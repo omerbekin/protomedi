@@ -7,6 +7,8 @@ export interface DebugAction {
   id: string;
   section: string;
   label: string | (() => string);
+  /** Uzun açıklama (düğmenin üstüne gelince görünür); etiket kısa tutulur. */
+  hint?: string;
   run: () => void;
 }
 
@@ -81,16 +83,20 @@ export class DebugMenu {
       const h = document.createElement('h3');
       h.textContent = name;
       this.panel.append(h);
+      const grid = document.createElement('div');
+      grid.className = 'debug-grid';
+      this.panel.append(grid);
       for (const action of list) {
         const btn = document.createElement('button');
         btn.className = 'debug-action';
         btn.textContent = typeof action.label === 'function' ? action.label() : action.label;
+        if (action.hint) btn.title = action.hint;
         btn.addEventListener('click', () => {
           action.run();
           // After a scene restart the new values are ready on the next frame
           requestAnimationFrame(() => this.render());
         });
-        this.panel.append(btn);
+        grid.append(btn);
       }
     }
 

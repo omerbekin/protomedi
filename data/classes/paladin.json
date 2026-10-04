@@ -1,5 +1,35 @@
 {
-  "id": "paladin", "name": "Paladin", "spriteId": "paladin", "color": "#e6c14a",
-  "stats": { "hp": 100, "mp": 40, "atk": 12, "def": 10, "mag": 12, "res": 10, "spd": 8, "mpRegen": 3, "crit": 0.03, "eva": 0.02 },
-  "ai": "healer", "skills": ["holy_strike", "lay_on_hands", "radiance"]
+  "id": "paladin",
+  "name": "Paladin",
+  "spriteId": "paladin",
+  "color": "#e6c14a",
+  "logo": "holy",
+  "frontPriority": 2,
+  "attributes": {
+    "str": 15,
+    "int": 17,
+    "dex": 6,
+    "luck": 3
+  },
+  "armor": 10,
+  "magicArmor": 0,
+  "mpRegen": 3,
+  "ai": "healer",
+  "skills": [
+    "holy_strike",
+    "blessing",
+    "judgment",
+    "radiance"
+  ],
+  "passive": {
+    "id": "divine_light",
+    "name": "Divine Light",
+    "icon": "holy",
+    "text": "At the start of your turn, heal the most wounded ally.",
+    "effect": {
+      "type": "divineLight",
+      "power": 0.45,
+      "scale": "int"
+    }
+  }
 }

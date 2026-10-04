@@ -13,10 +13,10 @@ export interface TurnSlot {
   counter: number;
 }
 
-/** Eşit sayaçta: sayacı yüksek olan, sonra parti, sonra düşük yuva, sonra uid. */
-function compare(a: TurnSlot, b: TurnSlot): number {
+/** Eşit sayaçta: sayacı yüksek olan, sonra `firstSide` tarafı, sonra düşük yuva, sonra uid. */
+function compare(a: TurnSlot, b: TurnSlot, firstSide: Side): number {
   if (a.counter !== b.counter) return b.counter - a.counter;
-  if (a.side !== b.side) return a.side === 'party' ? -1 : 1;
+  if (a.side !== b.side) return a.side === firstSide ? -1 : 1;
   if (a.slot !== b.slot) return a.slot - b.slot;
   return a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0;
 }
@@ -25,19 +25,25 @@ function compare(a: TurnSlot, b: TurnSlot): number {
  * Sıradaki aktörü bulur. Sayaçları (yerinde) en erken oynayacak kişi eşiğe ulaşana kadar ilerletir;
  * seçilen aktörün sayacını DÜŞÜRMEZ (oyun bitirince düşer). SPD'si 0 olanlar hiç oynamaz.
  */
-export function advanceTurn(slots: TurnSlot[], threshold: number): TurnSlot | null {
+export function advanceTurn(slots: TurnSlot[], threshold: number, firstSide: Side = 'party'): TurnSlot | null {
   const movers = slots.filter((s) => s.spd > 0);
   if (movers.length === 0) return null;
   const ticks = Math.min(...movers.map((s) => Math.max(0, Math.ceil((threshold - s.counter) / s.spd))));
   for (const s of movers) s.counter += s.spd * ticks;
-  return movers.filter((s) => s.counter >= threshold).sort(compare)[0] ?? null;
+  return movers.filter((s) => s.counter >= threshold).sort((a, b) => compare(a, b, firstSide))[0] ?? null;
 }
 
 /**
  * Sıra çubuğu için tahmin: şu anki aktör (varsa) + sonraki aktörler. Girdiyi değiştirmez.
  * Ölüm/çağrı gibi gelecek olayları bilemez; her olaydan sonra yeniden hesaplanır.
  */
-export function predictQueue(slots: TurnSlot[], threshold: number, count: number, currentUid: string | null): string[] {
+export function predictQueue(
+  slots: TurnSlot[],
+  threshold: number,
+  count: number,
+  currentUid: string | null,
+  firstSide: Side = 'party',
+): string[] {
   const copy = slots.map((s) => ({ ...s }));
   const queue: string[] = [];
   const current = currentUid ? copy.find((s) => s.uid === currentUid) : undefined;
@@ -46,7 +52,7 @@ export function predictQueue(slots: TurnSlot[], threshold: number, count: number
     current.counter -= threshold;
   }
   while (queue.length < count) {
-    const next = advanceTurn(copy, threshold);
+    const next = advanceTurn(copy, threshold, firstSide);
     if (!next) break;
     queue.push(next.uid);
     next.counter -= threshold;

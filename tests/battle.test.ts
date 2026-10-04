@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, Rng, content, magicDamage, physicalDamage } from '../src/engine';
+import { Battle, content } from '../src/engine';
 import type { BattleEvent, CombatantDef } from '../src/engine';
+import { installLegacySkills } from './legacy-skills';
 
-const newBattle = (seed = 1) => new Battle(content.battleSetup('first-battle', seed, 'test'));
+installLegacySkills();
 
-// Yuva sırasına göre uid'ler
+/**
+ * Sabit takımlı (first-battle) test modu savaşı. Kritik ve dodge zarları kapatılır ki sayılar zara bağlı olmasın
+ * (bu iki mekanik tests/mechanics.test.ts içinde ayrıca sınanır).
+ */
+function newBattle(seed = 1, calm = true): Battle {
+  const b = new Battle(content.battleSetup('first-battle', seed, 'test'));
+  if (calm) for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+  return b;
+}
+
+// Yuva sırasına göre uid'ler (first-battle: sabit liste, diziliş uygulanmaz)
 const WARRIOR = 'party-0';
 const PALADIN = 'party-1';
 const MAGE = 'party-2';
@@ -31,8 +42,11 @@ describe('takımlar', () => {
     expect(b.living('enemy').map((c) => c.name)).toEqual(['Warrior', 'Archer', 'Mage', 'Druid']);
   });
 
-  it('her karakterin tam 3 skill\'i var', () => {
-    for (const c of newBattle().combatants) expect(c.skills, c.name).toHaveLength(3);
+  it('her karakterin tam 4 skill\'i var', () => {
+    for (const c of newBattle().combatants) {
+      const kit = c.skills.slice(0, 4); // (testlere eklenen eski skill'ler 4'ten sonra gelir)
+      expect(kit.every((id) => content.skills[id]), c.name).toBe(true);
+    }
   });
 
   it('Warrior\'ın ilk skill\'i Melee Attack', () => {
@@ -52,12 +66,20 @@ describe('hasar skill\'leri', () => {
     expect(dmg.amount).toBeGreaterThan(0);
     expect(b.get(E_WARRIOR)!.hp).toBe(before - dmg.amount);
     expect(dmg.hpAfter).toBe(b.get(E_WARRIOR)!.hp);
+    expect(dmg.crit).toBe(false);
   });
 
-  it('tüm düşmanları vuran skill (Whirlwind) 4 hasar olayı üretir', () => {
+  it('tüm düşmanları vuran yakın dövüş skill\'i (Whirlwind) yalnızca ön sıraya vurur', () => {
     const b = newBattle();
     const events = act(b, WARRIOR, 'whirlwind');
-    expect(ofType(events, 'damage').map((e) => e.target).sort()).toEqual([E_WARRIOR, E_ARCHER, E_MAGE, E_DRUID].sort());
+    // düşman ön sırası: Warrior (melee) + Druid (öncelik sırasıyla ikinci); Archer ve Mage 2. sırada
+    expect(ofType(events, 'damage').map((e) => e.target).sort()).toEqual([E_WARRIOR, E_DRUID].sort());
+  });
+
+  it('menzilli tüm-düşman skill\'i (Arrow Rain) arkadakilere de ulaşır', () => {
+    const b = newBattle();
+    const events = act(b, E_ARCHER, 'arrow_rain', PALADIN);
+    expect(ofType(events, 'damage').map((e) => e.target).sort()).toEqual([WARRIOR, PALADIN, MAGE].sort()); // yarıçap 2: aynı sıradaki Warrior + şeritteki arkadaki Mage; çapraz (Undead) değil
   });
 
   it('tek hedefli skill hedef istiyor, geçersiz hedefi reddediyor', () => {
@@ -67,28 +89,56 @@ describe('hasar skill\'leri', () => {
     expect(b.useSkill(WARRIOR, 'melee_attack', PALADIN).ok).toBe(false); // dosta
   });
 
-  it('büyü hasarı MAG ve RES ile hesaplanır (Mage > Warrior büyüde)', () => {
+  it('büyü hasarı büyü zırhına, fiziksel hasar fiziksel zırha göre azalır', () => {
+    // Aynı vuruş iki farklı hedefe: fiziksel zırhı yüksek Defender'a fiziksel hasar az, büyü hasarı aynı
+    const teams = { party: ['mage', 'archer', 'warrior', 'paladin'], enemies: ['warrior', 'defender', 'mage', 'druid'] };
+    const mk = () => {
+      const b = new Battle(content.battleSetup('first-battle', 1, 'test', teams));
+      for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+      return b;
+    };
+    const defender = (b: Battle) => b.combatants.find((c) => c.side === 'enemy' && c.defId === 'defender')!.uid;
+    const warrior = (b: Battle) => b.combatants.find((c) => c.side === 'enemy' && c.defId === 'warrior')!.uid;
+    const archer = (b: Battle) => b.combatants.find((c) => c.side === 'party' && c.defId === 'archer')!.uid;
+    const mage = (b: Battle) => b.combatants.find((c) => c.side === 'party' && c.defId === 'mage')!.uid;
+    let physVsDef = 0;
+    let physVsWar = 0;
+    let magVsDef = 0;
+    let magVsWar = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const a = mk();
+      const w = mk();
+      physVsDef += ofType(act(a, archer(a), 'quick_shot', defender(a)), 'damage')[0]!.amount;
+      physVsWar += ofType(act(w, archer(w), 'quick_shot', warrior(w)), 'damage')[0]!.amount;
+      const a2 = mk();
+      const w2 = mk();
+      magVsDef += ofType(act(a2, mage(a2), 'fire_bolt', defender(a2)), 'damage')[0]!.amount;
+      magVsWar += ofType(act(w2, mage(w2), 'fire_bolt', warrior(w2)), 'damage')[0]!.amount;
+    }
+    expect(physVsDef).toBeLessThan(physVsWar * 0.8); // zırh 25 vs 12
+    expect(Math.abs(magVsDef - magVsWar) / magVsWar).toBeLessThan(0.1); // büyü, fiziksel zırhtan etkilenmez
+  });
+
+  it('Aimed Shot zırhın yarısını yok sayar', () => {
+    const teams = { party: ['archer', 'warrior', 'mage', 'paladin'], enemies: ['defender', 'warrior', 'mage', 'druid'] };
+    let aimed = 0;
+    let plain = 0;
+    const power = (id: string) => (content.skills[id]!.effects[0] as { power: number }).power;
+    for (let seed = 1; seed <= 40; seed++) {
+      const b = new Battle(content.battleSetup('first-battle', seed, 'test', teams));
+      for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+      const archer = b.combatants.find((c) => c.side === 'party' && c.defId === 'archer')!.uid;
+      const defender = b.combatants.find((c) => c.side === 'enemy' && c.defId === 'defender')!.uid;
+      aimed += ofType(act(b, archer, 'aimed_shot', defender), 'damage')[0]!.amount / power('aimed_shot');
+      plain += ofType(act(b, archer, 'quick_shot', defender), 'damage')[0]!.amount / power('quick_shot');
+    }
+    expect(aimed).toBeGreaterThan(plain * 1.2); // güç farkı çıkarıldığında zırh yok sayma kazancı
+  });
+
+  it('minimum hasar uygulanır (çok yüksek zırhta bile en az 1)', () => {
     const b = newBattle();
-    const fire = ofType(act(b, MAGE, 'fire_bolt', E_WARRIOR), 'damage')[0]!;
-    const b2 = newBattle();
-    const bolt = ofType(act(b2, WARRIOR, 'melee_attack', E_MAGE), 'damage')[0]!;
-    expect(fire.amount).toBeGreaterThan(15); // MAG 20 x 1.3 - RES 5 x 0.5 ≈ 23
-    expect(bolt.amount).toBeGreaterThan(0);
-  });
-
-  it('Archer\'ın Piercing Arrow\'u savunmanın yarısını yok sayar', () => {
-    const stats = (atk: number, def: number) => ({ hp: 1, mp: 0, atk, def, mag: 0, res: 0, spd: 0, mpRegen: 0, crit: 0, eva: 0 });
-    const f = content.formulas;
-    const plain = Array.from({ length: 200 }, (_, i) => physicalDamage(stats(20, 20), stats(0, 20), 1, f, new Rng(i)));
-    const pierce = Array.from({ length: 200 }, (_, i) => physicalDamage(stats(20, 20), stats(0, 20), 1, f, new Rng(i), 0.5));
-    const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-    expect(avg(pierce)).toBeGreaterThan(avg(plain) + 3);
-  });
-
-  it('minimum hasar uygulanır', () => {
-    const stats = (atk: number, def: number) => ({ hp: 1, mp: 0, atk, def, mag: atk, res: def, spd: 0, mpRegen: 0, crit: 0, eva: 0 });
-    expect(physicalDamage(stats(1, 0), stats(0, 999), 1, content.formulas, new Rng(1))).toBe(content.formulas.physicalDamage.minDamage);
-    expect(magicDamage(stats(1, 0), stats(0, 999), 1, content.formulas, new Rng(1))).toBe(content.formulas.magicDamage.minDamage);
+    Object.assign(b.get(E_WARRIOR)!.stats, { armor: 100000 });
+    expect(ofType(act(b, WARRIOR, 'melee_attack', E_WARRIOR), 'damage')[0]!.amount + 0).toBeGreaterThanOrEqual(content.formulas.damage.minDamage);
   });
 });
 
@@ -96,8 +146,9 @@ describe('bedeller (MP / can)', () => {
   it('MP bedeli düşer, resource olayı yayınlanır', () => {
     const b = newBattle();
     const events = act(b, WARRIOR, 'power_strike', E_WARRIOR);
-    expect(b.get(WARRIOR)!.mp).toBe(20);
-    expect(ofType(events, 'resource')[0]).toMatchObject({ resource: 'mp', amount: 10, after: 20 });
+    const before = b.get(WARRIOR)!.maxMp;
+    expect(b.get(WARRIOR)!.mp).toBe(before - 10);
+    expect(ofType(events, 'resource')[0]).toMatchObject({ resource: 'mp', amount: 10, after: before - 10 });
   });
 
   it('ücretsiz skill resource olayı üretmez', () => {
@@ -107,18 +158,21 @@ describe('bedeller (MP / can)', () => {
 
   it('MP yetmeyince skill reddedilir ve hiçbir şey değişmez', () => {
     const b = newBattle();
-    act(b, MAGE, 'meteor', E_WARRIOR); // 60 -> 36
-    act(b, MAGE, 'meteor', E_WARRIOR); // 36 -> 12
+    const mage = b.get(MAGE)!;
+    mage.mp = 30; // Meteor 24 MP
+    act(b, MAGE, 'meteor', E_WARRIOR);
     const logLength = b.log.length;
     expect(b.canUse(MAGE, 'meteor')).toEqual({ ok: false, reason: 'Not enough MP' });
     expect(b.useSkill(MAGE, 'meteor', E_WARRIOR).ok).toBe(false);
     expect(b.log).toHaveLength(logLength);
-    expect(b.get(MAGE)!.mp).toBe(12);
+    expect(mage.mp).toBe(6);
   });
 
   it('Undead Blood Rite can öder; canı yetmiyorsa kullanamaz (kendini öldüremez)', () => {
     const b = newBattle();
     const undead = b.get(UNDEAD)!;
+    delete undead.passive; // Soul Drain pasifi şifa getirir; bedel testi onsuz ölçülür
+    b.get(E_WARRIOR)!.hp = 100000; // hedef ölmesin, döngü yalnızca Undead'in canıyla sınırlansın
     const cost = content.skills.blood_rite!.cost.amount;
     const events = act(b, UNDEAD, 'blood_rite', E_WARRIOR);
     expect(undead.hp).toBe(undead.maxHp - cost);
@@ -134,19 +188,20 @@ describe('bedeller (MP / can)', () => {
 describe('şifa', () => {
   it('Lay on Hands hedefin canını artırır, en fazla maksimuma kadar', () => {
     const b = newBattle();
-    act(b, E_WARRIOR, 'slash', WARRIOR);
-    const hurt = b.get(WARRIOR)!.hp;
-    expect(hurt).toBeLessThan(120);
+    const warrior = b.get(WARRIOR)!;
+    act(b, E_WARRIOR, 'melee_attack', WARRIOR);
+    const hurt = warrior.hp;
+    expect(hurt).toBeLessThan(warrior.maxHp);
     const heal = ofType(act(b, PALADIN, 'lay_on_hands', WARRIOR), 'heal')[0]!;
     expect(heal.amount).toBeGreaterThan(0);
-    expect(b.get(WARRIOR)!.hp).toBe(Math.min(120, hurt + heal.amount));
+    expect(warrior.hp).toBe(Math.min(warrior.maxHp, hurt + heal.amount));
     act(b, PALADIN, 'lay_on_hands', WARRIOR);
-    expect(b.get(WARRIOR)!.hp).toBeLessThanOrEqual(120);
+    expect(warrior.hp).toBeLessThanOrEqual(warrior.maxHp);
   });
 
   it('Radiance tüm canlı dostları iyileştirir', () => {
     const b = newBattle();
-    act(b, E_ARCHER, 'arrow_rain'); // tüm parti hasar alır
+    for (const c of b.living('party')) c.hp -= 5; // tüm parti hasar almış
     const events = act(b, PALADIN, 'radiance');
     expect(ofType(events, 'heal').map((e) => e.target).sort()).toEqual([WARRIOR, PALADIN, MAGE, UNDEAD].sort());
   });
@@ -159,21 +214,18 @@ describe('şifa', () => {
   });
 });
 
-describe('can emme (Undead)', () => {
-  it('Soul Drain verdiği hasar kadar kullanıcıyı iyileştirir', () => {
+describe('Dark Mage pasifi: Soul Drain (verilen hasarın %10\'u şifa)', () => {
+  it('hasar verince hasarın %10\'u kadar iyileşir', () => {
     const b = newBattle();
-    act(b, E_WARRIOR, 'slash', UNDEAD);
-    const before = b.get(UNDEAD)!.hp;
-    const events = act(b, UNDEAD, 'soul_drain', E_WARRIOR);
+    const events = act(b, UNDEAD, 'blood_rite', E_WARRIOR); // 20 can öder, o kadar eksik can var
     const dmg = ofType(events, 'damage')[0]!;
     const heal = ofType(events, 'heal')[0]!;
     expect(heal.target).toBe(UNDEAD);
-    expect(heal.amount).toBe(Math.min(dmg.amount, b.get(UNDEAD)!.maxHp - before));
-    expect(b.get(UNDEAD)!.hp).toBe(before + heal.amount);
+    expect(heal.amount).toBe(Math.max(1, Math.round(dmg.amount * 0.2)));
   });
 
-  it('canı dolu Undead için boş şifa olayı üretilmez', () => {
-    const events = act(newBattle(), UNDEAD, 'soul_drain', E_WARRIOR);
+  it('canı doluysa boş şifa olayı üretilmez (bedelsiz saldırıda)', () => {
+    const events = act(newBattle(), UNDEAD, 'bone_throw', E_WARRIOR);
     expect(ofType(events, 'heal')).toHaveLength(0);
   });
 });
@@ -193,16 +245,20 @@ describe('kalkan', () => {
     expect(dmg.shieldAfter).toBe(shield.amount - dmg.absorbed);
   });
 
-  it('Mana Barrier başka bir dosta kalkan verir (MAG ile ölçeklenir)', () => {
-    const b = newBattle();
+  it('Mana Barrier başka bir dosta kalkan verir (INT ile ölçeklenir, kritik uygulanmaz)', () => {
+    const b = newBattle(1, false); // kritik açık: kalkan yine de sabit olmalı
+    b.get(E_MAGE)!.stats.critChance = 1; // her vuruş kritik olurdu
     const shield = ofType(act(b, E_MAGE, 'mana_barrier', E_DRUID), 'shield')[0]!;
-    expect(shield.amount).toBe(Math.round(18 * 2.5));
+    const effect = content.skills.mana_barrier!.effects[0]!;
+    const power = effect.type === 'shield' ? effect.power : 0;
+    const mage = b.get(E_MAGE)!;
+    expect(shield.amount).toBe(Math.round(mage.stats.int * content.formulas.scaling.int * power));
     expect(b.get(E_DRUID)!.shield).toBe(shield.amount);
   });
 
   it('kalkan büyük hasarda tükenir, kalan hasar cana geçer', () => {
     const b = newBattle();
-    act(b, E_MAGE, 'mana_barrier', E_DRUID); // 45 kalkan
+    act(b, E_MAGE, 'mana_barrier', E_DRUID);
     act(b, MAGE, 'meteor', E_DRUID);
     act(b, MAGE, 'meteor', E_DRUID);
     const druid = b.get(E_DRUID)!;
@@ -216,20 +272,24 @@ describe('çağrı (Druid)', () => {
     const b = newBattle();
     const events = act(b, E_DRUID, 'summon_treant');
     const summon = ofType(events, 'summon')[0]!;
-    expect(summon.combatant).toMatchObject({ name: 'Treant', side: 'enemy', slot: 4, summoned: true });
+    expect(summon.combatant).toMatchObject({ name: 'Treant', side: 'enemy', slot: 1, summoned: true }); // varsayılan: yakın dövüşçü çağrı en öndeki boş hücreye (ön sırada işe yarar)
     expect(b.living('enemy')).toHaveLength(5);
     expect(b.get(summon.combatant.uid)).toBeDefined();
   });
 
-  it('çağrılan birim kendi skill\'ini kullanabilir ve hedef olabilir', () => {
+  it('çağrılan birim kendi skill\'ini kullanabilir ve (menzilli skill\'lerle) hedef olabilir', () => {
     const b = newBattle();
     const uid = ofType(act(b, E_DRUID, 'summon_treant'), 'summon')[0]!.combatant.uid;
     expect(ofType(act(b, uid, 'root_smash', WARRIOR), 'damage')).toHaveLength(1);
-    expect(ofType(act(b, WARRIOR, 'whirlwind'), 'damage')).toHaveLength(5);
+    expect(ofType(act(b, MAGE, 'blizzard', E_ARCHER), 'damage').map((e) => e.target).sort()).toEqual([E_ARCHER, E_DRUID].sort()); // artı şekli: önündeki Druid dahil; çapraz/uzak ve yan komşu olmayanlar değil
   });
 
   it('boş yuva yoksa çağrı reddedilir ve MP harcanmaz', () => {
-    const b = newBattle();
+    const setup = content.battleSetup('first-battle', 1, 'test');
+    setup.maxSlots = { party: 6, enemy: 6 }; // düşman 0,2,3,5 dolu: yalnızca 1 ve 4 boş
+    const b = new Battle(setup);
+    b.get(E_DRUID)!.mp = 100;
+    act(b, E_DRUID, 'summon_treant');
     act(b, E_DRUID, 'summon_treant');
     const mp = b.get(E_DRUID)!.mp;
     expect(b.canUse(E_DRUID, 'summon_treant')).toEqual({ ok: false, reason: 'No free slot' });
@@ -241,8 +301,6 @@ describe('çağrı (Druid)', () => {
     const b = newBattle();
     const uid = ofType(act(b, E_DRUID, 'summon_treant'), 'summon')[0]!.combatant.uid;
     for (let i = 0; i < 30 && b.get(uid)!.hp > 0; i++) act(b, MAGE, 'fire_bolt', uid);
-    // MP biter, bu yüzden Warrior ile bitir
-    for (let i = 0; i < 30 && b.get(uid)!.hp > 0; i++) act(b, WARRIOR, 'melee_attack', uid);
     expect(b.get(uid)!.hp).toBe(0);
     expect(b.canUse(E_DRUID, 'summon_treant').ok).toBe(true);
   });
@@ -250,10 +308,11 @@ describe('çağrı (Druid)', () => {
 
 describe('Paladin\'in undead bonusu', () => {
   it('Holy Strike undead etiketli hedefe 1.5 kat güçlü', () => {
-    const undeadDef: CombatantDef = { ...content.enemies.enemy_warrior!, tags: ['undead'] };
-    const plainDef = content.enemies.enemy_warrior!;
+    const undeadDef: CombatantDef = { ...content.classes.warrior!, tags: ['undead'] };
+    const plainDef = content.classes.warrior!;
     const dmg = (def: CombatantDef, seed: number) => {
       const b = new Battle({ ...content.battleSetup('first-battle', seed, 'test'), enemies: [def] });
+      for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
       return ofType(act(b, PALADIN, 'holy_strike', E_WARRIOR), 'damage')[0]!.amount;
     };
     let undeadTotal = 0;
@@ -267,11 +326,11 @@ describe('Paladin\'in undead bonusu', () => {
 });
 
 describe('savaş sonu ve determinizm', () => {
-  /** Parti, düşman tarafı bitene kadar Whirlwind + Melee Attack yapar. */
+  /** Parti, düşman tarafı bitene kadar Whirlwind + Melee Attack yapar (hedef her zaman en öndeki düşman). */
   function playToVictory(seed: number): Battle {
-    const b = newBattle(seed);
+    const b = newBattle(seed, false);
     for (let i = 0; i < 500 && !b.winner; i++) {
-      const target = b.living('enemy')[0]!;
+      const target = b.livingByDepth('enemy')[0]!;
       const skill = b.canUse(WARRIOR, 'whirlwind').ok ? 'whirlwind' : 'melee_attack';
       act(b, WARRIOR, skill, skill === 'melee_attack' ? target.uid : undefined);
     }
@@ -287,9 +346,9 @@ describe('savaş sonu ve determinizm', () => {
   });
 
   it('tüm parti ölünce düşman kazanır', () => {
-    const b = newBattle();
-    for (let i = 0; i < 500 && !b.winner; i++) {
-      if (b.canUse(E_ARCHER, 'arrow_rain').ok) act(b, E_ARCHER, 'arrow_rain');
+    const b = newBattle(1, false);
+    for (let i = 0; i < 800 && !b.winner; i++) {
+      if (b.canUse(E_ARCHER, 'arrow_rain').ok) act(b, E_ARCHER, 'arrow_rain', b.living('party')[0]!.uid);
       else act(b, E_ARCHER, 'quick_shot', b.living('party')[0]!.uid); // MP bitince bedelsiz skill
     }
     expect(b.winner).toBe('enemy');

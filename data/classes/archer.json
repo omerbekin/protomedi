@@ -1,0 +1,34 @@
+{
+  "id": "archer",
+  "name": "Archer",
+  "spriteId": "archer",
+  "color": "#3f7d4e",
+  "logo": "bow",
+  "frontPriority": 8,
+  "attributes": {
+    "str": 10,
+    "int": 10,
+    "dex": 16.0,
+    "luck": 8
+  },
+  "armor": 5,
+  "magicArmor": 0,
+  "mpRegen": 3,
+  "ai": "sniper",
+  "skills": [
+    "quick_shot",
+    "piercing_arrow",
+    "arrow_rain",
+    "aimed_shot"
+  ],
+  "passive": {
+    "id": "sharpshooter",
+    "name": "Sharpshooter",
+    "icon": "target",
+    "text": "",
+    "effect": {
+      "type": "longshot",
+      "perRow": 0.07
+    }
+  }
+}

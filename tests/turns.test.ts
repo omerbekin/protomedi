@@ -87,8 +87,9 @@ describe('savaşta sıra (turns modu)', () => {
     for (const c of b.combatants) {
       expect(count(c.uid) / 360).toBeCloseTo(c.stats.spd / total, 1);
     }
-    // Archer (12) Undead'den (6) 2 kat sık oynar
-    expect(count('enemy-1')).toBeGreaterThan(count('party-3') * 1.8);
+    // Hızlı karakter yavaş olandan SPD oranına yakın sıklıkta oynar (Archer 12, Undead 8: ~1,5 kat)
+    const ratio = b.get('enemy-1')!.stats.spd / b.get('party-3')!.stats.spd;
+    expect(count('enemy-1') / count('party-3')).toBeCloseTo(ratio, 0);
   });
 
   it('sırası gelmeyen aktör oynayamaz, gelen oynayabilir', () => {

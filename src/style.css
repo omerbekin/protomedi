@@ -72,7 +72,7 @@ body.force-portrait .rotate-warning {
   right: 8px;
   bottom: 60px;
   top: 8px;
-  width: min(340px, calc(100vw - 16px));
+  width: min(380px, calc(100vw - 16px));
   overflow-y: auto;
   padding: 12px;
   background: rgba(15, 15, 25, 0.95);
@@ -100,15 +100,21 @@ body.force-portrait .rotate-warning {
   color: #8d99ae;
 }
 
+/* Her kategori bir ızgara: satır başına 2-3 düğme */
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 6px;
+}
+
 .debug-action,
 .debug-close {
   display: block;
   width: 100%;
   min-height: 44px;
-  margin-bottom: 6px;
-  padding: 8px 12px;
-  font: 14px system-ui, sans-serif;
-  text-align: left;
+  padding: 6px 8px;
+  font: 13px system-ui, sans-serif;
+  text-align: center;
   color: #edf2f4;
   background: #2b2d42;
   border: 1px solid #4a4e69;

@@ -1,5 +1,0 @@
-{
-  "id": "enemy_druid", "name": "Druid", "spriteId": "enemy_druid", "color": "#5a8f29",
-  "stats": { "hp": 85, "mp": 60, "atk": 6, "def": 6, "mag": 14, "res": 10, "spd": 8, "mpRegen": 4, "crit": 0.03, "eva": 0.03 },
-  "ai": "support", "skills": ["thorn_whip", "rejuvenate", "summon_treant"]
-}

@@ -1,0 +1,29 @@
+{
+  "id": "skeleton",
+  "name": "Skeleton",
+  "spriteId": "skeleton",
+  "color": "#d9d4c0",
+  "logo": "skull",
+  "frontPriority": 8,
+  "tags": [
+    "undead"
+  ],
+  "attributes": {
+    "str": 10,
+    "int": 0,
+    "dex": 0,
+    "luck": 0
+  },
+  "armor": 3,
+  "magicArmor": 0,
+  "mpRegen": 0,
+  "overrides": {
+    "hp": 105,
+    "mp": 0,
+    "spd": 6
+  },
+  "ai": "aggressive",
+  "skills": [
+    "skeleton_strike"
+  ]
+}

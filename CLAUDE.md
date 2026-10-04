@@ -3,7 +3,7 @@
 ## Özet
 Armor Games'teki Sonny tarzı, yandan görünümlü (side-view), 2D pixel art, sıra tabanlı RPG.
 Web tabanlı (TypeScript + Phaser 3 + Vite), mobil tarayıcıda da oynanır.
-4 kişilik parti, düğüm tabanlı dünya haritası, hıza göre dinamik sıra sistemi.
+5 kişilik takım, düğüm tabanlı dünya haritası, hıza göre dinamik sıra sistemi.
 
 ## Sahip ve çalışma biçimi
 - Proje sahibi (Ömer) **kod okumaz/denetlemez**. Kalite güvencesi: otomatik testler, oyun içi debug menüsü, denge simülasyon raporları.
@@ -24,7 +24,10 @@ Web tabanlı (TypeScript + Phaser 3 + Vite), mobil tarayıcıda da oynanır.
 - **Oyun içi arayüz İngilizce** (menüler, düğmeler, uyarılar, skill/karakter isimleri, debug menüsü dahil). Ömer'le konuşma, raporlar, `docs/` ve kod yorumları Türkçe kalır. Yeni ekran yazılırken İngilizce yazılır.
 - **Sıra sistemi:** her karakterin `spd` (çabukluk) statı vardır; sayaç modeli (`src/engine/turn-order.ts`, eşik `data/formulas.json` > `turn`). SPD ne kadar yüksekse o kadar sık oynar. Sıra çubuğu aynı hesaptan gelen tahmini gösterir.
 - **Kontrol:** oyuncu tarafını oyuncu, düşman tarafını yapay zeka oynar (`src/engine/ai.ts`; öncelikler ve eşikler `data/ai.json` profillerinde, karakterin `ai` alanı profil seçer). Yapay zeka saf ve belirleyicidir (rastgelelik kullanmaz).
+- **Takımlar:** oyuncu ve düşman aynı sınıf havuzundan (`data/classes/`) seed'e göre 4 farklı sınıf alır (`data/battles/random-battle.json`). Görsel sınıfa aittir, taraf fark etmez. Her sınıfın tam 4 skill'i vardır. Çağrılan birimler `data/summons/` altındadır. Sayfa `?seed=123` ile belirli bir savaşla açılır.
+- **Stat sistemi:** 4 temel stat (str, int, dex, luck) can/MP/hız/kritiği türetir (`src/engine/stats.ts`, `data/formulas.json`). Skill hasarı/şifası/kalkanı ilgili statla ölçeklenir. Zırh yüzdesel (zırh/(zırh+30)). Kritik son çarpan (hasar+şifa, kalkan değil). Dizilim: her taraf 4 sıra x 3 şerit (yuva = sıra*3+şerit, `formation` in formulas.json); melee skiller düşmanın en öndeki dolu sırasına ulaşır (`formation.meleeRows`), alan skill'leri `area.radius` ile artı şeklinde, `column_enemies` seçilen şeridin tamamına vurur. Başlangıç ekranı `TeamSelectScene` (4+4 sınıf seç, randomize); `?seed=` ekranı atlar.
 - **MP yenilenmesi ve cooldown:** her karakter kendi turunun başında `mpRegen` kadar MP kazanır; güçlü skill'lerin `cooldown` değeri vardır (kullanıcının kendi tur sayısıyla). İkisi de yalnızca `turns` modunda işler. Denge hedefi: yapay zeka vs yapay zeka savaşında oyuncu kazanma oranı ~%50 (`npm run sim`).
+- **Arayüz ayrıntıları:** skill düğmeleri küçüktür (ikon + isim + bedel), ayrıntı tooltip'tedir; hedef seçerken fareyle gelinen karakterde tahmini etki önizlenir (`src/engine/preview.ts`, saf ve belirleyici); skill açıklaması `src/engine/skill-info.ts` verisinden üretilir. Skill animasyonları `animation.skillSlowdown` ile yavaşlatılır. Yeni bir skill eklerken `icon` ve (yukarıdan düşecekse) `motion: "sky"` + `skyFx` alanlarını ver.
 - **İki savaş modu:** `turns` (varsayılan, gerçek oyun) ve `test` (sırasız; her karakter istediği an oynar, yalnızca debug menüsünden açılır). Her yeni savaş özelliği iki modda da bozulmamalı.
 - Dokunmatik öncelikli girdi; fare ve klavye de çalışır. Dokunma hedefleri en az 44px (gerçek piksel).
 - Yayın: her değişiklik önizleme linkine yayınlanır (Cloudflare Pages veya GitHub Pages), Ömer telefondan oynar.
@@ -67,6 +70,6 @@ tests/            vitest testleri
 - `npm run dev` — geliştirme sunucusu (`--host` açık: aynı Wi-Fi'deki telefondan da açılır)
 - `npm run build` — tip kontrolü + üretim derlemesi (`dist/`)
 - `npm test` — vitest testleri (motor saflığı denetimi dahil: `src/engine` içinde Math.random/Phaser/DOM yasak)
-- `npm run sim` — headless denge simülatörü (`src/sim/cli.ts`): iki taraf yapay zeka ile tam savaşlar (kazanma oranı, ölenler, skill kullanımı) + skill etki tablosu. İsteğe bağlı savaş sayısı: `npm run sim -- 1000`
+- `npm run sim` — headless denge simülatörü (`src/sim/cli.ts`): rastgele takımlı savaşlar, iki taraf yapay zeka; sınıf kazanma oranı (hedef %40-60, ideal ~%50), kompozisyon, skill kullanımı raporu. Seçenekler: `npm run sim -- <savaş sayısı> <ilk seed>`. `tests/balance.test.ts` aynı ölçümü test olarak korur.
 - Yayın: `main` dalına push → GitHub Actions test + build → GitHub Pages (`.github/workflows/deploy.yml`). Test kırmızıysa yayın olmaz.
 - Debug menüsü: sağ alttaki DEBUG düğmesi (klavyede ` veya F2). Yeni özellik = `src/main.ts` içinde `debug.register(...)` ile yeni giriş.

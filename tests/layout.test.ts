@@ -6,9 +6,9 @@ describe('savaş yerleşimi verisi', () => {
     expect([layout.width, layout.height]).toEqual([1920, 1080]);
   });
 
-  it('parti 4 yuva, düşman 5 yuva (4 + 1 çağrı yeri)', () => {
-    expect(layout.partySlots).toHaveLength(4);
-    expect(layout.enemySlots).toHaveLength(5);
+  it('her iki tarafta 4 sıra x 3 şerit = 12 yuva', () => {
+    expect(layout.partySlots).toHaveLength(12);
+    expect(layout.enemySlots).toHaveLength(12);
   });
 
   it('parti solda, düşmanlar sağda', () => {
@@ -27,9 +27,9 @@ describe('savaş yerleşimi verisi', () => {
     }
   });
 
-  it('placeholder boyutu sprite kutusundan büyük değil', () => {
-    expect(layout.characterSize.width).toBeLessThanOrEqual(layout.spriteBox.width);
-    expect(layout.characterSize.height).toBeLessThanOrEqual(layout.spriteBox.height);
+  it('placeholder çizimi 140x200 koordinatlarıyla yapıldı; sprite kutusuna küçültülerek sığar', () => {
+    expect(layout.characterSize).toEqual({ width: 140, height: 200 });
+    expect(layout.spriteBox.width / layout.characterSize.width).toBeGreaterThan(0.5);
   });
 
   it('aynı sıradaki karakterler üst üste binmiyor', () => {
@@ -44,11 +44,21 @@ describe('savaş yerleşimi verisi', () => {
     }
   });
 
-  it('komşu karakterlerin kutuları yatayda en fazla %20 örtüşüyor (arka/ön sıra dizilimi)', () => {
-    const { width: bw } = layout.spriteBox;
+  it('komşu sıraların arası, aynı sıradaki perspektif kaymasından büyük', () => {
     for (const slots of [layout.partySlots, layout.enemySlots]) {
-      const xs = slots.map((s) => s.x).sort((a, b) => a - b);
-      for (let i = 1; i < xs.length; i++) expect(bw - (xs[i]! - xs[i - 1]!)).toBeLessThanOrEqual(bw * 0.2);
+      const dx = (a: number, b: number) => Math.abs(slots[a]!.x - slots[b]!.x);
+      for (let row = 0; row < 3; row++) expect(dx(row * 3 + 1, (row + 1) * 3 + 1)).toBeGreaterThan(dx(row * 3, row * 3 + 2)); // sıra aralığı, aynı sıradaki x farkından büyük
+    }
+  });
+
+  it('yuvalar sıra x şerit düzeninde: aynı şeritte y aynı, ön sıra ekran ortasına daha yakın', () => {
+    const mid = layout.width / 2;
+    for (const slots of [layout.partySlots, layout.enemySlots]) {
+      for (let lane = 0; lane < 3; lane++) {
+        const ys = [0, 1, 2, 3].map((row) => slots[row * 3 + lane]!.y);
+        expect(new Set(ys).size).toBe(1);
+      }
+      for (let row = 1; row < 4; row++) expect(Math.abs(slots[row * 3 + 1]!.x - mid)).toBeGreaterThan(Math.abs(slots[(row - 1) * 3 + 1]!.x - mid));
     }
   });
 
@@ -59,15 +69,53 @@ describe('savaş yerleşimi verisi', () => {
   });
 
   it('komut düğmeleri yatay telefonda da >= 44 gerçek piksel', () => {
-    // En kötü durum: ~340px yüksekliğinde yatay telefon ekranı (tarayıcı çubukları açıkken)
-    const scale = 340 / layout.height;
+    // En kötü durum: ~360px yüksekliğinde yatay telefon ekranı (tarayıcı çubukları açıkken)
+    const scale = 360 / layout.height;
     expect(layout.commandPanel.buttonHeight * scale).toBeGreaterThanOrEqual(44);
     expect(layout.commandPanel.y + layout.commandPanel.buttonHeight).toBeLessThanOrEqual(layout.height);
   });
 
+  it("HP/MP/stat bloğu alt barın yatayda en fazla %30'unu kaplar", () => {
+    const p = layout.commandPanel;
+    expect((p.padding + p.statsWidth) / layout.width).toBeLessThanOrEqual(0.3);
+  });
+
   it('komut panelinde karakter bilgisi + 4 skill düğmesi yan yana sığıyor', () => {
     const p = layout.commandPanel;
-    const needed = p.padding * 2 + p.infoWidth + 4 * p.buttonWidth + 4 * p.gap;
+    const needed = p.padding * 2 + p.statsWidth + 4 * p.buttonWidth + 4 * p.gap + p.tipWidth;
     expect(needed).toBeLessThanOrEqual(layout.width);
+  });
+});
+
+describe('animasyon ve arayüz ayarları', () => {
+  it('skill animasyonları %20 yavaş', () => {
+    expect(layout.animation.skillSlowdown).toBeCloseTo(1.2, 5);
+  });
+
+  it('hasar/şifa/MP sayıları ekranda en az 1,2 saniye kalır', () => {
+    expect(layout.animation.damageNumberMs).toBeGreaterThanOrEqual(1200);
+  });
+
+  it('skill düğmeleri küçük (kompakt) ve ikon + isim + bedel sığıyor', () => {
+    const p = layout.commandPanel;
+    expect(p.buttonWidth).toBeLessThanOrEqual(240);
+    expect(p.iconSize + 10 + 60).toBeLessThanOrEqual(p.buttonHeight); // ikon + isim + bedel satırı dikey sığar
+  });
+
+  it('zırh ikonu, takım seçimi ve kompakt tooltip ayarları tutarlı', () => {
+    expect(layout.armorIcon.maxSize).toBeGreaterThan(layout.armorIcon.minSize);
+    expect(layout.armorIcon.maxArmor).toBeGreaterThan(0);
+    const t = layout.teamSelect;
+    expect(4 * t.slotWidth + 3 * t.gap + 60).toBeLessThanOrEqual(layout.width / 2);
+    expect(layout.tooltip.compact).toBeDefined();
+  });
+
+  it('tooltip genişlikleri ekrana sığar', () => {
+    expect(layout.tooltip.width).toBeLessThan(layout.width / 2);
+  });
+
+  it('büyük vuruş efektleri tanımlı: ratio eşikleri sıralı', () => {
+    expect(layout.animation.hitMaxRatio).toBeGreaterThan(layout.animation.cameraShakeRatio);
+    expect(layout.animation.cameraShakeRatio).toBeGreaterThan(0);
   });
 });

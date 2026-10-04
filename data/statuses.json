@@ -1,0 +1,51 @@
+{
+  "_not": "Süreli durumlar (buff/debuff). Süre, durumu taşıyanın kendi turlarıyla sayılır. speedMult: hız çarpanı; damageTakenMult: alınan hasar çarpanı; healTakenMult: alınan şifa çarpanı; skipTurn: sıradaki turu pas geçirir. taunt/guard/regen özel kodlu durumlardır (motorda). Yeni bir durum = buraya bir giriş + skill'de {type:'status'} etkisi. İleride durumların birbiriyle etkileşimi için burası genişletilecek.",
+  "slow": {
+    "name": "Slow",
+    "type": "debuff",
+    "icon": "boot",
+    "color": "#7fb2ff",
+    "speedMult": 0.7,
+    "text": "Speed -30%"
+  },
+  "haste": {
+    "name": "Haste",
+    "type": "buff",
+    "icon": "boot",
+    "color": "#7dff9b",
+    "speedMult": 1.4,
+    "text": "Speed +40%"
+  },
+  "wound": {
+    "name": "Wound",
+    "type": "debuff",
+    "icon": "drop",
+    "color": "#c0203a",
+    "healTakenMult": 0.75,
+    "text": "Healing received -25%"
+  },
+  "stun": {
+    "name": "Stun",
+    "type": "debuff",
+    "icon": "bash",
+    "color": "#ffd166",
+    "skipTurn": true,
+    "text": "Skips its next turn"
+  },
+  "fortify": {
+    "name": "Fortified",
+    "type": "buff",
+    "icon": "guardian",
+    "color": "#c58bff",
+    "damageTakenMult": 0.5,
+    "text": "Damage taken -50%"
+  },
+  "blessed": {
+    "name": "Blessed",
+    "type": "buff",
+    "icon": "holy",
+    "color": "#fff0a0",
+    "damageTakenMult": 0.7,
+    "text": "Damage taken -30%"
+  }
+}

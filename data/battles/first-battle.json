@@ -1,7 +1,7 @@
 {
   "id": "first-battle",
   "background": "castle-hall",
-  "slots": { "party": 4, "enemy": 5 },
+  "slots": { "party": 12, "enemy": 12 },
   "party": ["warrior", "paladin", "mage", "undead"],
-  "enemies": ["enemy_warrior", "enemy_archer", "enemy_mage", "enemy_druid"]
+  "enemies": ["warrior", "archer", "mage", "druid"]
 }

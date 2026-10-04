@@ -1,0 +1,36 @@
+{
+  "id": "druid",
+  "name": "Druid",
+  "spriteId": "druid",
+  "color": "#5a8f29",
+  "logo": "leaf",
+  "frontPriority": 5,
+  "attributes": {
+    "str": 16,
+    "int": 25,
+    "dex": 6,
+    "luck": 3
+  },
+  "armor": 6,
+  "magicArmor": 0,
+  "mpRegen": 4,
+  "ai": "support",
+  "skills": [
+    "thorn_whip",
+    "natures_wrath",
+    "rejuvenate",
+    "summon_treant"
+  ],
+  "passive": {
+    "id": "verdant_blessing",
+    "name": "Verdant Blessing",
+    "icon": "leaves",
+    "text": "Whenever you summon, all allies are healed.",
+    "effect": {
+      "type": "verdantBlessing",
+      "power": 0.6,
+      "scale": "int"
+    }
+  },
+  "reserveFront": true
+}

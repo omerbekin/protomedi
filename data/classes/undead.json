@@ -1,5 +1,38 @@
 {
-  "id": "undead", "name": "Undead", "spriteId": "undead", "color": "#7d8a73", "tags": ["undead"],
-  "stats": { "hp": 95, "mp": 30, "atk": 14, "def": 6, "mag": 14, "res": 8, "spd": 6, "mpRegen": 2, "crit": 0.04, "eva": 0.02 },
-  "ai": "aggressive", "skills": ["bone_slash", "soul_drain", "blood_rite"]
+  "id": "undead",
+  "name": "Undead",
+  "spriteId": "undead",
+  "color": "#7d8a73",
+  "logo": "skull",
+  "frontPriority": 4,
+  "attributes": {
+    "str": 19.0,
+    "int": 10,
+    "dex": 6,
+    "luck": 2
+  },
+  "armor": 7,
+  "magicArmor": 0,
+  "mpRegen": 3,
+  "ai": "darkmage",
+  "skills": [
+    "bone_throw",
+    "blood_rite",
+    "wail_of_the_dead",
+    "raise_dead"
+  ],
+  "passive": {
+    "id": "vampiric_bite",
+    "name": "Vampiric Bite",
+    "icon": "drain",
+    "text": "",
+    "effect": {
+      "type": "soulDrain",
+      "ratio": 0.2
+    }
+  },
+  "tags": [
+    "undead"
+  ],
+  "role": "Dark Mage"
 }

@@ -1,37 +1,820 @@
 {
-  "_not": "Etki türleri: damage (physical|magic, power, ignoreDefense, lifesteal, bonusVsTag), heal, shield, summon. Bedel: mp veya hp. motion ve fx yalnızca görsel ipucudur. Sayılar GEÇİCİDİR.",
-
-  "melee_attack":   { "id": "melee_attack",   "name": "Melee Attack",    "target": "single_enemy", "cost": { "resource": "mp", "amount": 0 },  "motion": "melee",  "fx": "#ffe9b0", "effects": [ { "type": "damage", "damageType": "physical", "power": 1.0 } ] },
-  "power_strike":   { "id": "power_strike", "cooldown": 2,   "name": "Power Strike",    "target": "single_enemy", "cost": { "resource": "mp", "amount": 10 }, "motion": "melee",  "fx": "#ffe9b0", "effects": [ { "type": "damage", "damageType": "physical", "power": 1.8 } ] },
-  "whirlwind":      { "id": "whirlwind", "cooldown": 3,      "name": "Whirlwind",       "target": "all_enemies",  "cost": { "resource": "mp", "amount": 15 }, "motion": "melee",  "fx": "#ffe9b0", "effects": [ { "type": "damage", "damageType": "physical", "power": 0.7 } ] },
-
-  "holy_strike":    { "id": "holy_strike",    "name": "Holy Strike",     "target": "single_enemy", "cost": { "resource": "mp", "amount": 6 },  "motion": "melee",  "fx": "#fff0a0", "effects": [ { "type": "damage", "damageType": "magic", "power": 1.1, "bonusVsTag": { "tag": "undead", "multiplier": 1.5 } } ] },
-  "lay_on_hands":   { "id": "lay_on_hands", "cooldown": 2,   "name": "Lay on Hands",    "target": "single_ally",  "cost": { "resource": "mp", "amount": 12 }, "motion": "cast",   "fx": "#7dff9b", "effects": [ { "type": "heal", "power": 3.0 } ] },
-  "radiance":       { "id": "radiance", "cooldown": 3,       "name": "Radiance",        "target": "all_allies",   "cost": { "resource": "mp", "amount": 20 }, "motion": "cast",   "fx": "#fff0a0", "effects": [ { "type": "heal", "power": 1.5 } ] },
-
-  "fire_bolt":      { "id": "fire_bolt",      "name": "Fire Bolt",       "target": "single_enemy", "cost": { "resource": "mp", "amount": 5 },  "motion": "cast",   "fx": "#ff7a1a", "effects": [ { "type": "damage", "damageType": "magic", "power": 1.3 } ] },
-  "blizzard":       { "id": "blizzard", "cooldown": 2,       "name": "Blizzard",        "target": "all_enemies",  "cost": { "resource": "mp", "amount": 14 }, "motion": "cast",   "fx": "#8fd8ff", "effects": [ { "type": "damage", "damageType": "magic", "power": 0.8 } ] },
-  "meteor":         { "id": "meteor", "cooldown": 3,         "name": "Meteor",          "target": "single_enemy", "cost": { "resource": "mp", "amount": 24 }, "motion": "cast",   "fx": "#ff4d1a", "effects": [ { "type": "damage", "damageType": "magic", "power": 2.6 } ] },
-
-  "bone_slash":     { "id": "bone_slash",     "name": "Bone Slash",      "target": "single_enemy", "cost": { "resource": "mp", "amount": 0 },  "motion": "melee",  "fx": "#d9d4c0", "effects": [ { "type": "damage", "damageType": "physical", "power": 1.0 } ] },
-  "soul_drain":     { "id": "soul_drain",     "name": "Soul Drain",      "target": "single_enemy", "cost": { "resource": "mp", "amount": 8 },  "motion": "cast",   "fx": "#b36bff", "effects": [ { "type": "damage", "damageType": "magic", "power": 1.0, "lifesteal": 1.0 } ] },
-  "blood_rite":     { "id": "blood_rite", "cooldown": 2,     "name": "Blood Rite",      "target": "single_enemy", "cost": { "resource": "hp", "amount": 20 }, "motion": "cast",   "fx": "#c0203a", "effects": [ { "type": "damage", "damageType": "magic", "power": 2.4 } ] },
-
-  "slash":          { "id": "slash",          "name": "Slash",           "target": "single_enemy", "cost": { "resource": "mp", "amount": 0 },  "motion": "melee",  "fx": "#ffe9b0", "effects": [ { "type": "damage", "damageType": "physical", "power": 1.0 } ] },
-  "crushing_blow":  { "id": "crushing_blow", "cooldown": 2,  "name": "Crushing Blow",   "target": "single_enemy", "cost": { "resource": "mp", "amount": 10 }, "motion": "melee",  "fx": "#ffe9b0", "effects": [ { "type": "damage", "damageType": "physical", "power": 1.7 } ] },
-  "shield_wall":    { "id": "shield_wall", "cooldown": 3,    "name": "Shield Wall",     "target": "self",         "cost": { "resource": "mp", "amount": 12 }, "motion": "cast",   "fx": "#6ec1ff", "effects": [ { "type": "shield", "stat": "def", "power": 3.0 } ] },
-
-  "quick_shot":     { "id": "quick_shot",     "name": "Quick Shot",      "target": "single_enemy", "cost": { "resource": "mp", "amount": 0 },  "motion": "ranged", "fx": "#d9c9a3", "effects": [ { "type": "damage", "damageType": "physical", "power": 1.0 } ] },
-  "piercing_arrow": { "id": "piercing_arrow", "cooldown": 2, "name": "Piercing Arrow",  "target": "single_enemy", "cost": { "resource": "mp", "amount": 8 },  "motion": "ranged", "fx": "#d9c9a3", "effects": [ { "type": "damage", "damageType": "physical", "power": 1.6, "ignoreDefense": 0.5 } ] },
-  "arrow_rain":     { "id": "arrow_rain", "cooldown": 3,     "name": "Arrow Rain",      "target": "all_enemies",  "cost": { "resource": "mp", "amount": 16 }, "motion": "ranged", "fx": "#d9c9a3", "effects": [ { "type": "damage", "damageType": "physical", "power": 0.6 } ] },
-
-  "frost_bolt":      { "id": "frost_bolt",      "name": "Frost Bolt",      "target": "single_enemy", "cost": { "resource": "mp", "amount": 5 },  "motion": "cast", "fx": "#8fd8ff", "effects": [ { "type": "damage", "damageType": "magic", "power": 1.3 } ] },
-  "lightning_storm": { "id": "lightning_storm", "cooldown": 3, "name": "Lightning Storm", "target": "all_enemies",  "cost": { "resource": "mp", "amount": 16 }, "motion": "cast", "fx": "#fff27a", "effects": [ { "type": "damage", "damageType": "magic", "power": 0.75 } ] },
-  "mana_barrier":    { "id": "mana_barrier", "cooldown": 2,    "name": "Mana Barrier",    "target": "single_ally",  "cost": { "resource": "mp", "amount": 10 }, "motion": "cast", "fx": "#6ec1ff", "effects": [ { "type": "shield", "stat": "mag", "power": 2.5 } ] },
-
-  "thorn_whip":     { "id": "thorn_whip",     "name": "Thorn Whip",      "target": "single_enemy", "cost": { "resource": "mp", "amount": 0 },  "motion": "cast",   "fx": "#7ed957", "effects": [ { "type": "damage", "damageType": "magic", "power": 0.9 } ] },
-  "rejuvenate":     { "id": "rejuvenate", "cooldown": 2,     "name": "Rejuvenate",      "target": "single_ally",  "cost": { "resource": "mp", "amount": 10 }, "motion": "cast",   "fx": "#7dff9b", "effects": [ { "type": "heal", "power": 2.5 } ] },
-  "summon_treant":  { "id": "summon_treant", "cooldown": 4,  "name": "Summon Treant",   "target": "self",         "cost": { "resource": "mp", "amount": 20 }, "motion": "cast",   "fx": "#7ed957", "effects": [ { "type": "summon", "unit": "treant" } ] },
-
-  "root_smash":     { "id": "root_smash",     "name": "Root Smash",      "target": "single_enemy", "cost": { "resource": "mp", "amount": 0 },  "motion": "melee",  "fx": "#8a6a3a", "effects": [ { "type": "damage", "damageType": "physical", "power": 1.0 } ] }
+  "_not": "Etkiler: damage (damageType physical|magic, element physical|fire|ice|holy|dark|nature|arcane (yalnızca renk/yazı), scale str|int|dex|luck, power; opsiyonel ignoreDefense, lifesteal, bonusVsTag, others (column_enemies'te şeritteki diğerlerine hasarın bu kadarı), bonusPerMissingMana, bonusFromShield {ratio, consume}), heal, hot (tur bazlı şifa: turns), shield (shieldType 'magic' ise yalnızca büyü hasarını emer), summon (lifespan: kendi tur sayısı), manaBurn, taunt (turns, breakRatio: taunt'lı bu oranda can kaybedince biter), guard (turns, share). scale: etkinin hangi temel özelliğe (str/int/dex/luck) bağlı olduğu. motion melee olan skill'ler yalnızca düşmanın en öndeki 2 canlı birimine vurabilir. cooldown: kullanıcının kendi tur sayısıyla bekleme. motion/fx/icon yalnızca görsel. Sayılar GEÇİCİDİR. Çağrı skill'inde oyuncu boş yuvayı seçer. HEDEF BİÇİMLERİ: area_enemies + area {radius 1|2}: oyuncu merkez düşmanı seçer; radius 1 = merkez + önü/arkası/sağı/solu (artı, çapraz yok), radius 2 = öne/arkaya/sağa/sola 2'şer + çaprazlara 1'er. column_enemies: seçilen düşmanın şeridindeki herkes (seçilene tam, diğerlerine others kadar). Dizilim: sıra (derinlik) x şerit; motion melee olanlar yalnızca en öndeki dolu sıraya vurur. Çağrı skill'inde oyuncu boş yuvayı seçer. shield efektinde self: true ise kalkan hedefe değil kullanıcıya gider (Shield Bash). Alan/şerit skill'leri boş hücreye de atılabilir (useSkill'in slot parametresi). summon efektinde onEnemyBoard: true ise birim düşmanın tahtasına çağrılır (sahibi yine çağıranın tarafı). Skill'de ignoreFrontRow: true ise yakın dövüş 'yalnızca ön sıradan' kuralından muaf (dash/charge/sızan çağrılar). BUFF/DEBUFF: {type:'status', status, turns, self?} (data/statuses.json: slow, haste, wound, stun, fortify, blessed...). YER ETKİSİ: {type:'ground', ground, turns, scale, power} (data/grounds.json: poison, burning); skill'in kapsadığı hücrelere bırakılır. {type:'selfDamage', ratio}: kullanıcıya maks canının ratio'su kadar hasar. target 'everyone': herkese gider, her etki 'side' (allies|enemies) ile ya da varsayılanla (hasar/durum düşmana, şifa/kalkan dosta) taraf seçer. Hasar etkisinde falloff: çok hedefli vuruşta her yeni hedef bir öncekinin falloff katı hasar alır. Skill'de ignoreReach: melee olsa da menzil/ön sıra sınırı yok (charge). target 'random_enemies' + count: rastgele (seed'li) farklı count düşmana gider. skyCenter: yukarıdan düşen etki seçilen alanın merkezine tek büyük olarak düşer. skyStagger: hedeflere sırayla (rastgele sıra, ms arayla) başlar. motion 'ground' (yerden çıkan etki: Blood Rite ağzı), 'whip' (kırbaç). taunt etkisinde allyDamageMult: taunt sürerken taunt'lı olmayan dostlar bu çarpanla hasar alır.",
+  "melee_attack": {
+    "id": "melee_attack",
+    "name": "Melee Attack",
+    "icon": "sword",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "melee",
+    "fx": "#ffe9b0",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 1.8
+      }
+    ]
+  },
+  "whirlwind": {
+    "id": "whirlwind",
+    "name": "Whirlwind",
+    "icon": "swirl",
+    "target": "all_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 15
+    },
+    "cooldown": 3,
+    "motion": "melee",
+    "fx": "#ffe9b0",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 1.2
+      }
+    ]
+  },
+  "holy_strike": {
+    "id": "holy_strike",
+    "name": "Holy Strike",
+    "icon": "holy",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "sky",
+    "fx": "#fff0a0",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 0.75,
+        "element": "holy"
+      }
+    ],
+    "skyFx": "light"
+  },
+  "radiance": {
+    "id": "radiance",
+    "name": "Radiance",
+    "icon": "burst",
+    "target": "everyone",
+    "cost": {
+      "resource": "mp",
+      "amount": 20
+    },
+    "cooldown": 3,
+    "motion": "sky",
+    "fx": "#fff0a0",
+    "effects": [
+      {
+        "type": "heal",
+        "scale": "int",
+        "power": 0.95
+      },
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 0.65,
+        "element": "holy"
+      }
+    ],
+    "skyFx": "light",
+    "skyStagger": 130
+  },
+  "judgment": {
+    "id": "judgment",
+    "name": "Judgment",
+    "icon": "hammer",
+    "target": "area_enemies",
+    "area": {
+      "radius": 1
+    },
+    "cost": {
+      "resource": "mp",
+      "amount": 14
+    },
+    "cooldown": 3,
+    "motion": "sky",
+    "skyFx": "light",
+    "skyCenter": true,
+    "fx": "#fff0a0",
+    "effects": [
+      {
+        "type": "ground",
+        "ground": "holy_fire",
+        "turns": 2,
+        "scale": "int",
+        "power": 0.85
+      }
+    ]
+  },
+  "fire_bolt": {
+    "id": "fire_bolt",
+    "name": "Fire Bolt",
+    "icon": "flame",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 5
+    },
+    "motion": "cast",
+    "fx": "#ff7a1a",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 1.8,
+        "element": "fire"
+      }
+    ]
+  },
+  "blizzard": {
+    "id": "blizzard",
+    "name": "Blizzard",
+    "icon": "snow",
+    "target": "area_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 14
+    },
+    "cooldown": 2,
+    "motion": "sky",
+    "skyFx": "shards",
+    "fx": "#8fd8ff",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 1.0,
+        "element": "ice"
+      }
+    ],
+    "area": {
+      "radius": 1
+    }
+  },
+  "meteor": {
+    "id": "meteor",
+    "name": "Meteor",
+    "icon": "meteor",
+    "target": "area_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 24
+    },
+    "cooldown": 4,
+    "motion": "sky",
+    "skyFx": "meteor",
+    "fx": "#ff4d1a",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 1.0,
+        "element": "fire"
+      },
+      {
+        "type": "ground",
+        "ground": "burning",
+        "turns": 2,
+        "scale": "int",
+        "power": 0.3
+      }
+    ],
+    "area": {
+      "radius": 1
+    },
+    "skyCenter": true
+  },
+  "mana_barrier": {
+    "id": "mana_barrier",
+    "name": "Mana Barrier",
+    "icon": "barrier",
+    "target": "single_ally",
+    "cost": {
+      "resource": "mp",
+      "amount": 10
+    },
+    "cooldown": 3,
+    "motion": "cast",
+    "fx": "#6ec1ff",
+    "effects": [
+      {
+        "type": "shield",
+        "scale": "int",
+        "power": 0.9
+      }
+    ]
+  },
+  "blood_rite": {
+    "id": "blood_rite",
+    "name": "Blood Rite",
+    "icon": "drop",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "hp",
+      "amount": 20
+    },
+    "cooldown": 2,
+    "motion": "ground",
+    "fx": "#c0203a",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "str",
+        "power": 2.6,
+        "element": "dark"
+      }
+    ]
+  },
+  "wail_of_the_dead": {
+    "id": "wail_of_the_dead",
+    "name": "Wail of the Dead",
+    "icon": "wail",
+    "target": "area_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 12
+    },
+    "cooldown": 3,
+    "motion": "cast",
+    "fx": "#b36bff",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "str",
+        "power": 1.0,
+        "element": "dark"
+      },
+      {
+        "type": "ground",
+        "ground": "poison",
+        "turns": 2,
+        "scale": "str",
+        "power": 0.3
+      }
+    ],
+    "area": {
+      "radius": 1
+    }
+  },
+  "quick_shot": {
+    "id": "quick_shot",
+    "name": "Quick Shot",
+    "icon": "arrow",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "ranged",
+    "fx": "#d9c9a3",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "dex",
+        "power": 0.8
+      },
+      {
+        "type": "status",
+        "status": "haste",
+        "turns": 2,
+        "self": true
+      }
+    ]
+  },
+  "piercing_arrow": {
+    "id": "piercing_arrow",
+    "name": "Piercing Arrow",
+    "icon": "pierce",
+    "target": "column_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 8
+    },
+    "cooldown": 2,
+    "motion": "ranged",
+    "fx": "#d9c9a3",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "dex",
+        "power": 1.2,
+        "falloff": 0.7
+      }
+    ]
+  },
+  "arrow_rain": {
+    "id": "arrow_rain",
+    "name": "Arrow Rain",
+    "icon": "arrows",
+    "target": "area_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 16
+    },
+    "cooldown": 3,
+    "motion": "sky",
+    "skyFx": "arrows",
+    "fx": "#d9c9a3",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "dex",
+        "power": 0.5
+      }
+    ],
+    "area": {
+      "radius": 2
+    }
+  },
+  "aimed_shot": {
+    "id": "aimed_shot",
+    "name": "Aimed Shot",
+    "icon": "target",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 14
+    },
+    "cooldown": 4,
+    "motion": "ranged",
+    "fx": "#ffd166",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "dex",
+        "power": 2.4,
+        "ignoreDefense": 0.5
+      }
+    ]
+  },
+  "thorn_whip": {
+    "id": "thorn_whip",
+    "name": "Thorn Whip",
+    "icon": "thorn",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "whip",
+    "fx": "#7ed957",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 1.2,
+        "element": "nature"
+      },
+      {
+        "type": "status",
+        "status": "wound",
+        "turns": 2
+      }
+    ]
+  },
+  "rejuvenate": {
+    "id": "rejuvenate",
+    "name": "Rejuvenate",
+    "icon": "leaf",
+    "target": "single_ally",
+    "cost": {
+      "resource": "mp",
+      "amount": 10
+    },
+    "cooldown": 3,
+    "motion": "cast",
+    "fx": "#7dff9b",
+    "effects": [
+      {
+        "type": "heal",
+        "scale": "int",
+        "power": 1.2
+      },
+      {
+        "type": "hot",
+        "scale": "int",
+        "power": 0.4,
+        "turns": 3
+      }
+    ]
+  },
+  "summon_treant": {
+    "id": "summon_treant",
+    "name": "Summon Treant",
+    "icon": "tree",
+    "target": "self",
+    "cost": {
+      "resource": "mp",
+      "amount": 25
+    },
+    "cooldown": 6,
+    "motion": "cast",
+    "fx": "#7ed957",
+    "effects": [
+      {
+        "type": "summon",
+        "unit": "treant",
+        "lifespan": 3
+      }
+    ]
+  },
+  "natures_wrath": {
+    "id": "natures_wrath",
+    "name": "Nature's Wrath",
+    "icon": "leaves",
+    "target": "area_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 14
+    },
+    "cooldown": 3,
+    "motion": "cast",
+    "fx": "#7ed957",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 1.0,
+        "element": "nature"
+      }
+    ],
+    "area": {
+      "radius": 1
+    }
+  },
+  "taunt": {
+    "id": "taunt",
+    "name": "Taunt",
+    "icon": "finger",
+    "target": "self",
+    "cost": {
+      "resource": "mp",
+      "amount": 8
+    },
+    "cooldown": 4,
+    "motion": "cast",
+    "fx": "#ff9f43",
+    "effects": [
+      {
+        "type": "taunt",
+        "turns": 2,
+        "breakRatio": 0.25,
+        "allyDamageMult": 0.5
+      },
+      {
+        "type": "shield",
+        "scale": "str",
+        "power": 0.3
+      }
+    ]
+  },
+  "guard": {
+    "id": "guard",
+    "name": "Guard",
+    "icon": "guardian",
+    "target": "single_ally",
+    "cost": {
+      "resource": "mp",
+      "amount": 10
+    },
+    "cooldown": 4,
+    "motion": "cast",
+    "fx": "#6ec1ff",
+    "effects": [
+      {
+        "type": "guard",
+        "turns": 3,
+        "share": 0.5
+      }
+    ]
+  },
+  "mana_burn": {
+    "id": "mana_burn",
+    "name": "Mana Burn",
+    "icon": "manaburn",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "melee",
+    "fx": "#9b59d0",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 0.9,
+        "element": "arcane"
+      },
+      {
+        "type": "manaBurn",
+        "amount": 10,
+        "gainRatio": 0.5
+      }
+    ]
+  },
+  "drain_field": {
+    "id": "drain_field",
+    "name": "Drain Field",
+    "icon": "drainfield",
+    "target": "area_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 14
+    },
+    "cooldown": 3,
+    "motion": "sky",
+    "fx": "#9b59d0",
+    "effects": [
+      {
+        "type": "manaBurn",
+        "amount": 14.0
+      }
+    ],
+    "area": {
+      "radius": 2
+    },
+    "skyFx": "void"
+  },
+  "void_strike": {
+    "id": "void_strike",
+    "name": "Void Strike",
+    "icon": "void",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 16
+    },
+    "cooldown": 3,
+    "motion": "cast",
+    "fx": "#7d3fb0",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 1.9,
+        "bonusPerMissingMana": 1.0,
+        "element": "arcane"
+      }
+    ]
+  },
+  "spell_ward": {
+    "id": "spell_ward",
+    "name": "Spell Ward",
+    "icon": "rune",
+    "target": "self",
+    "cost": {
+      "resource": "mp",
+      "amount": 10
+    },
+    "cooldown": 4,
+    "motion": "cast",
+    "fx": "#b36bff",
+    "effects": [
+      {
+        "type": "shield",
+        "scale": "int",
+        "power": 0.3,
+        "shieldType": "magic",
+        "bonusPerMana": 0.35
+      }
+    ]
+  },
+  "root_smash": {
+    "id": "root_smash",
+    "name": "Root Smash",
+    "icon": "fist",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "melee",
+    "fx": "#8a6a3a",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 1.0
+      }
+    ]
+  },
+  "raise_dead": {
+    "id": "raise_dead",
+    "name": "Raise Dead",
+    "icon": "skull",
+    "target": "self",
+    "cost": {
+      "resource": "mp",
+      "amount": 14
+    },
+    "cooldown": 5,
+    "motion": "cast",
+    "fx": "#b36bff",
+    "effects": [
+      {
+        "type": "summon",
+        "unit": "skeleton",
+        "lifespan": 4,
+        "onEnemyBoard": true
+      }
+    ]
+  },
+  "skeleton_strike": {
+    "id": "skeleton_strike",
+    "name": "Bone Strike",
+    "icon": "bone",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "melee",
+    "fx": "#d9d4c0",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 1.0
+      }
+    ]
+  },
+  "charge": {
+    "id": "charge",
+    "name": "Charge",
+    "icon": "bigsword",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 10
+    },
+    "cooldown": 3,
+    "motion": "melee",
+    "ignoreFrontRow": true,
+    "ignoreReach": true,
+    "fx": "#ffe9b0",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 2.0
+      },
+      {
+        "type": "status",
+        "status": "stun",
+        "turns": 1
+      }
+    ]
+  },
+  "abyssal_cry": {
+    "id": "abyssal_cry",
+    "name": "Abyssal Cry",
+    "icon": "roar",
+    "target": "self",
+    "cost": {
+      "resource": "mp",
+      "amount": 15
+    },
+    "cooldown": 5,
+    "motion": "cast",
+    "fx": "#c0203a",
+    "effects": [
+      {
+        "type": "selfDamage",
+        "ratio": 0.15
+      },
+      {
+        "type": "status",
+        "status": "fortify",
+        "turns": 3,
+        "self": true
+      }
+    ]
+  },
+  "blessing": {
+    "id": "blessing",
+    "name": "Blessing",
+    "icon": "cross",
+    "target": "single_ally",
+    "cost": {
+      "resource": "mp",
+      "amount": 12
+    },
+    "cooldown": 3,
+    "motion": "cast",
+    "fx": "#fff0a0",
+    "effects": [
+      {
+        "type": "status",
+        "status": "blessed",
+        "turns": 3
+      }
+    ]
+  },
+  "bone_throw": {
+    "id": "bone_throw",
+    "name": "Bone Throw",
+    "icon": "bone",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "ranged",
+    "fx": "#d9d4c0",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 1.1
+      },
+      {
+        "type": "status",
+        "status": "slow",
+        "turns": 2
+      }
+    ]
+  },
+  "tremor_slam": {
+    "id": "tremor_slam",
+    "name": "Tremor Slam",
+    "icon": "bash",
+    "target": "area_enemies",
+    "area": {
+      "radius": 1
+    },
+    "cost": {
+      "resource": "mp",
+      "amount": 8
+    },
+    "cooldown": 3,
+    "motion": "melee",
+    "fx": "#ffe9b0",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 0.4
+      },
+      {
+        "type": "status",
+        "status": "slow",
+        "turns": 2
+      }
+    ]
+  },
+  "fist_crush": {
+    "id": "fist_crush",
+    "name": "Fist Crush",
+    "icon": "crush",
+    "target": "random_enemies",
+    "count": 3,
+    "cost": {
+      "resource": "mp",
+      "amount": 14
+    },
+    "cooldown": 4,
+    "motion": "sky",
+    "skyFx": "fist",
+    "fx": "#ffd166",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 1.8
+      }
+    ]
+  }
 }

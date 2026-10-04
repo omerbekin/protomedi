@@ -1,0 +1,29 @@
+{
+  "id": "treant",
+  "name": "Treant",
+  "spriteId": "treant",
+  "color": "#6b4423",
+  "logo": "tree",
+  "frontPriority": 8,
+  "attributes": {
+    "str": 13.5,
+    "int": 0,
+    "dex": 0,
+    "luck": 0
+  },
+  "armor": 5,
+  "magicArmor": 0,
+  "mpRegen": 0,
+  "overrides": {
+    "hp": 105,
+    "mp": 0,
+    "spd": 5
+  },
+  "ai": "aggressive",
+  "skills": [
+    "root_smash"
+  ],
+  "tags": [
+    "nature"
+  ]
+}

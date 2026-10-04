@@ -1,159 +1,69 @@
-// Headless denge simülatörü.
-// 1) Tam savaşlar: iki taraf da yapay zeka (data/ai.json) ile baştan sona oynanır, N farklı seed için.
-// 2) Skill raporu: her skill'in tek kullanımdaki ortalama etkisi (test modunda, sırasız).
-// Kullanım: npm run sim [savaş sayısı]
-import { Battle, chooseAction, content } from '../engine';
+// Headless denge simülatörü raporu (Türkçe).
+// Rastgele takımlı savaşlar (her seed'de farklı oyuncu/düşman kompozisyonu) iki taraf da yapay zeka ile oynanır;
+// sınıf, skill ve kompozisyon bazında rapor çıkarır. Hedefler docs/balance.md içindedir.
+// Kullanım: npm run sim -- [savaş sayısı] [ilk seed]
+import { content } from '../engine';
+import { simulate, winRate } from './simulate';
 
-const runs = Number(process.argv[2] ?? 500);
-const battleId = 'first-battle';
-const MAX_TURNS = 400; // bunu aşan savaş "berabere/kilitlenme" sayılır
-const fmt = (n: number, digits = 1) => n.toFixed(digits).replace('.', ',');
-const pct = (n: number, total: number) => `%${fmt((n / Math.max(1, total)) * 100, 0)}`;
+const runs = Number(process.argv[2] ?? 3000);
+const firstSeed = Number(process.argv[3] ?? 1);
+const WIN_LOW = 40; // sınıf kazanma oranı hedef aralığı (balance.md: ±%10)
+const WIN_HIGH = 60;
+const SKILL_SHARE_LIMIT = 40; // tek bir (bedelli) skill'in o sınıfın hamlelerindeki payı
 
-interface Outcome {
-  winner: 'party' | 'enemy' | null;
-  turns: number;
-  skipped: Map<string, number>;
-  used: Map<string, number>;
-  deadUnits: string[];
-  partyAlive: number;
-}
+const fmt = (n: number, d = 1) => n.toFixed(d).replace('.', ',');
+const pct = (n: number, total: number) => (total === 0 ? 0 : (n / total) * 100);
 
-function playBattle(seed: number): Outcome {
-  const battle = new Battle(content.battleSetup(battleId, seed, 'turns'));
-  const used = new Map<string, number>();
-  const skipped = new Map<string, number>();
-  const bump = (m: Map<string, number>, key: string) => m.set(key, (m.get(key) ?? 0) + 1);
-
-  while (!battle.winner && battle.turnsTaken < MAX_TURNS) {
-    const actor = battle.currentActor;
-    if (!actor) break;
-    const label = `${actor.side === 'party' ? 'Oyuncu' : 'Düşman'} ${actor.name}`;
-    const choice = chooseAction(battle, actor.uid, content.aiConfig);
-    const result = choice ? battle.useSkill(actor.uid, choice.skillId, choice.targetUid) : battle.skipTurn();
-    if (!result.ok) break; // YZ geçersiz hamle önermemeli; olursa raporu bozmamak için dur
-    if (choice) bump(used, `${label}|${content.skills[choice.skillId]?.name ?? choice.skillId}`);
-    else bump(skipped, label);
-  }
-  return {
-    winner: battle.winner,
-    turns: battle.turnsTaken,
-    skipped,
-    used,
-    deadUnits: battle.combatants.filter((c) => c.hp <= 0 && !c.summoned).map((c) => `${c.side === 'party' ? 'Oyuncu' : 'Düşman'} ${c.name}`),
-    partyAlive: battle.living('party').length,
-  };
-}
-
-// --- 1) Tam savaşlar (YZ vs YZ) ---
-const outcomes = Array.from({ length: runs }, (_, i) => playBattle(i + 1));
-const wins = outcomes.filter((o) => o.winner === 'party').length;
-const losses = outcomes.filter((o) => o.winner === 'enemy').length;
-const draws = outcomes.length - wins - losses;
-const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
+const r = simulate(runs, firstSeed);
 
 console.log('Proto denge simülatörü');
 console.log('======================');
-console.log(`Savaş: ${battleId}. İki taraf da yapay zeka ile oynandı, ${runs} savaş (seed 1..${runs}).`);
+console.log(`Savaş: ${content.DEFAULT_BATTLE} (her seed'de farklı takımlar). Yapay zeka vs yapay zeka, ${runs} savaş (seed ${firstSeed}..${firstSeed + runs - 1}).`);
 console.log('');
-console.log('SONUÇLAR');
-console.log(`  Oyuncu takımı kazandı : ${wins} (${pct(wins, runs)})`);
-console.log(`  Düşman takımı kazandı : ${losses} (${pct(losses, runs)})`);
-if (draws > 0) console.log(`  Bitmeyen/berabere     : ${draws} (${pct(draws, runs)})`);
-console.log(`  Ortalama savaş uzunluğu: ${fmt(avg(outcomes.map((o) => o.turns)))} tur (tüm birimlerin turları toplamı)`);
-console.log(`  Oyuncu kazanınca ortalama ${fmt(avg(outcomes.filter((o) => o.winner === 'party').map((o) => o.partyAlive)))} kişi hayatta`);
+console.log('GENEL');
+console.log(`  Oyuncu tarafı kazandı : ${r.partyWins} (%${fmt(pct(r.partyWins, runs))})`);
+console.log(`  Düşman tarafı kazandı : ${r.enemyWins} (%${fmt(pct(r.enemyWins, runs))})`);
+if (r.draws > 0) console.log(`  Bitmeyen savaş        : ${r.draws} (%${fmt(pct(r.draws, runs))})`);
+console.log(`  Ortalama savaş uzunluğu: ${fmt(r.totalTurns / runs)} tur (tüm birimlerin turları toplamı)`);
+console.log('  (İki taraf simetrik; eşit hızda önce oynayan taraf seed\'e göre değişir. Beklenen: %50 civarı.)');
 
-const deaths = new Map<string, number>();
-for (const o of outcomes) for (const u of o.deadUnits) deaths.set(u, (deaths.get(u) ?? 0) + 1);
+const rows = Object.keys(content.classes).map((id) => ({ id, name: content.classes[id]!.name, s: r.classes.get(id)! }));
 console.log('');
-console.log('KİM ÖLÜYOR (savaşların yüzde kaçında)');
-for (const [unit, n] of [...deaths].sort((a, b) => b[1] - a[1])) console.log(`  ${unit.padEnd(18)} ${pct(n, runs)}`);
-
-const used = new Map<string, number>();
-const skipped = new Map<string, number>();
-for (const o of outcomes) {
-  for (const [k, v] of o.used) used.set(k, (used.get(k) ?? 0) + v);
-  for (const [k, v] of o.skipped) skipped.set(k, (skipped.get(k) ?? 0) + v);
+console.log(`SINIF DENGESİ (hedef kazanma oranı %${WIN_LOW}-${WIN_HIGH}; sınıfın tek tarafta olduğu savaşlar)`);
+console.log('  sınıf     savaş  kazanma  ölüm   hasar  şifa  kalkan   (savaş başına, o sınıfın birimi)');
+const warnings: string[] = [];
+for (const { name, s } of [...rows].sort((a, b) => winRate(b.s) - winRate(a.s))) {
+  const win = winRate(s);
+  const flag = win < WIN_LOW || win > WIN_HIGH ? '  <-- DENGESİZ' : '';
+  if (flag) warnings.push(`${name} %${fmt(win, 0)}`);
+  console.log(
+    `  ${name.padEnd(8)} ${String(s.games).padStart(6)}  %${fmt(win).padStart(5)}  %${fmt(pct(s.deaths, s.units), 0).padStart(3)}  ${fmt(s.damage / s.units, 0).padStart(5)}  ${fmt(s.heal / s.units, 0).padStart(4)}  ${fmt(s.shield / s.units, 0).padStart(5)}${flag}`,
+  );
 }
-const owners = [...new Set([...used.keys()].map((k) => k.split('|')[0]!))];
-console.log('');
-console.log('SKILL KULLANIMI (o karakterin hamlelerinin yüzde kaçı) ve pas geçme');
-for (const owner of owners) {
-  const entries = [...used].filter(([k]) => k.startsWith(`${owner}|`));
-  const total = entries.reduce((s, [, v]) => s + v, 0);
-  const skips = skipped.get(owner) ?? 0;
-  console.log(`  ${owner}  (savaş başına ${fmt(total / runs)} hamle, ${fmt(skips / runs)} pas)`);
-  for (const [k, v] of entries.sort((a, b) => b[1] - a[1])) console.log(`      ${k.split('|')[1]!.padEnd(16)} ${pct(v, total)}`);
-}
-console.log('');
-console.log('Not: balance.md hedefleri (ör. tek skill %40 üstü olmasın) bu rakamlara göre okunur. Pas geçme sayısı yüksekse karakterin MP\'si çabuk bitiyor demektir.');
+console.log(warnings.length ? `  UYARI: hedef aralığın dışında: ${warnings.join(', ')}` : '  Tüm sınıflar hedef aralığın içinde.');
 
-// --- 2) Skill raporu (tek kullanım, test modu) ---
-interface Row {
-  owner: string;
-  skill: string;
-  cost: string;
-  damage: number;
-  heal: number;
-  shield: number;
-  targets: number;
-  summons: boolean;
+console.log('');
+console.log('KOMPOZİSYONLAR (takım olarak kazanma oranı; 4 sınıflı 15 farklı takım)');
+const comps = [...r.comps].map(([key, c]) => ({ key, ...c })).sort((a, b) => winRate(b) - winRate(a));
+for (const c of comps) {
+  const win = winRate(c);
+  const names = c.key.split('+').map((id) => content.classes[id]?.name ?? id).join(' + ');
+  console.log(`  %${fmt(win).padStart(5)}  (${String(c.games).padStart(4)} savaş)  ${names}${win < 30 || win > 70 ? '  <-- uç değer' : ''}`);
 }
 
-const rows: Row[] = [];
-const roster = new Battle(content.battleSetup(battleId, 1, 'test')).combatants.filter((c) => !c.summoned);
-const skillRuns = Math.min(runs, 300);
-
-for (const who of roster) {
-  for (const skillId of who.skills) {
-    const skill = content.skills[skillId]!;
-    let damage = 0;
-    let heal = 0;
-    let shield = 0;
-    let targets = 0;
-    for (let seed = 1; seed <= skillRuns; seed++) {
-      const battle = new Battle(content.battleSetup(battleId, seed, 'test'));
-      // Şifa ölçülebilsin diye herkesin canı yarıya indirilir (yalnızca simülasyonda)
-      if (skill.effects.some((e) => e.type === 'heal')) for (const c of battle.combatants) c.hp = Math.round(c.maxHp / 2);
-      const choices = battle.validTargets(who.uid, skillId);
-      const r = battle.useSkill(who.uid, skillId, choices[0]?.uid);
-      if (!r.ok) continue;
-      for (const e of r.events) {
-        if (e.type === 'damage') damage += e.amount + e.absorbed;
-        if (e.type === 'heal') heal += e.amount;
-        if (e.type === 'shield') shield += e.amount;
-        if (e.type === 'skillUsed') targets = e.targets.length;
-      }
-    }
-    rows.push({
-      owner: `${who.side === 'party' ? 'Oyuncu' : 'Düşman'} ${who.name}`,
-      skill: skill.name,
-      cost: `${skill.cost.amount > 0 ? `${skill.cost.amount} ${skill.cost.resource.toUpperCase()}` : 'bedelsiz'}${skill.cooldown ? `, bekleme ${skill.cooldown} tur` : ''}`,
-      damage: damage / skillRuns,
-      heal: heal / skillRuns,
-      shield: shield / skillRuns,
-      targets,
-      summons: skill.effects.some((e) => e.type === 'summon'),
-    });
+console.log('');
+console.log(`SKILL KULLANIMI (sınıfın hamlelerinin yüzde kaçı; bedelli bir skill %${SKILL_SHARE_LIMIT}'ı aşmamalı)`);
+const skillWarnings: string[] = [];
+for (const { name, s } of rows) {
+  const total = [...s.skillUses.values()].reduce((a, b) => a + b, 0);
+  console.log(`  ${name}  (savaşa katılan birim başına ${fmt(s.moves / s.units)} hamle, ${fmt(s.skips / s.units)} pas)`);
+  for (const [skillId, n] of [...s.skillUses].sort((a, b) => b[1] - a[1])) {
+    const skill = content.skills[skillId];
+    const share = pct(n, total);
+    const paid = (skill?.cost.amount ?? 0) > 0;
+    const flag = paid && share > SKILL_SHARE_LIMIT ? '  <-- baskın' : '';
+    if (flag) skillWarnings.push(`${name} ${skill?.name} %${fmt(share, 0)}`);
+    console.log(`      ${(skill?.name ?? skillId).padEnd(18)} %${fmt(share, 0).padStart(3)}${paid ? '' : '  (bedelsiz)'}${flag}`);
   }
 }
-
-console.log('');
-console.log('SKILL ETKİLERİ (tek kullanımda ortalama, toplam)');
-let lastOwner = '';
-for (const r of rows) {
-  if (r.owner !== lastOwner) {
-    console.log(`  ${r.owner}`);
-    lastOwner = r.owner;
-  }
-  const effects = [
-    r.damage > 0 ? `hasar ${fmt(r.damage)}` : '',
-    r.heal > 0 ? `şifa ${fmt(r.heal)}` : '',
-    r.shield > 0 ? `kalkan ${fmt(r.shield)}` : '',
-    r.summons ? 'Treant çağırır' : '',
-    r.targets > 1 ? `${r.targets} hedef` : '',
-  ]
-    .filter(Boolean)
-    .join(', ');
-  console.log(`      ${r.skill.padEnd(16)} ${r.cost.padEnd(24)} ${effects || '-'}`);
-}
+console.log(skillWarnings.length ? `  UYARI: baskın skill: ${skillWarnings.join(', ')}` : '  Baskın (tek doğru hamle) skill yok.');

@@ -1,5 +1,34 @@
 {
-  "id": "mage", "name": "Mage", "spriteId": "mage", "color": "#3d7be0",
-  "stats": { "hp": 90, "mp": 60, "atk": 4, "def": 4, "mag": 20, "res": 10, "spd": 9, "mpRegen": 4, "crit": 0.05, "eva": 0.04 },
-  "ai": "aggressive", "skills": ["fire_bolt", "blizzard", "meteor"]
+  "id": "mage",
+  "name": "Mage",
+  "spriteId": "mage",
+  "color": "#3d7be0",
+  "logo": "wizhat",
+  "frontPriority": 7,
+  "attributes": {
+    "str": 10,
+    "int": 26.0,
+    "dex": 8,
+    "luck": 4
+  },
+  "armor": 4,
+  "magicArmor": 0,
+  "mpRegen": 4,
+  "ai": "caster",
+  "skills": [
+    "fire_bolt",
+    "blizzard",
+    "mana_barrier",
+    "meteor"
+  ],
+  "passive": {
+    "id": "spell_echo",
+    "name": "Spell Echo",
+    "icon": "rune",
+    "text": "Damaging spells with a cooldown have a 25% chance to be ready again immediately.",
+    "effect": {
+      "type": "spellEcho",
+      "chance": 0.25
+    }
+  }
 }

@@ -1,66 +1,77 @@
 import type { Rng } from './rng';
-import type { Formulas, Stats } from './types';
+import { armorReduction, attributePower } from './stats';
+import type { Attribute, Formulas, Stats } from './types';
 
-const varied = (value: number, variance: number, rng: Rng) => value * (1 + (rng.next() * 2 - 1) * variance);
-
-const physicalBase = (attacker: Stats, defender: Stats, power: number, formulas: Formulas, ignoreDefense: number) =>
-  attacker.atk * power - defender.def * (1 - ignoreDefense) * formulas.physicalDamage.defenseFactor;
-
-const magicBase = (attacker: Stats, defender: Stats, power: number, formulas: Formulas, ignoreDefense: number) =>
-  attacker.mag * power - defender.res * (1 - ignoreDefense) * formulas.magicDamage.resistFactor;
-
-/** Fiziksel hasar. Tüm katsayılar data/formulas.json'dan gelir. */
-export function physicalDamage(
-  attacker: Stats,
-  defender: Stats,
-  power: number,
-  formulas: Formulas,
-  rng: Rng,
-  ignoreDefense = 0,
-): number {
-  const { variance, minDamage } = formulas.physicalDamage;
-  return Math.max(minDamage, Math.round(varied(physicalBase(attacker, defender, power, formulas, ignoreDefense), variance, rng)));
+/** Bir hasar etkisinin hesap girdisi (skill etkisi + hedefe özel ekler). */
+export interface DamageSpec {
+  damageType: 'physical' | 'magic';
+  scale: Attribute;
+  power: number;
+  ignoreDefense?: number;
+  /** Zırhtan ÖNCE eklenen düz miktar (eksik mana, tüketilen kalkan gibi). */
+  extra?: number;
+  /** Hedefin aldığı hasar çarpanı (çağrılan birimler için 2). */
+  takenMultiplier?: number;
 }
 
-/** Büyü hasarı: MAG x güç - RES x katsayı. */
-export function magicDamage(
-  attacker: Stats,
-  defender: Stats,
-  power: number,
-  formulas: Formulas,
-  rng: Rng,
-  ignoreDefense = 0,
-): number {
-  const { variance, minDamage } = formulas.magicDamage;
-  return Math.max(minDamage, Math.round(varied(magicBase(attacker, defender, power, formulas, ignoreDefense), variance, rng)));
+export interface Range {
+  min: number;
+  max: number;
+  avg: number;
 }
 
-/** Şifa miktarı: MAG x güç. */
-export function healAmount(caster: Stats, power: number, formulas: Formulas, rng: Rng): number {
+/**
+ * Sapmasız, kritiksiz hasar: (özellik x katsayı x güç + ekler) x (1 - zırh azalması) x alınan hasar çarpanı.
+ * Zırh YÜZDESEL düşürür; zırh arttıkça azalma artışı yavaşlar (armor / (armor + k)).
+ */
+function baseDamage(attacker: Stats, defender: Stats, spec: DamageSpec, formulas: Formulas): number {
+  const armor = (spec.damageType === 'physical' ? defender.armor : defender.magicArmor) * (1 - (spec.ignoreDefense ?? 0));
+  const raw = attributePower(attacker, spec.scale, formulas) * spec.power + (spec.extra ?? 0);
+  return raw * (1 - armorReduction(armor, formulas)) * (spec.takenMultiplier ?? 1);
+}
+
+/** Hasarın alabileceği en düşük, en yüksek ve ortalama değer (kritik hariç). Rastgelelik kullanmaz. */
+export function damageRange(attacker: Stats, defender: Stats, spec: DamageSpec, formulas: Formulas): Range {
+  const { variance, minDamage } = formulas.damage;
+  const base = baseDamage(attacker, defender, spec, formulas);
+  const clamp = (v: number) => Math.max(minDamage, Math.round(v));
+  return { min: clamp(base * (1 - variance)), max: clamp(base * (1 + variance)), avg: clamp(base) };
+}
+
+/** Zar atılmış hasar (±sapma, kritik HARİÇ; kritik ayrıca rollCrit ile son çarpan olarak uygulanır). */
+export function rollDamage(attacker: Stats, defender: Stats, spec: DamageSpec, formulas: Formulas, rng: Rng): number {
+  const { variance, minDamage } = formulas.damage;
+  const base = baseDamage(attacker, defender, spec, formulas);
+  return Math.max(minDamage, Math.round(base * (1 + (rng.next() * 2 - 1) * variance)));
+}
+
+/** Kritik zarı: her çağrıda bir sayı tüketir. Hasarın/şifanın SON çarpanını döndürür (kritik yoksa 1). */
+export function rollCrit(stats: Pick<Stats, 'critChance' | 'critMult'>, rng: Rng): { crit: boolean; mult: number } {
+  const crit = rng.next() < stats.critChance;
+  return { crit, mult: crit ? stats.critMult : 1 };
+}
+
+/** Fiziksel saldırıdan kaçınma zarı: her çağrıda bir sayı tüketir. */
+export function rollDodge(defender: Pick<Stats, 'dodge'>, rng: Rng): boolean {
+  return rng.next() < defender.dodge;
+}
+
+/** Şifa miktarının aralığı (kritik hariç). */
+export function healRange(caster: Stats, scale: Attribute, power: number, formulas: Formulas): Range {
   const { variance, minHeal } = formulas.heal;
-  return Math.max(minHeal, Math.round(varied(caster.mag * power, variance, rng)));
+  const raw = attributePower(caster, scale, formulas) * power;
+  const clamp = (v: number) => Math.max(minHeal, Math.round(v));
+  return { min: clamp(raw * (1 - variance)), max: clamp(raw * (1 + variance)), avg: clamp(raw) };
 }
 
-// --- Yapay zekanın tahminleri: rastgelelik kullanmaz, motorun RNG'sine dokunmaz ---
-
-/** Beklenen (sapmasız) hasar. */
-export function expectedDamage(
-  type: 'physical' | 'magic',
-  attacker: Stats,
-  defender: Stats,
-  power: number,
-  formulas: Formulas,
-  ignoreDefense = 0,
-): number {
-  const base =
-    type === 'physical'
-      ? physicalBase(attacker, defender, power, formulas, ignoreDefense)
-      : magicBase(attacker, defender, power, formulas, ignoreDefense);
-  const min = type === 'physical' ? formulas.physicalDamage.minDamage : formulas.magicDamage.minDamage;
-  return Math.max(min, Math.round(base));
+/** Zar atılmış şifa (kritik hariç). */
+export function rollHeal(caster: Stats, scale: Attribute, power: number, formulas: Formulas, rng: Rng): number {
+  const { variance, minHeal } = formulas.heal;
+  const raw = attributePower(caster, scale, formulas) * power;
+  return Math.max(minHeal, Math.round(raw * (1 + (rng.next() * 2 - 1) * variance)));
 }
 
-/** Beklenen (sapmasız) şifa. */
-export function expectedHeal(caster: Stats, power: number, formulas: Formulas): number {
-  return Math.max(formulas.heal.minHeal, Math.round(caster.mag * power));
+/** Kalkan miktarı: sabit (sapma ve kritik YOK). */
+export function shieldAmount(caster: Stats, scale: Attribute, power: number, formulas: Formulas): number {
+  return Math.round(attributePower(caster, scale, formulas) * power);
 }

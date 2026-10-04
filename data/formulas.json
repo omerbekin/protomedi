@@ -1,7 +1,53 @@
 {
-  "_not": "Fiziksel: ATK x güç - DEF x defenseFactor. Büyü: MAG x güç - RES x resistFactor. İkisi de (1 ± variance) ile çarpılır, en az minDamage. Şifa: MAG x güç (± variance). Sıra: her tikte herkesin sayacı SPD kadar dolar, threshold'a ulaşan oynar (sayaç taşması korunur); queueLength sıra çubuğunda görünen aktör sayısı.",
-  "physicalDamage": { "defenseFactor": 0.5, "variance": 0.1, "minDamage": 1 },
-  "magicDamage": { "resistFactor": 0.5, "variance": 0.1, "minDamage": 1 },
-  "heal": { "variance": 0.05, "minHeal": 1 },
-  "turn": { "threshold": 100, "queueLength": 8 }
+  "_not": "STAT SİSTEMİ: 4 temel özellik (str, int, dex, luck) türev stat'ları verir. Can = hpBase + hpPerStr x str. Mana = mpBase + mpPerInt x int. Hız = spdBase + spdPerDex x dex. Fiziksel dodge = dodgePerDex x dex. Kritik şansı = critChanceBase + critChancePerLuck x luck; kritik çarpanı = critMultBase + critMultPerLuck x luck (kritik, hasar ve şifanın SON çarpanıdır, kalkana uygulanmaz). HASAR: özellik x scaling x güç (+ ekler), zırh yüzdesel düşürür: azalma = armor / (armor + armor.k) (azalan getirili). Her skill etkisi hangi özelliğe bağlandığını (scale) kendisi söyler. Çağrılan birimler summon.damageTakenMultiplier kat hasar yer. DİZİLİM: her taraf formation.rows sıra x formation.lanes şerit; yakın dövüş skill'leri düşmanın en öndeki formation.meleeRows dolu sırasına vurabilir. Alan skill'leri merkez birimin çevresinde artı şekliyle vurur (area.radius), column skill'leri seçilen birimin şeridindeki herkese. Sıra: her tikte herkesin sayacı hız kadar dolar, threshold'a ulaşan oynar. Sayılar GEÇİCİDİR. HASSASİYET: weaknesses[tür etiketi][element] = alınan hasar çarpanı (undead ışığa/holy, nature ateşe/fire +%50). Birimin tags alanındaki her etiket uygulanır.",
+  "attributes": {
+    "hpBase": 20,
+    "hpPerStr": 6,
+    "mpBase": 10,
+    "mpPerInt": 2,
+    "spdBase": 5,
+    "spdPerDex": 0.5,
+    "dodgePerDex": 0.003,
+    "critChanceBase": 0.05,
+    "critChancePerLuck": 0.005,
+    "critMultBase": 1.5,
+    "critMultPerLuck": 0.01
+  },
+  "scaling": {
+    "str": 1.0,
+    "dex": 1.0,
+    "int": 0.7,
+    "luck": 1.0
+  },
+  "armor": {
+    "k": 30
+  },
+  "damage": {
+    "variance": 0.1,
+    "minDamage": 1
+  },
+  "heal": {
+    "variance": 0.05,
+    "minHeal": 1
+  },
+  "summon": {
+    "damageTakenMultiplier": 2
+  },
+  "formation": {
+    "rows": 4,
+    "lanes": 3,
+    "meleeRows": 1
+  },
+  "turn": {
+    "threshold": 100,
+    "queueLength": 8
+  },
+  "weaknesses": {
+    "undead": {
+      "holy": 1.5
+    },
+    "nature": {
+      "fire": 1.5
+    }
+  }
 }

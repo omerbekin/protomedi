@@ -1,5 +1,34 @@
 {
-  "id": "warrior", "name": "Warrior", "spriteId": "warrior", "color": "#c8553d",
-  "stats": { "hp": 120, "mp": 30, "atk": 18, "def": 12, "mag": 2, "res": 6, "spd": 10, "mpRegen": 2, "crit": 0.05, "eva": 0.03 },
-  "ai": "fighter", "skills": ["melee_attack", "power_strike", "whirlwind"]
+  "id": "warrior",
+  "name": "Warrior",
+  "spriteId": "warrior",
+  "color": "#c8553d",
+  "logo": "helm",
+  "frontPriority": 1,
+  "attributes": {
+    "str": 18.0,
+    "int": 10,
+    "dex": 10,
+    "luck": 3
+  },
+  "armor": 12,
+  "magicArmor": 0,
+  "mpRegen": 2,
+  "ai": "aggressive",
+  "skills": [
+    "melee_attack",
+    "charge",
+    "whirlwind",
+    "abyssal_cry"
+  ],
+  "passive": {
+    "id": "berserker",
+    "name": "Berserker",
+    "icon": "drop",
+    "text": "The lower your HP, the harder you hit: up to +50% damage at the brink of death.",
+    "effect": {
+      "type": "rage",
+      "maxBonus": 0.8
+    }
+  }
 }

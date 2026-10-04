@@ -1,0 +1,21 @@
+{
+  "_not": "Yerde kalan etkiler (hücrelere bırakılır). Üstünde duran düşman birimler kendi turlarının başında hasar alır. Süre, etkiyi bırakanın kendi turlarıyla sayılır (o ölürse etki biter). Hasar, bırakıldığı andaki güce göre sabittir; büyü hasarıdır (kritik/dodge yok).",
+  "poison": {
+    "name": "Poison",
+    "color": "#7ed957",
+    "element": "nature",
+    "icon": "drop"
+  },
+  "burning": {
+    "name": "Burning Ground",
+    "color": "#ff7a1a",
+    "element": "fire",
+    "icon": "flame"
+  },
+  "holy_fire": {
+    "name": "Holy Fire",
+    "color": "#ffd23f",
+    "element": "holy",
+    "icon": "holy"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "antimage",
+  "name": "Anti-Mage",
+  "spriteId": "antimage",
+  "color": "#9b59d0",
+  "logo": "nullsphere",
+  "frontPriority": 3.5,
+  "attributes": {
+    "str": 10,
+    "int": 24.0,
+    "dex": 9,
+    "luck": 3
+  },
+  "armor": 4,
+  "magicArmor": 20,
+  "mpRegen": 3,
+  "ai": "antimage",
+  "skills": [
+    "mana_burn",
+    "drain_field",
+    "spell_ward",
+    "void_strike"
+  ],
+  "passive": {
+    "id": "mana_overflow",
+    "name": "Mana Overflow",
+    "icon": "droplet",
+    "text": "Magic damage blocked by your magic armor builds up; every 30 blocked, your whole team gains 5 MP.",
+    "effect": {
+      "type": "manaOverflow",
+      "threshold": 30,
+      "mana": 5
+    }
+  }
+}

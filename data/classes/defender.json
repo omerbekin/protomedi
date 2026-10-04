@@ -1,0 +1,37 @@
+{
+  "id": "defender",
+  "name": "Defender",
+  "spriteId": "defender",
+  "color": "#8a94a6",
+  "logo": "bulwark",
+  "frontPriority": 0,
+  "attributes": {
+    "str": 20,
+    "int": 8,
+    "dex": 4,
+    "luck": 2
+  },
+  "armor": 20,
+  "magicArmor": 0,
+  "mpRegen": 2,
+  "ai": "tank",
+  "skills": [
+    "tremor_slam",
+    "taunt",
+    "guard",
+    "fist_crush"
+  ],
+  "passive": {
+    "id": "bulwark_aura",
+    "name": "Bulwark Aura",
+    "icon": "guardian",
+    "text": "You and the allies right next to you (front, back, left, right) gain +8 armor.",
+    "effect": {
+      "type": "armorAura",
+      "armor": 8
+    }
+  },
+  "overrides": {
+    "hp": 166
+  }
+}

@@ -17,7 +17,7 @@ const lastEvents = (b: Battle, n: number) => b.log.slice(-n);
 
 describe('MP yenilenmesi', () => {
   it('her karakterin mpRegen değeri var ve küçük (maks MP\'nin %15\'inden az)', () => {
-    for (const def of [...Object.values(content.classes), ...Object.values(content.enemies)]) {
+    for (const def of [...Object.values(content.classes), ...Object.values(content.summons)]) {
       expect(def.stats.mpRegen, def.id).toBeGreaterThanOrEqual(0);
       if (def.stats.mp > 0) expect(def.stats.mpRegen / def.stats.mp, def.id).toBeLessThan(0.15);
     }
@@ -82,10 +82,10 @@ describe('MP yenilenmesi', () => {
 
 describe('cooldown (bekleme süresi)', () => {
   it('güçlü skill\'lerin cooldown değeri var, bedelsiz temel saldırıların yok', () => {
-    for (const id of ['meteor', 'rejuvenate', 'power_strike', 'whirlwind', 'radiance', 'summon_treant']) {
+    for (const id of ['meteor', 'rejuvenate', 'charge', 'whirlwind', 'radiance', 'summon_treant']) {
       expect(content.skills[id]?.cooldown, id).toBeGreaterThan(0);
     }
-    for (const id of ['melee_attack', 'slash', 'quick_shot', 'bone_slash', 'thorn_whip', 'root_smash']) {
+    for (const id of ['melee_attack', 'quick_shot', 'bone_throw', 'thorn_whip', 'root_smash']) {
       expect(content.skills[id]?.cooldown ?? 0, id).toBe(0);
     }
   });
@@ -97,10 +97,11 @@ describe('cooldown (bekleme süresi)', () => {
     expect(r.ok).toBe(true);
   }
 
-  it('kullanılan skill bir sonraki turlarda reddedilir, sonra tekrar açılır (Meteor: 3 tur)', () => {
+  it('kullanılan skill bir sonraki turlarda reddedilir, sonra tekrar açılır (Meteor: 4 tur)', () => {
     const b = turnsBattle();
+    delete b.get('party-2')!.passive; // Spell Echo cooldown'u rastgele sıfırlamasın
     const cooldown = content.skills.meteor!.cooldown!;
-    expect(cooldown).toBe(3);
+    expect(cooldown).toBe(4);
     castMeteor(b);
     const mage = b.get('party-2')!;
     mage.mp = mage.maxMp; // MP engel olmasın
