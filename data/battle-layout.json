@@ -1,0 +1,36 @@
+{
+  "_not": "Savaş ekranı yerleşimi. Renkler geçici; palet onaylanınca assets/palette.json'a taşınacak.",
+  "virtualWidth": 480,
+  "virtualHeight": 270,
+  "groundY": 200,
+  "slotSize": 32,
+  "partySlots": [
+    { "x": 150, "y": 200 },
+    { "x": 115, "y": 210 },
+    { "x": 80, "y": 200 },
+    { "x": 45, "y": 210 }
+  ],
+  "enemySlots": [
+    { "x": 330, "y": 200 },
+    { "x": 365, "y": 210 },
+    { "x": 400, "y": 200 },
+    { "x": 435, "y": 210 },
+    { "x": 400, "y": 160 }
+  ],
+  "turnBar": {
+    "x": 140,
+    "y": 6,
+    "cells": 8,
+    "cellSize": 20,
+    "gap": 5
+  },
+  "colors": {
+    "sky": "#2b2d42",
+    "ground": "#3d3a4b",
+    "groundLine": "#6b6880",
+    "partySlot": "#4fa3ff",
+    "enemySlot": "#ff5a5a",
+    "turnCell": "#8d99ae",
+    "text": "#edf2f4"
+  }
+}

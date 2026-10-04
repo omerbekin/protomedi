@@ -1,0 +1,160 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  color: #edf2f4;
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#game {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* --- Dikey ekran uyarısı: oyun ortada kalır, üstte bant çıkar --- */
+.rotate-warning {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  padding: 16px;
+  text-align: center;
+  font-size: 18px;
+  background: rgba(20, 20, 30, 0.92);
+  border-bottom: 2px solid #ffb703;
+  z-index: 10;
+}
+
+.rotate-warning .icon {
+  display: block;
+  font-size: 40px;
+  line-height: 1.2;
+}
+
+@media (orientation: portrait) {
+  .rotate-warning {
+    display: block;
+  }
+}
+
+body.force-portrait .rotate-warning {
+  display: block;
+}
+
+/* --- Debug menüsü (gerçek piksel; dokunma hedefi >= 44px) --- */
+.debug-toggle {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  min-width: 64px;
+  min-height: 44px;
+  padding: 0 12px;
+  font: bold 14px monospace;
+  color: #edf2f4;
+  background: rgba(60, 60, 80, 0.7);
+  border: 1px solid #8d99ae;
+  border-radius: 8px;
+  z-index: 30;
+}
+
+.debug-panel {
+  position: fixed;
+  right: 8px;
+  bottom: 60px;
+  top: 8px;
+  width: min(340px, calc(100vw - 16px));
+  overflow-y: auto;
+  padding: 12px;
+  background: rgba(15, 15, 25, 0.95);
+  border: 1px solid #8d99ae;
+  border-radius: 8px;
+  z-index: 20;
+  touch-action: pan-y;
+}
+
+.debug-panel[hidden] {
+  display: none;
+}
+
+.debug-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font: bold 16px monospace;
+}
+
+.debug-panel h3 {
+  margin: 14px 0 6px;
+  font: bold 12px monospace;
+  text-transform: uppercase;
+  color: #8d99ae;
+}
+
+.debug-action,
+.debug-close {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 6px;
+  padding: 8px 12px;
+  font: 14px system-ui, sans-serif;
+  text-align: left;
+  color: #edf2f4;
+  background: #2b2d42;
+  border: 1px solid #4a4e69;
+  border-radius: 6px;
+}
+
+.debug-close {
+  width: auto;
+  margin: 0;
+}
+
+.debug-action:active,
+.debug-close:active {
+  background: #4a4e69;
+}
+
+.debug-info {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin: 0;
+  font: 12px monospace;
+}
+
+.debug-info dt {
+  color: #8d99ae;
+}
+
+.debug-info dd {
+  margin: 0;
+}
+
+.fps-counter {
+  position: fixed;
+  left: 8px;
+  top: 8px;
+  padding: 4px 8px;
+  font: bold 12px monospace;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 25;
+}
