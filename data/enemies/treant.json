@@ -1,0 +1,5 @@
+{
+  "id": "treant", "name": "Treant", "spriteId": "treant", "color": "#6b4423",
+  "stats": { "hp": 70, "mp": 0, "atk": 13, "def": 9, "mag": 0, "res": 4, "spd": 5, "mpRegen": 0, "crit": 0, "eva": 0 },
+  "ai": "aggressive", "skills": ["root_smash"]
+}

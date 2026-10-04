@@ -1,0 +1,5 @@
+{
+  "id": "enemy_archer", "name": "Archer", "spriteId": "enemy_archer", "color": "#3f7d4e",
+  "stats": { "hp": 75, "mp": 30, "atk": 15, "def": 5, "mag": 4, "res": 6, "spd": 12, "mpRegen": 3, "crit": 0.1, "eva": 0.08 },
+  "ai": "sniper", "skills": ["quick_shot", "piercing_arrow", "arrow_rain"]
+}

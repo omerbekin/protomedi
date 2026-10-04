@@ -1,0 +1,5 @@
+{
+  "id": "paladin", "name": "Paladin", "spriteId": "paladin", "color": "#e6c14a",
+  "stats": { "hp": 100, "mp": 40, "atk": 12, "def": 10, "mag": 12, "res": 10, "spd": 8, "mpRegen": 3, "crit": 0.03, "eva": 0.02 },
+  "ai": "healer", "skills": ["holy_strike", "lay_on_hands", "radiance"]
+}

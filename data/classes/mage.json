@@ -1,0 +1,5 @@
+{
+  "id": "mage", "name": "Mage", "spriteId": "mage", "color": "#3d7be0",
+  "stats": { "hp": 90, "mp": 60, "atk": 4, "def": 4, "mag": 20, "res": 10, "spd": 9, "mpRegen": 4, "crit": 0.05, "eva": 0.04 },
+  "ai": "aggressive", "skills": ["fire_bolt", "blizzard", "meteor"]
+}

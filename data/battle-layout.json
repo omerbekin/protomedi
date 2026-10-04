@@ -1,36 +1,62 @@
 {
-  "_not": "Savaş ekranı yerleşimi. Renkler geçici; palet onaylanınca assets/palette.json'a taşınacak.",
-  "virtualWidth": 480,
-  "virtualHeight": 270,
-  "groundY": 200,
-  "slotSize": 32,
+  "_not": "Savaş ekranı yerleşimi (1920x1080 HD). Koordinatlar karakterin ayak noktasıdır. characterSize: placeholder çizim boyutu; spriteBox: karakterin ekranda sığdırıldığı kutu (oran korunur). Renkler geçici.",
+  "width": 1920,
+  "height": 1080,
+  "characterSize": { "width": 140, "height": 200 },
+  "spriteBox": { "width": 190, "height": 300 },
   "partySlots": [
-    { "x": 150, "y": 200 },
-    { "x": 115, "y": 210 },
-    { "x": 80, "y": 200 },
-    { "x": 45, "y": 210 }
+    { "x": 820, "y": 820 },
+    { "x": 645, "y": 880 },
+    { "x": 470, "y": 820 },
+    { "x": 295, "y": 880 }
   ],
   "enemySlots": [
-    { "x": 330, "y": 200 },
-    { "x": 365, "y": 210 },
-    { "x": 400, "y": 200 },
-    { "x": 435, "y": 210 },
-    { "x": 400, "y": 160 }
+    { "x": 1100, "y": 820 },
+    { "x": 1275, "y": 880 },
+    { "x": 1450, "y": 820 },
+    { "x": 1625, "y": 880 },
+    { "x": 1800, "y": 820 }
   ],
-  "turnBar": {
-    "x": 140,
-    "y": 6,
-    "cells": 8,
-    "cellSize": 20,
-    "gap": 5
+  "turnBar": { "y": 24, "cells": 8, "cellSize": 90, "gap": 16 },
+  "hpBar": { "width": 140, "height": 16, "offsetY": 24, "mpHeight": 8 },
+  "commandPanel": {
+    "y": 920,
+    "padding": 40,
+    "buttonWidth": 340,
+    "infoWidth": 360,
+    "buttonHeight": 144,
+    "gap": 24
   },
+  "animation": {
+    "attackLungeDistance": 220,
+    "attackDurationMs": 180,
+    "hitFlashMs": 90,
+    "damageNumberRise": 90,
+    "damageNumberMs": 700,
+    "deathFadeMs": 500,
+    "spriteFps": 8,
+    "aiThinkMs": 700,
+    "announceMs": 1100
+  },
+  "fontFamily": "\"Trebuchet MS\", system-ui, sans-serif",
   "colors": {
-    "sky": "#2b2d42",
-    "ground": "#3d3a4b",
-    "groundLine": "#6b6880",
+    "fallbackBackground": "#2b2d42",
     "partySlot": "#4fa3ff",
     "enemySlot": "#ff5a5a",
-    "turnCell": "#8d99ae",
-    "text": "#edf2f4"
+    "turnCell": "#d9c9a3",
+    "text": "#f4ede1",
+    "textStroke": "#1a1410",
+    "panel": "#1a1410",
+    "button": "#5a3e2b",
+    "buttonPressed": "#7a5a3f",
+    "buttonBorder": "#d9a55b",
+    "hpBack": "#3b1f1f",
+    "hpFill": "#5cc46b",
+    "hpFillEnemy": "#e0574a",
+    "mpFill": "#4f8cff",
+    "shield": "#8fe3ff",
+    "heal": "#7dff9b",
+    "damage": "#ffe066",
+    "targetHighlight": "#ffd166"
   }
 }

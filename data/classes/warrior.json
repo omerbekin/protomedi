@@ -1,0 +1,5 @@
+{
+  "id": "warrior", "name": "Warrior", "spriteId": "warrior", "color": "#c8553d",
+  "stats": { "hp": 120, "mp": 30, "atk": 18, "def": 12, "mag": 2, "res": 6, "spd": 10, "mpRegen": 2, "crit": 0.05, "eva": 0.03 },
+  "ai": "fighter", "skills": ["melee_attack", "power_strike", "whirlwind"]
+}

@@ -1,0 +1,5 @@
+{
+  "id": "undead", "name": "Undead", "spriteId": "undead", "color": "#7d8a73", "tags": ["undead"],
+  "stats": { "hp": 95, "mp": 30, "atk": 14, "def": 6, "mag": 14, "res": 8, "spd": 6, "mpRegen": 2, "crit": 0.04, "eva": 0.02 },
+  "ai": "aggressive", "skills": ["bone_slash", "soul_drain", "blood_rite"]
+}

@@ -1,0 +1,114 @@
+{
+  "_not": "Yapay zeka profilleri. priorities soldan sağa denenir; ilk uygun olan seçilir. kill: öldürebileceği biri varsa. heal: dostlardan biri healBelowRatio altındaysa. summon: yeterince çağrılmış birim yoksa. shield: kalkansız ve canı shieldBelowRatio altındaki dosta/kendine. aoe: en az aoeMinTargets düşman varsa herkese vuran skill. damage: odak hedefe en verimli hasar. focus: lowest_hp (en az canlıya) veya lowest_ratio (can oranı en düşüğe). mpCostWeight/hpCostWeight: bedelin skora etkisi. minHpRatioForHpCost: can ödeyen skill'ler için kullanıcının en az can oranı (öldürücü vuruş hariç).",
+  "defaultProfile": "aggressive",
+  "profiles": {
+    "aggressive": {
+      "priorities": [
+        "kill",
+        "aoe",
+        "damage"
+      ],
+      "focus": "lowest_ratio",
+      "aoeMinTargets": 3,
+      "healBelowRatio": 0,
+      "shieldBelowRatio": 0,
+      "maxSummons": 0,
+      "mpCostWeight": 0.5,
+      "hpCostWeight": 1,
+      "minHpRatioForHpCost": 0.5
+    },
+    "bruiser": {
+      "priorities": [
+        "kill",
+        "shield",
+        "aoe",
+        "damage"
+      ],
+      "focus": "lowest_ratio",
+      "aoeMinTargets": 3,
+      "healBelowRatio": 0,
+      "shieldBelowRatio": 0.7,
+      "maxSummons": 0,
+      "mpCostWeight": 0.5,
+      "hpCostWeight": 1,
+      "minHpRatioForHpCost": 0.5
+    },
+    "sniper": {
+      "priorities": [
+        "kill",
+        "aoe",
+        "damage"
+      ],
+      "focus": "lowest_hp",
+      "aoeMinTargets": 3,
+      "healBelowRatio": 0,
+      "shieldBelowRatio": 0,
+      "maxSummons": 0,
+      "mpCostWeight": 0.4,
+      "hpCostWeight": 1,
+      "minHpRatioForHpCost": 0.5
+    },
+    "caster": {
+      "priorities": [
+        "kill",
+        "shield",
+        "aoe",
+        "damage"
+      ],
+      "focus": "lowest_ratio",
+      "aoeMinTargets": 3,
+      "healBelowRatio": 0,
+      "shieldBelowRatio": 0.75,
+      "maxSummons": 0,
+      "mpCostWeight": 0.4,
+      "hpCostWeight": 1,
+      "minHpRatioForHpCost": 0.5
+    },
+    "healer": {
+      "priorities": [
+        "kill",
+        "heal",
+        "damage"
+      ],
+      "focus": "lowest_ratio",
+      "aoeMinTargets": 3,
+      "healBelowRatio": 0.55,
+      "shieldBelowRatio": 0,
+      "maxSummons": 0,
+      "mpCostWeight": 0.3,
+      "hpCostWeight": 1,
+      "minHpRatioForHpCost": 0.5
+    },
+    "support": {
+      "priorities": [
+        "kill",
+        "heal",
+        "summon",
+        "damage"
+      ],
+      "focus": "lowest_ratio",
+      "aoeMinTargets": 3,
+      "healBelowRatio": 0.5,
+      "shieldBelowRatio": 0,
+      "maxSummons": 1,
+      "mpCostWeight": 0.3,
+      "hpCostWeight": 1,
+      "minHpRatioForHpCost": 0.5
+    },
+    "fighter": {
+      "priorities": [
+        "kill",
+        "aoe",
+        "damage"
+      ],
+      "focus": "lowest_ratio",
+      "aoeMinTargets": 3,
+      "healBelowRatio": 0,
+      "shieldBelowRatio": 0,
+      "maxSummons": 0,
+      "mpCostWeight": 0.5,
+      "hpCostWeight": 1,
+      "minHpRatioForHpCost": 0.5
+    }
+  }
+}

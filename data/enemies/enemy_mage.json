@@ -1,0 +1,5 @@
+{
+  "id": "enemy_mage", "name": "Mage", "spriteId": "enemy_mage", "color": "#6a4c93",
+  "stats": { "hp": 70, "mp": 60, "atk": 4, "def": 4, "mag": 18, "res": 10, "spd": 9, "mpRegen": 4, "crit": 0.05, "eva": 0.04 },
+  "ai": "caster", "skills": ["frost_bolt", "lightning_storm", "mana_barrier"]
+}

@@ -19,8 +19,13 @@ Web tabanlı (TypeScript + Phaser 3 + Vite), mobil tarayıcıda da oynanır.
 - **İçerik koddan ayrı**: class, skill, düşman, item, düğüm haritası `data/*.json` dosyalarında. Denge değişikliği = veri değişikliği. Yeni class = yeni veri dosyası (+ sprite).
 - **Seed'li RNG** zorunlu. Motorda `Math.random` yasak. Aynı seed + aynı girdiler = birebir aynı savaş.
 - Kayıt: localStorage, sürümlü şema.
-- Sanal çözünürlük 480x270 (16:9), tamsayı ölçekleme, `image-rendering: pixelated`.
+- Oyun çözünürlüğü **1920x1080 (HD, 16:9)**: Ömer kararı (2026-10-04). Ekrana oranı korunarak sığdırılır (Phaser Scale.FIT). Gerçek pixel art sprite'lar NEAREST filtreyle büyütülür.
 - **Yatay (landscape) öncelikli.** Dikey tutulan telefonda oyun alanı yatay formatta ortalanır ve "telefonu yatay çevir" uyarısı gösterilir.
+- **Oyun içi arayüz İngilizce** (menüler, düğmeler, uyarılar, skill/karakter isimleri, debug menüsü dahil). Ömer'le konuşma, raporlar, `docs/` ve kod yorumları Türkçe kalır. Yeni ekran yazılırken İngilizce yazılır.
+- **Sıra sistemi:** her karakterin `spd` (çabukluk) statı vardır; sayaç modeli (`src/engine/turn-order.ts`, eşik `data/formulas.json` > `turn`). SPD ne kadar yüksekse o kadar sık oynar. Sıra çubuğu aynı hesaptan gelen tahmini gösterir.
+- **Kontrol:** oyuncu tarafını oyuncu, düşman tarafını yapay zeka oynar (`src/engine/ai.ts`; öncelikler ve eşikler `data/ai.json` profillerinde, karakterin `ai` alanı profil seçer). Yapay zeka saf ve belirleyicidir (rastgelelik kullanmaz).
+- **MP yenilenmesi ve cooldown:** her karakter kendi turunun başında `mpRegen` kadar MP kazanır; güçlü skill'lerin `cooldown` değeri vardır (kullanıcının kendi tur sayısıyla). İkisi de yalnızca `turns` modunda işler. Denge hedefi: yapay zeka vs yapay zeka savaşında oyuncu kazanma oranı ~%50 (`npm run sim`).
+- **İki savaş modu:** `turns` (varsayılan, gerçek oyun) ve `test` (sırasız; her karakter istediği an oynar, yalnızca debug menüsünden açılır). Her yeni savaş özelliği iki modda da bozulmamalı.
 - Dokunmatik öncelikli girdi; fare ve klavye de çalışır. Dokunma hedefleri en az 44px (gerçek piksel).
 - Yayın: her değişiklik önizleme linkine yayınlanır (Cloudflare Pages veya GitHub Pages), Ömer telefondan oynar.
 
@@ -50,7 +55,8 @@ tests/            vitest testleri
 ## Asset kuralları
 - Pixel art, sabit palet (`docs/design/art.md`). Her karakter için sabit animasyon seti: `idle`, `attack`, `cast`, `hit`, `death` (+ `defend`).
 - Dosya adı: `assets/sprites/<id>/<animasyon>.png` (yatay sprite sheet). Gerçek sprite aynı isimle konunca placeholder'ın yerini otomatik alır.
-- Placeholder: class rengine boyalı basit blok karakter, animasyon için basit hareket/yanıp sönme.
+- Placeholder: class rengine boyalı basit blok karakter + sınıfı anlatan donanım, animasyon için basit hareket/yanıp sönme.
+- Gerçek sprite: `assets/sprites/<id>/idle.png` tek bir ayakta duran illüstrasyon olabilir (genişlik < 1,5 x yükseklik) ya da yatay sprite sheet. Ekranda `data/battle-layout.json` > `spriteBox` içine oranı korunarak sığdırılır. Karakter sayfaları `tools/slice-characters.mjs` ile kesilir; eşleştirme tablosu `assets/CREDITS.md`.
 - Harici asset kullanılırsa kaynağı ve lisansı `assets/CREDITS.md` dosyasına yaz.
 
 ## Kapsam dışı (şimdilik)
@@ -61,6 +67,6 @@ tests/            vitest testleri
 - `npm run dev` — geliştirme sunucusu (`--host` açık: aynı Wi-Fi'deki telefondan da açılır)
 - `npm run build` — tip kontrolü + üretim derlemesi (`dist/`)
 - `npm test` — vitest testleri (motor saflığı denetimi dahil: `src/engine` içinde Math.random/Phaser/DOM yasak)
-- `npm run sim` — headless denge simülatörü (`src/sim/cli.ts`)
+- `npm run sim` — headless denge simülatörü (`src/sim/cli.ts`): iki taraf yapay zeka ile tam savaşlar (kazanma oranı, ölenler, skill kullanımı) + skill etki tablosu. İsteğe bağlı savaş sayısı: `npm run sim -- 1000`
 - Yayın: `main` dalına push → GitHub Actions test + build → GitHub Pages (`.github/workflows/deploy.yml`). Test kırmızıysa yayın olmaz.
 - Debug menüsü: sağ alttaki DEBUG düğmesi (klavyede ` veya F2). Yeni özellik = `src/main.ts` içinde `debug.register(...)` ile yeni giriş.

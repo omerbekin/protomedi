@@ -1,0 +1,5 @@
+{
+  "id": "enemy_warrior", "name": "Warrior", "spriteId": "enemy_warrior", "color": "#8c2f39",
+  "stats": { "hp": 110, "mp": 20, "atk": 16, "def": 11, "mag": 2, "res": 5, "spd": 9, "mpRegen": 2, "crit": 0.05, "eva": 0.03 },
+  "ai": "bruiser", "skills": ["slash", "crushing_blow", "shield_wall"]
+}

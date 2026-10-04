@@ -16,13 +16,15 @@ export class DebugMenu {
   private readonly actions = new Map<string, DebugAction>();
   private readonly infoProviders = new Map<string, DebugInfo>();
   private readonly panel: HTMLDivElement;
+  private infoEl: HTMLDListElement | null = null;
+  private infoTimer = 0;
   private open = false;
 
   constructor(root: HTMLElement) {
     const toggle = document.createElement('button');
     toggle.className = 'debug-toggle';
     toggle.textContent = 'DEBUG';
-    toggle.setAttribute('aria-label', 'Debug menüsünü aç/kapat');
+    toggle.setAttribute('aria-label', 'Toggle debug menu');
     toggle.addEventListener('click', () => this.setOpen(!this.open));
 
     this.panel = document.createElement('div');
@@ -49,6 +51,8 @@ export class DebugMenu {
   setOpen(open: boolean): void {
     this.open = open;
     this.panel.hidden = !open;
+    window.clearInterval(this.infoTimer);
+    if (open) this.infoTimer = window.setInterval(() => this.fillInfo(), 400);
     this.render();
   }
 
@@ -59,10 +63,10 @@ export class DebugMenu {
     const header = document.createElement('div');
     header.className = 'debug-header';
     const title = document.createElement('span');
-    title.textContent = 'Debug menüsü';
+    title.textContent = 'Debug menu';
     const close = document.createElement('button');
     close.className = 'debug-close';
-    close.textContent = 'Kapat';
+    close.textContent = 'Close';
     close.addEventListener('click', () => this.setOpen(false));
     header.append(title, close);
     this.panel.append(header);
@@ -83,7 +87,7 @@ export class DebugMenu {
         btn.textContent = typeof action.label === 'function' ? action.label() : action.label;
         btn.addEventListener('click', () => {
           action.run();
-          // Sahne yeniden başlatılınca yeni değerler bir sonraki karede hazır olur
+          // After a scene restart the new values are ready on the next frame
           requestAnimationFrame(() => this.render());
         });
         this.panel.append(btn);
@@ -91,18 +95,27 @@ export class DebugMenu {
     }
 
     const infoTitle = document.createElement('h3');
-    infoTitle.textContent = 'Bilgi';
+    infoTitle.textContent = 'Info';
     const info = document.createElement('dl');
     info.className = 'debug-info';
+    this.infoEl = info;
+    this.fillInfo();
+    this.panel.append(infoTitle, info);
+  }
+
+  /** Only the info block is refreshed periodically (buttons stay untouched so taps are never lost). */
+  private fillInfo(): void {
+    if (!this.infoEl) return;
+    const rows: HTMLElement[] = [];
     for (const provider of this.infoProviders.values()) {
       for (const [key, value] of Object.entries(provider())) {
         const dt = document.createElement('dt');
         dt.textContent = key;
         const dd = document.createElement('dd');
         dd.textContent = value;
-        info.append(dt, dd);
+        rows.push(dt, dd);
       }
     }
-    this.panel.append(infoTitle, info);
+    this.infoEl.replaceChildren(...rows);
   }
 }

@@ -1,0 +1,7 @@
+{
+  "_not": "Fiziksel: ATK x güç - DEF x defenseFactor. Büyü: MAG x güç - RES x resistFactor. İkisi de (1 ± variance) ile çarpılır, en az minDamage. Şifa: MAG x güç (± variance). Sıra: her tikte herkesin sayacı SPD kadar dolar, threshold'a ulaşan oynar (sayaç taşması korunur); queueLength sıra çubuğunda görünen aktör sayısı.",
+  "physicalDamage": { "defenseFactor": 0.5, "variance": 0.1, "minDamage": 1 },
+  "magicDamage": { "resistFactor": 0.5, "variance": 0.1, "minDamage": 1 },
+  "heal": { "variance": 0.05, "minHeal": 1 },
+  "turn": { "threshold": 100, "queueLength": 8 }
+}

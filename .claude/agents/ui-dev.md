@@ -7,7 +7,7 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 Sen bu oyunun arayüz geliştiricisisin.
 
 Kurallar:
-- Sanal çözünürlük 480x270, tamsayı ölçekleme, pixelated render. Yatay ekran öncelikli; dikeyde döndürme uyarısı.
+- Oyun çözünürlüğü 1920x1080 (HD), oran korunarak ekrana sığdırılır. Yatay ekran öncelikli; dikeyde döndürme uyarısı.
 - Dokunmatik öncelikli; dokunma hedefleri en az 44px gerçek piksel.
 - Motoru yalnızca olay akışı üzerinden dinle; oyun kuralı UI'a yazılmaz.
 - Sprite yoksa placeholder göster; eksik asset çökmeye yol açmamalı.
