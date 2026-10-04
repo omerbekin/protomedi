@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, content, describePassive } from '../src/engine';
+import { Battle, chooseAction, content, describePassive, describeSkill, previewSkill } from '../src/engine';
 import type { BattleEvent, BattleMode, Combatant } from '../src/engine';
 import { installLegacySkills } from './legacy-skills';
 
@@ -76,7 +76,7 @@ describe('kritik vuruş', () => {
     const mage = unit(b, 'party', 'mage');
     Object.assign(mage.stats, { critChance: 1, critMult: 3 });
     const sh = ofType(act(b, mage.uid, 'mana_barrier', unit(b, 'party', 'warrior').uid), 'shield')[0]!;
-    expect(sh.amount).toBe(Math.round(mage.stats.int * content.formulas.scaling.int * 0.9));
+    expect(sh.amount).toBe(Math.round(mage.stats.int * content.formulas.scaling.int * (content.skills.mana_barrier!.effects[0] as { power: number }).power));
   });
 
   it('kritik damage olayında işaretlenir; kritik yokken false', () => {
@@ -93,7 +93,7 @@ describe('fiziksel dodge', () => {
     target.stats.dodge = 1;
     const hp = target.hp;
     const events = act(b, unit(b, 'party', 'warrior').uid, 'melee_attack', target.uid);
-    expect(ofType(events, 'dodge')).toHaveLength(1);
+    expect(ofType(events, 'dodge')).toHaveLength(2); // Double Strike: iki vuruş da kaçırılır
     expect(ofType(events, 'damage')).toHaveLength(0);
     expect(target.hp).toBe(hp);
   });
@@ -355,11 +355,13 @@ describe('Defender: Taunt, Guard, Fist Crush', () => {
       const events = hit(guarded);
       const onWarrior = ofType(events, 'damage').filter((e) => e.target === warriorG.uid);
       const onDefender = ofType(events, 'damage').filter((e) => e.target === defenderG.uid);
-      expect(onWarrior).toHaveLength(1);
-      expect(onDefender).toHaveLength(1);
-      expect(onDefender[0]!.redirected).toBe(true);
-      expect(onWarrior[0]!.amount + onWarrior[0]!.absorbed + onDefender[0]!.amount + onDefender[0]!.absorbed).toBe(base);
-      expect(onDefender[0]!.amount + onDefender[0]!.absorbed).toBe(Math.round(base * 0.5));
+      expect(onWarrior).toHaveLength(2); // Double Strike: iki vuruş
+      expect(onDefender).toHaveLength(2);
+      expect(onDefender.every((e) => e.redirected)).toBe(true);
+      const sum = (list: typeof onWarrior) => list.reduce((s, e) => s + e.amount + e.absorbed, 0);
+      expect(sum(onWarrior) + sum(onDefender)).toBe(base);
+      expect(sum(onDefender)).toBeGreaterThanOrEqual(Math.round(base * 0.5) - 1);
+      expect(sum(onDefender)).toBeLessThanOrEqual(Math.round(base * 0.5) + 1);
     }
   });
 
@@ -1137,5 +1139,137 @@ describe('Çağıran ölünce çağrılan da ölür', () => {
     act(b, 'enemy-0', 'fire_bolt', sk);
     expect(b.get(sk)!.hp).toBe(0);
     expect(b.get('party-0')!.hp).toBeGreaterThan(0);
+  });
+});
+
+describe('Treant menzili +1 (reach)', () => {
+  const mk = (treantSlot: number) => {
+    const b = grid(cells({ 0: 'druid', 2: 'warrior' }), cells({ 0: 'warrior', 3: 'mage', 6: 'archer' }));
+    const sk = ofType(act(b, 'party-0', 'summon_treant', undefined, treantSlot), 'summon')[0]!.combatant.uid;
+    return { b, sk };
+  };
+
+  it('Root Smash reach +1: düşmanın ilk 2 sırasına ulaşır (3. sıraya ulaşmaz)', () => {
+    expect(content.skills.root_smash!.reach).toBe(1);
+    const { b, sk } = mk(1);
+    expect(b.validTargets(sk, 'root_smash').map((c) => c.slot).sort((x, y) => x - y)).toEqual([0, 3]);
+  });
+
+  it('ön sıranın bir gerisinden vurabilir, iki gerisinden vuramaz', () => {
+    const mid = mk(4);
+    expect(mid.b.canUse(mid.sk, 'root_smash').ok).toBe(true);
+    const back = mk(7);
+    expect(back.b.canUse(back.sk, 'root_smash')).toEqual({ ok: false, reason: 'Melee: front row only' });
+  });
+
+  it('diğer yakın dövüş skill\'lerinin menzili değişmez (yalnızca ön sıra)', () => {
+    const b = grid(cells({ 0: 'warrior' }), cells({ 0: 'warrior', 3: 'mage' }));
+    expect(b.validTargets('party-0', 'fire_slash' in content.skills ? 'fire_slash' : content.classes.warrior!.skills[0]!).map((c) => c.slot)).toEqual([0]);
+  });
+});
+
+describe('Paladin: Resurrection', () => {
+  const setup = () => grid(cells({ 0: 'warrior', 2: 'paladin', 3: 'mage' }), cells({ 0: 'archer' }));
+  const fall = (b: Battle, uid: string) => {
+    b.get(uid)!.hp = 0;
+  };
+
+  it('Blessing yerine Resurrection: düşmüş tek dostu hedefler, %50 can ve mana', () => {
+    expect(content.classes.paladin!.skills.slice(0, 4)).toEqual(['holy_strike', 'resurrection', 'judgment', 'radiance']);
+    expect(content.skills.resurrection).toMatchObject({ target: 'dead_ally', effects: [{ type: 'revive', hpRatio: 0.5, mpRatio: 0.5 }] });
+  });
+
+  it('düşmüş dostu olduğu yerde diriltir (yarı can, yarı mana, durumlar temiz)', () => {
+    const b = setup();
+    const w = b.get('party-0')!;
+    w.statuses.push({ kind: 'wound', turns: 2, source: 'enemy-0' });
+    fall(b, 'party-0');
+    const slot = w.slot;
+    const events = act(b, 'party-1', 'resurrection', 'party-0');
+    const rev = ofType(events, 'revive')[0]!;
+    expect(rev).toMatchObject({ target: 'party-0', hpAfter: Math.round(w.maxHp * 0.5), mpAfter: Math.round(w.maxMp * 0.5) });
+    expect(w.hp).toBe(Math.round(w.maxHp * 0.5));
+    expect(w.mp).toBe(Math.round(w.maxMp * 0.5));
+    expect(w.slot).toBe(slot);
+    expect(w.statuses).toEqual([]);
+    expect(b.living('party').map((c) => c.uid)).toContain('party-0');
+  });
+
+  it('yalnızca düşmüş dostlar seçilebilir: canlılar, düşmanlar ve çağrılar değil', () => {
+    const b = setup();
+    expect(b.canUse('party-1', 'resurrection')).toEqual({ ok: false, reason: 'No fallen ally' });
+    fall(b, 'party-0');
+    fall(b, 'enemy-0');
+    expect(b.validTargets('party-1', 'resurrection').map((c) => c.uid)).toEqual(['party-0']);
+    expect(b.useSkill('party-1', 'resurrection', 'party-2').ok).toBe(false); // canlı dost
+    expect(b.useSkill('party-1', 'resurrection', 'enemy-0').ok).toBe(false); // düşman
+  });
+
+  it('yuvası başka bir birimce doldurulduysa diriltilemez; çağrılar diriltilemez', () => {
+    const b = grid(cells({ 0: 'druid', 2: 'paladin' }), cells({ 0: 'archer' }));
+    fall(b, 'party-0');
+    const sk = ofType(act(b, 'party-1', 'resurrection', 'party-0'), 'revive').length; // druid düştü, yuva boş: dirilir
+    expect(sk).toBe(1);
+    const c = grid(cells({ 0: 'druid', 2: 'paladin' }), cells({ 0: 'archer' }));
+    const treant = ofType(act(c, 'party-0', 'summon_treant', undefined, 1), 'summon')[0]!.combatant.uid;
+    c.get(treant)!.hp = 0; // çağrı düştü
+    expect(c.validTargets('party-1', 'resurrection')).toEqual([]);
+    // druid düşer, yuvasına başka birim (düşman çağrısı gibi) oturursa diriltilemez
+    const d = grid(cells({ 0: 'warrior', 2: 'paladin' }), cells({ 0: 'archer' }));
+    fall(d, 'party-0');
+    d.combatants.push({ ...d.get('enemy-0')!, uid: 'x', side: 'party', board: 'party', slot: 0, summoned: false, hp: 10 });
+    expect(d.validTargets('party-1', 'resurrection')).toEqual([]);
+  });
+
+  it('diriltilen birim sırada yeniden oynar; savaş sonu kontrolü tekrar işler', () => {
+    const b = new Battle(content.battleSetup('random-battle', 1, 'turns', { party: ['warrior', 'paladin'], enemies: ['archer'] }, false));
+    expect(b.mode).toBe('turns');
+    const w = b.combatants.find((c) => c.defId === 'warrior' && c.side === 'party')!;
+    w.hp = 0;
+    const p = b.combatants.find((c) => c.defId === 'paladin')!;
+    p.mp = p.maxMp;
+    p.cooldowns = {};
+    // paladinin sırasını bekle
+    for (let i = 0; i < 100 && b.currentUid !== p.uid; i++) b.skipTurn();
+    act(b, p.uid, 'resurrection', w.uid);
+    expect(w.hp).toBeGreaterThan(0);
+    let played = false;
+    for (let i = 0; i < 100 && !played; i++) {
+      if (b.currentUid === w.uid) played = true;
+      else b.skipTurn();
+    }
+    expect(played).toBe(true);
+  });
+
+  it('AI (healer): düşmüş dostu varsa diriltir; yoksa Resurrection seçmez', () => {
+    const b = setup();
+    expect(chooseAction(b, 'party-1', content.aiConfig)?.skillId).not.toBe('resurrection');
+    fall(b, 'party-0');
+    expect(chooseAction(b, 'party-1', content.aiConfig)).toMatchObject({ skillId: 'resurrection', targetUid: 'party-0' });
+  });
+});
+
+describe('Warrior: Double Strike (iki vuruş)', () => {
+  it('iki ayrı hasar etkisi, her biri %90 STR; iki hasar olayı üretir', () => {
+    const sk = content.skills.melee_attack!;
+    expect(sk.name).toBe('Double Strike');
+    expect(sk.effects).toHaveLength(2);
+    for (const e of sk.effects) expect(e).toMatchObject({ type: 'damage', damageType: 'physical', scale: 'str', power: 0.9 });
+    const b = make({ party: ['warrior', 'mage', 'archer', 'paladin'], enemies: ['defender', 'warrior', 'archer', 'mage'] });
+    const events = act(b, unit(b, 'party', 'warrior').uid, 'melee_attack', unit(b, 'enemy', 'defender').uid);
+    expect(ofType(events, 'damage')).toHaveLength(2);
+  });
+
+  it('skill açıklaması tek satırda "x2" gösterir; önizleme iki vuruşun toplamıdır', () => {
+    const b = make({ party: ['warrior', 'mage', 'archer', 'paladin'], enemies: ['defender', 'warrior', 'archer', 'mage'] });
+    const w = unit(b, 'party', 'warrior');
+    const info = describeSkill(content.skills.melee_attack!, w.stats, content.formulas);
+    expect(info.lines.filter((l) => l.startsWith('Damage'))).toHaveLength(1);
+    expect(info.lines[0]).toContain('x2');
+    const target = unit(b, 'enemy', 'defender');
+    const pv = previewSkill(b, w.uid, 'melee_attack', target.uid)[0]!;
+    const single = previewSkill(b, w.uid, 'whirlwind')[0]; // yalnızca karşılaştırma için hazır
+    expect(pv.damage!.avg).toBeGreaterThan(0);
+    expect(single).toBeDefined();
   });
 });

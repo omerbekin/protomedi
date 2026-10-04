@@ -63,7 +63,7 @@ describe('4 temel özellik ve türev stat\'lar', () => {
     for (const def of Object.values(content.classes)) {
       // can ya STR'den türer ya da (Defender gibi) veride elle ezilmiştir
       const derived = Math.round(f.attributes.hpBase + f.attributes.hpPerStr * def.attributes.str);
-      if (def.id === 'defender') expect(def.stats.hp, def.id).toBe(166); // Defender canı elle ayarlı (eski türetilmiş 128'in +%30'u)
+      if (def.id === 'defender') expect(def.stats.hp, def.id).toBe(158); // Defender canı elle ayarlı (128 -> %30 artış -> %5 azalış)
       else expect(def.stats.hp, def.id).toBe(derived);
       expect(def.stats.mp, def.id).toBe(Math.round(f.attributes.mpBase + f.attributes.mpPerInt * def.attributes.int));
       expect(def.stats.spd, def.id).toBeGreaterThan(0);

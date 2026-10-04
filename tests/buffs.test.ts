@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Battle, content } from '../src/engine';
 import type { BattleEvent } from '../src/engine';
+import { installLegacySkill } from './legacy-skills';
 
 type Ev<T extends BattleEvent['type']> = Extract<BattleEvent, { type: T }>;
 const ofType = <T extends BattleEvent['type']>(events: BattleEvent[], type: T): Ev<T>[] => events.filter((e): e is Ev<T> => e.type === type);
@@ -92,9 +93,11 @@ describe('durumlar: hız, alınan hasar, alınan şifa, sersemleme', () => {
   it('Abyssal Cry: kendine maks canının %15\'i kadar hasar verir (en az 1 can kalır) ve alınan hasarı azaltır', () => {
     const b = calm(grid(cells({ 0: 'warrior' }), cells({ 0: 'archer' })));
     const w = b.get('party-0')!;
+    const cryRatio = (content.skills.abyssal_cry!.effects[0] as { ratio: number }).ratio;
+    expect(cryRatio).toBe(0.2);
     const events = act(b, 'party-0', 'abyssal_cry');
-    expect(ofType(events, 'damage')[0]).toMatchObject({ target: 'party-0', source: 'party-0', amount: Math.round(w.maxHp * 0.15) });
-    expect(w.hp).toBe(w.maxHp - Math.round(w.maxHp * 0.15));
+    expect(ofType(events, 'damage')[0]).toMatchObject({ target: 'party-0', source: 'party-0', amount: Math.round(w.maxHp * cryRatio) });
+    expect(w.hp).toBe(w.maxHp - Math.round(w.maxHp * cryRatio));
     expect(hasStatus(b, 'party-0', 'fortify')).toBe(true);
     // fortify'lı birim aynı saldırıdan ~yarı hasar alır
     const hit = (fort: boolean) => {
@@ -115,6 +118,7 @@ describe('durumlar: hız, alınan hasar, alınan şifa, sersemleme', () => {
   });
 
   it('Blessing (Paladin): dosta 3 tur %30 daha az hasar', () => {
+    installLegacySkill('blessing', 'paladin'); // oyundan kaldırıldı, blessed durumu hâlâ test ediliyor
     const b = calm(grid(cells({ 0: 'paladin', 2: 'warrior' }), cells({ 0: 'archer' })));
     act(b, 'party-0', 'blessing', 'party-1');
     expect(b.get('party-1')!.statuses.find((s) => s.kind === 'blessed')?.turns).toBe(3);
@@ -323,8 +327,8 @@ describe('sınıf verisi (bu turun düzenlemeleri)', () => {
     expect(content.summons.treant!.stats.str).toBe(13.5);
   });
 
-  it('Taunt ikonu orta parmak; Void Strike menzilli', () => {
-    expect(content.skills.taunt!.icon).toBe('finger');
+  it('Taunt ikonu savaş borusu; Void Strike menzilli', () => {
+    expect(content.skills.taunt!.icon).toBe('taunt');
     expect(content.skills.void_strike!.motion).not.toBe('melee');
   });
 
@@ -379,35 +383,21 @@ describe('Taunt: dostları korur', () => {
     expect(before).toBeGreaterThan(0);
   });
 
-  it('Defender canı %30 arttı (128 -> 166)', () => {
-    expect(content.classes.defender!.stats.hp).toBe(166);
+  it('Defender canı %30 arttı, sonra %5 azaldı (128 -> 166 -> 158)', () => {
+    expect(content.classes.defender!.stats.hp).toBe(158);
   });
 });
 
-describe('Druid: Rejuvenate başlangıç şifası ve dizilimde boş ön hücre', () => {
-  it('Druid\'li takımda ön sırada 1 hücre boş kalır (en çok 2 karakter); Druid\'siz takımda 3 olabilir', () => {
-    let withDruid = 0;
-    let withoutDruid3 = 0;
+describe('Druid: Rejuvenate başlangıç şifası, dizilim ve Treant menzili', () => {
+  it('Druid\'li takımlarda ön sırada boş hücre bırakılmaz: ön sıra 3 kişiyle dolabilir', () => {
+    let full3 = 0;
     for (let seed = 1; seed <= 300; seed++) {
       const { party } = content.rollTeams('random-battle', seed);
+      if (!party.includes('druid')) continue;
       for (const cellsList of [content.randomCells(party, seed), content.defaultCells(party)]) {
-        const front = cellsList.slice(0, 3).filter(Boolean).length;
-        if (party.includes('druid')) {
-          expect(front, `seed ${seed}`).toBeLessThanOrEqual(2);
-          withDruid++;
-        } else if (front === 3) withoutDruid3++;
+        if (cellsList.slice(0, 3).filter(Boolean).length === 3) full3++;
       }
     }
-    expect(withDruid).toBeGreaterThan(50);
-    expect(withoutDruid3).toBeGreaterThan(0);
-  });
-
-  it('boş ön hücre, çağrılan Treant\'ın ön sıraya yerleşmesini sağlar (melee kuralı)', () => {
-    const { party } = { party: ['warrior', 'defender', 'druid', 'mage', 'archer'] };
-    const b = new Battle(content.battleSetup('random-battle', 3, 'test', { party, enemies: ['mage', 'archer'] }));
-    const druid = b.combatants.find((c) => c.side === 'party' && c.defId === 'druid')!;
-    const ev = ofType(act(b, druid.uid, 'summon_treant'), 'summon')[0]!;
-    expect(b.rowOf(ev.combatant.slot)).toBe(0);
-    expect(b.canUse(ev.combatant.uid, 'root_smash').ok).toBe(true);
+    expect(full3).toBeGreaterThan(0);
   });
 });

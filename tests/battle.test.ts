@@ -49,10 +49,10 @@ describe('takımlar', () => {
     }
   });
 
-  it('Warrior\'ın ilk skill\'i Melee Attack', () => {
+  it('Warrior\'ın ilk skill\'i Double Strike (kimliği melee_attack)', () => {
     const w = newBattle().get(WARRIOR)!;
     expect(w.skills[0]).toBe('melee_attack');
-    expect(content.skills.melee_attack?.name).toBe('Melee Attack');
+    expect(content.skills.melee_attack?.name).toBe('Double Strike');
   });
 });
 
@@ -61,10 +61,13 @@ describe('hasar skill\'leri', () => {
     const b = newBattle();
     const before = b.get(E_WARRIOR)!.hp;
     const events = act(b, WARRIOR, 'melee_attack', E_WARRIOR);
-    expect(events.map((e) => e.type)).toEqual(['skillUsed', 'damage']);
-    const dmg = ofType(events, 'damage')[0]!;
+    expect(events.map((e) => e.type)).toEqual(['skillUsed', 'damage', 'damage']); // Double Strike: iki vuruş
+    const hits = ofType(events, 'damage');
+    const dmg = hits[1]!;
+    expect(hits[0]!.amount).toBeGreaterThan(0);
     expect(dmg.amount).toBeGreaterThan(0);
-    expect(b.get(E_WARRIOR)!.hp).toBe(before - dmg.amount);
+    expect(b.get(E_WARRIOR)!.hp).toBe(before - hits[0]!.amount - dmg.amount);
+    expect(hits[0]!.hpAfter).toBe(before - hits[0]!.amount);
     expect(dmg.hpAfter).toBe(b.get(E_WARRIOR)!.hp);
     expect(dmg.crit).toBe(false);
   });
@@ -238,10 +241,11 @@ describe('kalkan', () => {
     expect(b.get(E_WARRIOR)!.shield).toBe(shield.amount);
 
     const hpBefore = b.get(E_WARRIOR)!.hp;
-    const dmg = ofType(act(b, WARRIOR, 'melee_attack', E_WARRIOR), 'damage')[0]!;
+    const hits = ofType(act(b, WARRIOR, 'melee_attack', E_WARRIOR), 'damage'); // Double Strike: iki vuruş
+    const dmg = hits[0]!;
     expect(dmg.absorbed).toBeGreaterThan(0);
     expect(dmg.amount + dmg.absorbed).toBeGreaterThan(0);
-    expect(b.get(E_WARRIOR)!.hp).toBe(hpBefore - dmg.amount);
+    expect(b.get(E_WARRIOR)!.hp).toBe(hpBefore - hits.reduce((s, h) => s + h.amount, 0));
     expect(dmg.shieldAfter).toBe(shield.amount - dmg.absorbed);
   });
 
@@ -366,6 +370,6 @@ describe('savaş sonu ve determinizm', () => {
     const seen: string[] = [];
     b.on((e) => seen.push(e.type));
     act(b, WARRIOR, 'melee_attack', E_WARRIOR);
-    expect(seen).toEqual(['skillUsed', 'damage']);
+    expect(seen).toEqual(['skillUsed', 'damage', 'damage']);
   });
 });

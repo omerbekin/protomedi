@@ -24,7 +24,7 @@
   "passive": {
     "id": "mana_overflow",
     "name": "Mana Overflow",
-    "icon": "droplet",
+    "icon": "overflow",
     "text": "Magic damage blocked by your magic armor builds up; every 30 blocked, your whole team gains 5 MP.",
     "effect": {
       "type": "manaOverflow",

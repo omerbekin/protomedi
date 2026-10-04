@@ -183,7 +183,7 @@ export class Battle {
   /** Skill tek bir hedef seçilmesini gerektiriyor mu? */
   needsTargetChoice(skillId: string): boolean {
     const t = this.skill(skillId)?.target;
-    return t === 'single_enemy' || t === 'single_ally' || t === 'area_enemies' || t === 'column_enemies';
+    return t === 'single_enemy' || t === 'single_ally' || t === 'dead_ally' || t === 'area_enemies' || t === 'column_enemies';
   }
 
   /** Çağrı skill'i mi (yeri oyuncu seçer)? */
@@ -279,7 +279,7 @@ export class Battle {
           } else {
             // Ön sıra, düşmanın kendi tahtasındaki birimlere göre belirlenir; bizim tahtamıza sızan düşman çağrıları hep yakındadır
             const home = list.filter((c) => c.board === c.side);
-            const rows = [...new Set(home.map((c) => this.rowOf(c.slot)))].slice(0, this.setup.formulas.formation.meleeRows);
+            const rows = [...new Set(home.map((c) => this.rowOf(c.slot)))].slice(0, this.setup.formulas.formation.meleeRows + (skill.reach ?? 0));
             list = list.filter((c) => c.board !== c.side || rows.includes(this.rowOf(c.slot)));
           }
         }
@@ -292,6 +292,11 @@ export class Battle {
       case 'single_ally':
       case 'all_allies':
         return this.livingByDepth(actor.side);
+      case 'dead_ally':
+        // Düşmüş dostlar (çağrılar hariç); yuvası başka bir birim tarafından doldurulduysa diriltilemez
+        return this.combatants
+          .filter((c) => c.side === actor.side && c.board === c.side && c.hp <= 0 && !c.summoned && !this.combatants.some((o) => o.hp > 0 && o.board === c.board && o.slot === c.slot))
+          .sort((x, y) => x.slot - y.slot);
       case 'everyone':
         return [...this.livingByDepth(actor.side), ...this.livingByDepth(opposite(actor.side))];
     }
@@ -309,7 +314,7 @@ export class Battle {
     if (!skill) return { ok: false, reason: 'Unknown skill' };
     if (this.mode === 'turns' && (actor.cooldowns[skillId] ?? 0) > 0) return { ok: false, reason: 'On cooldown' };
     // Yakın dövüş yalnızca kendi takımının ön sırasındaki birimlerden yapılabilir (dash/charge gibi skill'ler ignoreFrontRow ile istisna olur)
-    if (skill.motion === 'melee' && skill.target !== 'self' && !skill.ignoreFrontRow && !skill.ignoreReach && actor.board === actor.side && this.rowOf(actor.slot) !== this.frontRowOf(actor.side)) {
+    if (skill.motion === 'melee' && skill.target !== 'self' && !skill.ignoreFrontRow && !skill.ignoreReach && actor.board === actor.side && this.rowOf(actor.slot) > this.frontRowOf(actor.side) + (skill.reach ?? 0)) {
       return { ok: false, reason: 'Melee: front row only' };
     }
     const { resource, amount } = skill.cost;
@@ -318,7 +323,7 @@ export class Battle {
     if (skill.effects.some((e) => e.type === 'summon') && this.freeSlots(this.summonBoard(actorUid, skillId)).length === 0) {
       return { ok: false, reason: 'No free slot' };
     }
-    if (this.validTargets(actorUid, skillId).length === 0) return { ok: false, reason: 'No target in reach' };
+    if (this.validTargets(actorUid, skillId).length === 0) return { ok: false, reason: skill.target === 'dead_ally' ? 'No fallen ally' : 'No target in reach' };
     return { ok: true };
   }
 
@@ -401,6 +406,19 @@ export class Battle {
             const base = rollHeal(actor.stats, effect.scale, effect.power, f, this.rng);
             const { crit, mult } = rollCrit(actor.stats, this.rng); // kritik: şifanın SON çarpanı
             this.applyHeal(actor, target, Math.round(base * mult), crit, emit);
+          }
+          break;
+        case 'revive':
+          for (const target of ts) {
+            if (target.hp > 0) continue;
+            target.hp = Math.max(1, Math.round(target.maxHp * effect.hpRatio));
+            target.mp = Math.round(target.maxMp * effect.mpRatio);
+            target.shield = 0;
+            target.magicShield = 0;
+            target.statuses = [];
+            target.turnCounter = 0;
+            this.announcedDead.delete(target.uid);
+            emit({ type: 'revive', source: actor.uid, target: target.uid, hpAfter: target.hp, mpAfter: target.mp });
           }
           break;
         case 'hot':

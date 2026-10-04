@@ -33,7 +33,6 @@ export function buildDef(data: CombatantData, formulas: Formulas): CombatantDef 
     logo: data.logo,
     frontPriority: data.frontPriority,
     ...(data.role ? { role: data.role } : {}),
-    ...(data.reserveFront ? { reserveFront: true } : {}),
     attributes: { ...data.attributes },
     stats: deriveStats(data, formulas),
     skills: [...data.skills],

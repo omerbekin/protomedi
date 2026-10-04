@@ -32,6 +32,9 @@ export const armorProminence = (armor: number) => Math.min(1, Math.max(0, armor 
 /** Sahnedeki tek bir karakter: sprite (veya placeholder), isim, can / MP çubuğu, kalkan çubukları, zırh ve durum ikonları. */
 export class CombatantView {
   readonly container: Phaser.GameObjects.Container;
+  /** Ölüm animasyonu bitti: birim sahnede görünmez (diriltme hedefi olarak hayalet gösterilebilir). */
+  private fallen = false;
+  private readonly baseY: number;
   readonly sprite: Phaser.GameObjects.Sprite;
   /** Ekranda kaplanan boyut (sprite, spriteBox içine oranı korunarak sığdırılır). */
   readonly w: number;
@@ -61,6 +64,7 @@ export class CombatantView {
     y: number,
   ) {
     this.homeX = x;
+    this.baseY = y;
     const tex = characterTexture(scene, combatant.spriteId, combatant.color);
     this.realSprite = tex.real;
 
@@ -140,6 +144,7 @@ export class CombatantView {
   setGlow(kind: 'good' | 'bad' | null, strong = false): void {
     const key = kind ? `${kind}:${strong}` : '';
     if (key === this.glowKey) return;
+    if (this.fallen) this.container.setAlpha(kind ? (strong ? 0.8 : 0.5) : 0); // düşmüş birim: yalnızca diriltme hedefiyken hayalet olarak görünür
     this.glowKey = key;
     if (this.glowFx) {
       this.scene.tweens.killTweensOf(this.glowFx);
@@ -275,6 +280,101 @@ export class CombatantView {
         },
       });
     });
+  }
+
+  /**
+   * Yerden çıkış: karakter zeminin altından yükselir; zemin çizgisinin altı bir geometri maskesiyle gizlenir (gömülü kısım görünmez).
+   * `jitter`: yükselirken yanlara titreme (piksel). Çıkış bitince Promise çözülür.
+   */
+  riseFromGround(ms: number, jitter = 4): Promise<void> {
+    const g = this.scene.make.graphics({ x: 0, y: 0 }, false);
+    g.fillStyle(0xffffff).fillRect(this.homeX - 500, this.baseY - 900, 1000, 900 + 4);
+    this.container.setMask(g.createGeometryMask());
+    this.container.setAlpha(1);
+    this.container.setY(this.baseY + this.h + 16);
+    return new Promise((resolve) => {
+      this.scene.tweens.add({
+        targets: this.container,
+        y: this.baseY,
+        duration: slow(ms),
+        ease: 'Cubic.easeOut',
+        onUpdate: () => this.container.setX(this.homeX + Phaser.Math.Between(-jitter, jitter)),
+        onComplete: () => {
+          this.container.setX(this.homeX);
+          this.container.clearMask(true);
+          resolve();
+        },
+      });
+    });
+  }
+
+  /** Karakterin durduğu (ev) zemin noktası. */
+  get home(): { x: number; y: number } {
+    return { x: this.homeX, y: this.baseY };
+  }
+
+  /** Hızla (x, y) noktasına koşar; `ghost` doluysa arkasında bu renkte hayalet izler bırakır. Varışta çözülür. */
+  approach(x: number, y: number, ms: number, ghost?: number): Promise<void> {
+    this.play('attack');
+    this.container.setDepth(3500);
+    let next = 0;
+    return new Promise((resolve) => {
+      this.scene.tweens.add({
+        targets: this.container,
+        x,
+        y,
+        duration: slow(ms),
+        ease: 'Quad.easeIn',
+        onUpdate: () => {
+          const now = this.scene.time.now;
+          if (ghost !== undefined && now >= next) {
+            this.afterimage(ghost, 0.55, 260);
+            next = now + 26;
+          }
+        },
+        onComplete: () => resolve(),
+      });
+    });
+  }
+
+  /** Ev noktasına geri döner (isteğe bağlı hayalet izli). */
+  returnHome(ms = 240, ghost?: number): Promise<void> {
+    let next = 0;
+    return new Promise((resolve) => {
+      this.scene.tweens.add({
+        targets: this.container,
+        x: this.homeX,
+        y: this.baseY,
+        duration: slow(ms),
+        ease: 'Quad.easeOut',
+        onUpdate: () => {
+          const now = this.scene.time.now;
+          if (ghost !== undefined && now >= next) {
+            this.afterimage(ghost, 0.35, 200);
+            next = now + 30;
+          }
+        },
+        onComplete: () => {
+          this.container.setDepth(this.baseY);
+          this.container.setScale(1);
+          this.play('idle');
+          resolve();
+        },
+      });
+    });
+  }
+
+  /** Karakterin anlık görüntüsü (renkli, sönen hayalet): hız izi. */
+  afterimage(tint: number, alpha = 0.5, life = 240): void {
+    const img = this.scene.add
+      .image(this.container.x, this.container.y, this.sprite.texture.key, this.sprite.frame.name)
+      .setOrigin(0.5, 1)
+      .setScale(this.sprite.scaleX * this.container.scaleX, this.sprite.scaleY * this.container.scaleY)
+      .setFlipX(this.sprite.flipX)
+      .setTint(tint)
+      .setAlpha(alpha)
+      .setDepth(this.container.depth - 1);
+    this.scene.tweens.add({ targets: img, alpha: 0, duration: slow(life), onComplete: () => img.destroy() });
   }
 
   /** Büyü / atış hazırlığı: hafif şişip halka bırakır. */
@@ -482,8 +582,26 @@ export class CombatantView {
         alpha: 0,
         y: this.container.y + 20,
         duration: timing.deathFadeMs,
-        onComplete: () => resolve(),
+        onComplete: () => {
+          this.fallen = true;
+          resolve();
+        },
       });
     });
+  }
+
+  /** Diriltme: düşmüş birim olduğu yerde canlanır. */
+  revive(hp: number, mp: number): void {
+    this.fallen = false;
+    this.setGlow(null);
+    this.scene.tweens.killTweensOf(this.container);
+    this.container.setY(this.baseY).setAlpha(0);
+    this.setHp(hp, false);
+    this.setMp(mp, false);
+    this.setShield(0, 0, false);
+    this.play('idle');
+    this.ring(colors.heal, 1.2);
+    this.floatText('Revived', colors.heal, 48);
+    this.scene.tweens.add({ targets: this.container, alpha: 1, duration: slow(450) });
   }
 }

@@ -17,14 +17,14 @@
   "ai": "healer",
   "skills": [
     "holy_strike",
-    "blessing",
+    "resurrection",
     "judgment",
     "radiance"
   ],
   "passive": {
     "id": "divine_light",
     "name": "Divine Light",
-    "icon": "holy",
+    "icon": "divine",
     "text": "At the start of your turn, heal the most wounded ally.",
     "effect": {
       "type": "divineLight",

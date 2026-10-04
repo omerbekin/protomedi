@@ -24,7 +24,7 @@
   "passive": {
     "id": "bulwark_aura",
     "name": "Bulwark Aura",
-    "icon": "guardian",
+    "icon": "aura",
     "text": "You and the allies right next to you (front, back, left, right) gain +8 armor.",
     "effect": {
       "type": "armorAura",
@@ -32,6 +32,6 @@
     }
   },
   "overrides": {
-    "hp": 166
+    "hp": 158
   }
 }

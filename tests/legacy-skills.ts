@@ -19,6 +19,10 @@ const LEGACY: Record<string, SkillDef> = {
     id: 'lay_on_hands', name: 'Lay on Hands', icon: 'cross', target: 'single_ally', cost: { resource: 'mp', amount: 12 }, cooldown: 3,
     motion: 'cast', fx: '#fff0a0', effects: [{ type: 'heal', scale: 'int', power: 2.5 }],
   },
+  blessing: {
+    id: 'blessing', name: 'Blessing', icon: 'cross', target: 'single_ally', cost: { resource: 'mp', amount: 12 }, cooldown: 3,
+    motion: 'cast', fx: '#fff0a0', effects: [{ type: 'status', status: 'blessed', turns: 3 }],
+  },
   shield_bash: {
     id: 'shield_bash', name: 'Shield Bash', icon: 'bash', target: 'single_enemy', cost: { resource: 'mp', amount: 0 },
     motion: 'melee', fx: '#ffe9b0', effects: [{ type: 'damage', damageType: 'physical', scale: 'str', power: 1.0 }, { type: 'shield', scale: 'str', power: 0.5, self: true }],
@@ -35,7 +39,7 @@ const LEGACY: Record<string, SkillDef> = {
 
 const GIVE: Record<string, string[]> = {
   warrior: ['power_strike', 'shield_wall'],
-  paladin: ['lay_on_hands'],
+  paladin: ['lay_on_hands', 'blessing'],
   defender: ['shield_bash'],
   undead: ['bone_slash', 'soul_drain'],
 };
@@ -47,4 +51,11 @@ export function installLegacySkills(): void {
     const def = content.classes[cls]!;
     for (const id of ids) if (!def.skills.includes(id)) def.skills.push(id);
   }
+}
+
+/** Tek bir eski skill'i kayda ve (verilirse) bir sınıfın listesine ekler. */
+export function installLegacySkill(id: string, cls?: string): void {
+  content.skills[id] = LEGACY[id]!;
+  const def = cls ? content.classes[cls] : undefined;
+  if (def && !def.skills.includes(id)) def.skills.push(id);
 }

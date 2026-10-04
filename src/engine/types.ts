@@ -69,8 +69,6 @@ export interface CombatantData {
   logo: string;
   /** Dizilimde sıra: küçük = daha önde (yakın dövüş / dayanıklı). */
   frontPriority: number;
-  /** true: takımda bu sınıf varsa ön sırada 1 hücre boş bırakılır (çağrılan melee birim oraya konabilsin). */
-  reserveFront?: boolean;
   /** Seçim ekranında gösterilen klasman (yoksa ilk skill'in türüne göre Melee/Ranged/Caster). */
   role?: string;
   attributes: Attributes;
@@ -96,7 +94,6 @@ export interface CombatantDef {
   color: string;
   logo: string;
   frontPriority: number;
-  reserveFront?: boolean;
   role?: string;
   attributes: Attributes;
   stats: Stats;
@@ -108,7 +105,7 @@ export interface CombatantDef {
 
 export type Element = 'physical' | 'fire' | 'ice' | 'holy' | 'dark' | 'nature' | 'arcane';
 
-export type SkillTarget = 'single_enemy' | 'all_enemies' | 'area_enemies' | 'column_enemies' | 'everyone' | 'random_enemies' | 'single_ally' | 'all_allies' | 'self';
+export type SkillTarget = 'single_enemy' | 'all_enemies' | 'area_enemies' | 'column_enemies' | 'everyone' | 'random_enemies' | 'single_ally' | 'dead_ally' | 'all_allies' | 'self';
 
 export type SkillEffectKind =
   | {
@@ -132,6 +129,8 @@ export type SkillEffectKind =
       bonusFromShield?: { ratio: number; consume: boolean };
     }
   | { type: 'heal'; scale: Attribute; power: number }
+  /** Düşmüş bir dostu bulunduğu yerde diriltir: maks canının/manasının bu oranlarıyla (hedef 'dead_ally'). */
+  | { type: 'revive'; hpRatio: number; mpRatio: number }
   /** Tur bazlı şifa: hedefin sonraki `turns` turunun başında `power` kadar iyileştirir. */
   | { type: 'hot'; scale: Attribute; power: number; turns: number }
   | { type: 'shield'; scale: Attribute; power: number; shieldType?: 'magic'; /** Kullanıcının kalan MP'si başına eklenen kalkan. */ bonusPerMana?: number; /** true: kalkan hedefe değil kullanıcının kendisine gider (ör. Shield Bash). */ self?: boolean }
@@ -183,6 +182,12 @@ export interface SkillDef {
   ignoreFrontRow?: boolean;
   /** true: yakın dövüş skill'i menzil sınırı olmadan (ön sıra kuralı olmadan) herhangi bir düşmana gider (charge/dash). */
   ignoreReach?: boolean;
+  /** Yakın dövüş menzili bonusu (satır): kullanıcı ön sıranın bu kadar gerisinden de vurabilir ve düşmanın bu kadar fazla ön sırasına ulaşır. */
+  reach?: number;
+  /** Animasyonun çaldığı ses efektleri (data/audio.json adları); vfx yalnızca bu listedekileri çalar. */
+  sfx?: string[];
+  /** Skill efekti (animasyon) adı: src/ui/vfx-kinds.ts; yoksa `motion`/`skyFx` genel animasyonu oynar. */
+  vfx?: string;
   /** target 'random_enemies': kaç (farklı) rastgele düşmana gider. */
   count?: number;
   /** true: yukarıdan düşen etki her hedefe ayrı değil, seçilen alanın merkezine TEK büyük olarak düşer. */
@@ -353,6 +358,8 @@ export type BattleEvent =
   | { type: 'statusEnd'; target: string; status: StatusKind; broken?: boolean }
   | { type: 'summon'; actor: string; combatant: Combatant }
   | { type: 'despawn'; target: string }
+  /** Düşmüş bir birim olduğu yerde dirildi. */
+  | { type: 'revive'; source: string; target: string; hpAfter: number; mpAfter: number }
   | { type: 'mpRegen'; actor: string; amount: number; after: number }
   /** Bir pasif tetiklendi (UI kısa bir yazı gösterir). */
   | { type: 'passive'; actor: string; passive: string; name: string }

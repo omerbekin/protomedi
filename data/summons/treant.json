@@ -3,7 +3,7 @@
   "name": "Treant",
   "spriteId": "treant",
   "color": "#6b4423",
-  "logo": "tree",
+  "logo": "treant",
   "frontPriority": 8,
   "attributes": {
     "str": 13.5,

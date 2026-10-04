@@ -55,6 +55,8 @@ interface Option {
   /** Yakılacak toplam mana ve mana yakılan hedef sayısı. */
   burn: number;
   burnTargets: number;
+  /** Düşmüş bir dostu diriltir mi (diriltilen birimin maks canı değer sayılır). */
+  revive: number;
   /** Mana yakmanın değeri: yakılan mana, hedefin mana havuzuyla (büyücüler) ağırlıklanır. */
   burnScore: number;
   /** 4. (güçlü) skill mi. */
@@ -131,6 +133,7 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
     shield: 0,
     burn: 0,
     burnTargets: 0,
+    revive: 0,
     burnScore: 0,
     ultimate: actor.skills.indexOf(skill.id) === 3,
     summon: skill.effects.some((e) => e.type === 'summon'),
@@ -149,6 +152,7 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
       if (lifesteal > 0 && !p.damage.splash) o.selfHeal += p.damage.hpLoss * lifesteal;
     }
     if (p.heal) o.heal += p.heal.avg;
+    if (skill.effects.some((e) => e.type === 'revive')) o.revive += target.maxHp;
     if (p.hot) o.heal += p.hot.total;
     // Saldırı skill'inin kendine verdiği kalkan (Shield Bash) kalkan önceliğini tetiklemez
     if (p.shield && !['single_enemy', 'all_enemies', 'area_enemies', 'column_enemies'].includes(skill.target)) o.shield += p.shield.amount;
@@ -195,6 +199,9 @@ const PICKERS: Record<AiPriority, Picker> = {
 
   // Dostlardan biri eşiğin altındaysa, o dostu içeren en verimli şifa (anlık veya tur bazlı).
   heal: (_b, actor, profile, options) => {
+    // Düşmüş bir dostu diriltmek her şifadan değerlidir: en güçlü (en çok canlı) birim önce
+    const revives = options.filter((o) => o.revive > 0);
+    if (revives.length > 0) return best(revives, (o) => o.revive - o.cost);
     const hurt = (c: Combatant) => ratio(c) < profile.healBelowRatio;
     if (profile.healBelowRatio <= 0) return undefined;
     const healers = options.filter((o) => o.heal > 0 && o.targets.some(hurt));

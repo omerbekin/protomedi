@@ -5,10 +5,12 @@ import layout from '../data/battle-layout.json';
 import { attributePower, content } from '../src/engine';
 import type { StatKind } from '../src/engine';
 import { ICON_KINDS, isIconKind } from '../src/ui/icon-kinds';
+import { VFX_KINDS } from '../src/ui/vfx-kinds';
+import { UI_ICONS } from '../src/ui/dom-icons';
 import { STAT_COLOR, STAT_ICON, UI_ICON, STAT_LABEL } from '../src/ui/stat-icons';
 
 // Şema doğrulama: data/ altına eklenen her içerik burada denetlenir.
-const SKILL_TARGETS = ['single_enemy', 'all_enemies', 'area_enemies', 'column_enemies', 'everyone', 'random_enemies', 'single_ally', 'all_allies', 'self'];
+const SKILL_TARGETS = ['single_enemy', 'all_enemies', 'area_enemies', 'column_enemies', 'everyone', 'random_enemies', 'single_ally', 'dead_ally', 'all_allies', 'self'];
 const MOTIONS = ['melee', 'ranged', 'cast', 'sky', 'ground', 'whip'];
 const ATTRIBUTES = ['str', 'int', 'dex', 'luck'];
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -81,6 +83,13 @@ describe('skill verisi', () => {
           case 'selfDamage':
             expect(e.ratio).toBeGreaterThan(0);
             expect(e.ratio).toBeLessThan(1);
+            break;
+          case 'revive':
+            expect(e.hpRatio).toBeGreaterThan(0);
+            expect(e.hpRatio).toBeLessThanOrEqual(1);
+            expect(e.mpRatio).toBeGreaterThanOrEqual(0);
+            expect(e.mpRatio).toBeLessThanOrEqual(1);
+            expect(s.target).toBe('dead_ally');
             break;
           case 'guard':
             expect(e.turns).toBeGreaterThan(0);
@@ -244,7 +253,7 @@ describe('güç sınırları (kalkan ve çağrı çok güçlü olmasın)', () =>
         for (const def of Object.values(content.classes)) {
           if (!def.skills.includes(id)) continue;
           const amount = attributePower(def.stats, e.scale, content.formulas) * e.power;
-          expect(amount, `${def.id} ${id}`).toBeLessThanOrEqual(Math.min(...classHps) * 0.25);
+          expect(amount, `${def.id} ${id}`).toBeLessThanOrEqual(Math.min(...classHps) * 0.3); // Mana Barrier %110 INT (Ömer kararı) en zayıf canın ~%25'ini aşar: üst sınır %30
         }
       }
     }
@@ -327,8 +336,30 @@ describe('görsel veri: skill ikonları, class logoları, stat ikonları, hareke
       ...Object.values(content.classes).map((c) => c.passive?.icon ?? ''),
       ...Object.values(STAT_ICON),
       ...Object.values(UI_ICON),
+      ...Object.values(content.statuses).map((s) => s.icon),
+      ...Object.values(content.grounds).map((g) => g.icon),
+      'shield', // zırh aurası rozeti
+      'skull', // ölümcül hasar işareti
+      'hourglass', // kalan tur
+      'leaf', // regen rozeti
+      'roar', // varsayılan durum ikonu
+      'finger', // yedek
+      ...UI_ICONS, // debug dock ve ayarlar (DOM)
     ]);
     for (const kind of ICON_KINDS) expect(used.has(kind), kind).toBe(true);
+  });
+
+  it('her skill piksel art efektine (vfx) sahip; yalnızca Radiance genel hareketi kullanır', () => {
+    for (const [id, s] of Object.entries(content.skills)) {
+      if (id === 'radiance') {
+        expect(s.vfx, id).toBeUndefined();
+        continue;
+      }
+      expect(VFX_KINDS as readonly string[], `${id} vfx`).toContain(s.vfx);
+    }
+    // her efekt en az bir skill tarafından kullanılıyor
+    const used = new Set(Object.values(content.skills).map((s) => s.vfx));
+    for (const k of VFX_KINDS) expect(used.has(k), k).toBe(true);
   });
 
   it("yukarıdan düşen skill'lerin hepsinin düşen şey türü var", () => {

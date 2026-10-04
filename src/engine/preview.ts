@@ -131,6 +131,9 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
           critChance: actor.stats.critChance,
           critMax: Math.min(Math.round(r.max * actor.stats.critMult), missing),
         };
+      } else if (effect.type === 'revive') {
+        const e = entry(target.uid);
+        e.statuses = [...(e.statuses ?? []), `Revived: ${Math.max(1, Math.round(target.maxHp * effect.hpRatio))} HP, ${Math.round(target.maxMp * effect.mpRatio)} MP`];
       } else if (effect.type === 'hot') {
         const perTurn = Math.round(attributePower(actor.stats, effect.scale, f) * effect.power);
         entry(target.uid).hot = {

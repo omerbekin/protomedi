@@ -24,7 +24,7 @@
   "passive": {
     "id": "vampiric_bite",
     "name": "Vampiric Bite",
-    "icon": "drain",
+    "icon": "soul",
     "text": "",
     "effect": {
       "type": "soulDrain",

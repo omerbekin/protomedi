@@ -7,6 +7,9 @@ import { backgroundKey, hasBackground, preloadAssets } from '../assets';
 import { CombatantView, color, slow, textStyle } from '../combatant-view';
 import { ensureIcon, ensureSkillIcon } from '../icons';
 import { initialSeed, newSeed } from '../seed';
+import { playSfx } from '../audio';
+import { VFX, meleeApproach, summonFx } from '../vfx';
+import type { VfxKind } from '../../ui/vfx-kinds';
 
 export interface BattleSceneData {
   seed: number;
@@ -82,6 +85,7 @@ export class BattleScene extends Phaser.Scene {
     this.mode = data.mode ?? this.mode;
     if ('teams' in data) this.teams = data.teams;
     this.views = new Map();
+    this.lastSkill = new Map();
     this.controlled = null;
     this.uiActor = null;
     this.busy = false;
@@ -245,7 +249,9 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     if (this.selected && this.selected.actor === actor.uid && this.battle.canUse(actor.uid, this.selected.skill).ok) return;
-    const first = actor.skills.find((id) => this.battle.canUse(actor.uid, id).ok);
+    // Test modunda her karakter son kullandığı/seçtiği skill'de kalır (her seferinde ilk skill'e dönmez)
+    const remembered = this.battle.mode === 'test' ? this.lastSkill.get(actor.uid) : undefined;
+    const first = remembered && this.battle.canUse(actor.uid, remembered).ok ? remembered : actor.skills.find((id) => this.battle.canUse(actor.uid, id).ok);
     if (first) this.applySelection(actor.uid, first);
     else this.clearSelection();
   }
@@ -486,10 +492,15 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     this.applySelection(actor.uid, skillId);
+    if (this.battle.mode === 'test') this.lastSkill.set(actor.uid, skillId);
     this.refreshCommands();
   }
 
+  /** Test modu: her karakterin son kullandığı/seçtiği skill (kullanınca seçim sıfırlanmasın). */
+  private lastSkill = new Map<string, string>();
+
   private perform(actor: string, skill: string, target: string, slot?: number): void {
+    if (this.battle.mode === 'test') this.lastSkill.set(actor, skill);
     this.clearSelection();
     this.hideInfoTip();
     this.hideUnitTip();
@@ -497,6 +508,26 @@ export class BattleScene extends Phaser.Scene {
     this.busy = true;
     this.refreshCommands();
     this.settle();
+  }
+
+  /** Çok vuruşlu skill'in sıradaki vuruş animasyonu (VfxCtx.gate): ilgili hasar olayından hemen önce oynar. */
+  private hitGate: { skip: number; run: () => Promise<void>; abort: () => void } | null = null;
+
+  private abortHitGate(): void {
+    const g = this.hitGate;
+    this.hitGate = null;
+    g?.abort();
+  }
+
+  private async passHitGate(): Promise<void> {
+    const g = this.hitGate;
+    if (!g) return;
+    if (g.skip > 0) {
+      g.skip--;
+      return;
+    }
+    this.hitGate = null;
+    await g.run();
   }
 
   private onCombatantTap(view: CombatantView): void {
@@ -721,6 +752,7 @@ export class BattleScene extends Phaser.Scene {
     const battle = this.battle;
     this.eventQueue = this.eventQueue.then(async () => {
       if (battle !== this.battle || !this.scene.isActive()) return;
+      this.abortHitGate(); // olaylar bitti: oynanmamış vuruş animasyonu kaldıysa (hedef ilk vuruşta öldü) karakter yerine dönsün
       this.busy = false;
       this.refreshCommands();
       if (battle.mode !== 'turns' || battle.winner) return;
@@ -764,6 +796,7 @@ export class BattleScene extends Phaser.Scene {
     if (!this.scene.isActive()) return;
     switch (e.type) {
       case 'skillUsed': {
+        this.abortHitGate();
         const actor = this.battle.get(e.actor);
         const skill = content.skills[e.skill];
         if (actor && skill) this.announce(`${actor.side === 'enemy' ? 'Enemy ' : ''}${actor.name} uses ${skill.name}`);
@@ -776,6 +809,7 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       case 'damage': {
+        await this.passHitGate();
         const target = this.views.get(e.target);
         if (target) {
           // The bigger the hit relative to max HP, the stronger the reaction (shake, flash, number size, bar drain)
@@ -795,6 +829,7 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       case 'dodge':
+        await this.passHitGate();
         this.views.get(e.target)?.dodge();
         await this.wait(slow(90));
         return;
@@ -838,10 +873,17 @@ export class BattleScene extends Phaser.Scene {
       }
       case 'summon': {
         const view = this.addView(e.combatant);
-        view?.fadeIn();
-        await this.wait(slow(400));
+        if (view) {
+          view.container.setAlpha(0);
+          await summonFx(this, e.combatant.defId, view);
+        }
         return;
       }
+      case 'revive':
+        this.views.get(e.target)?.revive(e.hpAfter, e.mpAfter);
+        await this.wait(slow(500));
+        this.refreshCommands();
+        return;
       case 'despawn':
         await this.views.get(e.target)?.vanish();
         this.refreshCommands();
@@ -868,6 +910,7 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       case 'turnStart':
+        this.abortHitGate();
         this.uiActor = e.actor;
         this.renderTurnBar(e.queue);
         this.refreshCommands();
@@ -901,6 +944,38 @@ export class BattleScene extends Phaser.Scene {
     const offensive = skill.effects.some((ef) => ef.type === 'damage' || ef.type === 'manaBurn' || ef.type === 'ground');
     // Area skills can be cast on empty cells: they still play (the effect lands on the chosen cell)
     if (targets.length === 0 && !(center !== undefined && offensive)) return;
+
+    // Piksel art skill efekti (src/game/vfx.ts): varsa genel hareket yerine o oynar
+    const vfx = skill.vfx ? VFX[skill.vfx as VfxKind] : undefined;
+    if (vfx) {
+      const cells = center !== undefined && this.battle.isAreaSkill(skillId) ? this.battle.areaCells(skillId, center).map((slot) => this.cellPos(board, slot)) : [];
+      // Whirlwind gibi tüm düşmanlara vuran yakın dövüş: hedeflerin ön sırasının orta hücresi
+      let rowCenter: { x: number; y: number } | undefined;
+      if (skill.target === 'all_enemies' && skill.motion === 'melee' && targets.length > 0) {
+        const row = Math.min(...targets.map((t) => this.battle.rowOf(t.combatant.slot)));
+        rowCenter = this.cellPos(board, row * content.GRID.lanes + 1);
+      }
+      await vfx({
+        scene: this,
+        actor,
+        targets,
+        skill,
+        board,
+        ...(center !== undefined ? { center } : {}),
+        ...(rowCenter ? { rowCenter } : {}),
+        cells,
+        lunge: () => meleeApproach(this, actor, targets),
+        windUp: (hex, anim = 'cast') => actor.windUp(hex, anim),
+        sfx: (id) => {
+          if (skill.sfx?.includes(id)) playSfx(this, id);
+        },
+        gate: (skip, run, abort) => {
+          this.abortHitGate();
+          this.hitGate = { skip, run, abort };
+        },
+      });
+      return;
+    }
 
     if (skill.motion === 'melee') {
       const avgX = targets.reduce((sum, t) => sum + t.container.x, 0) / targets.length;

@@ -17,14 +17,14 @@
   "ai": "aggressive",
   "skills": [
     "melee_attack",
-    "charge",
     "whirlwind",
+    "charge",
     "abyssal_cry"
   ],
   "passive": {
     "id": "berserker",
     "name": "Berserker",
-    "icon": "drop",
+    "icon": "rage",
     "text": "The lower your HP, the harder you hit: up to +50% damage at the brink of death.",
     "effect": {
       "type": "rage",

@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import layout from '../data/battle-layout.json';
+import { audioSettings, playSfxOn } from './game/audio';
 import { BattleScene } from './game/scenes/BattleScene';
 import { TeamSelectScene } from './game/scenes/TeamSelectScene';
 import { newSeed } from './game/seed';
 import { DebugMenu } from './ui/debug-menu';
+import { SettingsMenu } from './ui/settings';
 import './style.css';
 
 // Normal açılış: takım seçim ekranı. Adreste ?seed=123 varsa seçimi atlayıp o seed'in rastgele takımlarıyla doğrudan savaş
@@ -33,9 +35,18 @@ let fps: HTMLDivElement | null = null;
 let fpsTimer = 0;
 let forcePortrait = false;
 
+// --- Settings (top right): sound volume 0-10 ---
+new SettingsMenu(document.getElementById('ui-root')!, {
+  onVolume: (level) => {
+    audioSettings.volume = level / 10;
+  },
+  preview: () => playSfxOn((game.sound as unknown as { context?: AudioContext }).context, 'stunChime'),
+});
+
 debug.register({
   id: 'scene.team-select',
   section: 'Battle',
+  dock: { row: 0, order: 1, icon: 'team' },
   label: 'Team select',
   hint: 'Back to the team selection screen',
   run: () => {
@@ -46,6 +57,7 @@ debug.register({
 debug.register({
   id: 'mode.toggle',
   section: 'Control',
+  dock: { row: 0, order: 0, icon: 'flask', on: () => battle()?.mode === 'test' },
   label: () => (battle()?.mode === 'test' ? 'Mode: Test' : 'Mode: Turns'),
   hint: 'Switch between turn-based and test mode (no turn order, any unit can act). Restarts the battle.',
   run: () => {
@@ -63,6 +75,7 @@ debug.register({
 debug.register({
   id: 'battle.random',
   section: 'Battle',
+  dock: { row: 0, order: 2, icon: 'dice' },
   label: 'New teams',
   hint: 'Random teams, new seed',
   run: () => battle()?.scene.restart({ seed: newSeed(), teams: undefined }),
@@ -77,6 +90,7 @@ debug.register({
 debug.register({
   id: 'battle.autoplay',
   section: 'Control',
+  dock: { row: 1, order: 0, icon: 'robot', on: () => !!battle()?.autoPlay },
   label: () => (battle()?.autoPlay ? 'Auto: on' : 'Auto: off'),
   hint: 'Let the AI play your party',
   run: () => battle()?.toggleAutoPlay(),
@@ -84,6 +98,7 @@ debug.register({
 debug.register({
   id: 'battle.free-mp',
   section: 'Control',
+  dock: { row: 1, order: 1, icon: 'freemp', on: () => BattleScene.freeMp },
   label: () => (BattleScene.freeMp ? 'Free MP: on' : 'Free MP: off'),
   hint: 'Skills cost no mana (both sides)',
   run: () => {
@@ -105,6 +120,14 @@ debug.register({
 debug.register({
   id: 'battle.cycle-actor',
   section: 'Control',
+  dock: {
+    row: 1,
+    order: 2,
+    icon: () => {
+      const a = battle()?.activeActor;
+      return a ? { name: a.logo, accent: a.color, overlay: 'next' } : { name: 'next' };
+    },
+  },
   label: () => {
     const b = battle();
     if (b?.mode !== 'test') return 'Next unit';

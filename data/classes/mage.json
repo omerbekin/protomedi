@@ -24,7 +24,7 @@
   "passive": {
     "id": "spell_echo",
     "name": "Spell Echo",
-    "icon": "rune",
+    "icon": "echo",
     "text": "Damaging spells with a cooldown have a 25% chance to be ready again immediately.",
     "effect": {
       "type": "spellEcho",

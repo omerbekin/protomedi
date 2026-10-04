@@ -19,6 +19,7 @@ export const TARGET_TEXT: Record<SkillTarget, string> = {
   area_enemies: 'Area',
   column_enemies: 'Column',
   single_ally: 'One ally',
+  dead_ally: 'One fallen ally',
   all_allies: 'All allies',
   everyone: 'Everyone',
   random_enemies: 'Random enemies',
@@ -67,13 +68,20 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
     kinds.push(kind);
   };
   let canCrit = false;
+  // Aynı etki art arda tekrar ediyorsa (Double Strike: iki vuruş) tek satır + 'x2'
+  const effects: Array<{ e: SkillDef['effects'][number]; times: number }> = [];
   for (const e of skill.effects) {
+    const last = effects[effects.length - 1];
+    if (last && JSON.stringify(last.e) === JSON.stringify(e) && e.type === 'damage') last.times++;
+    else effects.push({ e, times: 1 });
+  }
+  for (const { e, times } of effects) {
     const who = skill.target === 'everyone' ? ((e.side ?? (e.type === 'heal' || e.type === 'hot' || e.type === 'shield' || e.type === 'guard' ? 'allies' : 'enemies')) === 'allies' ? ' (allies)' : ' (enemies)') : '';
     const raw = (scale: Attribute, power: number) => Math.round(attributePower(stats, scale, formulas) * power);
     if (e.type === 'damage') {
       canCrit = true;
       const element = e.element ?? 'physical';
-      add(`Damage ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)})${who}`, element);
+      add(`Damage ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)})${times > 1 ? ` x${times}` : ''}${who}`, element);
       if (e.ignoreDefense) add(`Ignores ${pct(e.ignoreDefense)} of armor`);
       if (e.lifesteal) add(`Heals you for ${pct(e.lifesteal)} of damage dealt`);
       if (e.bonusVsTag) add(`x${e.bonusVsTag.multiplier} vs ${e.bonusVsTag.tag}`);
@@ -83,6 +91,8 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
     } else if (e.type === 'heal') {
       canCrit = true;
       add(`Heal ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)})${who}`);
+    } else if (e.type === 'revive') {
+      add(`Revives the ally where it fell with ${pct(e.hpRatio)} HP and ${pct(e.mpRatio)} MP`);
     } else if (e.type === 'hot') {
       canCrit = true;
       add(`Heal ${raw(e.scale, e.power)} per turn for ${e.turns} turns`);
@@ -112,7 +122,7 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       add(`Guard ${e.turns} turns: take ${pct(e.share)} of the damage ally takes`);
     }
   }
-  if (skill.motion === 'melee' && skill.target !== 'self') add(skill.ignoreReach ? 'Charges at any enemy' : 'Melee: front row only');
+  if (skill.motion === 'melee' && skill.target !== 'self') add(skill.ignoreReach ? 'Charges at any enemy' : skill.reach ? `Melee: front ${skill.reach + 1} rows only (reach +${skill.reach})` : 'Melee: front row only');
   if (canCrit) add(`Crit ${(stats.critChance * 100).toFixed(1).replace(/\.0$/, '')}% x${stats.critMult.toFixed(2)}`);
   const { resource, amount } = skill.cost;
   return {

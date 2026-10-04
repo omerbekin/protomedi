@@ -24,7 +24,7 @@
   "passive": {
     "id": "sharpshooter",
     "name": "Sharpshooter",
-    "icon": "target",
+    "icon": "sharp",
     "text": "",
     "effect": {
       "type": "longshot",

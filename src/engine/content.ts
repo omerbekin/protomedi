@@ -154,14 +154,11 @@ function planCells(ids: string[], pickSize: (min: number, max: number) => number
     .map((id, i) => ({ id, i, melee: isMeleeClass(id) ? 0 : 1, p: (classes[id] ?? summons[id])?.frontPriority ?? 99 }))
     .sort((x, y) => x.melee - y.melee || x.p - y.p || x.i - y.i);
   const slots: number[] = Array.from({ length: ids.length }, () => -1);
-  const reserve = ids.some((id) => (classes[id] ?? summons[id])?.reserveFront);
   let at = 0;
   for (let row = 0; row < GRID.rows && at < order.length; row++) {
     const rest = order.slice(at);
     const meleeLeft = rest.filter((u) => isMeleeClass(u.id)).length;
-    // Takımda reserveFront sınıfı (Druid) varsa ön sırada 1 hücre boş kalır: çağrılan melee birim oraya konabilsin
-    const frontCap = row === 0 && reserve ? GRID.lanes - 1 : GRID.lanes;
-    const max = Math.min(frontCap, rest.length);
+    const max = Math.min(GRID.lanes, rest.length);
     // en az: kalan melee sayısı; ayrıca kalan birimler kalan sıralara sığmalı (hiçbir birim dışarıda kalmaz)
     const mustFit = rest.length - GRID.lanes * (GRID.rows - row - 1);
     const min = Math.max(1, Math.min(meleeLeft, max), Math.min(mustFit, max));
