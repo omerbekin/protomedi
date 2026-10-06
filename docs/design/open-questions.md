@@ -480,3 +480,142 @@ Sayılara dokunulmadı. `woodsmash` efekti baştan kuruldu: Treant hedefin yanı
 - **Mana Echo (Int primary, Arcane Ward yerine):** her MP bedelli skill'den sonra `primaryBonus.int.manaEchoChance` (%20) ihtimalle bedelin yarısı (yukarı yuvarla, en az 1) geri gelir, MP üst sınırı aşılmaz; bedelsiz skill'e zar atılmaz. Arcane Ward'ın +5 büyü zırhı kalktı (Anti-Mage dahil tüm Int primary class'larda artık bonus büyü zırhı yok). Olay `passive` "Mana Echo". Lucky Escape değişmedi (%30). Eski Momentum/Arcane Ward/Iron Skin kodu ve verisi silindi (testle kilitli).
 - **Not:** sağlık sim'i (200 savaş) çökmeden çalıştı; oranlar dengesiz (Defender %67, Paladin %65, Gambler %32, Mage %28), balance-tester'a bırakıldı.
 - **Açık sorular (Ömer):** (1) Resilience 1 turluk debuff'ta zar atmasın (1'in altına inmez) kuralı uygun mu? (2) Çevik olmayanlarda %1 evasion (dex 3) pratikte hissedilmez; 3 dex başına +%1 yeterli mi? (3) Gambler/Anti-Mage dex 8'e çıkarıldı (can/MP -2/-4): çeviklik için kabul mü?
+
+## 203. Bone Slash yalnızca aynı sıradaki yan komşulara, evasion 5 Dex = +%2 (üst sınır %75), dex dağılımı (engine-dev, Ömer isteği; denge testi YAPILMADI)
+- **Bone Slash hatası (sebep):** `computeSideNeighbors` yalnızca ekran yakınlığına (yatayda `maxDx` = 130 px) bakıyordu. Eğik dizilimde komşu sıranın çapraz hücreleri (dx 66-126 px) ekranda "yan" görünüyor; yakın şerit komşusu boşsa hedefin ARKASINDAKİ/ÖNÜNDEKİ hücre aday oluyordu. Yanlış çiftler (oyuncu tarafı; düşman aynası): 1->3, 2->3, 2->4, 3->1, 3->2, 4->2, 4->6, 5->6, 5->7, 6->4, 6->5, 7->5, 7->9, 8->9, 8->10, 9->7, 9->8, 10->8 (hepsi farklı sıra). Örn. ön sıra alt şerit (2) vurulunca, orta şerit (1) boşsa arkadaki sıra 1 şerit 0 (3) yan vuruş yiyordu.
+- **Çözüm:** `computeSideNeighbors(slots, maxDx, lanes)` artık yalnızca AYNI SIRADAKİ (aynı yatay hizadaki) hücreleri aday sayar; ön/arka (başka sıra) hiçbir zaman. Harita `formulas.json > formation.sideNeighbors` yeniden üretildi. Bir sıra 3 şerit olduğundan her hücrenin en fazla 1 üst + 1 alt komşusu var; boş şerit atlanır (1. ve 3. şerit doluysa birbirinin yanı).
+- **Ömer'in önceki örnekleri:** (b) düşman Warrior -> Defender+Gambler (aynı sıra) AYNEN çalışıyor. (a) "Archer@4 -> Defender@2 ve Gambler@3": Gambler@3 (aynı sıra) çalışıyor; Defender@2 (bir önceki sıranın çapraz hücresi) artık YAN SAYILMIYOR: bu hücre Archer'ın önünde-çaprazında, yani yeni kuralın tam yasakladığı durum. Aynı sıradaki karşılığı (Defender@5) yan komşudur. Test buna göre güncellendi.
+- **Evasion:** `dexPerEvasionStep: 5`, `evasionPerStep: 0,02`, `evasionMax: 0,75` (formulas.json; kod değişmedi, formül zaten veriye bağlıydı). `evasion = min(%75, floor(dex / 5) x %2)`: dex 5 -> %2, 10 -> %4, 15 -> %6, 16 -> %6, 4 -> %0. Tooltip metni veriden: "5 Dex = +2% evasion (whole steps, max 75%)".
+- **Dex dağılımı (arketipe göre farklı, hiçbiri 0 değil; toplam 30, primary en yüksek; puan en az önemli stattan alındı/verildi):**
+
+  | Class | Eski str/int/dex/luck | Yeni str/int/dex/luck | Can | MP | Hız | Evasion | Accuracy |
+  |---|---|---|---|---|---|---|---|
+  | Defender | 16/10/3/1 | 16/10/2/2 | 158 -> 158 | 30 -> 30 | 8 -> 8 | %1 -> %0 | %81 -> %82 |
+  | Warrior | 16/5/3/6 | 16/5/4/5 | 116 -> 116 | 20 -> 20 | 8 -> 9 | %1 -> %0 | %86 -> %85 |
+  | Paladin | 11/13/3/3 | 11/13/3/3 | 86 | 36 | 8 | %1 -> %0 | %83 |
+  | Mage | 3/20/3/4 | 3/20/4/3 | 38 | 50 | 8 -> 9 | %1 -> %0 | %84 -> %83 |
+  | Undead | 11/14/3/2 | 11/14/3/2 | 86 | 38 | 8 | %1 -> %0 | %82 |
+  | Druid | 8/16/3/3 | 7/16/6/1 | 68 -> 62 | 42 | 8 -> 9 | %1 -> %2 | %83 -> %81 |
+  | Archer | 3/6/15/6 | 3/5/16/6 | 38 | 22 -> 20 | 13 | %5 -> %6 | %86 |
+  | Anti-Mage | 4/15/8/3 | 4/15/8/3 | 44 | 40 | 10 | %2 | %83 |
+  | Gambler | 6/5/8/11 | 5/4/10/11 | 56 -> 50 | 20 -> 18 | 10 -> 11 | %2 -> %4 | %91 |
+  (Evasion eski formülle 3 Dex = %1; yeni formülle 5 Dex = %2. Hız aralığı 8-13: en yavaş en hızlının yarısından fazla yavaş değil, test var.) Warrior dex 5 yerine 4 oldu: int 4 olsaydı MP 18'e düşüp Charge (10 MP) arka arkaya iki kez atılamayacaktı (mevcut Lucky Escape testleri buna dayanıyor).
+- **Not:** dex küçük sınıfların (Defender/Paladin/Mage/Undead) evasion'ı yeni adımla %0'a indi (dex 3-4 < 5): Archer %6, Gambler %4, Druid/Anti-Mage %2, Warrior/Mage %0. Sağlık sim'i (100 savaş) çökmeden çalıştı; denge balance-tester'a bırakıldı.
+- **Açık sorular (Ömer):** (1) Defender/Paladin/Undead/Mage/Warrior'da evasion %0: kabul mü, yoksa küçük bir taban mı (örn. dex 4 ve 5 arası) istersin? (2) Archer'ın %6 evasion'ı hâlâ az mı geliyor (adım 4 Dex = +%2 yapılabilir)? (3) Bone Slash'in önündeki/arkasındaki çapraz hücrelere asla vurmaması (yalnızca aynı sıra) istediğin davranış mı?
+
+## 204. Yer etkileri (bilgi notu, kod değişikliği YOK; Ömer notu)
+- Meteor (burning) ve Wail (poison) ground'ları, üstünden geçen/üstünde duran karaktere debuff bırakacak mantıkta tasarlandı. Paladin'in Holy Fire ground'u şimdilik yalnızca üstündekilere hasar verir. Yer değiştirme mekaniği olmadığı için karakter üstünde kalıcı debuff yoktur.
+- İleride yer değiştirme eklenirse ground debuff'ları karakter-üstü durum olarak uygulanabilir. Resilience (Str primary, madde 202), ground'un karakter üstüne bıraktığı debuff'lara da ileride otomatik uygulanır (debuff uygulanırken zar atılır).
+
+## 205. Genel denge ayarı (balance-tester, Ömer isteği; yalnızca veri + test, motor ve YZ'ye dokunulmadı)
+Ölçüm: 3000 savaş x 3 seed aralığı (1, 5001, 10001) önce/sonra; sonra ek 3 aralıkla (20001, 30001, 900001) doğrulandı. Kurallar korundu: stat başına %1 hasar (scaling 1), evasion (5 Dex = %2, tavan %75), accuracy (taban %80 + Luck başına %1), YZ (`ai.ts`/`ai.json`) AYNEN; hiçbir süre (cooldown, buff/debuff/ground turu, summon ömrü) değişmedi.
+
+**Önce -> sonra sınıf kazanma oranı (3 aralık ortalaması; sağdaki 6 aralık):**
+
+| Sınıf | Önce | Sonra | (6 aralık) |
+|---|---|---|---|
+| Defender | 67,9 | 53,2 | 52,4 |
+| Archer | 62,4 | 55,1 | 54,7 |
+| Paladin | 54,6 | 52,4 | 52,6 |
+| Anti-Mage | 51,2 | 47,6 | 46,6 |
+| Undead | 50,1 | 49,6 | 49,6 |
+| Warrior | 47,8 | 51,0 | 50,8 |
+| Druid | 44,7 | 50,1 | 50,6 |
+| Mage | 41,7 | 45,0 | 46,0 |
+| Gambler | 29,8 | 46,1 | 46,6 |
+Oyuncu tarafı: önce %49,1 / 51,3 / 49,7; sonra %49,8 / 48,5 / 49,5 (6 aralıkta %48,5-52,4). Tüm sınıflar %45-55 aralığında (tek tek seed'de en düşük 43,0 Mage, en yüksek 57,2 Archer; hepsi %40-60 içinde). Kompozisyon uçları (%30- / %70+, ~50 savaşlık örnek): önce ~34 takım, şimdi seed başına 3-4 (örn. Anti-Mage + Druid + Gambler + Mage + Undead %18,8; hiç ön saf sınıfı yok).
+
+**Veri değişiklikleri (eski -> yeni):**
+- Resurrection (Ömer kararı): `revive.hpRatio` 0,5 -> 0,25, `mpRatio` 0,5 -> 0,25 (oran zaten veride; motor değişmedi). MP bedeli (30) ve cooldown (6) aynen.
+- Defender: Can (override) 158 -> 100, zırh 20 -> 19 (test kuralı: Defender zırhı > 0,6 x k = 18), Taunt `allyDamageMult` 0,5 -> 0,7 (dostlar taunt sürerken %50 yerine %30 az hasar alır), Fist Crush gücü 2,34 -> 1,7.
+- Archer: stat 3/5/16/6 -> 5/8/14/3 (str/int/dex/luck; toplam 30, primary Dex en yüksek; MP 20 -> 26, can 38 -> 50, accuracy %86 -> %83, evasion %6 -> %4, hız 13,4 -> 12,6), Quick Shot 0,8 -> 0,44, Piercing Arrow 1,2 -> 1,0, Arrow Rain 0,6 -> 0,7, Aimed Shot (4. skill) gücü 2,4 -> 2,6 ve MP bedeli 14 -> 10.
+- Gambler: stat 5/4/10/11 -> 7/4/7/12 (str/int/dex/luck; dex > en yüksek çevik olmayan Druid'in 6'sı kuralı korundu; can 50 -> 62, hız 11 -> 9,8, accuracy %91 -> %92), zırh 6 -> 12; Loaded Dice 0,91 -> 1,4, High Stakes 1,17 -> 1,65, Card Trick 1,04 -> 1,5, All In (4. skill) gücü 1,3 -> 1,9 ve kazanç çarpanı 2,6 -> 3,0.
+- Mage: stat 3/20/4/3 -> 5/20/3/2 (can 38 -> 50, accuracy %83 -> %82); Meteor doğrudan hasar 1,15 -> 1,25 (test kuralı: < 1,3) ve yanan zemin gücü 0,345 -> 0,7; Blizzard 1,0 -> 1,3.
+- Paladin: Holy Strike 0,9 -> 0,85, Radiance (şifa) 1,425 -> 1,15, Judgment (zemin) 0,85 -> 0,75.
+- Anti-Mage: Mana Steal 0,9 -> 1,25, Void Strike (4. skill) 1,9 -> 2,5.
+Dokunulmayan: Warrior, Undead, Druid (yalnızca diğer sınıflar değişince oranları kendiliğinden 50'ye yaklaştı).
+
+**4. skill (stat dizisindeki 4. yuva; YZ'nin x1,5 "ultimate" ağırlığı verdiği skill) kullanım oranı, o sınıfın hamlelerinin %'si, önce -> sonra:** Anti-Mage Void Strike 29,6 -> 31,9; Archer Aimed Shot 14,9 -> 9,0; Defender Fist Crush 19,2 -> 19,3; Druid Summon Treant 18,3 -> 19,3; Gambler All In 20,1 -> 17,8; Mage Meteor 22,6 -> 19,6; Paladin Radiance 14,2 -> 17,6; Undead Raise Dead 19,6 -> 21,0; Warrior Abyssal Cry 0 -> 0. Ömer'in saydığı diğer güçlü skill'ler: Paladin Judgment 17,0 -> 18,3; Warrior Whirlwind 11,8 -> 13,0 / Charge 3,5 -> 3,6; Defender Tremor Slam 10,3 -> 6,2; Archer Arrow Rain 1,5 -> 12,9; Undead Wail 29,4 -> 30,3; Gambler High Stakes 5,9 -> 7,6; Mage Blizzard 5,8 -> 5,6. 4. skill'lerin tercihi yapay yükseltilmedi: yalnızca güç/bedel sayıları değişti. Kullanımı sınırlayan şeyler skill'in kendisi değil cooldown (4-6 tur) ve MP havuzu + kısa ömür (Mage ortalama 2,3 hamle yapıyor).
+
+**Resurrection yeni davranışı:** dirilen max canın %25'i ve max manasının %25'i ile döner (örn. Warrior 116 can -> 29 can, 5 MP). Paladin'in hamlelerinde kullanım %7,4 -> %6,7 (birim başına ~0,38 -> ~0,31 kullanım/savaş); YZ kuralı aynı (düşmüş dost + 30 MP varsa diğer şifalardan önce), yani dirilme gücü düşünce kullanım değişmedi, yalnızca verdiği değer düştü. Denemeler (Paladin kullanım / kazanma): bedel 30 -> %6,5 / 53,4; 24 -> %8,4 / 54,2; 20 -> %9,6 / 54,4; sınıflar bandın içinde kaldığı için bedel 30'da bırakıldı (Ömer isterse 24 yapılabilir).
+
+**Test değişiklikleri (hard-coded sayılar veriden okunur):** Resurrection oranı ve olay testi (`reviveData()`), Taunt çarpanı (3 test), Defender zırh aurası (%40, veriden), Defender canı (veride `overrides.hp`), Judgment skill-info yüzdesi, bazı oran testlerinde yuvarlama payı için saldırgan statı büyütüldü (Abyssal Cry, Blessing, Hunter's Mark). `tests/balance.test.ts` SIKILAŞTIRILDI: taraf %45-55, her class %40-60, kompozisyon (>= 60 savaş) %10-90. `npm test` 751/751 ve `npm run build` yeşil.
+
+**Kalan sorunlar / öneriler:**
+- YZ (engine-dev'e): (1) Warrior'ın 4. skill'i Abyssal Cry (kendine can bedeli + fortify) HİÇ kullanılmıyor: `ai.ts`'te buff öncelik türü yok ve `value()` buff'ı saymıyor, yani gerçek bir "tanıma" eksiği; Warrior bu yüzden fiilen 3 skill'li. (2) YZ'de `ultimate` = skill dizisinin 4. elemanı (`actor.skills.indexOf(...) === 3`): Paladin için bu Radiance, Judgment değil; sıralama class json'larına bağlı. (3) Öncelik sırası "aoe > damage": Archer/Mage'de tek hedefli 4. skill (Aimed Shot) alan skill'i hazırken seçilmiyor (ancak 'kill' önceliğiyle çıkıyor); Mage'de 'shield' önceliği 'aoe'dan önce olduğu için Mana Barrier %21 hamle yiyor (Mage çok az hamle yapıyor). Bunlar bilinçli tasarım olabilir, hata saymadım.
+- Zayıf nokta: yalnızca büyücü/çevik takımlar (ön saf sınıfı yok: Warrior/Defender/Paladin yok) %20-30'a düşüyor (Anti-Mage + Druid + Gambler + Mage + Undead gibi). Bu sınıf değil kompozisyon etkisi; Mage ve Anti-Mage hâlâ en düşük sınıflar (%46-47) ve Mage çok kırılgan (ölüm %73, ortalama 2,3 hamle). Fire Bolt (5 MP) Mage hamlelerinin %53'ü, Defender Taunt %45 (sim uyarısı; test sınırı %60'ın altında).
+- Mage/Archer çok eşik-duyarlı: küçük sayı değişikliği (örn. Mage canı 50 -> 56 ve Fire Bolt aynı kalınca) Archer'ı %55 -> %39, Mage'i %46 -> %57 oynatıyor. Yeni stat/can değişikliği yapan herkes sim'i yeniden çalıştırmalı.
+- SÜRE ÖNERİLERİ (yapılmadı, Ömer'e sorulacak): (a) Archer Aimed Shot cooldown 4 -> 3 (bugün kullanım %9; MP ve cooldown birlikte sınırlıyor). (b) Mage Blizzard cooldown 2 ve Meteor 4: Mage 2,3 hamle yaptığı için ikisi de nadir çıkıyor; Meteor cooldown 4 -> 3 Mage'i yükseltir. (c) Warrior MP havuzu 20 + yenileme 1: Whirlwind (15) ve Charge (10) birlikte kullanılamıyor (%13 ve %4); sorun süre değil MP, ama Charge cooldown 3 -> 2 işe yaramaz çünkü MP bitiyor. (d) Gambler en düşük sınıf (%46): Gambler pasifi/skill cooldown'ları (High Stakes 2, Card Trick 2, All In 4) kısaltılabilir. (e) Defender Taunt 2 tur süresi/etkisi: Taunt %45 kullanım ve dostları koruma gücü hâlâ takım savaşının merkezi; allyDamageMult yerine tur 2 -> 1 düşünülebilir.
+- Defender can 100 < Warrior 116: "tank" kimliği zırh (19 + aura %40 = ~26,6) ve Taunt'tan geliyor. İstenirse can 120'ye çıkarıp Fist Crush/Taunt'tan düşürmek de mümkün (denendi: oran %55-56'ya çıkıyor).
+
+## 206. Debug menüsü dock'u bölümlendi: ikon + kısa yazı + tooltip (ui-dev, Ömer isteği)
+- Alttaki dock artık 5 başlıklı bölüm: Battle flow, Units, Combat tweaks, View, Tools. Her düğme ikon + 1-3 kelimelik yazı taşır; açık/kapalı düğmelerde ON/OFF, döngü düğmelerinde seçili değer (1x, Normal...) görünür. Hover'da tek cümlelik açıklama (tooltip) ve dock'un en üstündeki tek satırlık çubuk güncellenir. Dock "Hide" ile gizlenir, panel 440 -> 520 px oldu (dock en çok yüksekliğin %52'si, kendi içinde kayar).
+- Sekmeler (Battle/Unit/Skills/Sounds/Tweaks/Info) aynı; Sounds sekmesinin başına "Open Asset Gallery" düğmesi eklendi (yeni sekmede `./gallery.html`; sayfa ayrı ajan tarafından yapılıyor).
+- Yeni araç eklenmedi: mevcut işlevler bölümlere dağıtıldı. Birkaç var olan eylem dock'a da kondu (Restart battle, Revive everyone, Clear all cooldowns, Dodge döngüsü, Enemy AI, görünüm anahtarları). "See-through" ve "Side" artık dock'un View bölümünde; menü saydamken üstte "Solid" geri alma düğmesi çıkar. Bazı etiketler dock ile tutarlı olsun diye yeniden adlandırıldı (Same seed -> Restart battle, Auto -> Auto-play, Numbers -> Hide numbers, Slots -> Show slots, FPS -> Show FPS, Portrait -> Force portrait).
+- 5 yeni piksel ikon: restart, eye, swap, info, frame. "No cooldown" ve "Infinite MP" diye ayrı araç yok (Free MP ve Clear all cooldowns var).
+
+## 207. Cooldown değişiklikleri, BAŞLANGIÇ cooldown'u (initialCooldown) ve bağlamsal yapay zeka (engine-dev, Ömer isteği)
+Baz çizgisi (bu değişiklikten ÖNCE, 3 seed x 3000 savaş): `docs/design/balance-baseline-before-initcd.md`.
+
+**A) Cooldown (Ömer onayı, yalnızca veri):** Aimed Shot 4 -> 3, Meteor 4 -> 3, All In 4 -> 3. High Stakes ve Card Trick 2 (dokunulmadı). Defender Taunt SÜRESİ (2 tur) ve cooldown'u (4) DEĞİŞMEDİ.
+
+**B) Başlangıç cooldown'u mekaniği:**
+- Skill'de `initialCooldown` (veri). Savaş başında (yalnızca `turns` modu, yalnızca class birimleri) o skill'in cooldown sayacına bu değer yazılır; sayaç normal cooldown sayacıdır (kullanıcının KENDİ turlarında azalır). Tek fark: birimin İLK turunun başındaki azalma atlanır; yani "N" = birim kendi ilk N turunda skill'i kullanamaz, ilk turunda düğmede N görünür, N+1. turunda hazırdır. (Ömer'in "Opens on cooldown: N turns" okunuşu.) `test` modunda cooldown olmadığı için başlangıç cooldown'u da yok; çağrılan birimler (Skeleton, Treant) hiç almaz; `debugClearCooldowns` bunu da temizler.
+- Üst sınır **3** (Ömer): `data/formulas.json > cooldown.maxInitial`; motor değeri bu sınırla kısar, `tests/initial-cooldown.test.ts` verinin sınırı aşmadığını da denetler.
+- UI: skill düğmesi zaten motordaki sayacı gösterdiği için kalan tur otomatik görünür. Tooltip'e (savaşta ve takım seçiminde) tek satır: "Opens on cooldown: N turns" (`describeSkill().initialCooldown`; yalnızca turns modu). Önizleme ve YZ, cooldown kuralıyla skill'i "hazır değil" sayar.
+- **Verilen değerler (4. yuva skill'leri; gerekçe: savaşlar kısa, birim başına ortalama ~5-6 hamle, Mage ~2,7; 3 tur başlangıç cooldown'u Meteor'u fiilen siliyor):** Mage Meteor **1** (oyun belirleyici AoE; 2'de Mage %38,5'e, 3'te Meteor kullanımı %2'ye düştü), Defender Fist Crush **2**, Anti-Mage Void Strike **2**, Gambler All In **2**, Paladin Radiance **1** (şifa+hasar; ilk turdan alan şifası gereksiz). **Dışarıda bırakılanlar:** Archer Aimed Shot (verilince Archer'ın MP havuzu ilk turlarda Piercing/Arrow Rain'e gidip Aimed %23 -> %8 ve Archer %56 -> %40'a düştü: Archer eşiğe en duyarlı sınıf), Warrior Abyssal Cry (Warrior'ın 20 MP'si var, Whirlwind 15 + AC 15 sığmaz; başlangıç cooldown'u verilince ilk turda MP Whirlwind'e gidiyor ve AC %0'a düşüyor), Druid Summon Treant ve Undead Raise Dead (çağrı; zaten uzun cooldown 6/5 ve ilk turlarda çağrılması tasarım amacı, ömürleri 3-4 tur).
+- **3'ten fazlası için öneri (UYGULANMADI):** Mage Meteor 4 (en güçlü AoE + yanan zemin; ancak yalnızca Mage önce güçlendirilirse mantıklı: Mage şimdi %42-44 ve ortalama 2,7 hamle yapıyor), Anti-Mage Void Strike 4 ve Fist Crush 4 (MP 16/14 + güçlü hasar; savaşın ilk üçte birinde kullanılmaması anlamlı), Gambler All In 4 (bahis, MP biriktikten sonra anlamlı; şimdiki All In %9 ve Gambler %43 civarı, güçlenmeden önermem). Aimed Shot / Abyssal Cry için önce MP havuzu (Archer 26, Warrior 20) büyürse 2-3 verilebilir.
+
+**C) Yapay zeka (bağlamsal; gömülü ağırlık KALDIRILDI):**
+- `ai.ts`: 4. yuvaya x1,5 veren `ultimate`/`ultimateWeight` kalktı (skor artık yalnızca beklenen değer - bedel). Yerine skill'in `ai` ipucu (veri, `data/skills.json`): `requires` (hepsi), `anyOf` (en az biri) bağlam koşulları; sağlanmayan seçenek yalnızca öldürücü vuruşta ('kill' önceliği) ya da başka hiçbir şey yapılamıyorsa son çare olarak seçilir. Yeni öncelik türü **'tactic'** (`data/ai.json` profillerinde kill'den sonra, aoe/damage'dan önce; Paladin/Druid'de heal/summon sonrası): ipucu sağlanan seçenekler arasında en değerlisini seçer. Mevcut ana sıra (kill > ... > damage) bozulmadı.
+- Koşullar (kod: `SkillAiCond`): kill, minTargets, minLivingEnemies/Allies, minSelfHpRatio, minSelfHpRatioAfter (can bedelinden sonra), minSelfMpRatio, minBattleTurns, minWoundedAllies, minTargetArmorReduction, minTargetHpToDamage, minMissingManaShare. MP ayırma (`reserveMp: N`): ipuçlu skill en geç N tur sonra hazırsa, bağlamı şu an varsa ve MP'si yetecekse onu yetersiz bırakacak SALDIRI harcamaları ertelenir (şifa/kalkan/çağrı ve öldürme etkilenmez).
+- **Her 4. skill'in kuralı (sade):** Meteor: alan en az 2 düşmana vuruyorsa ya da öldürüyorsa. Aimed Shot: öldürüyorsa, ya da hedef zırhlıysa (zırh azaltması >= %30; ignoreDefense 0,5 değer katar), ya da hedefin canı hasarın >= 2 katıysa (yüksek canlı); MP ayrılır. Fist Crush: karşıda en az 3 düşman (3 rastgele hedef boşa gitmesin). Radiance: canı %70 altında yaralı en az bir dost VE vurulacak düşman varken. Judgment (3. yuva): alan en az 2 düşman ya da öldürüyor. Summon Treant / Raise Dead: mevcut 'summon' önceliği zaten bağlam (aynı anda en çok 1 çağrı, yer ve MP; Raise Dead düşman tahtasında boş yer ister). All In: MP en az %60 (bahis büyük) VE (hedef öldürülebilir ya da savaş en az 10 tur sürdü); MP ayrılır. Void Strike: hedefe eksik mana ekinin ham hasar payı >= %25 (mana yakılmış / mana havuzu büyük hedef) ya da öldürüyor.
+- **Warrior Abyssal Cry:** saf self-buff'lar için yeni "net değer" hesabı (can-eşdeğer): savunma (alınan hasarı azaltan durum x düşman takımının bana tek turda vurabileceği beklenen hasar x `incomingShare` x süre) + hasar artışı (Berserker pasifi: maxBonus x kaybedilen can oranı x temel saldırı x süre) - can bedeli (maks canın %30'u) - bu tur başka saldırı yapmamanın bedeli (`opportunityShare` x en iyi saldırı). Ek koşullar: can bedelinden sonra en az %35 can kalacak (yani mevcut can >= ~%65), karşıda en az 2 düşman, en az 2 canlı dost (tek başına ASLA), zaten Fortified ise tekrar atılmaz. `value()` artık pozitif buff'ı sayar (fallback buff'ı tanır). Sonuç: AC artık seçiliyor (başlangıç cooldown'u olmadan Warrior hamlelerinin ~%9'u; verilen değerlerde ~%9: cooldown 5 + MP 15/20 sınırlıyor). Whirlwind/Charge'tan önce kullanma isteği MP'ye takılıyor: Warrior'ın 20 MP'si AC (15) ile Whirlwind'i (15) birlikte taşıyamaz; `ai` ipucu bunu bilir, MP ayırma KULLANILMADI (Whirlwind/Charge'ı kalıcı kilitlerdi). Öneri (balance-tester): Warrior MP havuzu ya da AC maliyeti.
+- Testler: `tests/ai-context.test.ts` (her 4. skill için koşul sağlanınca seçilir/sağlanmayınca seçilmez, AC düşük canda/tek başına/tehdit yokken/Fortified iken seçilmez, determinizm, MP ayırma), `tests/initial-cooldown.test.ts` (max 3, turns/test, N tur kuralı, çağrılar, veri), mevcut testlerde Meteor'u ilk turdan kullanan senaryolara `debugClearCooldowns`.
+- **Sonuç ölçümü (sim, ayarlama YOK):** `balance-baseline-before-initcd.md` sonundaki "Sonra" tablosu. Üç seed'de oyuncu tarafı %49,9-51,3; tüm sınıflar %41,8-57,6 (Mage %41,8-44,0 ve Gambler %42,5-44,3 en düşük, Archer %55,8-57,6 en yüksek). Sağlık sim'i (200 savaş) çökmeden bitti.
+- **Ömer'e sorular:** (1) Başlangıç cooldown'u "ilk N turda kullanılamaz" (şimdiki) mı, yoksa "cast edilmiş gibi N sayacı, N-1 tur kullanılamaz" mı? (2) Aimed Shot ve Abyssal Cry dışarıda kalabilir mi (MP nedeniyle)? (3) Mage zayıf kalıyor (%42-44): Meteor'u 1'de bırakıp Mage'i güçlendirmek mi, yoksa 2-3 verip Mage'i güçlendirmek mi?
+
+## 208. Asset Gallery sayfası (gallery.html) (ui-dev, Ömer isteği; yalnızca araç, oyun kuralı değişmedi)
+Debug menüsündeki ses/animasyon listeleri için ayrı sayfa: dev `http://localhost:5173/gallery.html`, yayında `./gallery.html` (vite çok sayfalı derleme). Bölümler: Sounds, Animations (gömülü BattleScene, test modu), Characters (+ eski sürümler), Icons, Statuses & Grounds, UI/Palette. Tüm listeler veriden/dizinlerden otomatik türetilir (`src/gallery/catalog.ts`); `tests/gallery.test.ts` kapsamı denetler. Varsayımlar: (1) çağrıların (Skeleton/Treant) skill önizlemesi sahnede çağrı birimi olmadığı için bir class biriminden oynar; (2) müzik kaydı yok, "No music yet" notu çıkar (audio.json içine `music` anahtarı eklenince listelenir); (3) hiçbir veride kullanılmayan ikonlar "spare" etiketiyle ayrı gösterilir (efekt sprite olarak kullanılıyor olabilir).
+## 209. Balans turu: initialCooldown + bağlamsal YZ sonrası ayar (balance-tester, Ömer isteği; yalnızca veri + test; motor, YZ ve SÜRELER aynen)
+Ölçüm: 3000 savaş x 6 aralık (1, 5001, 10001 + doğrulama 20001, 30001, 900001), `npx tsx src/sim/cli.ts 3000 <seed>`. Kurallar korundu: stat başına %1 hasar, evasion (5 Dex = %2), hiçbir süre (cooldown, initialCooldown, buff/ground/summon turu) ve `ai.json`/`ai.ts` değişmedi; ayar yalnızca skill güçleri, bir Warrior stat dağılımı ve Defender canı.
+
+**Önceki turdan (205 sonu) şimdiki duruma ve ayar sonrasına (3 aralık ortalaması):**
+
+| Sınıf | 205 sonu | initCD+YZ (ayarsız) | Ayar sonrası (3 aralık) | (6 aralık) |
+|---|---|---|---|---|
+| Defender | 53,2 | 48,7 | 53,3 | 52,7 |
+| Warrior | 51,0 | 50,3 | 51,5 | 52,0 |
+| Archer | 55,1 | 56,9 | 50,8 | 50,7 |
+| Paladin | 52,4 | 54,5 | 50,2 | 50,6 |
+| Undead | 49,6 | 50,4 | 49,9 | 49,3 |
+| Mage | 45,0 | 43,0 | 49,4 | 49,7 |
+| Gambler | 46,1 | 43,4 | 49,3 | 49,7 |
+| Druid | 50,1 | 51,7 | 49,2 | 49,4 |
+| Anti-Mage | 47,6 | 51,2 | 46,3 | 45,8 |
+Oyuncu tarafı: %50,6 / 49,4 / 49,4 (6 aralıkta %49,4-51,3). Tek tek seed'de (6 aralık) en düşük 44,4 (Anti-Mage), en yüksek 53,5; hepsi %44-54 içinde. Kompozisyon uçları (>=%70): seed başına 1-3 (bir aralıkta 7 uç takım çıktı); hepsi Archer/Defender/Paladin/Undead ağırlıklı ön saflı takımlar, en yüksek %78.
+
+**Neden değişmişti (ayarsız ölçüm, initCD + yeni YZ):** (a) 4. skill'lerin gömülü x1,5 ağırlığı kalkıp bağlam koşulu gelince Meteor/Void Strike/Fist Crush/All In daha seçici oldu; en çok bunlara dayanan Mage (%45 -> 43), Gambler (%46 -> 43) ve Defender (Fist Crush artık yalnızca 3+ düşmanda; %53 -> 49) düştü. (b) Aimed Shot/Judgment/Radiance'ın bağlamı sağlandığında daha etkili kullanımı ve cooldown 4 -> 3 Archer'ı (%55 -> 57) ve Paladin'i (%52 -> 54,5) yükseltti; Anti-Mage Void Strike bağlamıyla %47,6 -> 51. (c) Warrior'da Abyssal Cry artık ~%9 seçiliyor ama 20 MP Whirlwind'i silip (%0) Abyssal Cry'a gidiyor.
+
+**Değişiklikler (eski -> yeni):**
+- Defender: can override 100 -> 150 (tank teması geri: Warrior 116'dan yüksek; zırh 19 + aura aynı). Bunun yarattığı yükselişi (%58) dengelemek için: Taunt dostlara hasar çarpanı (allyDamageMult) 0,7 -> 0,9 (dost koruması azaldı), Taunt kendi kalkanı 0,3 -> 0,15 (STR katı), Fist Crush 1,7 -> 1,2.
+- Warrior: stat 16/5/4/5 -> 16/8/4/2 (str/int/dex/luck; primary Str kaldı; MP 20 -> 26, MP yenileme 1 -> 2, can 116 aynı, accuracy %85 -> %82, kritik %7,5 -> %6). Karar: Abyssal Cry maliyeti 15'te bırakıldı; MP'yi Int artırarak çözdüm (Whirlwind %0 -> %6, Charge %4 -> %8, Abyssal Cry %9 -> %13). Dex 4 tutuldu (3 yapınca "çevik olmayan altı class en az 4 farklı dex değeri" testi bozuluyor). Double Strike (her iki vuruş) 0,9 -> 1,1; Whirlwind 1,2 -> 1,4.
+- Archer: Quick Shot 0,44 -> 0,40, Piercing Arrow 1,0 aynı, Aimed Shot 2,6 -> 2,55 (MP 10 aynı).
+- Paladin: Holy Strike 0,85 -> 0,80, Judgment (zemin) 0,75 -> 0,70.
+- Mage (can/stat aynı, kırılgan): Fire Bolt 1,8 -> 2,2, Blizzard 1,3 -> 1,5, Mana Barrier 1,1 -> 1,25.
+- Gambler: Loaded Dice 1,4 -> 1,8, High Stakes 1,65 -> 1,9, Card Trick 1,5 -> 1,7, All In 1,9 -> 2,2.
+- Anti-Mage: Mana Steal (mana_burn) 1,25 -> 1,7, Void Strike 2,5 -> 2,55, Spell Ward bonusPerMana 0,35 -> 0,5.
+- Dokunulmayan: Undead, Druid skill'leri, Meteor, Resurrection, MP bedelleri (hiçbiri değişmedi).
+- Test: `tests/mechanics.test.ts` Double Strike gücü veriden okunur; Bulwark Aura testi Quick Shot yerine Warrior melee_attack kullanır (Quick Shot gücü düşünce yuvarlama farkı kayboluyordu); Mana Burn testinde hedef her çağrıdan önce tam cana döndürülür (Mana Steal gücü artınca Mage ilk vuruşta ölüyordu). `tests/balance.test.ts` bantları (%45-55 taraf, %40-60 sınıf) değiştirilmedi. `npm test` 816/816, `npm run build` yeşil.
+
+**4. skill ve diğer bağlamlı skill kullanımı (6 aralık ortalaması, sınıf hamlelerinin %'si; ayarsız -> ayar sonrası):** Abyssal Cry 9 -> 13, Whirlwind 0 -> 6, Charge 4 -> 8, Judgment 23 -> 23, Radiance 14 -> 14, Meteor 10,7 -> 9,8, Aimed Shot 23 -> 23, Fist Crush 13 -> 14, Void Strike 21,7 -> 21, All In 9 -> 10, Raise Dead 21 -> 22, Summon Treant 19 -> 19, Fire Bolt 54 -> 57 (baskın uyarı), Taunt 49 -> 47. YZ'ye dokunulmadığı için oranlar neredeyse aynı kaldı; ayar yalnızca güç/maliyetle.
+
+**Kalan sorunlar:** (1) Anti-Mage hâlâ en düşük (%45,8; tek seed'de en az %44,4; hedef bandı içinde): Void Strike bağlamı nadir, Mana Steal'in gücünü artırmak oranı az oynatıyor. (2) Sonuçlar eşiğe çok duyarlı: Aimed Shot 2,6 -> 2,4 Archer'ı %57 -> %43'e düşürdü; Warrior dex 4 -> 3 (luck +1) Warrior'ı yaklaşık %5 aşağı itti. (3) Mage Fire Bolt %57 ve Defender Taunt %47 (sim "baskın" uyarısı; test sınırı %60 altında). (4) Ön saflı takımlar (Archer/Defender/Paladin/Undead/Warrior) %70-78. (5) Defender'ın savaş başına verdiği hasar çok düşük (18); tank kimliği Taunt/Guard'dan geliyor.
+
+**Süre / başlangıç cooldown önerileri (UYGULANMADI, Ömer'e sorulacak):** (a) Anti-Mage Void Strike initialCooldown 2 -> 1 (Anti-Mage en zayıf; başlangıç kilidi ilk iki turunu boşa harcıyor). (b) Warrior: Abyssal Cry'a initialCooldown verilebilir, artık MP 26/yenileme 2 olduğu için Whirlwind'i silmez; ancak %13 kullanım zaten yüksek, gerek yok. (c) Aimed Shot'a initialCooldown verilmemesi Archer'ı korur (önceki ölçüm: %56 -> %40). (d) Mage Meteor initialCooldown 1 yeterli; 2 yapılırsa Mage'in %49,7'si kırılgan hâle gelir. (e) Defender Taunt cooldown 4 -> 5 ya da Guard share 0,5 -> 0,4 gerekirse Defender'ı aşağı çeker. (f) Gambler All In initialCooldown 2 iyi; 3'te Gambler %45'in altına iner.
+
+**YZ'de gerçek hata:** Gözlemlenmedi. (Not: Mana Barrier Mage hamlelerinin %22'sini alıyor; bilinçli 'shield' önceliği, hata değil.)
+
+## 210. Wiki paneli (sağ üst kitap simgesi) (ui-dev, Ömer isteği; yalnızca arayüz, oyun kuralı değişmedi)
+Ayar dişlisinin yanına kitap düğmesi: tam ekrana yakın modal; Getting Started, Classes (+ Summons), Skills (filtreli), Stats & Mechanics, Statuses & Grounds, Elements; arama kutusu; Esc/X ile kapanır. Hepsi veriden/motordan türetilir (`src/wiki/catalog.ts`, `tests/wiki.test.ts`); yalnızca Mechanics/Getting Started cümle şablonları elle yazılıdır (sayıları formulas.json'dan). Wiki açıkken savaş otomatik durur, kapanınca devam eder (debug Pause'dan bağımsız `debugState.uiPaused`).
+Varsayımlar: (1) class kartındaki "arketip/rol" için `data/classes/*.json` içine görünen `role` alanı eklendi (Warrior: Melee Bruiser, Defender: Tank, Paladin: Holy Healer, Mage: Elemental Mage, Archer: Marksman, Druid: Nature Summoner, Gambler: Risk Taker, Anti-Mage: Mana Hunter; Undead zaten Dark Mage'di) - Ömer değiştirebilir; (2) debug menüsüne "Open wiki" düğmesi (Tools) eklendi.

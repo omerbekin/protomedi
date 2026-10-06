@@ -79,6 +79,8 @@ export class Battle {
   /** Luck-primary "Lucky Escape" hakkını kullanmış birimler. */
   private readonly luckySaved = new Set<string>();
   private summonCount = 0;
+  /** Başlangıç cooldown'u olan birimler: ilk turunun başında azalmayacak skill'ler (uid -> skill id'leri). */
+  private readonly initialHold = new Map<string, Set<string>>();
   private groundCount = 0;
   /** Yerde duran (süreli) etkiler. */
   readonly ground: GroundEffect[] = [];
@@ -93,8 +95,28 @@ export class Battle {
       ...setup.party.map((d, i) => createCombatant(d, 'party', setup.partySlots?.[i] ?? i, `party-${i}`)),
       ...setup.enemies.map((d, i) => createCombatant(d, 'enemy', setup.enemySlots?.[i] ?? i, `enemy-${i}`)),
     ];
+    // Başlangıç cooldown'u (initialCooldown): yalnızca turns modunda ve class birimlerinde; test modunda cooldown zaten yok
+    if (this.mode === 'turns') for (const c of this.combatants) this.applyInitialCooldowns(c);
     this.record({ type: 'battleStart', seed: this.seed, combatants: this.combatants.map(cloneCombatant) });
     if (this.mode === 'turns') this.advance((e) => this.record(e));
+  }
+
+  /**
+   * Skill'lerin `initialCooldown` değerini sayaca yazar (üst sınır formulas.json > cooldown.maxInitial).
+   * Sayaç normal cooldown sayacıdır; yalnızca birimin İLK turunun başındaki azalma atlanır, böylece skill, birimin
+   * ilk N turunda kullanılamaz ve ilk turunda sayaç N gösterir.
+   */
+  private applyInitialCooldowns(c: Combatant): void {
+    if (c.summoned) return;
+    const max = this.setup.formulas.cooldown?.maxInitial ?? 0;
+    for (const id of c.skills) {
+      const n = Math.min(max, Math.floor(this.skill(id)?.initialCooldown ?? 0));
+      if (n <= 0) continue;
+      c.cooldowns[id] = n;
+      let held = this.initialHold.get(c.uid);
+      if (!held) this.initialHold.set(c.uid, (held = new Set()));
+      held.add(id);
+    }
   }
 
   on(listener: Listener): () => void {
@@ -760,7 +782,10 @@ export class Battle {
     const actor = next ? this.get(next.uid) : undefined;
     if (!next || !actor) return;
     // Kendi turunun başında: bekleme süreleri 1 azalır
+    const held = this.initialHold.get(actor.uid);
+    this.initialHold.delete(actor.uid);
     for (const id of Object.keys(actor.cooldowns)) {
+      if (held?.has(id)) continue; // başlangıç cooldown'u: ilk turda azalmaz (ilk N turda kullanılamaz)
       actor.cooldowns[id] = Math.max(0, (actor.cooldowns[id] ?? 0) - 1);
       if (actor.cooldowns[id] === 0) delete actor.cooldowns[id];
     }
@@ -1077,7 +1102,11 @@ export class Battle {
 
   /** Debug: bekleme sürelerini sıfırlar (verilen birim ya da herkes). */
   debugClearCooldowns(uid?: string): void {
-    for (const c of this.combatants) if (!uid || c.uid === uid) c.cooldowns = {};
+    for (const c of this.combatants) {
+      if (uid && c.uid !== uid) continue;
+      c.cooldowns = {};
+      this.initialHold.delete(c.uid);
+    }
   }
 
   /** Debug: tanımlı bir durumu (data/statuses.json) birime ekler. */

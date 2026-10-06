@@ -204,7 +204,7 @@ describe('hız (SPD) ve yapay zeka verisi', () => {
     expect(content.formulas.turn.queueLength).toBeGreaterThanOrEqual(1);
   });
 
-  const PRIORITIES = ['kill', 'heal', 'summon', 'shield', 'aoe', 'damage', 'taunt', 'guard', 'burn', 'thorns'];
+  const PRIORITIES = ['kill', 'heal', 'tactic', 'summon', 'shield', 'aoe', 'damage', 'taunt', 'guard', 'burn', 'thorns'];
 
   it('varsayılan YZ profili tanımlı', () => {
     expect(content.aiConfig.profiles[content.aiConfig.defaultProfile]).toBeDefined();

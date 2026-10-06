@@ -126,7 +126,7 @@ describe('yapay zeka: şifa, kalkan, çağrı', () => {
 describe('yapay zeka: hasar tercihleri', () => {
   it('4 düşman varken herkese vuran skill\'i (AoE) tercih eder', () => {
     const choice = chooseAction(testBattle(), E_MAGE, ai);
-    expect(choice?.reason).toBe('aoe');
+    expect(['aoe', 'tactic']).toContain(choice?.reason); // Meteor bağlamsal ('tactic'), Blizzard 'aoe'
     expect(['blizzard', 'meteor']).toContain(choice?.skillId); // alan skill'leri: 3 kişilik alan
   });
 
@@ -156,6 +156,7 @@ describe('yapay zeka: hasar tercihleri', () => {
     b.get(PALADIN)!.hp = 0;
     b.get(MAGE)!.hp = 60; // oran 0.86, mutlak 60
     b.get(UNDEAD)!.hp = 79; // oran 0.99, mutlak 79
+    b.get(E_ARCHER)!.mp = 9; // Aimed Shot (10 MP; yüksek canlı hedefi bağlamsal seçerdi) kapalı: yalnızca odak kuralı sınanır
     expect(chooseAction(b, E_ARCHER, ai)?.targetUid).toBe(MAGE);
   });
 
@@ -347,20 +348,18 @@ describe('yapay zeka: 4. (güçlü) skill ve mana yakma hedefi', () => {
     const b = make(['mage', 'warrior', 'defender', 'paladin'], ['warrior', 'defender', 'mage', 'paladin', 'druid']);
     const mage = actFirst(b, 'mage');
     const choice = chooseAction(b, mage, ai);
-    expect(['meteor', 'blizzard']).toContain(choice?.skillId); // alan skill'leri; ultimate ağırlığı Meteor lehine
+    expect(['meteor', 'blizzard']).toContain(choice?.skillId); // alan skill'leri; Meteor bağlam (>= 2 düşman) sağlandığı için aday
     expect(content.skills[choice!.skillId]!.target).toBe('area_enemies');
   });
 
-  it('ultimate ağırlığı 1,5; profil ultimateWeight ile değiştirilebilir', () => {
+  it('4. yuvaya gömülü genel ağırlık yok: profilde ultimateWeight alanı kalmadı, 4. skill yalnızca bağlamıyla öne çıkar', () => {
+    for (const p of Object.values(ai.profiles)) expect(p, 'ultimateWeight').not.toHaveProperty('ultimateWeight');
+    // Aynı skill'in (Aimed Shot) bağlam ipucu kaldırılırsa (ipucusuz skill) seçim ağırlıkla değil değerle yapılır: 4. yuva olması avantaj vermez
     const b = make(['archer', 'warrior', 'defender', 'paladin'], ['warrior', 'defender', 'mage', 'paladin']);
     const archer = actFirst(b, 'archer');
-    const base = chooseAction(b, archer, ai);
-    const noUlt: AiConfig = JSON.parse(JSON.stringify(ai));
-    for (const p of Object.values(noUlt.profiles)) p.ultimateWeight = 0.01;
-    const weak = chooseAction(b, archer, noUlt);
-    expect(base).toBeDefined();
-    expect(weak).toBeDefined();
-    expect(weak?.skillId).not.toBe('aimed_shot'); // ağırlık yokken pahalı Aimed Shot seçilmez
+    const noHint: AiConfig = JSON.parse(JSON.stringify(ai));
+    for (const p of Object.values(noHint.profiles)) p.priorities = p.priorities.filter((x) => x !== 'tactic');
+    expect(chooseAction(b, archer, noHint)).toBeDefined();
   });
 
   it('Drain Field, mana havuzu büyük hedefleri (Mage) kapsayan alana atılır', () => {

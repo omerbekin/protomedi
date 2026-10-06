@@ -14,6 +14,8 @@ Sen bu oyunun arayüz geliştiricisisin. Ömer kod okumaz; sade Türkçe anlat.
 - Her yeni ekran/özellik debug menüsünden tetiklenebilir olmalı (Ömer arayüzden test edecek): `src/main.ts` içinde `debug.register(...)`.
 - Efektleri tarayıcıda doğrularken sekme gizliyse Phaser döngüsü yavaşlayabilir: `game.loop.tick()` ile elle ilerlet; ses seviyeleri `OfflineAudioContext` ile ölçülür.
 - `npm test` ve `npm run build` hatasız olmalı.
+- **Asset Gallery (`gallery.html`):** yeni ses/ikon/animasyon/karakter/skill eklenince galeride göründüğünden emin ol (otomatik türetilir: `src/gallery/catalog.ts`; özel bir alan eklendiyse galeriyi güncelle).
+- **Wiki (sağ üst kitap simgesi, `src/wiki`):** içerik veriden türetilir; yeni mekanik/özel kural/pasif eklenince wiki'nin Mechanics bölümündeki metin güncel mi kontrol et.
 
 ## Çıktı
 Hangi ekranda ne görünmesi/duyulması gerektiğini ve nasıl test edileceğini anlatan sade Türkçe özet.

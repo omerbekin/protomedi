@@ -1,15 +1,20 @@
 /**
  * Oyun içi debug menüsü (DOM üstünde, gerçek piksel ölçüsünde; dokunma hedefleri >= 44px).
  * Sekmeli: her sekmede düğme ızgaraları (register) ve özel paneller (registerPanel: galeri, ses listesi, seed...) bulunur.
- * Altta, sekmeden bağımsız hep görünen ikonlu hızlı düğme dock'u vardır. Her yeni ekran/özellik buraya bir giriş koyar ki arayüzden test edilebilsin.
+ * Altta, sekmeden bağımsız hep görünen bölümlü hızlı düğme dock'u vardır (her düğme: ikon + kısa işlev yazısı + tooltip; açık/kapalı rozeti). Her yeni ekran/özellik buraya bir giriş koyar ki arayüzden test edilebilsin.
  */
+import { DOCK_GROUPS, DOCK_HINT, DOCK_KEYS, dockBadge, dockTooltip, type DockGroup } from './debug-layout';
 import { iconUrl } from './dom-icons';
 
-/** Debug menüsünün altına sabitlenen, yalnızca ikonlu hızlı düğme. */
+/** Debug menüsünün altına sabitlenen hızlı düğme: ikon + kısa işlev yazısı (+ açık/kapalı rozeti), bir bölümde. */
 export interface DockSpec {
-  /** Satır (0 = üstteki) ve satır içi sıra (soldan sağa). */
-  row: number;
+  /** Bölüm (başlıklı grup) ve bölüm içi sıra. */
+  group: DockGroup;
   order: number;
+  /** Düğmenin yanındaki kısa işlev yazısı (1-3 kelime, İngilizce). */
+  short: string;
+  /** Seçili değer rozeti (ör. hız "2x"); yoksa `on` varsa ON/OFF gösterilir. */
+  state?: () => string;
   /** İkon adı (src/ui/icon-kinds.ts) ya da dinamik ikon (ör. sıradaki birimin logosu + küçük ok). */
   icon: string | (() => { name: string; accent?: string; overlay?: string });
   /** Açık/kapalı durumu (açıkken vurgulanır). */
@@ -94,6 +99,8 @@ export class DebugMenu {
   private readonly scroll = new Map<string, number>();
   private body: HTMLDivElement | null = null;
   private ghost = false;
+  private dockOpen = true;
+  private dockScroll = 0;
 
   constructor(
     root: HTMLElement,
@@ -117,6 +124,28 @@ export class DebugMenu {
     }
 
     root.append(toggle, this.panel);
+
+    // The menu's own view controls live in the dock's "View" group
+    this.register({
+      id: 'view.see-through',
+      tab: 'Battle',
+      section: 'View',
+      dockOnly: true,
+      dock: { group: 'View', order: 0, icon: 'eye', short: 'See-through', on: () => this.ghost },
+      label: () => (this.ghost ? 'See-through: on' : 'See-through: off'),
+      hint: 'Make the menu transparent so you can watch the battle behind it (use the Solid button at the top to restore)',
+      run: () => this.setGhost(!this.ghost),
+    });
+    this.register({
+      id: 'view.side',
+      tab: 'Battle',
+      section: 'View',
+      dockOnly: true,
+      dock: { group: 'View', order: 1, icon: 'swap', short: 'Side', state: () => (this.panel.classList.contains('left') ? 'Left' : 'Right') },
+      label: () => (this.panel.classList.contains('left') ? 'Side: left' : 'Side: right'),
+      hint: 'Move the menu to the other side of the screen',
+      run: () => this.toggleSide(),
+    });
 
     window.addEventListener('keydown', (e) => {
       const el = e.target as HTMLElement | null;
@@ -148,6 +177,27 @@ export class DebugMenu {
     this.render();
   }
 
+  /** Belirtilen sekmeyi açar (menü kapalıysa önce açar). */
+  openTab(tab: string): void {
+    this.tab = tab;
+    if (!this.open) this.setOpen(true);
+    else this.render();
+  }
+
+  private setGhost(on: boolean): void {
+    this.ghost = on;
+    this.render();
+  }
+
+  private toggleSide(): void {
+    const left = this.panel.classList.toggle('left');
+    try {
+      window.localStorage.setItem(SIDE_KEY, left ? 'left' : 'right');
+    } catch {
+      /* ignore */
+    }
+  }
+
   /** Menüyü şimdi yeniden çizer (kaydırma ve sekme korunur). */
   refresh(): void {
     this.render();
@@ -173,20 +223,10 @@ export class DebugMenu {
     title.textContent = 'Debug menu';
     const tools = document.createElement('div');
     tools.className = 'debug-header-tools';
-    const ghost = debugButton(this.ghost ? 'Solid' : 'See-through', () => {
-      this.ghost = !this.ghost;
-      this.render();
-    }, { title: 'Make the menu transparent so you can watch the battle behind it (click this button again to restore)', className: 'debug-header-btn' });
-    const side = debugButton('Side', () => {
-      const left = this.panel.classList.toggle('left');
-      try {
-        window.localStorage.setItem(SIDE_KEY, left ? 'left' : 'right');
-      } catch {
-        /* ignore */
-      }
-    }, { title: 'Move the menu to the other side of the screen', className: 'debug-header-btn' });
-    const close = debugButton('Close', () => this.setOpen(false), { className: 'debug-header-btn' });
-    tools.append(ghost, side, close);
+    if (this.ghost) {
+      tools.append(debugButton('Solid', () => this.setGhost(false), { icon: 'eye', title: 'The menu is see-through. Click to make it solid again.', className: 'debug-header-btn' }));
+    }
+    tools.append(debugButton('Close', () => this.setOpen(false), { title: 'Close the debug menu (` or F2 also toggles it)', className: 'debug-header-btn' }));
     header.append(title, tools);
     this.panel.append(header);
 
@@ -256,51 +296,113 @@ export class DebugMenu {
     }
   }
 
-  /** Sık kullanılan düğmeler: menünün altına sabit, yalnızca ikon (açıklama üstüne gelince çıkar). */
+  /** Sık kullanılan düğmeler: menünün altına sabit, bölümlü; her düğme ikon + kısa işlev yazısı + (toggle ise) ON/OFF rozeti. */
   private renderDock(): void {
-    const rows = new Map<number, DebugAction[]>();
+    const groups = new Map<string, DebugAction[]>();
     for (const action of this.actions.values()) {
       if (!action.dock) continue;
-      const list = rows.get(action.dock.row) ?? [];
+      const list = groups.get(action.dock.group) ?? [];
       list.push(action);
-      rows.set(action.dock.row, list);
+      groups.set(action.dock.group, list);
     }
-    if (rows.size === 0) return;
+    if (groups.size === 0) return;
     const dock = document.createElement('div');
     dock.className = 'debug-dock';
-    for (const row of [...rows.keys()].sort((a, b) => a - b)) {
-      const el = document.createElement('div');
-      el.className = 'debug-dock-row';
-      for (const action of rows.get(row)!.sort((a, b) => a.dock!.order - b.dock!.order)) {
-        const spec = action.dock!;
-        const btn = document.createElement('button');
-        btn.className = 'debug-dock-btn';
-        if (spec.on?.()) btn.classList.add('on');
-        const label = typeof action.label === 'function' ? action.label() : action.label;
-        btn.title = action.hint ? `${label}: ${action.hint}` : label;
-        btn.setAttribute('aria-label', label);
-        const ic = typeof spec.icon === 'function' ? spec.icon() : { name: spec.icon };
-        const main = document.createElement('img');
-        main.className = 'debug-dock-icon';
-        main.src = iconUrl(ic.name, ic.accent);
-        main.alt = '';
-        btn.append(main);
-        if (ic.overlay) {
-          const over = document.createElement('img');
-          over.className = 'debug-dock-overlay';
-          over.src = iconUrl(ic.overlay);
-          over.alt = '';
-          btn.append(over);
-        }
-        btn.addEventListener('click', () => {
-          action.run();
-          requestAnimationFrame(() => this.render());
-        });
-        el.append(btn);
+
+    const bar = document.createElement('div');
+    bar.className = 'debug-dock-bar';
+    const hintEl = document.createElement('span');
+    hintEl.className = 'debug-dock-hint';
+    const defaultHint = `${DOCK_HINT}  |  ${DOCK_KEYS}`;
+    hintEl.textContent = defaultHint;
+    const fold = document.createElement('button');
+    fold.className = 'debug-dock-fold';
+    fold.textContent = this.dockOpen ? 'Hide' : 'Quick actions';
+    fold.title = this.dockOpen ? 'Hide the quick actions to see more of the tab' : 'Show the quick actions';
+    fold.addEventListener('click', () => {
+      this.dockOpen = !this.dockOpen;
+      this.render();
+    });
+    bar.append(hintEl, fold);
+    dock.append(bar);
+
+    if (this.dockOpen) {
+      const scroller = document.createElement('div');
+      scroller.className = 'debug-dock-scroll';
+      scroller.addEventListener('scroll', () => {
+        this.dockScroll = scroller.scrollTop;
+      });
+      const names = [...DOCK_GROUPS, ...[...groups.keys()].filter((g) => !(DOCK_GROUPS as readonly string[]).includes(g))];
+      for (const name of names) {
+        const list = groups.get(name);
+        if (!list) continue;
+        const h = document.createElement('h4');
+        h.className = 'debug-dock-title';
+        h.textContent = name;
+        const grid = document.createElement('div');
+        grid.className = 'debug-dock-grid';
+        for (const action of list.sort((x, y) => x.dock!.order - y.dock!.order)) grid.append(this.dockButton(action, hintEl, defaultHint));
+        scroller.append(h, grid);
       }
-      dock.append(el);
+      dock.append(scroller);
+      // Restored after attach (scrollTop needs layout)
+      requestAnimationFrame(() => {
+        scroller.scrollTop = this.dockScroll;
+      });
     }
     this.panel.append(dock);
+  }
+
+  private dockButton(action: DebugAction, hintEl: HTMLElement, defaultHint: string): HTMLButtonElement {
+    const spec = action.dock!;
+    const label = typeof action.label === 'function' ? action.label() : action.label;
+    const badge = dockBadge(spec.on?.(), spec.state?.());
+    const tip = dockTooltip(label, action.hint, badge);
+    const btn = document.createElement('button');
+    btn.className = 'debug-dock-btn';
+    if (spec.on?.()) btn.classList.add('on');
+    btn.title = tip;
+    btn.setAttribute('aria-label', `${spec.short}${badge ? `: ${badge.text}` : ''}`);
+    btn.addEventListener('mouseenter', () => {
+      hintEl.textContent = tip;
+    });
+    btn.addEventListener('mouseleave', () => {
+      hintEl.textContent = defaultHint;
+    });
+
+    const ic = typeof spec.icon === 'function' ? spec.icon() : { name: spec.icon };
+    const iconBox = document.createElement('span');
+    iconBox.className = 'debug-dock-iconbox';
+    const main = document.createElement('img');
+    main.className = 'debug-dock-icon';
+    main.src = iconUrl(ic.name, ic.accent);
+    main.alt = '';
+    iconBox.append(main);
+    if (ic.overlay) {
+      const over = document.createElement('img');
+      over.className = 'debug-dock-overlay';
+      over.src = iconUrl(ic.overlay);
+      over.alt = '';
+      iconBox.append(over);
+    }
+    const text = document.createElement('span');
+    text.className = 'debug-dock-text';
+    const name = document.createElement('span');
+    name.className = 'debug-dock-label';
+    name.textContent = spec.short;
+    text.append(name);
+    if (badge) {
+      const b = document.createElement('span');
+      b.className = `debug-dock-badge ${badge.kind}`;
+      b.textContent = badge.text;
+      text.append(b);
+    }
+    btn.append(iconBox, text);
+    btn.addEventListener('click', () => {
+      action.run();
+      requestAnimationFrame(() => this.render());
+    });
+    return btn;
   }
 
   /** Only the info block is refreshed periodically (buttons stay untouched so taps are never lost). */

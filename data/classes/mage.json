@@ -4,12 +4,13 @@
   "spriteId": "mage",
   "color": "#3d7be0",
   "logo": "wizhat",
+  "role": "Elemental Mage",
   "frontPriority": 7,
   "attributes": {
-    "str": 3,
+    "str": 5,
     "int": 20,
     "dex": 3,
-    "luck": 4
+    "luck": 2
   },
   "primary": "int",
   "armor": 4,

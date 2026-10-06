@@ -4,12 +4,13 @@
   "spriteId": "druid",
   "color": "#5a8f29",
   "logo": "leaf",
+  "role": "Nature Summoner",
   "frontPriority": 5,
   "attributes": {
-    "str": 8,
+    "str": 7,
     "int": 16,
-    "dex": 3,
-    "luck": 3
+    "dex": 6,
+    "luck": 1
   },
   "primary": "int",
   "armor": 6,

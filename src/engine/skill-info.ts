@@ -10,6 +10,8 @@ export interface SkillInfo {
   targetBadge: string;
   cost: string;
   cooldown: string;
+  /** Savaş başında bu skill bekleme sayacıyla başlıyorsa tek satır ('Opens on cooldown: 3 turns'), yoksa boş. Yalnızca turns modunda gösterilir. */
+  initialCooldown: string;
   /** Etki satırları: hasar ölçeği, şifa, kalkan, çağrı, menzil ve ek kurallar. */
   lines: string[];
   /** `lines` ile aynı sırada: satırın rengini belirleyen element ('shield' / 'magicShield' kalkan satırları). */
@@ -160,12 +162,14 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
   if (skill.splash && skill.target === 'single_enemy') add(`Also hits the units beside the target (the neighbors above and below it on screen) for ${pct(skill.splash.mult ?? 1)} damage`, 'physical');
   if (skill.motion === 'melee' && skill.target !== 'self') add(skill.ignoreReach ? 'Charges at any enemy' : skill.reach ? `Melee: front ${skill.reach + 1} rows only (reach +${skill.reach})` : 'Melee: front row only');
   const { resource, amount } = skill.cost;
+  const initialTurns = Math.min(formulas.cooldown?.maxInitial ?? 0, Math.floor(skill.initialCooldown ?? 0));
   return {
     name: skill.name,
     target: skill.target === 'area_enemies' ? `Area (radius ${skill.area?.radius ?? 1})` : skill.target === 'random_enemies' ? `${skill.count ?? 3} random enemies` : TARGET_TEXT[skill.target],
     targetBadge: targetBadge(skill),
     cost: amount > 0 ? `${amount} ${resource.toUpperCase()}` : 'Free',
     cooldown: (skill.cooldown ?? 0) > 0 ? `${skill.cooldown} turns` : 'None',
+    initialCooldown: initialTurns > 0 ? `Opens on cooldown: ${initialTurns} turn${initialTurns > 1 ? 's' : ''}` : '',
     lines,
     kinds,
   };

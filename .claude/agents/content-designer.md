@@ -19,6 +19,8 @@ Sen bu oyunun (çalışma adı "Proto": sıra tabanlı, yandan görünümlü, me
 - Tüm içerik `data/` altında JSON; şema doğrulama testi var. Her iş sonunda `npm test` ve `npm run build` yeşil olmalı.
 - Sayıları koda gömme, veriye koy. Yeni mekanik gerekiyorsa `engine-dev`'e devret; sayısal denge için `balance-tester`'a devret.
 - Eksik asset oyunu çökertmemeli (placeholder).
+- **Asset Gallery (`gallery.html`):** yeni ses/ikon/animasyon/karakter/skill eklenince galeride göründüğünden emin ol (otomatik türetilir: `src/gallery/catalog.ts`; özel bir alan eklendiyse galeriyi güncelle).
+- **Wiki (sağ üst kitap simgesi, `src/wiki`):** içerik veriden türetilir; yeni mekanik/özel kural/pasif eklenince wiki'nin Mechanics bölümündeki metin güncel mi kontrol et.
 
 ## Çıktı
 Eklenen/değişen içeriğin sade Türkçe özeti: ne yapıldı, ekranda nasıl görünmeli/duyulmalı, Ömer neyi test etmeli.

@@ -1,5 +1,6 @@
 /**
  * Debug menüsünün içeriği: sekmeler, düğmeler ve paneller (birim araçları, skill galerisi, ses listesi, seed, hız...).
+ * Dock'taki (altta bölümlü hızlı düğmeler) her düğme: bölüm + ikon + kısa yazı + hint. Yeni eylem eklerken bir bölüme koy (src/ui/debug-layout.ts DOCK_GROUPS).
  * Sahneye yalnızca BattleScene'in debug* yöntemleri ve motorun debug* yöntemleri üzerinden dokunur; oyun kuralı burada yoktur.
  */
 import type Phaser from 'phaser';
@@ -41,6 +42,13 @@ let seedDraft = '';
 let hpDraft = '';
 let mpDraft = '';
 
+const FORCE_LABEL = { auto: 'Normal', always: 'Always', never: 'Never' } as const;
+
+/** Opens the asset gallery page in a new tab (relative URL: works on the dev server and in the build). */
+function openAssetGallery(): void {
+  window.open('./gallery.html', '_blank', 'noopener');
+}
+
 /** Panellerin üstünde kısa bilgi/hata satırı (bir sonraki işleme kadar kalır). */
 const notes = new Map<string, string>();
 
@@ -80,18 +88,18 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     id: 'scene.team-select',
     tab: 'Battle',
     section: 'Battle',
-    dock: { row: 0, order: 1, icon: 'team' },
+    dock: { group: 'Battle flow', order: 2, icon: 'team', short: 'Team select' },
     label: 'Team select',
-    hint: 'Back to the team selection screen',
+    hint: 'Go back to the team selection screen to pick new classes',
     run: () => battle()?.goToTeamSelect(),
   });
   debug.register({
     id: 'mode.toggle',
     tab: 'Battle',
     section: 'Battle',
-    dock: { row: 0, order: 0, icon: 'flask', on: () => battle()?.mode === 'test' },
+    dock: { group: 'Battle flow', order: 3, icon: 'flask', short: 'Mode', on: () => battle()?.mode === 'test', state: () => (battle()?.mode === 'test' ? 'Test' : 'Turns') },
     label: () => (battle()?.mode === 'test' ? 'Mode: Test' : 'Mode: Turns'),
-    hint: 'Switch between turn-based and test mode (no turn order, any unit can act). Restarts the battle.',
+    hint: 'Switch between turn-based and test mode (no turn order, any unit can act); restarts the battle',
     run: () => {
       const b = battle();
       if (b) b.scene.restart({ seed: newSeed(), mode: b.mode === 'test' ? 'turns' : 'test' });
@@ -101,9 +109,9 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     id: 'battle.random',
     tab: 'Battle',
     section: 'Battle',
-    dock: { row: 0, order: 2, icon: 'dice' },
+    dock: { group: 'Battle flow', order: 1, icon: 'dice', short: 'New teams' },
     label: 'New teams',
-    hint: 'Random teams, new seed',
+    hint: 'Start a new battle with random teams and a new seed',
     run: () => battle()?.scene.restart({ seed: newSeed(), teams: undefined }),
   });
   debug.register({
@@ -111,21 +119,23 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     tab: 'Battle',
     section: 'Battle',
     label: 'Rematch',
-    hint: 'Same teams, new seed',
+    hint: 'Start a new battle with the same teams but a new seed',
     run: () => battle()?.scene.restart({ seed: newSeed() }),
   });
   debug.register({
     id: 'battle.restart-same',
     tab: 'Battle',
     section: 'Battle',
-    label: 'Same seed',
-    hint: 'Restart the battle with the same seed and teams',
+    dock: { group: 'Battle flow', order: 0, icon: 'restart', short: 'Restart battle' },
+    label: 'Restart battle',
+    hint: 'Restart the battle from the beginning with the same seed and teams',
     run: () => battle()?.scene.restart({ seed: battle()?.seed }),
   });
   debug.register({
     id: 'battle.skip-turn',
     tab: 'Battle',
     section: 'Turn',
+    dock: { group: 'Battle flow', order: 4, icon: 'next', short: 'Skip turn' },
     label: 'Skip turn',
     hint: "Skip the current unit's turn",
     run: () => battle()?.skipCurrentTurn(),
@@ -135,8 +145,9 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     tab: 'Battle',
     section: 'Turn',
     dock: {
-      row: 1,
-      order: 2,
+      group: 'Units',
+      order: 4,
+      short: 'Next unit',
       icon: () => {
         const a = battle()?.activeActor;
         return a ? { name: a.logo, accent: a.color, overlay: 'next' } : { name: 'next' };
@@ -148,24 +159,24 @@ export function registerDebugTools({ game, debug }: Ctx): void {
       const a = b.activeActor;
       return a ? `Next: ${a.name}` : 'Next unit';
     },
-    hint: 'Test mode only: switch to the next unit',
+    hint: 'Test mode only: hand control to the next unit',
     run: () => battle()?.cycleActor(),
   });
   debug.register({
     id: 'battle.autoplay',
     tab: 'Battle',
     section: 'Control',
-    dock: { row: 1, order: 0, icon: 'robot', on: () => !!battle()?.autoPlay },
-    label: () => (battle()?.autoPlay ? 'Auto: on' : 'Auto: off'),
+    dock: { group: 'Battle flow', order: 5, icon: 'robot', short: 'Auto-play', on: () => !!battle()?.autoPlay },
+    label: () => (battle()?.autoPlay ? 'Auto-play: on' : 'Auto-play: off'),
     on: () => !!battle()?.autoPlay,
-    hint: 'Let the AI play your party',
+    hint: 'Let the AI play your own party turns',
     run: () => battle()?.toggleAutoPlay(),
   });
   debug.register({
     id: 'battle.free-mp',
     tab: 'Battle',
     section: 'Control',
-    dock: { row: 1, order: 1, icon: 'freemp', on: () => BattleScene.freeMp },
+    dock: { group: 'Combat tweaks', order: 3, icon: 'freemp', short: 'Free MP', on: () => BattleScene.freeMp },
     label: () => (BattleScene.freeMp ? 'Free MP: on' : 'Free MP: off'),
     on: () => BattleScene.freeMp,
     hint: 'Skills cost no mana (both sides)',
@@ -182,9 +193,10 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     id: 'tweak.enemy-ai',
     tab: 'Battle',
     section: 'Control',
+    dock: { group: 'Combat tweaks', order: 4, icon: 'helm', short: 'Enemy AI', on: () => debugState.enemyAiOff, state: () => (debugState.enemyAiOff ? 'OFF' : 'ON') },
     label: () => (debugState.enemyAiOff ? 'Enemy AI: off' : 'Enemy AI: on'),
     on: () => debugState.enemyAiOff,
-    hint: 'Off: enemies never act, their turns are skipped (turn mode)',
+    hint: 'Off: enemies never act and their turns are skipped (turn mode)',
     run: () => {
       debugState.enemyAiOff = !debugState.enemyAiOff;
     },
@@ -363,7 +375,7 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     dockOnly: true,
     tab: 'Unit',
     section: 'Quick',
-    dock: { row: 1, order: 3, icon: 'heart' },
+    dock: { group: 'Units', order: 0, icon: 'heart', short: 'Heal my team' },
     label: 'Heal my team',
     hint: 'Revive and fully restore HP and MP of all your units',
     run: () => {
@@ -379,7 +391,7 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     dockOnly: true,
     tab: 'Unit',
     section: 'Quick',
-    dock: { row: 1, order: 4, icon: 'skull' },
+    dock: { group: 'Units', order: 2, icon: 'skull', short: 'Kill enemies' },
     label: 'Kill enemies',
     hint: 'Kill all enemies (you win)',
     run: () => {
@@ -388,6 +400,47 @@ export function registerDebugTools({ game, debug }: Ctx): void {
       for (const c of s.battle.living('enemy')) s.battle.debugKill(c.uid);
       s.debugAfterChange();
     },
+  });
+
+  debug.register({
+    id: 'unit.revive-all',
+    dockOnly: true,
+    tab: 'Unit',
+    section: 'Quick',
+    dock: { group: 'Units', order: 1, icon: 'ankh', short: 'Revive everyone' },
+    label: 'Revive everyone',
+    hint: 'Bring every fallen unit (both sides) back to life',
+    run: () => {
+      const s = battle();
+      if (!s) return;
+      s.battle.debugReviveAll();
+      s.debugAfterChange();
+    },
+  });
+  debug.register({
+    id: 'unit.clear-cooldowns',
+    dockOnly: true,
+    tab: 'Unit',
+    section: 'Quick',
+    dock: { group: 'Units', order: 3, icon: 'rune', short: 'Clear all cooldowns' },
+    label: 'Clear all cooldowns',
+    hint: "Reset every unit's skill cooldowns",
+    run: () => {
+      const s = battle();
+      if (!s) return;
+      s.battle.debugClearCooldowns();
+      s.debugAfterChange();
+    },
+  });
+  debug.register({
+    id: 'unit.tools',
+    dockOnly: true,
+    tab: 'Unit',
+    section: 'Quick',
+    dock: { group: 'Units', order: 5, icon: 'muscle', short: 'Unit tools' },
+    label: 'Unit tools',
+    hint: 'Open the Unit tab: pick one unit, then set HP/MP, kill, revive or add a status',
+    run: () => debug.openTab('Unit'),
   });
 
   // ===== Skills (gallery) =====
@@ -466,6 +519,16 @@ export function registerDebugTools({ game, debug }: Ctx): void {
 
   // ===== Sounds =====
   debug.registerPanel({
+    id: 'panel.asset-gallery-link',
+    tab: 'Sounds',
+    render: (el) => {
+      el.append(
+        ...debugSection('Asset gallery', debugButton('Open Asset Gallery', openAssetGallery, { icon: 'frame', title: 'Open the asset gallery (sounds, icons and more) in a new browser tab' })),
+        noteLineText('The full sound list is also in the asset gallery. These buttons play the same sounds.'),
+      );
+    },
+  });
+  debug.registerPanel({
     id: 'panel.sounds',
     tab: 'Sounds',
     render: (el, refresh) => {
@@ -503,9 +566,9 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     dockOnly: true,
     tab: 'Tweaks',
     section: 'Animation speed',
-    dock: { row: 0, order: 3, icon: 'hourglass', on: () => debugState.speed !== 1 },
+    dock: { group: 'Battle flow', order: 7, icon: 'hourglass', short: 'Speed', on: () => debugState.speed !== 1, state: () => speedLabel(debugState.speed) },
     label: () => `Speed: ${speedLabel(debugState.speed)}`,
-    hint: 'Cycle the animation speed (0.25x - 4x)',
+    hint: 'Tap to cycle the animation speed (0.25x, 0.5x, 1x, 2x, 4x)',
     run: () => {
       debugState.speed = nextInCycle(SPEEDS, debugState.speed as (typeof SPEEDS)[number]);
       applyTiming();
@@ -515,10 +578,10 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     id: 'tweak.skip',
     tab: 'Tweaks',
     section: 'Animation speed',
-    dock: { row: 2, order: 2, icon: 'ffwd', on: () => debugState.skipAnims },
+    dock: { group: 'Battle flow', order: 8, icon: 'ffwd', short: 'Skip anims', on: () => debugState.skipAnims },
     label: () => (debugState.skipAnims ? 'Skip anims: on' : 'Skip anims: off'),
     on: () => debugState.skipAnims,
-    hint: 'Play animations extremely fast (battle results come instantly)',
+    hint: 'Play animations extremely fast so battle results come almost instantly',
     run: () => {
       debugState.skipAnims = !debugState.skipAnims;
       applyTiming();
@@ -528,8 +591,8 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     id: 'tweak.pause',
     tab: 'Tweaks',
     section: 'Animation speed',
-    dock: { row: 0, order: 4, icon: 'pause', on: () => debugState.paused },
-    label: () => (debugState.paused ? 'Paused' : 'Pause'),
+    dock: { group: 'Battle flow', order: 6, icon: 'pause', short: 'Pause', on: () => debugState.paused },
+    label: () => (debugState.paused ? 'Pause: on' : 'Pause: off'),
     on: () => debugState.paused,
     hint: 'Freeze all animations and timers (tap again to continue)',
     run: () => {
@@ -541,9 +604,10 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     id: 'tweak.numbers',
     tab: 'Tweaks',
     section: 'Display',
-    label: () => (debugState.hideNumbers ? 'Numbers: hidden' : 'Numbers: shown'),
+    dock: { group: 'View', order: 2, icon: 'eye', short: 'Hide numbers', on: () => debugState.hideNumbers },
+    label: () => (debugState.hideNumbers ? 'Hide numbers: on' : 'Hide numbers: off'),
     on: () => debugState.hideNumbers,
-    hint: 'Hide damage and heal numbers above units',
+    hint: 'Hide the damage and heal numbers floating above units',
     run: () => {
       debugState.hideNumbers = !debugState.hideNumbers;
     },
@@ -552,9 +616,10 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     id: 'battle.slots',
     tab: 'Tweaks',
     section: 'Display',
-    label: () => (battle()?.showSlots ? 'Slots: on' : 'Slots: off'),
+    dock: { group: 'View', order: 3, icon: 'frame', short: 'Show slots', on: () => !!battle()?.showSlots },
+    label: () => (battle()?.showSlots ? 'Show slots: on' : 'Show slots: off'),
     on: () => !!battle()?.showSlots,
-    hint: 'Show the formation cells',
+    hint: 'Draw the formation cells (4 rows x 3 lanes) on the battlefield',
     run: () => {
       const b = battle();
       b?.setSlotsVisible(!b.showSlots);
@@ -564,8 +629,10 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     id: 'screen.fps',
     tab: 'Tweaks',
     section: 'Display',
-    label: () => (fps ? 'FPS: on' : 'FPS: off'),
+    dock: { group: 'View', order: 4, icon: 'info', short: 'Show FPS', on: () => !!fps },
+    label: () => (fps ? 'Show FPS: on' : 'Show FPS: off'),
     on: () => !!fps,
+    hint: 'Show a frames-per-second counter in the top left corner',
     run: () => {
       if (fps) {
         fps.remove();
@@ -588,9 +655,10 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     id: 'screen.portrait',
     tab: 'Tweaks',
     section: 'Display',
-    label: () => (forcePortrait ? 'Portrait: on' : 'Portrait: off'),
+    dock: { group: 'View', order: 5, icon: 'swap', short: 'Force portrait', on: () => forcePortrait },
+    label: () => (forcePortrait ? 'Force portrait: on' : 'Force portrait: off'),
     on: () => forcePortrait,
-    hint: 'Force the "rotate your phone" notice',
+    hint: 'Show the "rotate your phone" notice as if the screen were upright',
     run: () => {
       forcePortrait = !forcePortrait;
       document.body.classList.toggle('force-portrait', forcePortrait);
@@ -615,9 +683,9 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     dockOnly: true,
     tab: 'Tweaks',
     section: 'Quick',
-    dock: { row: 2, order: 0, icon: 'sword', on: () => debugState.flags.damageMult > 1 },
+    dock: { group: 'Combat tweaks', order: 0, icon: 'sword', short: 'Damage', on: () => debugState.flags.damageMult > 1, state: () => (debugState.flags.damageMult >= 1000 ? 'Kill' : `${debugState.flags.damageMult}x`) },
     label: () => (debugState.flags.damageMult > 1 ? `Damage: ${debugState.flags.damageMult >= 1000 ? 'one-hit kill' : `${debugState.flags.damageMult}x`}` : 'Damage: 1x'),
-    hint: 'Cycle the damage multiplier: 1x, 10x, one-hit kill',
+    hint: 'Tap to cycle the damage multiplier for both sides: 1x, 10x, one-hit kill',
     run: () => {
       debugState.flags.damageMult = nextInCycle(DAMAGE_MULTS, debugState.flags.damageMult as (typeof DAMAGE_MULTS)[number]);
       applyFlags();
@@ -652,14 +720,45 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     dockOnly: true,
     tab: 'Tweaks',
     section: 'Quick',
-    dock: { row: 2, order: 1, icon: 'burst', on: () => debugState.flags.crit !== 'auto' },
-    label: () => `Crit: ${debugState.flags.crit}`,
-    hint: 'Cycle critical hits: normal, always, never',
+    dock: { group: 'Combat tweaks', order: 1, icon: 'burst', short: 'Crit', on: () => debugState.flags.crit !== 'auto', state: () => FORCE_LABEL[debugState.flags.crit] },
+    label: () => `Crit: ${FORCE_LABEL[debugState.flags.crit]}`,
+    hint: 'Tap to cycle critical hits: normal, always, never',
     run: () => {
       debugState.flags.crit = nextInCycle(['auto', 'always', 'never'] as const, debugState.flags.crit);
       applyFlags();
     },
   });
+  debug.register({
+    id: 'tweak.dodge-cycle',
+    dockOnly: true,
+    tab: 'Tweaks',
+    section: 'Quick',
+    dock: { group: 'Combat tweaks', order: 2, icon: 'feather', short: 'Dodge', on: () => debugState.flags.dodge !== 'auto', state: () => FORCE_LABEL[debugState.flags.dodge] },
+    label: () => `Dodge: ${FORCE_LABEL[debugState.flags.dodge]}`,
+    hint: 'Tap to cycle dodging: normal, always, never',
+    run: () => {
+      debugState.flags.dodge = nextInCycle(['auto', 'always', 'never'] as const, debugState.flags.dodge);
+      applyFlags();
+    },
+  });
+
+  // ===== Tools: shortcuts to the tab / page that holds each tool =====
+  const shortcut = (id: string, order: number, icon: string, short: string, tab: string, hint: string): void =>
+    debug.register({ id, dockOnly: true, tab, section: 'Tools', dock: { group: 'Tools', order, icon, short }, label: short, hint, run: () => debug.openTab(tab) });
+  shortcut('tools.skills', 0, 'wand', 'Skill preview', 'Skills', 'Open the Skills tab: play any skill animation and sound on a target without spending a turn');
+  shortcut('tools.sounds', 1, 'speaker', 'Sounds', 'Sounds', 'Open the Sounds tab: listen to every sound effect');
+  debug.register({
+    id: 'tools.asset-gallery',
+    dockOnly: true,
+    tab: 'Sounds',
+    section: 'Tools',
+    dock: { group: 'Tools', order: 2, icon: 'frame', short: 'Asset gallery' },
+    label: 'Asset gallery',
+    hint: 'Open the asset gallery page (sounds, icons and more) in a new browser tab',
+    run: openAssetGallery,
+  });
+  shortcut('tools.seed', 3, 'clover', 'Seed & link', 'Battle', 'Open the Battle tab: copy this battle\'s seed or link, or restart with a typed seed');
+  shortcut('tools.info', 4, 'info', 'Info', 'Info', 'Open the Info tab: live stats, turn queue and AI decisions');
 
   // ===== Info =====
   debug.registerInfo('units', () =>

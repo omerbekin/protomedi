@@ -27,8 +27,8 @@ const cast = (b: Battle, actor: string, target: string) => {
 
 describe('yan komşuluk haritası (veri = layout geometrisi)', () => {
   it('formulas.json haritası layout koordinatlarından üretilenle birebir aynı (layout değişirse haritayı yeniden üret)', () => {
-    expect(sn.party).toEqual(computeSideNeighbors(layout.partySlots, sn.maxDx));
-    expect(sn.enemy).toEqual(computeSideNeighbors(layout.enemySlots, sn.maxDx));
+    expect(sn.party).toEqual(computeSideNeighbors(layout.partySlots, sn.maxDx, f.formation.lanes));
+    expect(sn.enemy).toEqual(computeSideNeighbors(layout.enemySlots, sn.maxDx, f.formation.lanes));
   });
 
   it('adaylar ekranda üstte/altta (farklı yükseklik), yatayda maxDx içinde; yakından uzağa sıralı', () => {
@@ -54,6 +54,31 @@ describe('yan komşuluk haritası (veri = layout geometrisi)', () => {
     expect(sn.party).toEqual(sn.enemy);
   });
 
+  it('TÜM yuvalar (oyuncu ve düşman): yan komşu listesinde hücrenin önü/arkası (aynı şeritteki başka sıra) ya da başka sıranın çapraz hücresi YOK; hepsi aynı sırada', () => {
+    const lanes = f.formation.lanes;
+    for (const board of ['party', 'enemy'] as const) {
+      sn[board].forEach((cell, i) => {
+        for (const j of [...cell.up, ...cell.down]) {
+          expect(Math.floor(j / lanes), `${board} ${i} -> ${j}`).toBe(Math.floor(i / lanes)); // aynı sıra
+          expect(j % lanes, `${board} ${i} -> ${j} (ön/arka aynı şerit)`).not.toBe(i % lanes);
+        }
+        // sıra içinde en çok iki komşu yön, toplam aday sayısı = sıradaki diğer şeritler
+        expect(cell.up.length + cell.down.length).toBe(lanes - 1);
+      });
+    }
+  });
+
+  it('hiçbir hücre, kendi önündeki/arkasındaki hücre dolu olsa bile yan vuruş almaz (tüm yuva çiftleri taranır)', () => {
+    const lanes = f.formation.lanes;
+    const rows = f.formation.rows;
+    for (const board of ['party', 'enemy'] as const) {
+      for (let i = 0; i < rows * lanes; i++) {
+        const others = (slot: number) => Math.floor(slot / lanes) !== Math.floor(i / lanes); // yalnızca diğer sıralar dolu
+        expect(pickSideNeighbors(sn[board][i], others), `${board} ${i}`).toEqual([]);
+      }
+    }
+  });
+
   it('en çok iki komşu (bir üst, bir alt); dolu hücre yoksa boş; ilk DOLU aday seçilir', () => {
     const map = sn.party[2]!; // sıra 0, şerit 2 (en altta): yalnızca üst komşular
     expect(pickSideNeighbors(map, () => false)).toEqual([]);
@@ -66,21 +91,21 @@ describe('yan komşuluk haritası (veri = layout geometrisi)', () => {
 });
 
 describe('Bone Slash yan hedefleri ekran komşuluğuna göre (Ömer örnekleri)', () => {
-  it('(a) oyuncu tarafı: ön sıra şerit 2 Defender, arkasında şerit 0 Archer çapraz komşudur; Skeleton Archer\'a vurunca Defender da vurulur', () => {
+  it('(a) oyuncu tarafı: Archer (sıra 1) arkasındaki/önündeki Defender yan vuruş ALMAZ (eski hata: çapraz hücre yan sayılıyordu)', () => {
+    // Defender slot 2 (sıra 0, şerit 2), Archer slot 3 (sıra 1, şerit 0): ekranda yakın ama biri diğerinin önü/arkası
     const b = arena([['defender', 2], ['archer', 3], ['gambler', 5]], [['skeleton', 0]]);
     const archer = b.get('party-1')!;
-    const alive = b.living('party');
-    const near = pickSideNeighbors(sn.party[archer.slot], (s) => alive.some((c) => c.slot === s)).map((s) => alive.find((c) => c.slot === s)!.defId);
-    expect(near).toContain('defender');
-    // Archer arka sırada (melee ulaşamaz) ama geometrik komşuluk: Defender vurulacak aday
-    expect(b.splashTargets('skeleton_slash', archer).map((c) => c.uid)).toEqual(['party-0']);
-    // Defender'a vurunca da arkasındaki çapraz komşu Archer yan vuruş alır (slot 1 boş: bir sonraki aday slot 3)
-    expect(cast(b, 'enemy-0', 'party-0').sort()).toEqual(['party-0', 'party-1']);
+    expect(b.splashTargets('skeleton_slash', archer).map((c) => c.uid)).toEqual(['party-2']); // yalnızca aynı sıradaki Gambler
+    // Defender'a vurunca arkasındaki Archer vurulmaz (slot 0/1 boş)
+    expect(cast(b, 'enemy-0', 'party-0')).toEqual(['party-0']);
   });
 
-  it('(a2) seed 1 dizilimi: Archer orta şeritte (slot 4); Defender (slot 2) ve Gambler (slot 3) yan komşu (geometri)', () => {
-    const b = arena([['defender', 2], ['gambler', 3], ['archer', 4]], [['skeleton', 0]]);
+  it('(a2) seed 1 dizilimi (Ömer örneği): Archer orta şeritte (slot 4); aynı sıradaki Gambler (slot 3) ve Defender (slot 5) yan komşu; önündeki sıra 0 hücresi (slot 2) DEĞİL', () => {
+    const b = arena([['defender', 5], ['gambler', 3], ['archer', 4]], [['skeleton', 0]]);
     expect(b.splashTargets('skeleton_slash', b.get('party-2')!).map((c) => c.uid).sort()).toEqual(['party-0', 'party-1']);
+    // Defender önceki örnekte slot 2'deydi (Archer'ın önünde-çaprazında): artık yan sayılmaz
+    const c = arena([['defender', 2], ['gambler', 3], ['archer', 4]], [['skeleton', 0]]);
+    expect(c.splashTargets('skeleton_slash', c.get('party-2')!).map((x) => x.uid)).toEqual(['party-1']);
   });
 
   it('(b) düşman tarafı: ortadaki Warrior\'a vurunca Defender ve Gambler de vurulur (bozulmadı)', () => {
@@ -88,7 +113,7 @@ describe('Bone Slash yan hedefleri ekran komşuluğuna göre (Ömer örnekleri)'
     expect(cast(b, 'party-0', 'enemy-1').sort()).toEqual(['enemy-0', 'enemy-1', 'enemy-2']);
   });
 
-  it('(b2) aynı sıradaki yakın komşu doluysa daha uzaktaki çapraz hücreye bakılmaz', () => {
+  it('(b2) arkadaki sıra (slot 3) dolu olsa da yan vuruşa girmez', () => {
     const b = arena([['skeleton', 0]], [['defender', 2], ['warrior', 1], ['gambler', 0], ['archer', 3]]);
     expect(cast(b, 'party-0', 'enemy-1').sort()).toEqual(['enemy-0', 'enemy-1', 'enemy-2']);
   });
@@ -105,14 +130,14 @@ describe('Bone Slash yan hedefleri ekran komşuluğuna göre (Ömer örnekleri)'
   });
 
   it('önizleme/YZ\'nin kullandığı splashTargets aynı komşulukları verir', () => {
-    const b = arena([['defender', 2], ['archer', 3]], [['skeleton', 0]]);
+    const b = arena([['defender', 4], ['archer', 3]], [['skeleton', 0]]);
     expect(b.splashTargets('skeleton_slash', b.get('party-1')!).map((c) => c.uid)).toEqual(['party-0']);
   });
 });
 
 describe('stat tooltip metinleri (veriden)', () => {
   const lines = (kind: Parameters<typeof describeStat>[0]) => describeStat(kind, content.classes.archer!.stats, f).lines.join('\n');
-  it('Dex: kaçınma adımı ve üst sınır veriden yazılır ("3 Dex = +1% evasion")', () => {
+  it('Dex: kaçınma adımı ve üst sınır veriden yazılır (örn. "5 Dex = +2% evasion")', () => {
     const a = f.attributes;
     const step = `${a.dexPerEvasionStep} Dex = +${Math.round(a.evasionPerStep * 100)}% evasion`;
     expect(lines('evasion')).toContain(step);
@@ -137,20 +162,24 @@ describe('stat dağılımı ve taban isabet', () => {
     expect(f.attributes.accuracyBase).toBe(0.8);
     for (const c of Object.values(content.classes)) expect('accuracyBase' in c).toBe(false);
   });
-  it('hiçbir class dex 0 değil (en az 2); çevik olmayanlar az dex taşır; çeviklerin evasion adımı daha yüksek; toplam 30', () => {
-    for (const c of classes) expect(c.attributes.dex, c.id).toBeGreaterThanOrEqual(2);
-    for (const id of LOW_DEX) {
-      const c = content.classes[id]!;
-      expect(c.attributes.dex, id).toBeLessThanOrEqual(3);
-      expect(c.stats.evasion, id).toBeLessThanOrEqual(f.attributes.evasionPerStep); // en çok tek adım (%1)
-    }
-    for (const id of ['archer', 'gambler', 'antimage']) expect(content.classes[id]!.attributes.dex, id).toBeGreaterThanOrEqual(5);
-    expect(content.classes.archer!.stats.evasion).toBeGreaterThan(content.classes.warrior!.stats.evasion);
+  it('hiçbir class dex 0 değil (en az 1); toplam 30; primary en yüksek', () => {
+    for (const c of classes) expect(c.attributes.dex, c.id).toBeGreaterThanOrEqual(1);
     for (const c of classes) {
       const a = c.attributes;
       expect(a.str + a.int + a.dex + a.luck, c.id).toBe(30);
       expect(a[c.primary!], c.id).toBe(Math.max(a.str, a.int, a.dex, a.luck));
     }
+  });
+  it('dex dağılımı doğal: çevik olmayan altı class aynı dex değerini paylaşmaz (en az 4 farklı değer); çevikler (archer, gambler, antimage) en yüksek', () => {
+    const dexes = LOW_DEX.map((id) => content.classes[id]!.attributes.dex);
+    expect(new Set(dexes).size).toBeGreaterThanOrEqual(4);
+    const maxLow = Math.max(...dexes);
+    for (const id of ['archer', 'gambler', 'antimage']) expect(content.classes[id]!.attributes.dex, id).toBeGreaterThan(maxLow);
+    expect(content.classes.archer!.stats.evasion).toBeGreaterThan(content.classes.warrior!.stats.evasion);
+  });
+  it('evasion = floor(dex / adım) x yüzde; her class için veriden hesaplanan değere eşit', () => {
+    const a = f.attributes;
+    for (const c of classes) expect(c.stats.evasion, c.id).toBeCloseTo(Math.min(a.evasionMax, Math.floor(c.attributes.dex / a.dexPerEvasionStep) * a.evasionPerStep), 10);
   });
   it('hız aralığı: hiçbir sınıf spdBase altında değil; en yavaş sınıf en hızlının yarısından yavaş değil', () => {
     const spds = classes.map((c) => c.stats.spd);

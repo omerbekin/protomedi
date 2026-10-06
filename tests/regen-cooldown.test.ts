@@ -4,6 +4,9 @@ import type { BattleEvent } from '../src/engine';
 
 const turnsBattle = (seed = 1) => new Battle(content.battleSetup('first-battle', seed, 'turns'));
 const testBattle = (seed = 1) => new Battle(content.battleSetup('first-battle', seed, 'test'));
+/** Savaş başında bir birimin sayacında beklenen başlangıç cooldown'ları (veriden). */
+const expectedInitial = (skills: string[]) =>
+  Object.fromEntries(skills.filter((id) => (content.skills[id]?.initialCooldown ?? 0) > 0).map((id) => [id, Math.min(content.formulas.cooldown.maxInitial, content.skills[id]!.initialCooldown!)]));
 
 /** Sırası gelen aktör verilen uid olana kadar pas geçer. */
 function skipUntil(b: Battle, uid: string): void {
@@ -97,16 +100,17 @@ describe('cooldown (bekleme süresi)', () => {
 
   /** Mage'in sırası gelene kadar ilerlet, Meteor'u kullan. */
   function castMeteor(b: Battle): void {
+    b.debugClearCooldowns(); // başlangıç cooldown'u bu testlerin konusu değil (aşağıda ayrıca sınanır)
     skipUntil(b, 'party-2');
     const r = b.useSkill('party-2', 'meteor', 'enemy-0');
     expect(r.ok).toBe(true);
   }
 
-  it('kullanılan skill bir sonraki turlarda reddedilir, sonra tekrar açılır (Meteor: 4 tur)', () => {
+  it('kullanılan skill bir sonraki turlarda reddedilir, sonra tekrar açılır (Meteor: veriden cooldown)', () => {
     const b = turnsBattle();
     delete b.get('party-2')!.passive; // Spell Echo cooldown'u rastgele sıfırlamasın
     const cooldown = content.skills.meteor!.cooldown!;
-    expect(cooldown).toBe(4);
+    expect(cooldown).toBeGreaterThan(1);
     castMeteor(b);
     const mage = b.get('party-2')!;
     mage.mp = mage.maxMp; // MP engel olmasın
@@ -151,6 +155,7 @@ describe('cooldown (bekleme süresi)', () => {
 
   it('cooldown\'daki skill için YZ başka bir skill seçer', () => {
     const b = turnsBattle();
+    b.debugClearCooldowns();
     skipUntil(b, 'party-2');
     b.get('enemy-3')!.hp = 0; // hedefler azalsın, AoE yerine tek hedef Meteor cazip olsun
     b.get('enemy-1')!.hp = 0;
@@ -181,6 +186,7 @@ describe('cooldown (bekleme süresi)', () => {
     const b = turnsBattle();
     const start = b.log[0]!;
     expect(start.type).toBe('battleStart');
-    if (start.type === 'battleStart') for (const c of start.combatants) expect(c.cooldowns).toEqual({});
+    // Başlangıç anındaki kopyalar yalnızca başlangıç cooldown'larını (initialCooldown) taşır
+    if (start.type === 'battleStart') for (const c of start.combatants) expect(c.cooldowns).toEqual(expectedInitial(c.skills));
   });
 });

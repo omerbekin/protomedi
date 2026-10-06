@@ -53,12 +53,12 @@ describe('Dex evasion verir, Luck accuracy verir; skill ölçek çarpanları 1x'
     const ev = (dex: number) => mk(undefined, { str: 0, int: 0, dex, luck: 0 }).evasion;
     expect(ev(0)).toBe(0);
     expect(ev(a.dexPerEvasionStep)).toBeCloseTo(a.evasionPerStep, 10);
-    // her dexPerEvasionStep dex tam bir adım: dex 3 -> %1, 6 -> %2, 13 -> %4 (varsayılan veriyle)
+    // her dexPerEvasionStep dex tam bir adım: dex 5 -> %2, 10 -> %4, 15 -> %6 (varsayılan veriyle)
     for (const dex of [3, 6, 9, 13, 14, 15, 30]) expect(ev(dex), `dex ${dex}`).toBeCloseTo(Math.min(a.evasionMax, Math.floor(dex / a.dexPerEvasionStep) * a.evasionPerStep), 10);
     // yüzde her zaman tam sayı
     for (let d = 0; d <= 40; d++) expect(Number.isInteger(Math.round(ev(d) * 10000) / 100), `dex ${d}`).toBe(true);
     expect(ev(10000)).toBe(a.evasionMax);
-    expect(a.evasionMax).toBeLessThanOrEqual(0.3);
+    expect(a.evasionMax).toBeLessThanOrEqual(0.75);
     expect('evasionK' in a).toBe(false);
     expect('min' in f.hit).toBe(false); // hit şansı alt sınırı kaldırıldı
   });
@@ -328,6 +328,7 @@ describe("Dex primary: Hunter's Mark savaşta", () => {
     const attacker = b.combatants.find((c) => c.side === 'party' && c.defId === 'warrior')!;
     const victim = b.combatants.find((c) => c.side === 'enemy' && c.defId === 'defender')!;
     attacker.stats.hunterMark = hunter;
+    attacker.stats.str = 400; // büyük sayılar: yuvarlama payı oranı bozmasın (hedef zırhı/skill gücü veriden değişebilir)
     attacker.stats.spd = actorSpd;
     victim.stats.spd = targetSpd;
     victim.hp = victim.maxHp = 100000;

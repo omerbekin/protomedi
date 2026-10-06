@@ -531,6 +531,7 @@ describe('Anti-Mage: mana yakma, eksik manaya göre hasar, büyü kalkanı', () 
     expect(ofType(events, 'manaBurn')[0]).toMatchObject({ target: mage.uid, amount: 10, mpAfter: before - 10 });
     expect(am.mp).toBe(5); // yaktığının %50'si kendine
     expect(ofType(events, 'damage')).toHaveLength(1);
+    mage.hp = mage.maxHp; // hasar yükselse de hedef ölmesin
     mage.mp = 4;
     expect(ofType(act(b, am.uid, 'mana_burn', mage.uid), 'manaBurn')[0]).toMatchObject({ amount: 4, mpAfter: 0 });
     mage.mp = 0;
@@ -1025,8 +1026,8 @@ describe('Pasif skill\'ler', () => {
 
   it('Bulwark Aura hasarı gerçekten azaltır', () => {
     const phys = (aura: boolean) => {
-      const b = calm(grid(cells({ 0: 'warrior', ...(aura ? ({ 1: 'defender' } as Record<number, string>) : {}) }), cells({ 0: 'archer' })));
-      return total(act(b, 'enemy-0', 'quick_shot', 'party-0'), 'party-0');
+      const b = calm(grid(cells({ 0: 'warrior', ...(aura ? ({ 1: 'defender' } as Record<number, string>) : {}) }), cells({ 0: 'warrior' })));
+      return total(act(b, 'enemy-0', 'melee_attack', 'party-0'), 'party-0');
     };
     expect(phys(true)).toBeLessThan(phys(false));
   });
@@ -1073,6 +1074,7 @@ describe('Pasif skill\'ler', () => {
   it('Mage - Spell Echo: şans 1 iken cooldown\'lu hasar skill\'i hemen yeniden hazır olur', () => {
     const b = new Battle(content.battleSetup('random-battle', 3, 'turns', { party: cells({ 0: 'mage' }), enemies: cells({ 0: 'warrior', 2: 'mage' }) }, false));
     const mage = b.combatants.find((c) => c.defId === 'mage')!;
+    b.debugClearCooldowns(); // başlangıç cooldown'u bu testin konusu değil
     if (mage.passive?.effect.type === 'spellEcho') mage.passive.effect = { ...mage.passive.effect, chance: 1 };
     mage.mp = 100;
     for (let i = 0; i < 40 && b.currentUid !== mage.uid; i++) b.skipTurn();
@@ -1231,12 +1233,16 @@ describe('Paladin: Resurrection', () => {
     b.get(uid)!.hp = 0;
   };
 
-  it('Blessing yerine Resurrection: düşmüş tek dostu hedefler, %50 can ve mana', () => {
+  const reviveData = () => content.skills.resurrection!.effects.find((e) => e.type === 'revive') as { hpRatio: number; mpRatio: number }; // oranlar veriden (denge ayarı: %50 -> %25)
+
+  it('Blessing yerine Resurrection: düşmüş tek dostu hedefler, maks can ve manadan veriye bağlı oranla (Ömer kararı %25)', () => {
     expect(content.classes.paladin!.skills.slice(0, 4)).toEqual(['holy_strike', 'resurrection', 'judgment', 'radiance']);
-    expect(content.skills.resurrection).toMatchObject({ target: 'dead_ally', effects: [{ type: 'revive', hpRatio: 0.5, mpRatio: 0.5 }] });
+    expect(content.skills.resurrection).toMatchObject({ target: 'dead_ally' });
+    expect(reviveData().hpRatio).toBe(0.25); // Ömer kararı: dirilen max can ve manasının %25'i ile döner
+    expect(reviveData().mpRatio).toBe(0.25);
   });
 
-  it('düşmüş dostu olduğu yerde diriltir (yarı can, yarı mana, durumlar temiz)', () => {
+  it('düşmüş dostu olduğu yerde diriltir (veriye bağlı can ve mana oranı, durumlar temiz)', () => {
     const b = setup();
     const w = b.get('party-0')!;
     w.statuses.push({ kind: 'wound', turns: 2, source: 'enemy-0' });
@@ -1244,9 +1250,10 @@ describe('Paladin: Resurrection', () => {
     const slot = w.slot;
     const events = act(b, 'party-1', 'resurrection', 'party-0');
     const rev = ofType(events, 'revive')[0]!;
-    expect(rev).toMatchObject({ target: 'party-0', hpAfter: Math.round(w.maxHp * 0.5), mpAfter: Math.round(w.maxMp * 0.5) });
-    expect(w.hp).toBe(Math.round(w.maxHp * 0.5));
-    expect(w.mp).toBe(Math.round(w.maxMp * 0.5));
+    const { hpRatio, mpRatio } = reviveData();
+    expect(rev).toMatchObject({ target: 'party-0', hpAfter: Math.round(w.maxHp * hpRatio), mpAfter: Math.round(w.maxMp * mpRatio) });
+    expect(w.hp).toBe(Math.round(w.maxHp * hpRatio));
+    expect(w.mp).toBe(Math.round(w.maxMp * mpRatio));
     expect(w.slot).toBe(slot);
     expect(w.statuses).toEqual([]);
     expect(b.living('party').map((c) => c.uid)).toContain('party-0');
@@ -1307,11 +1314,12 @@ describe('Paladin: Resurrection', () => {
 });
 
 describe('Warrior: Double Strike (iki vuruş)', () => {
-  it('iki ayrı hasar etkisi, her biri %90 STR; iki hasar olayı üretir', () => {
+  it('iki ayrı hasar etkisi, her biri aynı STR gücünde (veriden); iki hasar olayı üretir', () => {
     const sk = content.skills.melee_attack!;
     expect(sk.name).toBe('Double Strike');
     expect(sk.effects).toHaveLength(2);
-    for (const e of sk.effects) expect(e).toMatchObject({ type: 'damage', damageType: 'physical', scale: 'str', power: 0.9 });
+    const p0 = (sk.effects[0] as { power: number }).power;
+    for (const e of sk.effects) expect(e).toMatchObject({ type: 'damage', damageType: 'physical', scale: 'str', power: p0 });
     const b = make({ party: ['warrior', 'mage', 'archer', 'paladin'], enemies: ['defender', 'warrior', 'archer', 'mage'] });
     const events = act(b, unit(b, 'party', 'warrior').uid, 'melee_attack', unit(b, 'enemy', 'defender').uid);
     expect(ofType(events, 'damage')).toHaveLength(2);

@@ -6,6 +6,8 @@ import { TeamSelectScene } from './game/scenes/TeamSelectScene';
 import { DebugMenu } from './ui/debug-menu';
 import { DEBUG_TABS, registerDebugTools } from './ui/debug-tools';
 import { SettingsMenu } from './ui/settings';
+import { WikiPanel } from './wiki/view';
+import { debugState } from './game/debug-state';
 import './style.css';
 
 // Geliştirme sunucusunda sekme adı canlı olmadığını belirtir (canlı sürüm: ProtoMedi).
@@ -38,6 +40,28 @@ new SettingsMenu(document.getElementById('ui-root')!, {
     audioSettings.volume = level / 10;
   },
   preview: () => playSfxOn((game.sound as unknown as { context?: AudioContext }).context, 'stunChime'),
+});
+
+// --- Wiki (top right, next to the settings gear): opens over the game; the battle is paused while it is open ---
+const battleNow = (): BattleScene | null => (game.scene.isActive(BattleScene.KEY) ? (game.scene.getScene(BattleScene.KEY) as BattleScene) : null);
+const wiki = new WikiPanel(document.getElementById('ui-root')!, {
+  onOpen: () => {
+    debugState.uiPaused = true;
+    battleNow()?.applyDebugTiming();
+  },
+  onClose: () => {
+    debugState.uiPaused = false;
+    battleNow()?.applyDebugTiming();
+  },
+});
+debug.register({
+  id: 'ui.wiki',
+  tab: 'Tweaks',
+  section: 'Display',
+  dock: { group: 'Tools', order: 90, icon: 'book', short: 'Open wiki' },
+  label: 'Open wiki',
+  hint: 'Open the in-game wiki (the book button, top right)',
+  run: () => wiki.setOpen(true),
 });
 
 registerDebugTools({ game, debug });

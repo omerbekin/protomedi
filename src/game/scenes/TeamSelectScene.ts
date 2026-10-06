@@ -456,6 +456,7 @@ export class TeamSelectScene extends Phaser.Scene {
     const elementHex = (k: (typeof info.kinds)[number]): string | undefined => (k === 'shield' ? colors.shield : k === 'magicShield' ? colors.magicShield : k ? colors.element[k] : undefined);
     const rows: Array<[string, string?]> = [[`Cost: ${info.cost}     Cooldown: ${info.cooldown}`, colors.muted]];
     info.lines.forEach((l, i) => rows.push([l, elementHex(info.kinds[i])]));
+    if (info.initialCooldown) rows.push([info.initialCooldown, colors.muted]);
     return { title: info.name, titleHex: '#f4ede1', icon: ensureSkillIcon(this, skill), badge: info.targetBadge, rows, width: 450 };
   }
 

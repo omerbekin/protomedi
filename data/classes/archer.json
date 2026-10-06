@@ -4,12 +4,13 @@
   "spriteId": "archer",
   "color": "#3f7d4e",
   "logo": "bow",
+  "role": "Marksman",
   "frontPriority": 8,
   "attributes": {
-    "str": 3,
-    "int": 6,
-    "dex": 15,
-    "luck": 6
+    "str": 5,
+    "int": 8,
+    "dex": 14,
+    "luck": 3
   },
   "primary": "dex",
   "armor": 5,

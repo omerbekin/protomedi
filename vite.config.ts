@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -10,6 +11,13 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 2000,
+    // Çok sayfalı derleme: oyun (index.html) + Asset Gallery (gallery.html -> dist/gallery.html)
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        gallery: fileURLToPath(new URL('./gallery.html', import.meta.url)),
+      },
+    },
   },
   test: {
     include: ['tests/**/*.test.ts'],

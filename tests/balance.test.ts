@@ -3,10 +3,8 @@ import { content } from '../src/engine';
 import { simulate, winRate } from '../src/sim/simulate';
 
 /**
- * Sağlamlık kontrolü (denge ayarı DEĞİL): yapay zeka vs yapay zeka, rastgele takımlar.
- * Yeni stat sistemi ve yeni class'lar (Defender, Anti-Mage) henüz taslak değerlerle; genel denge ayarı yapılana
- * kadar eşikler GENİŞ tutuldu: yalnızca bir şeyin bariz biçimde bozulmadığını (taraf avantajı, bitmeyen savaş,
- * tek sınıfın ezmesi) yakalar. Denge ayarı yapılınca eşikleri docs/balance.md hedeflerine (class %40-60) sıkıştır.
+ * Denge kontrolü: yapay zeka vs yapay zeka, rastgele takımlar. Genel denge ayarı yapıldı (open-questions.md madde 205);
+ * eşikler docs/balance.md hedeflerine sıkıştırıldı: her class %40-60, taraf avantajı yok (%45-55).
  */
 const RUNS = 3000;
 const result = simulate(RUNS, 900001);
@@ -14,24 +12,24 @@ const result = simulate(RUNS, 900001);
 describe('sağlamlık (rastgele takımlar, YZ vs YZ)', () => {
   it('iki taraf da yaklaşık eşit kazanıyor (taraf avantajı yok)', () => {
     const party = (result.partyWins / RUNS) * 100;
-    expect(party).toBeGreaterThan(44);
-    expect(party).toBeLessThan(56);
+    expect(party).toBeGreaterThan(45);
+    expect(party).toBeLessThan(55);
   });
 
-  it('hiçbir class tamamen ezilmiyor ya da ezmiyor (%15-85)', () => {
+  it('her class kazanma oranı hedef aralığında (%40-60; docs/balance.md)', () => {
     for (const id of Object.keys(content.classes)) {
       const win = winRate(result.classes.get(id)!);
-      expect(win, `${id} %${win.toFixed(1)}`).toBeGreaterThan(8);
-      expect(win, `${id} %${win.toFixed(1)}`).toBeLessThan(92);
+      expect(win, `${id} %${win.toFixed(1)}`).toBeGreaterThanOrEqual(40);
+      expect(win, `${id} %${win.toFixed(1)}`).toBeLessThanOrEqual(60);
     }
   });
 
-  it('yeterince örneklenen kompozisyonlar uç değerde değil (%3-97)', () => {
+  it('yeterince örneklenen kompozisyonlar uç değerde değil (%10-90)', () => {
     for (const [key, c] of result.comps) {
       if (c.games < 60) continue;
       const win = winRate(c);
-      expect(win, `${key} %${win.toFixed(1)} (${c.games} savaş)`).toBeGreaterThan(1);
-      expect(win, `${key} %${win.toFixed(1)} (${c.games} savaş)`).toBeLessThan(99);
+      expect(win, `${key} %${win.toFixed(1)} (${c.games} savaş)`).toBeGreaterThan(10);
+      expect(win, `${key} %${win.toFixed(1)} (${c.games} savaş)`).toBeLessThan(90);
     }
   });
 

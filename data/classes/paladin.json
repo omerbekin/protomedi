@@ -4,6 +4,7 @@
   "spriteId": "paladin",
   "color": "#e6c14a",
   "logo": "holy",
+  "role": "Holy Healer",
   "frontPriority": 2,
   "attributes": {
     "str": 11,

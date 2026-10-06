@@ -746,6 +746,35 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     g.poly([16, 1, 26, 17, 26, 21, 16, 30, 6, 21, 6, 17], 'u').poly([16, 9, 22, 18, 20, 24, 12, 24, 10, 18], 'U');
     g.ring(12.5, 18.5, 3.2, 'w', 1.4).ring(19.5, 18.5, 3.2, 'w', 1.4);
   },
+  // Arayüz (debug menüsü): yeniden başlat, saydam, yan değiştir, bilgi, galeri
+  restart: (g) => {
+    g.ring(16, 16, 11, 'y', 3.5, -0.4, 4.9);
+    g.poly([20, 1, 31, 8, 21, 14], 'w');
+  },
+  eye: (g) => {
+    g.poly([1, 16, 8, 8, 16, 5, 24, 8, 31, 16, 24, 24, 16, 27, 8, 24], 'w');
+    g.disc(16, 16, 6.5, 'u').disc(16, 16, 3.2, 'k').disc(14.5, 14.5, 1.3, 'w');
+  },
+  swap: (g) => {
+    g.rect(4, 8, 20, 4, 'y').poly([22, 2, 31, 10, 22, 18], 'y');
+    g.rect(8, 20, 20, 4, 'w').poly([10, 14, 1, 22, 10, 30], 'w');
+  },
+  info: (g) => {
+    g.disc(16, 16, 14, 'u').disc(16, 16, 11.5, 'U');
+    g.rect(14, 13, 4, 11, 'w').rect(14, 6, 4, 4, 'w');
+  },
+  // Wiki: kapalı, kırmızı ciltli kitap (altın çizgiler ve amblem, sağda sayfa kenarı)
+  book: (g) => {
+    g.rect(4, 3, 21, 25, 'R').rect(4, 3, 21, 2, 'r').rect(4, 3, 3, 25, 'k');
+    g.rect(25, 5, 4, 22, 'e').rect(25, 9, 4, 1, 'l').rect(25, 13, 4, 1, 'l').rect(25, 17, 4, 1, 'l').rect(25, 21, 4, 1, 'l');
+    g.rect(7, 6, 15, 1, 'Y').rect(7, 24, 15, 1, 'Y');
+    g.poly([15, 9, 20, 14, 15, 19, 10, 14], 'y').poly([15, 11, 18, 14, 15, 17, 12, 14], 'Y');
+    g.rect(14, 13, 2, 2, 'w');
+  },
+  frame: (g) => {
+    g.rect(2, 4, 28, 24, 'b').rect(5, 7, 22, 18, 'c');
+    g.poly([5, 25, 12, 14, 18, 21, 22, 17, 27, 25], 'g').disc(21, 11, 2.6, 'y');
+  },
 
   // ---------- ortak: durumlar, yerdeki etkiler, istatistikler ----------
   drop: (g) => {

@@ -4,15 +4,16 @@
   "spriteId": "defender",
   "color": "#8a94a6",
   "logo": "bulwark",
+  "role": "Tank",
   "frontPriority": 0,
   "attributes": {
     "str": 16,
     "int": 10,
-    "dex": 3,
-    "luck": 1
+    "dex": 2,
+    "luck": 2
   },
   "primary": "str",
-  "armor": 20,
+  "armor": 19,
   "magicArmor": 0,
   "ai": "tank",
   "skills": [
@@ -33,6 +34,6 @@
     }
   },
   "overrides": {
-    "hp": 158
+    "hp": 150
   }
 }

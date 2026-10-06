@@ -1,5 +1,5 @@
 {
-  "_not": "Etkiler: damage (damageType physical|magic, element physical|fire|ice|holy|dark|nature|arcane (yalnızca renk/yazı), scale str|int|dex|luck, power; opsiyonel ignoreDefense, lifesteal, bonusVsTag, others (column_enemies'te şeritteki diğerlerine hasarın bu kadarı), bonusPerMissingMana, bonusFromShield {ratio, consume}), heal, hot (tur bazlı şifa: turns), shield (shieldType 'magic' ise yalnızca büyü hasarını emer), summon (lifespan: kendi tur sayısı), manaBurn, taunt (turns, breakRatio: taunt'lı bu oranda can kaybedince biter), guard (turns, share). scale: etkinin hangi temel özelliğe (str/int/dex/luck) bağlı olduğu. motion melee olan skill'ler yalnızca düşmanın en öndeki 2 canlı birimine vurabilir. cooldown: kullanıcının kendi tur sayısıyla bekleme. motion/fx/icon yalnızca görsel. Sayılar GEÇİCİDİR. Çağrı skill'inde oyuncu boş yuvayı seçer. HEDEF BİÇİMLERİ: area_enemies + area {radius 1|2}: oyuncu merkez düşmanı seçer; radius 1 = merkez + önü/arkası/sağı/solu (artı, çapraz yok), radius 2 = öne/arkaya/sağa/sola 2'şer + çaprazlara 1'er. column_enemies: seçilen düşmanın şeridindeki herkes (seçilene tam, diğerlerine others kadar). Dizilim: sıra (derinlik) x şerit; motion melee olanlar yalnızca en öndeki dolu sıraya vurur. Çağrı skill'inde oyuncu boş yuvayı seçer. shield efektinde self: true ise kalkan hedefe değil kullanıcıya gider (Shield Bash). Alan/şerit skill'leri boş hücreye de atılabilir (useSkill'in slot parametresi). summon efektinde onEnemyBoard: true ise birim düşmanın tahtasına çağrılır (sahibi yine çağıranın tarafı). Skill'de ignoreFrontRow: true ise yakın dövüş 'yalnızca ön sıradan' kuralından muaf (dash/charge/sızan çağrılar). BUFF/DEBUFF: {type:'status', status, turns, self?} (data/statuses.json: slow, haste, wound, stun, fortify, blessed...). YER ETKİSİ: {type:'ground', ground, turns, scale, power} (data/grounds.json: poison, burning); skill'in kapsadığı hücrelere bırakılır. {type:'selfDamage', ratio}: kullanıcıya maks canının ratio'su kadar hasar. target 'everyone': herkese gider, her etki 'side' (allies|enemies) ile ya da varsayılanla (hasar/durum düşmana, şifa/kalkan dosta) taraf seçer. Hasar etkisinde falloff: çok hedefli vuruşta her yeni hedef bir öncekinin falloff katı hasar alır. Skill'de ignoreReach: melee olsa da menzil/ön sıra sınırı yok (charge). target 'random_enemies' + count: rastgele (seed'li) farklı count düşmana gider. skyCenter: yukarıdan düşen etki seçilen alanın merkezine tek büyük olarak düşer. skyStagger: hedeflere sırayla (rastgele sıra, ms arayla) başlar. motion 'ground' (yerden çıkan etki: Blood Rite ağzı), 'whip' (kırbaç). taunt etkisinde allyDamageMult: taunt sürerken taunt'lı olmayan dostlar bu çarpanla hasar alır. reach: yakın dövüş menzili bonusu (satır); kullanıcı ön sıranın reach kadar gerisinden vurabilir ve düşmanın meleeRows+reach ön sırasına ulaşır. revive/dead_ally: düşmüş dostu olduğu yerde maks can/mana oranıyla diriltir. sfx: skill'in animasyonunun çaldığı ses adları (data/audio.json). vfx bunlardan yalnızca listede olanları çalar. KUMAR (Gambler): hasar etkisinde repeatChance (0-1): her hedefe vuruştan sonra bu ihtimalle aynı vuruş bir kez daha (çifte vuruş). Hasar etkisinde bet {resource hp|mp, ratio, winChance, winMult, loseMult (varsayılan 1, 0 = iska), perStake}: skill başına bir zar; bahis hp ise maks canın ratio'su (canı en fazla 1'e indirir), mp ise bedel düşüldükten sonra KALAN MP'nin ratio'su; kazanırsa hasar winMult + perStake x bahis katı ve bahis geri kalır, kaybederse loseMult katı ve bahis kaybedilir. {type:'randomStatus', options:[{status, turns, weight}]}: vurulan her hedefe ağırlıklı zarla tek bir durum.",
+  "_not": "Etkiler: damage (damageType physical|magic, element physical|fire|ice|holy|dark|nature|arcane (yalnızca renk/yazı), scale str|int|dex|luck, power; opsiyonel ignoreDefense, lifesteal, bonusVsTag, others (column_enemies'te şeritteki diğerlerine hasarın bu kadarı), bonusPerMissingMana, bonusFromShield {ratio, consume}), heal, hot (tur bazlı şifa: turns), shield (shieldType 'magic' ise yalnızca büyü hasarını emer), summon (lifespan: kendi tur sayısı), manaBurn, taunt (turns, breakRatio: taunt'lı bu oranda can kaybedince biter), guard (turns, share). scale: etkinin hangi temel özelliğe (str/int/dex/luck) bağlı olduğu. motion melee olan skill'ler yalnızca düşmanın en öndeki 2 canlı birimine vurabilir. cooldown: kullanıcının kendi tur sayısıyla bekleme. motion/fx/icon yalnızca görsel. Sayılar GEÇİCİDİR. Çağrı skill'inde oyuncu boş yuvayı seçer. HEDEF BİÇİMLERİ: area_enemies + area {radius 1|2}: oyuncu merkez düşmanı seçer; radius 1 = merkez + önü/arkası/sağı/solu (artı, çapraz yok), radius 2 = öne/arkaya/sağa/sola 2'şer + çaprazlara 1'er. column_enemies: seçilen düşmanın şeridindeki herkes (seçilene tam, diğerlerine others kadar). Dizilim: sıra (derinlik) x şerit; motion melee olanlar yalnızca en öndeki dolu sıraya vurur. Çağrı skill'inde oyuncu boş yuvayı seçer. shield efektinde self: true ise kalkan hedefe değil kullanıcıya gider (Shield Bash). Alan/şerit skill'leri boş hücreye de atılabilir (useSkill'in slot parametresi). summon efektinde onEnemyBoard: true ise birim düşmanın tahtasına çağrılır (sahibi yine çağıranın tarafı). Skill'de ignoreFrontRow: true ise yakın dövüş 'yalnızca ön sıradan' kuralından muaf (dash/charge/sızan çağrılar). BUFF/DEBUFF: {type:'status', status, turns, self?} (data/statuses.json: slow, haste, wound, stun, fortify, blessed...). YER ETKİSİ: {type:'ground', ground, turns, scale, power} (data/grounds.json: poison, burning); skill'in kapsadığı hücrelere bırakılır. {type:'selfDamage', ratio}: kullanıcıya maks canının ratio'su kadar hasar. target 'everyone': herkese gider, her etki 'side' (allies|enemies) ile ya da varsayılanla (hasar/durum düşmana, şifa/kalkan dosta) taraf seçer. Hasar etkisinde falloff: çok hedefli vuruşta her yeni hedef bir öncekinin falloff katı hasar alır. Skill'de ignoreReach: melee olsa da menzil/ön sıra sınırı yok (charge). target 'random_enemies' + count: rastgele (seed'li) farklı count düşmana gider. skyCenter: yukarıdan düşen etki seçilen alanın merkezine tek büyük olarak düşer. skyStagger: hedeflere sırayla (rastgele sıra, ms arayla) başlar. motion 'ground' (yerden çıkan etki: Blood Rite ağzı), 'whip' (kırbaç). taunt etkisinde allyDamageMult: taunt sürerken taunt'lı olmayan dostlar bu çarpanla hasar alır. reach: yakın dövüş menzili bonusu (satır); kullanıcı ön sıranın reach kadar gerisinden vurabilir ve düşmanın meleeRows+reach ön sırasına ulaşır. revive/dead_ally: düşmüş dostu olduğu yerde maks can/mana oranıyla diriltir. sfx: skill'in animasyonunun çaldığı ses adları (data/audio.json). vfx bunlardan yalnızca listede olanları çalar. KUMAR (Gambler): hasar etkisinde repeatChance (0-1): her hedefe vuruştan sonra bu ihtimalle aynı vuruş bir kez daha (çifte vuruş). Hasar etkisinde bet {resource hp|mp, ratio, winChance, winMult, loseMult (varsayılan 1, 0 = iska), perStake}: skill başına bir zar; bahis hp ise maks canın ratio'su (canı en fazla 1'e indirir), mp ise bedel düşüldükten sonra KALAN MP'nin ratio'su; kazanırsa hasar winMult + perStake x bahis katı ve bahis geri kalır, kaybederse loseMult katı ve bahis kaybedilir. {type:'randomStatus', options:[{status, turns, weight}]}: vurulan her hedefe ağırlıklı zarla tek bir durum. cooldown: kullanıldıktan sonra kaç tur beklenir. initialCooldown: savaş başında (yalnızca turns modu, çağrılan birimler hariç) bu skill zaten bu kadar tur bekleme sayacıyla başlar; sayaç mevcut cooldown sayacıyla aynıdır (kullanıcının kendi turlarında azalır), üst sınır data/formulas.json > cooldown.maxInitial (3). ai: yapay zeka bağlam ipucu (src/engine/ai.ts): requires = hepsi sağlanmalı, anyOf = en az biri sağlanmalı; sağlanmayınca skill yalnızca öldürücü vuruş önceliğinde seçilebilir. Koşullar: kill, minTargets (vurulan düşman sayısı), minLivingEnemies, minLivingAllies, minSelfHpRatio, minSelfHpRatioAfter (can bedeli sonrası), minSelfMpRatio, minBattleTurns, minWoundedAllies+woundedBelowRatio, minTargetArmorReduction, minTargetHpToDamage, minMissingManaShare. Saf self-buff skill'lerinde incomingShare (düşman takımının bana vuracak payı, savunma değeri) ve opportunityShare (buff turunda yapılabilecek en iyi saldırının bedele eklenen payı). reserveMp: N; skill en geç N tur sonra hazır olacaksa ona yetecek MP'yi tüketecek saldırılar ertelenir.",
   "melee_attack": {
     "id": "melee_attack",
     "name": "Double Strike",
@@ -16,13 +16,13 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.9
+        "power": 1.1
       },
       {
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.9
+        "power": 1.1
       }
     ],
     "vfx": "doublestrike",
@@ -49,7 +49,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.2
+        "power": 1.4
       }
     ],
     "vfx": "whirlwind",
@@ -75,7 +75,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.9,
+        "power": 0.8,
         "element": "holy"
       }
     ],
@@ -96,13 +96,14 @@
       "amount": 20
     },
     "cooldown": 3,
+    "initialCooldown": 1,
     "motion": "sky",
     "fx": "#fff0a0",
     "effects": [
       {
         "type": "heal",
         "scale": "int",
-        "power": 1.425
+        "power": 1.15
       },
       {
         "type": "damage",
@@ -117,7 +118,14 @@
     "sfx": [
       "lightSwell",
       "choirAh"
-    ]
+    ],
+    "ai": {
+      "requires": {
+        "minTargets": 1,
+        "minWoundedAllies": 1,
+        "woundedBelowRatio": 0.7
+      }
+    }
   },
   "judgment": {
     "id": "judgment",
@@ -142,7 +150,7 @@
         "ground": "holy_fire",
         "turns": 2,
         "scale": "int",
-        "power": 0.85
+        "power": 0.7
       }
     ],
     "vfx": "judgment",
@@ -150,7 +158,17 @@
       "hammerWhoosh",
       "hammerSlam",
       "fireCrackle"
-    ]
+    ],
+    "ai": {
+      "anyOf": [
+        {
+          "minTargets": 2
+        },
+        {
+          "kill": true
+        }
+      ]
+    }
   },
   "fire_bolt": {
     "id": "fire_bolt",
@@ -168,7 +186,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.8,
+        "power": 2.2,
         "element": "fire"
       }
     ],
@@ -197,7 +215,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1,
+        "power": 1.5,
         "element": "ice"
       }
     ],
@@ -220,7 +238,8 @@
       "resource": "mp",
       "amount": 24
     },
-    "cooldown": 4,
+    "cooldown": 3,
+    "initialCooldown": 1,
     "motion": "sky",
     "skyFx": "meteor",
     "fx": "#ff4d1a",
@@ -229,7 +248,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.15,
+        "power": 1.25,
         "element": "fire"
       },
       {
@@ -237,7 +256,7 @@
         "ground": "burning",
         "turns": 2,
         "scale": "int",
-        "power": 0.345
+        "power": 0.7
       }
     ],
     "area": {
@@ -249,7 +268,18 @@
       "meteorWhistle",
       "bigBoom",
       "fireCrackle"
-    ]
+    ],
+    "ai": {
+      "anyOf": [
+        {
+          "minTargets": 2
+        },
+        {
+          "kill": true
+        }
+      ],
+      "reserveMp": 2
+    }
   },
   "mana_barrier": {
     "id": "mana_barrier",
@@ -267,7 +297,7 @@
       {
         "type": "shield",
         "scale": "int",
-        "power": 1.1
+        "power": 1.25
       }
     ],
     "vfx": "barrier",
@@ -356,7 +386,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 0.8
+        "power": 0.4
       },
       {
         "type": "status",
@@ -389,7 +419,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 1.2,
+        "power": 1,
         "falloff": 0.7
       }
     ],
@@ -418,7 +448,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 0.6
+        "power": 0.7
       }
     ],
     "area": {
@@ -438,9 +468,9 @@
     "target": "single_enemy",
     "cost": {
       "resource": "mp",
-      "amount": 14
+      "amount": 10
     },
-    "cooldown": 4,
+    "cooldown": 3,
     "motion": "ranged",
     "fx": "#ffd166",
     "effects": [
@@ -448,7 +478,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 2.4,
+        "power": 2.55,
         "ignoreDefense": 0.5
       }
     ],
@@ -458,7 +488,21 @@
       "heavyTwang",
       "arrowWhoosh",
       "arrowThunk"
-    ]
+    ],
+    "ai": {
+      "anyOf": [
+        {
+          "kill": true
+        },
+        {
+          "minTargetArmorReduction": 0.3
+        },
+        {
+          "minTargetHpToDamage": 2
+        }
+      ],
+      "reserveMp": 2
+    }
   },
   "thorn_whip": {
     "id": "thorn_whip",
@@ -597,12 +641,12 @@
         "type": "taunt",
         "turns": 2,
         "breakRatio": 0.25,
-        "allyDamageMult": 0.5
+        "allyDamageMult": 0.9
       },
       {
         "type": "shield",
         "scale": "str",
-        "power": 0.3
+        "power": 0.15
       }
     ],
     "vfx": "taunt",
@@ -650,7 +694,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.9,
+        "power": 1.7,
         "element": "arcane"
       },
       {
@@ -704,6 +748,7 @@
       "amount": 16
     },
     "cooldown": 3,
+    "initialCooldown": 2,
     "motion": "cast",
     "fx": "#7d3fb0",
     "effects": [
@@ -711,7 +756,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.9,
+        "power": 2.55,
         "bonusPerMissingMana": 1,
         "element": "arcane"
       }
@@ -720,7 +765,18 @@
     "sfx": [
       "voidPulse",
       "implode"
-    ]
+    ],
+    "ai": {
+      "anyOf": [
+        {
+          "kill": true
+        },
+        {
+          "minMissingManaShare": 0.25
+        }
+      ],
+      "reserveMp": 2
+    }
   },
   "spell_ward": {
     "id": "spell_ward",
@@ -740,7 +796,7 @@
         "scale": "int",
         "power": 0.3,
         "shieldType": "magic",
-        "bonusPerMana": 0.35
+        "bonusPerMana": 0.5
       }
     ],
     "vfx": "spellward",
@@ -952,7 +1008,16 @@
     "vfx": "warcry",
     "sfx": [
       "scream"
-    ]
+    ],
+    "ai": {
+      "requires": {
+        "minSelfHpRatioAfter": 0.35,
+        "minLivingEnemies": 2,
+        "minLivingAllies": 2
+      },
+      "incomingShare": 0.5,
+      "opportunityShare": 0.4
+    }
   },
   "bone_throw": {
     "id": "bone_throw",
@@ -1029,6 +1094,7 @@
       "amount": 14
     },
     "cooldown": 4,
+    "initialCooldown": 2,
     "motion": "sky",
     "skyFx": "fist",
     "fx": "#ffd166",
@@ -1037,14 +1103,20 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 2.34
+        "power": 1.2
       }
     ],
     "vfx": "fistcrush",
     "sfx": [
       "fistWhoosh",
       "punchImpact"
-    ]
+    ],
+    "ai": {
+      "requires": {
+        "minTargets": 3
+      },
+      "reserveMp": 2
+    }
   },
   "resurrection": {
     "id": "resurrection",
@@ -1061,8 +1133,8 @@
     "effects": [
       {
         "type": "revive",
-        "hpRatio": 0.5,
-        "mpRatio": 0.5
+        "hpRatio": 0.25,
+        "mpRatio": 0.25
       }
     ],
     "vfx": "resurrect",
@@ -1088,7 +1160,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 0.91,
+        "power": 1.8,
         "repeatChance": 0.25
       }
     ],
@@ -1115,7 +1187,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.17,
+        "power": 1.9,
         "bet": {
           "resource": "hp",
           "ratio": 0.15,
@@ -1149,7 +1221,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.04
+        "power": 1.7
       },
       {
         "type": "randomStatus",
@@ -1187,7 +1259,8 @@
       "resource": "mp",
       "amount": 8
     },
-    "cooldown": 4,
+    "cooldown": 3,
+    "initialCooldown": 2,
     "motion": "cast",
     "fx": "#ffd166",
     "effects": [
@@ -1195,12 +1268,12 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.3,
+        "power": 2.2,
         "bet": {
           "resource": "mp",
           "ratio": 1,
           "winChance": 0.5,
-          "winMult": 2.6,
+          "winMult": 3,
           "loseMult": 0,
           "perStake": 0.1
         }
@@ -1212,6 +1285,20 @@
       "diceRoll",
       "allInSlam",
       "coinSpill"
-    ]
+    ],
+    "ai": {
+      "requires": {
+        "minSelfMpRatio": 0.6
+      },
+      "anyOf": [
+        {
+          "kill": true
+        },
+        {
+          "minBattleTurns": 10
+        }
+      ],
+      "reserveMp": 2
+    }
   }
 }

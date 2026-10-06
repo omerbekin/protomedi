@@ -16,6 +16,8 @@ export interface DebugState {
   speed: number;
   skipAnims: boolean;
   paused: boolean;
+  /** Wiki paneli açıkken savaş otomatik durur (debug Pause'dan bağımsız; kapanınca eski haline döner). */
+  uiPaused: boolean;
   hideNumbers: boolean;
   /** true: düşman sırası gelince hiçbir şey yapmadan geçer. */
   enemyAiOff: boolean;
@@ -29,6 +31,7 @@ export const debugState: DebugState = {
   speed: 1,
   skipAnims: false,
   paused: false,
+  uiPaused: false,
   hideNumbers: false,
   enemyAiOff: false,
   galleryReset: true,
@@ -36,8 +39,8 @@ export const debugState: DebugState = {
 };
 
 /** Phaser tween/zamanlayıcı hız çarpanı: duraklatma 0, atlama çok hızlı, aksi halde seçilen hız. */
-export function effectiveTimeScale(s: Pick<DebugState, 'speed' | 'skipAnims' | 'paused'>): number {
-  if (s.paused) return 0;
+export function effectiveTimeScale(s: Pick<DebugState, 'speed' | 'skipAnims' | 'paused'> & { uiPaused?: boolean }): number {
+  if (s.paused || s.uiPaused) return 0;
   if (s.skipAnims) return SKIP_SPEED;
   return s.speed;
 }

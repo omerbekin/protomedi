@@ -18,6 +18,7 @@ Sen bu oyunun savaş motoru geliştiricisisin. Ömer kod okumaz; yaptığını s
 - Yapay zeka (`ai.ts`) saf ve belirleyicidir; yeni bir skill türü eklendiğinde `preview.ts` (önizleme), `skill-info.ts` (açıklama) ve AI değerlendirmesinin onu tanıdığından emin ol.
 - Skill'in görünüşü, sesi, animasyonu senin işin değil (`content-designer`/`ui-dev`); sayısal denge `balance-tester`'ın işi.
 - Büyük mekanik değişikliklerinden sonra `npx tsx src/sim/cli.ts 3000 1` ile denge bozulmadı mı kontrol et ve sonucu raporla.
+- **Wiki (sağ üst kitap simgesi, `src/wiki`):** içerik veriden türetilir; yeni mekanik/özel kural/pasif eklenince wiki'nin Mechanics bölümündeki metin güncel mi kontrol et.
 
 ## Çıktı
 Yaptığın değişikliğin sade Türkçe özeti, hangi testlerin eklendiği/güncellendiği, ekranda neyin nasıl görünmesi gerektiği ve Ömer'in neyi test etmesi gerektiği.

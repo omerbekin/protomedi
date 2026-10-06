@@ -208,13 +208,14 @@ describe('debug: skill galerisi (debugCast)', () => {
       // Ölü bir dost lazım olabilir
       if (content.skills[id]!.target === 'dead_ally') b.debugKill(b.living('party').find((c) => c.uid !== caster.uid)!.uid, false);
       caster.mp = 0;
+      const cdBefore = caster.cooldowns[id]; // başlangıç cooldown'u olabilir: debugCast bunu değiştirmez
       const turnsBefore = b.turnsTaken;
       const current = b.currentUid;
       const r = b.debugCast(caster.uid, id);
       expect(r.ok, `${id}: ${r.ok ? '' : r.reason}`).toBe(true);
       // (Mana burn skills may give mana back; the point is that the cost was not charged)
       if (!content.skills[id]!.effects.some((e) => e.type === 'manaBurn')) expect(caster.mp, id).toBe(0);
-      expect(Object.keys(caster.cooldowns), id).not.toContain(id);
+      expect(caster.cooldowns[id], id).toBe(cdBefore);
       expect(b.turnsTaken, id).toBe(turnsBefore);
       expect(b.currentUid, id).toBe(current);
       expect(b.log.some((e) => e.type === 'skillUsed' && e.skill === id), id).toBe(true);

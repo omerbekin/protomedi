@@ -219,6 +219,47 @@ export type SkillMotion = 'melee' | 'ranged' | 'cast' | 'sky' | 'ground' | 'whip
 /** 'sky' hareketinde yukarıdan düşen şeyin türü. */
 export type SkyFx = 'arrows' | 'shards' | 'meteor' | 'void' | 'light' | 'fist';
 
+/** Yapay zeka bağlam koşulu: içindeki tüm alanlar birlikte sağlanmalı (src/engine/ai.ts değerlendirir). */
+export interface SkillAiCond {
+  /** Seçenek en az bir düşmanı öldürüyor. */
+  kill?: boolean;
+  /** Seçenek en az bu kadar düşmana vuruyor (alan/rastgele skill'lerde hedef havuzu). */
+  minTargets?: number;
+  /** Sahada en az bu kadar canlı düşman var. */
+  minLivingEnemies?: number;
+  /** Sahada (kullanıcı dahil) en az bu kadar canlı dost var. */
+  minLivingAllies?: number;
+  /** Kullanıcının can oranı (şimdi) en az bu. */
+  minSelfHpRatio?: number;
+  /** Kullanıcının can oranı, skill'in can bedeli/kendine hasarı ödendikten SONRA en az bu. */
+  minSelfHpRatioAfter?: number;
+  /** Kullanıcının MP oranı (bedel ödenmeden) en az bu. */
+  minSelfMpRatio?: number;
+  /** Savaşta oynanan toplam tur (tüm birimler) en az bu. */
+  minBattleTurns?: number;
+  /** Canı `woundedBelowRatio` altındaki en az bu kadar dost var. */
+  minWoundedAllies?: number;
+  woundedBelowRatio?: number;
+  /** Ana hedefin fiziksel zırh azaltması (0-1) en az bu (ignoreDefense'in değer kattığı zırhlı hedef). */
+  minTargetArmorReduction?: number;
+  /** Ana hedefin (can + kalkan) / skill'in ortalama hasarı en az bu (yüksek canlı hedef). */
+  minTargetHpToDamage?: number;
+  /** Ana hedefe eksik mana ekinin ham hasar içindeki payı en az bu (bonusPerMissingMana). */
+  minMissingManaShare?: number;
+}
+
+/** Skill'in YZ bağlamı: `requires` hepsi, `anyOf` (doluysa) en az biri sağlanmalı; sağlanmazsa skill yalnızca öldürücü vuruşta seçilebilir. */
+export interface SkillAiHint {
+  requires?: SkillAiCond;
+  anyOf?: SkillAiCond[];
+  /** Saf self-buff skill'inde: düşman takımının kullanıcıya vurma payı (0-1), savunma değeri hesabında. Varsayılan 0,4. */
+  incomingShare?: number;
+  /** Saf self-buff skill'inde: buff turu yerine yapılabilecek en iyi saldırının değerinin, buff'ın bedeline eklenecek payı (0-1). Varsayılan 0,5. */
+  opportunityShare?: number;
+  /** N: bu skill en geç N tur sonra hazır olacaksa ve MP'si yetebilecekse, ona yetecek MP'yi tüketecek saldırı skill'leri ertelenir (MP ayırma; yoksa ayırma yok). */
+  reserveMp?: number;
+}
+
 /** data/skills.json girdisi. */
 export interface SkillDef {
   id: string;
@@ -234,6 +275,14 @@ export interface SkillDef {
   effects: SkillEffect[];
   /** Kullanıldıktan sonra kullanıcının kaç tur boyunca tekrar kullanamayacağı (yoksa 0). Yalnızca turns modunda. */
   cooldown?: number;
+  /**
+   * Savaş başında bu skill zaten bu kadar tur bekleme sayacıyla başlar ("hazır değil"). Sayaç `cooldown` sayacıyla aynıdır
+   * (kullanıcının kendi turlarında azalır). Yalnızca turns modunda ve class birimlerinde işler (çağrılanlarda ve test modunda yok).
+   * Üst sınır: formulas.json > cooldown.maxInitial (3).
+   */
+  initialCooldown?: number;
+  /** Yapay zeka bağlam ipucu: skill ne zaman EFEKTİF kullanılır (bkz. SkillAiHint). Yoksa yalnızca beklenen değere göre seçilir. */
+  ai?: SkillAiHint;
   /** true: yakın dövüş skill'i olsa da kullanıcının ön sırada olma şartı aranmaz (ileride dash/charge gibi skill'ler için). */
   ignoreFrontRow?: boolean;
   /** true: yakın dövüş skill'i menzil sınırı olmadan (ön sıra kuralı olmadan) herhangi bir düşmana gider (charge/dash). */
@@ -310,6 +359,8 @@ export interface Formulas {
     sideNeighbors?: { maxDx: number; party: { up: number[]; down: number[] }[]; enemy: { up: number[]; down: number[] }[] };
   };
   turn: { threshold: number; queueLength: number };
+  /** Cooldown kuralları: `maxInitial` = bir skill'in savaş başı başlangıç cooldown'unun (initialCooldown) üst sınırı. */
+  cooldown: { maxInitial: number };
 }
 
 /** turns = hıza göre sıralı gerçek oyun; test = sırasız, her karakter istediği an oynar (debug). */

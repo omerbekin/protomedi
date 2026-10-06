@@ -7,6 +7,7 @@ const mk = (caster: string, mode: 'turns' | 'test') => {
   const b = new Battle(content.battleSetup('random-battle', 3, mode, { party: cells({ 0: caster }), enemies: cells({ 0: 'warrior', 3: 'warrior' }) }, false));
   for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0, armor: 0, magicArmor: 0 });
   const me = b.combatants.find((c) => c.side === 'party')!;
+  b.debugClearCooldowns(); // başlangıç cooldown'u bu testlerin konusu değil
   me.mp = 999;
   if (mode === 'turns') while (b.currentUid !== me.uid) b.skipTurn();
   return { b, me };
@@ -96,7 +97,8 @@ describe('yer etkisi (ground) hasarı bırakanın statına bağlıdır', () => {
     hi.me.stats.int = 30;
     const sk = content.skills.judgment!;
     const info = (m: typeof lo) => describeSkill(sk, m.me.stats, content.formulas, {}, { grounds: content.grounds }).lines.join(' ');
-    expect(info(lo)).toMatch(/85% INT/);
+    const judgmentPct = Math.round((sk.effects.find((e) => e.type === 'ground') as { power: number }).power * 100); // yüzde veriden
+    expect(info(lo)).toMatch(new RegExp(`${judgmentPct}% INT`));
     expect(info(lo)).not.toBe(info(hi));
     const pv = (m: typeof lo) => previewSkill(m.b, m.me.uid, 'judgment', 'enemy-0')[0]!.ground!;
     expect(pv(hi).perTick).toBeGreaterThan(pv(lo).perTick);

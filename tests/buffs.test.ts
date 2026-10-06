@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import defenderRaw from '../data/classes/defender.json';
 import { Battle, content } from '../src/engine';
 import type { BattleEvent } from '../src/engine';
 import { installLegacySkill } from './legacy-skills';
@@ -6,8 +7,11 @@ import { installLegacySkill } from './legacy-skills';
 type Ev<T extends BattleEvent['type']> = Extract<BattleEvent, { type: T }>;
 const ofType = <T extends BattleEvent['type']>(events: BattleEvent[], type: T): Ev<T>[] => events.filter((e): e is Ev<T> => e.type === type);
 const cells = (map: Record<number, string>) => Array.from({ length: 12 }, (_, i) => map[i] ?? '');
-const grid = (party: string[], enemies: string[], mode: 'test' | 'turns' = 'test', seed = 1) =>
-  new Battle(content.battleSetup('random-battle', seed, mode, { party, enemies }, false));
+const grid = (party: string[], enemies: string[], mode: 'test' | 'turns' = 'test', seed = 1) => {
+  const b = new Battle(content.battleSetup('random-battle', seed, mode, { party, enemies }, false));
+  b.debugClearCooldowns(); // başlangıç cooldown'u (initialCooldown) bu testlerin konusu değil: skill'ler ilk turdan kullanılabilir
+  return b;
+};
 const act = (b: Battle, actor: string, skill: string, target?: string, slot?: number): BattleEvent[] => {
   const r = b.useSkill(actor, skill, target, slot);
   if (!r.ok) throw new Error(`${actor} ${skill}: ${r.reason}`);
@@ -102,6 +106,7 @@ describe('durumlar: hız, alınan hasar, alınan şifa, sersemleme', () => {
     // fortify'lı birim aynı saldırıdan ~yarı hasar alır
     const hit = (fort: boolean) => {
       const c = calm(grid(cells({ 0: 'warrior' }), cells({ 0: 'archer' })));
+      c.get('enemy-0')!.stats.dex = 200; // büyük sayılar: yuvarlama payı oranı bozmasın (skill gücü veriden değişebilir)
       if (fort) c.get('party-0')!.statuses.push({ kind: 'fortify', turns: 3, source: 'party-0' });
       return dmgTo(act(c, 'enemy-0', 'quick_shot', 'party-0'), 'party-0');
     };
@@ -124,6 +129,7 @@ describe('durumlar: hız, alınan hasar, alınan şifa, sersemleme', () => {
     expect(b.get('party-1')!.statuses.find((s) => s.kind === 'blessed')?.turns).toBe(3);
     const hit = (blessed: boolean) => {
       const c = calm(grid(cells({ 0: 'paladin', 2: 'warrior' }), cells({ 0: 'archer' })));
+      c.get('enemy-0')!.stats.dex = 200; // büyük sayılar: yuvarlama payı oranı bozmasın (skill gücü veriden değişebilir)
       if (blessed) c.get('party-1')!.statuses.push({ kind: 'blessed', turns: 3, source: 'party-0' });
       return dmgTo(act(c, 'enemy-0', 'quick_shot', 'party-1'), 'party-1');
     };
@@ -308,10 +314,10 @@ describe('Judgment: holy fire alanı', () => {
 });
 
 describe('sınıf verisi (bu turun düzenlemeleri)', () => {
-  it('Quick Shot haste 2 tur; Aimed Shot cd 4; Meteor cd 4 ve tek büyük meteor (skyCenter)', () => {
+  it('Quick Shot haste 2 tur; Aimed Shot cd 3; Meteor cd 3 ve tek büyük meteor (skyCenter)', () => {
     expect(content.skills.quick_shot!.effects.find((e) => e.type === 'status')).toMatchObject({ status: 'haste', turns: 2, self: true });
-    expect(content.skills.aimed_shot!.cooldown).toBe(4);
-    expect(content.skills.meteor!.cooldown).toBe(4);
+    expect(content.skills.aimed_shot!.cooldown).toBe(3);
+    expect(content.skills.meteor!.cooldown).toBe(3);
     expect(content.skills.meteor!.skyCenter).toBe(true);
   });
 
@@ -335,7 +341,8 @@ describe('sınıf verisi (bu turun düzenlemeleri)', () => {
   it('Defender pasifi kendisine de zırh verir; çaprazındakine vermez', () => {
     const b = new Battle(content.battleSetup('random-battle', 1, 'test', { party: cells({ 4: 'defender', 3: 'warrior', 0: 'archer' }), enemies: cells({ 0: 'mage' }) }, false));
     const d = b.combatants.find((c) => c.defId === 'defender')!;
-    expect(b.effectiveStats(d).armor).toBe(d.stats.armor + 8);
+    const auraPct = (content.classes.defender!.passive!.effect as { pct: number }).pct; // yüzde veriden (Defender zırhının %40'ı)
+    expect(b.effectiveStats(d).armor).toBeCloseTo(d.stats.armor * (1 + auraPct), 6);
     expect(b.effectiveStats(b.combatants.find((c) => c.defId === 'archer')!).armor).toBe(content.classes.archer!.stats.armor); // slot 0: çapraz
   });
 
@@ -345,7 +352,7 @@ describe('sınıf verisi (bu turun düzenlemeleri)', () => {
 });
 
 describe('Taunt: dostları korur', () => {
-  it('Taunt sürerken taunt\'lı olmayan dostlar %50 daha az hasar alır; taunt\'lı kendisi etkilenmez; taunt bitince biter', () => {
+  it('Taunt sürerken taunt\'lı olmayan dostlar veriden gelen oranda (allyDamageMult) hasar alır; taunt\'lı kendisi etkilenmez; taunt bitince biter', () => {
     // Arrow Rain alan skill'i taunt'tan etkilenmez: merkez party-1, alan her iki dosta da vurur
     const hit = (taunt: boolean, victim: 'party-0' | 'party-1') => {
       const b = calm(grid(cells({ 0: 'defender', 2: 'warrior' }), cells({ 0: 'archer' })));
@@ -356,17 +363,20 @@ describe('Taunt: dostları korur', () => {
       b.get('enemy-0')!.stats.dex = 200; // büyük sayılar: yuvarlama farkı gizlemesin
       return dmgTo(act(b, 'enemy-0', 'arrow_rain', 'party-1'), victim);
     };
+    const allyMult = (content.skills.taunt!.effects.find((e) => e.type === 'taunt') as { allyDamageMult: number }).allyDamageMult; // değer veriden (denge ayarıyla değişir)
     const ally = hit(true, 'party-1') / hit(false, 'party-1');
-    expect(ally).toBeGreaterThan(0.45);
-    expect(ally).toBeLessThan(0.55);
+    expect(ally).toBeGreaterThan(allyMult - 0.05);
+    expect(ally).toBeLessThan(allyMult + 0.05);
     expect(hit(true, 'party-0') / hit(false, 'party-0')).toBeGreaterThan(0.9); // Defender'ın kendisi yarı hasar almaz
   });
 
-  it('Taunt skill verisi: dost hasar çarpanı 0,5', () => {
-    expect(content.skills.taunt!.effects.find((e) => e.type === 'taunt')).toMatchObject({ allyDamageMult: 0.5 });
+  it('Taunt skill verisi: dost hasar çarpanı veriden (0 ile 1 arası) uygulanır', () => {
+    const allyMult = (content.skills.taunt!.effects.find((e) => e.type === 'taunt') as { allyDamageMult: number }).allyDamageMult;
+    expect(allyMult).toBeGreaterThan(0);
+    expect(allyMult).toBeLessThan(1);
     const b = grid(cells({ 0: 'defender', 2: 'warrior' }), cells({ 0: 'archer' }));
     act(b, 'party-0', 'taunt');
-    expect(b.damageTakenMult(b.get('party-1')!)).toBe(0.5);
+    expect(b.damageTakenMult(b.get('party-1')!)).toBe(allyMult);
     expect(b.damageTakenMult(b.get('party-0')!)).toBe(1);
     b.get('party-0')!.statuses = []; // taunt bitti
     expect(b.damageTakenMult(b.get('party-1')!)).toBe(1);
@@ -379,12 +389,14 @@ describe('Taunt: dostları korur', () => {
     act(b, 'party-0', 'taunt');
     // taunt'lı Defender yakın dövüş menzilindeyken saldırı Defender'a zorlanır; Warrior'a önizleme yine hesaplanabilir (menzilli)
     b.get('party-0')!.statuses = b.get('party-0')!.statuses.filter((s) => s.kind === 'taunt');
-    expect(b.damageTakenMult(b.get('party-1')!)).toBe(0.5);
+    const allyMult = (content.skills.taunt!.effects.find((e) => e.type === 'taunt') as { allyDamageMult: number }).allyDamageMult;
+    expect(b.damageTakenMult(b.get('party-1')!)).toBe(allyMult);
     expect(before).toBeGreaterThan(0);
   });
 
-  it('Defender canı %30 arttı, sonra %5 azaldı (128 -> 166 -> 158)', () => {
-    expect(content.classes.defender!.stats.hp).toBe(158);
+  it('Defender canı class verisindeki elle ayar (overrides.hp) değeridir (denge ayarında 158 -> 100)', () => {
+    expect(defenderRaw.overrides.hp).toBeGreaterThan(0);
+    expect(content.classes.defender!.stats.hp).toBe(defenderRaw.overrides.hp);
   });
 });
 

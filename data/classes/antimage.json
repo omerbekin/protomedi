@@ -4,6 +4,7 @@
   "spriteId": "antimage",
   "color": "#9b59d0",
   "logo": "nullsphere",
+  "role": "Mana Hunter",
   "frontPriority": 3.5,
   "attributes": {
     "str": 4,

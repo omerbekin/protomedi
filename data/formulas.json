@@ -1,5 +1,5 @@
 {
-  "_not": "STAT SİSTEMİ: 4 temel özellik (str, int, dex, luck). Can = hpBase + hpPerStr x str; Mana = mpBase + mpPerInt x int; Hız = spdBase + spdPerDex x dex. TURN BAŞI YENİLENME (turns modu): can = round(str x hpRegenPerStr) (düz), MP = round(int x mpRegenPerInt) (0 int = 0; class'larda sabit mpRegen yok). KRİTİK: şans = critChanceBase + critChancePerLuck x luck; çarpan SABİT critMult (luck artırmaz); kritik hasar ve şifanın SON çarpanıdır, kalkana uygulanmaz. İSABET/KAÇINMA: accuracy = accuracyBase + accuracyPerLuck x luck; evasion = min(evasionMax, floor(dex / dexPerEvasionStep) x evasionPerStep) (tam sayı adımlı, azalan getiri yok: her dexPerEvasionStep dex +evasionPerStep); hasar veren her vuruşun (fiziksel ve büyülü) hit şansı = clamp(accuracy - evasion, 0, hit.max) (alt sınır YOK: hit şansı %0 olabilir); iska = dodge olayı. Şifa/kalkan/buff/kendine etki/yer etkisi (zehir, yanan zemin) isabet kontrolü yapmaz. PRIMARY: her class'ın bir primary statı vardır; en yüksek statıysa (eşitlik dahil) primaryBonus aktiftir: str = Resilience (karaktere uygulanan her debuff, uygulanırken resilienceChance ihtimalle 1 tur kısalır, en az 1 kalır), dex = Hunter's Mark (hedefinden daha hızlıysa hasar veren vuruşlar hunterMarkMult kadar fazla vurur), int = Mana Echo (her skill sonrası manaEchoChance ihtimalle MP bedelinin yarısı, yukarı yuvarla, geri gelir), luck = Lucky Escape (savaşta bir kez ölümcül vuruşta surviveChance ihtimalle 1 canla kurtulur). Class'larda dört stat toplamı 30. Skill ölçek çarpanları (scaling) hepsi 1. HASAR: özellik x scaling x güç (+ ekler), zırh yüzdesel düşürür: azalma = armor / (armor + armor.k). Her skill etkisi hangi özelliğe bağlandığını (scale) kendisi söyler. Çağrılan birimler summon.damageTakenMultiplier kat hasar yer. DİZİLİM: her taraf formation.rows sıra x formation.lanes şerit; yakın dövüş skill'leri düşmanın en öndeki formation.meleeRows dolu sırasına vurabilir. Alan skill'leri merkez birimin çevresinde artı şekliyle vurur (area.radius), column skill'leri seçilen birimin şeridindeki herkese. Sıra: her tikte herkesin sayacı hız kadar dolar, threshold'a ulaşan oynar. Sayılar GEÇİCİDİR. HASSASİYET: weaknesses[tür etiketi][element] = alınan hasar çarpanı. YAN KOMŞULUK (formation.sideNeighbors): yan vuruşlu skill (Bone Slash) hedefin EKRANDA üstündeki ve altındaki birime vurur; harita data/battle-layout.json hücre koordinatlarından src/engine/formation.ts > computeSideNeighbors ile (maxDx = yatay tolerans) üretilir, tests/side-neighbors.test.ts verinin layout ile eşleştiğini denetler; layout değişirse haritayı yeniden üret. Her hücre için up/down: yakından uzağa aday hücreler, çalışma zamanında her yönün ilk dolu adayı vurulur. HIZ: spdBase + spdPerDex x dex (0 dex = spdBase).",
+  "_not": "STAT SİSTEMİ: 4 temel özellik (str, int, dex, luck). Can = hpBase + hpPerStr x str; Mana = mpBase + mpPerInt x int; Hız = spdBase + spdPerDex x dex. TURN BAŞI YENİLENME (turns modu): can = round(str x hpRegenPerStr) (düz), MP = round(int x mpRegenPerInt) (0 int = 0; class'larda sabit mpRegen yok). KRİTİK: şans = critChanceBase + critChancePerLuck x luck; çarpan SABİT critMult (luck artırmaz); kritik hasar ve şifanın SON çarpanıdır, kalkana uygulanmaz. İSABET/KAÇINMA: accuracy = accuracyBase + accuracyPerLuck x luck; evasion = min(evasionMax, floor(dex / dexPerEvasionStep) x evasionPerStep) (tam sayı adımlı, azalan getiri yok: her dexPerEvasionStep dex +evasionPerStep); hasar veren her vuruşun (fiziksel ve büyülü) hit şansı = clamp(accuracy - evasion, 0, hit.max) (alt sınır YOK: hit şansı %0 olabilir); iska = dodge olayı. Şifa/kalkan/buff/kendine etki/yer etkisi (zehir, yanan zemin) isabet kontrolü yapmaz. PRIMARY: her class'ın bir primary statı vardır; en yüksek statıysa (eşitlik dahil) primaryBonus aktiftir: str = Resilience (karaktere uygulanan her debuff, uygulanırken resilienceChance ihtimalle 1 tur kısalır, en az 1 kalır), dex = Hunter's Mark (hedefinden daha hızlıysa hasar veren vuruşlar hunterMarkMult kadar fazla vurur), int = Mana Echo (her skill sonrası manaEchoChance ihtimalle MP bedelinin yarısı, yukarı yuvarla, geri gelir), luck = Lucky Escape (savaşta bir kez ölümcül vuruşta surviveChance ihtimalle 1 canla kurtulur). Class'larda dört stat toplamı 30. Skill ölçek çarpanları (scaling) hepsi 1. HASAR: özellik x scaling x güç (+ ekler), zırh yüzdesel düşürür: azalma = armor / (armor + armor.k). Her skill etkisi hangi özelliğe bağlandığını (scale) kendisi söyler. Çağrılan birimler summon.damageTakenMultiplier kat hasar yer. DİZİLİM: her taraf formation.rows sıra x formation.lanes şerit; yakın dövüş skill'leri düşmanın en öndeki formation.meleeRows dolu sırasına vurabilir. Alan skill'leri merkez birimin çevresinde artı şekliyle vurur (area.radius), column skill'leri seçilen birimin şeridindeki herkese. Sıra: her tikte herkesin sayacı hız kadar dolar, threshold'a ulaşan oynar. Sayılar GEÇİCİDİR. HASSASİYET: weaknesses[tür etiketi][element] = alınan hasar çarpanı. YAN KOMŞULUK (formation.sideNeighbors): yan vuruşlu skill (Bone Slash) hedefin EKRANDA üstündeki ve altındaki birime vurur (YALNIZCA aynı sıradaki şerit komşuları; hedefin önü/arkası asla); harita data/battle-layout.json hücre koordinatlarından src/engine/formation.ts > computeSideNeighbors ile (maxDx = yatay tolerans) üretilir, tests/side-neighbors.test.ts verinin layout ile eşleştiğini denetler; layout değişirse haritayı yeniden üret. Her hücre için up/down: yakından uzağa aday hücreler, çalışma zamanında her yönün ilk dolu adayı vurulur. HIZ: spdBase + spdPerDex x dex (0 dex = spdBase).",
   "attributes": {
     "hpBase": 20,
     "hpPerStr": 6,
@@ -14,9 +14,9 @@
     "mpRegenPerInt": 0.25,
     "accuracyBase": 0.8,
     "accuracyPerLuck": 0.01,
-    "dexPerEvasionStep": 3,
-    "evasionPerStep": 0.01,
-    "evasionMax": 0.3
+    "dexPerEvasionStep": 5,
+    "evasionPerStep": 0.02,
+    "evasionMax": 0.75
   },
   "hit": {
     "max": 1,
@@ -72,8 +72,7 @@
         },
         {
           "up": [
-            0,
-            3
+            0
           ],
           "down": [
             2
@@ -82,8 +81,6 @@
         {
           "up": [
             1,
-            3,
-            4,
             0
           ],
           "down": []
@@ -92,26 +89,20 @@
           "up": [],
           "down": [
             4,
-            2,
-            1,
             5
           ]
         },
         {
           "up": [
-            3,
-            6
+            3
           ],
           "down": [
-            5,
-            2
+            5
           ]
         },
         {
           "up": [
             4,
-            6,
-            7,
             3
           ],
           "down": []
@@ -120,26 +111,20 @@
           "up": [],
           "down": [
             7,
-            5,
-            4,
             8
           ]
         },
         {
           "up": [
-            6,
-            9
+            6
           ],
           "down": [
-            8,
-            5
+            8
           ]
         },
         {
           "up": [
             7,
-            9,
-            10,
             6
           ],
           "down": []
@@ -148,8 +133,6 @@
           "up": [],
           "down": [
             10,
-            8,
-            7,
             11
           ]
         },
@@ -158,8 +141,7 @@
             9
           ],
           "down": [
-            11,
-            8
+            11
           ]
         },
         {
@@ -180,8 +162,7 @@
         },
         {
           "up": [
-            0,
-            3
+            0
           ],
           "down": [
             2
@@ -190,8 +171,6 @@
         {
           "up": [
             1,
-            3,
-            4,
             0
           ],
           "down": []
@@ -200,26 +179,20 @@
           "up": [],
           "down": [
             4,
-            2,
-            1,
             5
           ]
         },
         {
           "up": [
-            3,
-            6
+            3
           ],
           "down": [
-            5,
-            2
+            5
           ]
         },
         {
           "up": [
             4,
-            6,
-            7,
             3
           ],
           "down": []
@@ -228,26 +201,20 @@
           "up": [],
           "down": [
             7,
-            5,
-            4,
             8
           ]
         },
         {
           "up": [
-            6,
-            9
+            6
           ],
           "down": [
-            8,
-            5
+            8
           ]
         },
         {
           "up": [
             7,
-            9,
-            10,
             6
           ],
           "down": []
@@ -256,8 +223,6 @@
           "up": [],
           "down": [
             10,
-            8,
-            7,
             11
           ]
         },
@@ -266,8 +231,7 @@
             9
           ],
           "down": [
-            11,
-            8
+            11
           ]
         },
         {
@@ -279,6 +243,9 @@
         }
       ]
     }
+  },
+  "cooldown": {
+    "maxInitial": 3
   },
   "turn": {
     "threshold": 100,

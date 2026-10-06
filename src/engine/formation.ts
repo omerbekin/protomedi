@@ -12,16 +12,17 @@ export interface SideCandidates {
 }
 
 /**
- * Yan vuruş (splash) komşuluk haritası. Saldırı ekranda yatay (iki takım karşılıklı) geldiği için "yan" = ekranda hedefin
- * üstündeki ve altındaki birimlerdir: ayak noktaları yatayda en fazla `maxDx` (sprite genişliğinden az: sprite'lar üst üste biner)
- * uzakta, farklı yükseklikte olan hücreler. Eğik dizilim yüzünden bu, aynı sıradaki şerit komşuları ya da (yakın hücre boşsa)
- * bir önceki/sonraki sıranın çapraz hücresi olabilir. Her yönde en yakın aday önce gelir (eşitlikte küçük yuva).
+ * Yan vuruş (splash) komşuluk haritası. Saldırı ekranda yatay (iki takım karşılıklı) geldiği için "yan" = hedefle AYNI SIRADA
+ * (aynı yatay hizada) ekranda hedefin üstündeki ve altındaki şerit komşularıdır. Eğik dizilim yüzünden komşu sıranın bazı hücreleri
+ * (hedefin ARKASINDAKİ ya da ÖNÜNDEKİ çapraz hücreler) ekranda yakın görünür ve eskiden yanlışlıkla aday olurdu (boş yakın şerit
+ * yüzünden arkadaki hücre seçiliyordu); artık yalnızca aynı sıradaki (`lanes` hücre/sıra) hücreler aday olur: ön/arka ASLA.
+ * Ayrıca ayak noktaları yatayda en fazla `maxDx` uzakta, farklı yükseklikte olmalı. Her yönde en yakın aday önce gelir (eşitlikte küçük yuva).
  */
-export function computeSideNeighbors(slots: readonly CellPoint[], maxDx: number): SideCandidates[] {
+export function computeSideNeighbors(slots: readonly CellPoint[], maxDx: number, lanes: number): SideCandidates[] {
   return slots.map((a, i) => {
     const near = slots
       .map((b, j) => ({ j, dx: b.x - a.x, dy: b.y - a.y }))
-      .filter((c) => c.j !== i && Math.abs(c.dx) <= maxDx && c.dy !== 0)
+      .filter((c) => c.j !== i && Math.floor(c.j / lanes) === Math.floor(i / lanes) && Math.abs(c.dx) <= maxDx && c.dy !== 0)
       .map((c) => ({ ...c, d: Math.hypot(c.dx, c.dy) }))
       .sort((p, q) => p.d - q.d || p.j - q.j);
     return { up: near.filter((c) => c.dy < 0).map((c) => c.j), down: near.filter((c) => c.dy > 0).map((c) => c.j) };

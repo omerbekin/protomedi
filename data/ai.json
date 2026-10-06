@@ -1,11 +1,12 @@
 {
-  "_not": "Yapay zeka profilleri. priorities soldan sağa denenir; ilk uygun olan seçilir. kill: öldürebileceği biri varsa. heal: dostlardan biri healBelowRatio altındaysa. summon: yeterince çağrılmış birim yoksa. shield: kalkansız ve canı shieldBelowRatio altındaki dosta/kendine. aoe: en az aoeMinTargets düşman varsa herkese vuran skill. damage: odak hedefe en verimli hasar. focus: lowest_hp (en az canlıya) veya lowest_ratio (can oranı en düşüğe). mpCostWeight/hpCostWeight: bedelin skora etkisi. minHpRatioForHpCost: can ödeyen skill'ler için kullanıcının en az can oranı (öldürücü vuruş hariç). taunt: kendinde taunt yoksa ve kullanılabiliyorsa taunt çek. guard: canı guardBelowRatio altındaki, korumasız dostu koru. thorns: kendinde thorns yoksa ve en az thornsMinMelee yakın dövüşçü düşman varsa dikenli kalkan aç. burn: en az burnMinTargets düşmanın yakılabilir manası varsa mana yak.",
+  "_not": "Yapay zeka profilleri. priorities soldan sağa denenir; ilk uygun olan seçilir. kill: öldürebileceği biri varsa. heal: dostlardan biri healBelowRatio altındaysa. summon: yeterince çağrılmış birim yoksa. shield: kalkansız ve canı shieldBelowRatio altındaki dosta/kendine. aoe: en az aoeMinTargets düşman varsa herkese vuran skill. tactic: skill'in `ai` bağlam ipucu sağlanan (data/skills.json) seçenekler arasında en değerlisi: 4. skill'ler gibi güçlü skill'ler yalnızca doğru bağlamda (ör. Meteor en az 2 düşmana, Abyssal Cry yeterli canda ve tehdit varken) seçilir; saf self-buff'ın net değeri (savunma + hasar artışı - can/MP bedeli - kaçırılan saldırı) pozitif olmalı. damage: odak hedefe en verimli hasar. Skill'lerin `ai` ipuçları (data/skills.json) hangi bağlamda seçilebileceğini belirler; bağlam sağlanmıyorsa yalnızca öldürücü vuruşta seçilir. focus: lowest_hp (en az canlıya) veya lowest_ratio (can oranı en düşüğe). mpCostWeight/hpCostWeight: bedelin skora etkisi. minHpRatioForHpCost: can ödeyen skill'ler için kullanıcının en az can oranı (öldürücü vuruş hariç). taunt: kendinde taunt yoksa ve kullanılabiliyorsa taunt çek. guard: canı guardBelowRatio altındaki, korumasız dostu koru. thorns: kendinde thorns yoksa ve en az thornsMinMelee yakın dövüşçü düşman varsa dikenli kalkan aç. burn: en az burnMinTargets düşmanın yakılabilir manası varsa mana yak.",
   "defaultProfile": "aggressive",
   "profiles": {
     "thorny": {
       "priorities": [
         "kill",
         "thorns",
+        "tactic",
         "aoe",
         "damage"
       ],
@@ -22,6 +23,7 @@
     "aggressive": {
       "priorities": [
         "kill",
+        "tactic",
         "aoe",
         "damage"
       ],
@@ -38,6 +40,7 @@
       "priorities": [
         "kill",
         "shield",
+        "tactic",
         "aoe",
         "damage"
       ],
@@ -53,6 +56,7 @@
     "sniper": {
       "priorities": [
         "kill",
+        "tactic",
         "aoe",
         "damage"
       ],
@@ -69,6 +73,7 @@
       "priorities": [
         "kill",
         "shield",
+        "tactic",
         "aoe",
         "damage"
       ],
@@ -85,6 +90,7 @@
       "priorities": [
         "kill",
         "heal",
+        "tactic",
         "damage"
       ],
       "focus": "lowest_ratio",
@@ -101,6 +107,7 @@
         "kill",
         "heal",
         "summon",
+        "tactic",
         "damage"
       ],
       "focus": "lowest_ratio",
@@ -117,6 +124,7 @@
         "kill",
         "taunt",
         "guard",
+        "tactic",
         "damage"
       ],
       "focus": "lowest_ratio",
@@ -134,6 +142,7 @@
         "kill",
         "shield",
         "burn",
+        "tactic",
         "damage"
       ],
       "focus": "lowest_ratio",
@@ -150,6 +159,7 @@
       "priorities": [
         "kill",
         "summon",
+        "tactic",
         "aoe",
         "damage"
       ],
@@ -165,6 +175,7 @@
     "gambler": {
       "priorities": [
         "kill",
+        "tactic",
         "damage"
       ],
       "focus": "lowest_ratio",

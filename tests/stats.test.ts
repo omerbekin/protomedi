@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import defenderRaw from '../data/classes/defender.json';
 import { Rng, armorReduction, attributePower, content, damageRange, deriveStats, hitChance, rollCrit, rollHit } from '../src/engine';
 import type { CombatantData, DamageSpec, Stats } from '../src/engine';
 
@@ -78,10 +79,9 @@ describe('4 temel özellik ve türev stat\'lar', () => {
 
   it('veri dosyalarındaki her class\'ın stat\'ları özelliklerinden türetilmiş ve geçerli', () => {
     for (const def of Object.values(content.classes)) {
-      // can ya STR'den türer ya da (Defender gibi) veride elle ezilmiştir
+      // can ya STR'den türer ya da (Defender gibi) veride elle ezilmiştir (overrides.hp; değer veriden okunur)
       const derived = Math.round(f.attributes.hpBase + f.attributes.hpPerStr * def.attributes.str);
-      if (def.id === 'defender') expect(def.stats.hp, def.id).toBe(158); // Defender canı elle ayarlı (128 -> %30 artış -> %5 azalış)
-      else expect(def.stats.hp, def.id).toBe(derived);
+      expect(def.stats.hp, def.id).toBe(def.id === 'defender' ? defenderRaw.overrides.hp : derived);
       expect(def.stats.mp, def.id).toBe(Math.round(f.attributes.mpBase + f.attributes.mpPerInt * def.attributes.int));
       expect(def.stats.spd, def.id).toBeGreaterThan(0);
       expect(def.stats.critChance, def.id).toBeGreaterThanOrEqual(0.05);
