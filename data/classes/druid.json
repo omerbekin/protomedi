@@ -7,9 +7,9 @@
   "role": "Nature Summoner",
   "frontPriority": 5,
   "attributes": {
-    "str": 7,
+    "str": 8,
     "int": 16,
-    "dex": 6,
+    "dex": 5,
     "luck": 1
   },
   "primary": "int",

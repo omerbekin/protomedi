@@ -1,9 +1,9 @@
 {
-  "_not": "STAT SİSTEMİ: 4 temel özellik (str, int, dex, luck). Can = hpBase + hpPerStr x str; Mana = mpBase + mpPerInt x int; Hız = spdBase + spdPerDex x dex. TURN BAŞI YENİLENME (turns modu): can = round(str x hpRegenPerStr) (düz), MP = round(int x mpRegenPerInt) (0 int = 0; class'larda sabit mpRegen yok). KRİTİK: şans = critChanceBase + critChancePerLuck x luck; çarpan SABİT critMult (luck artırmaz); kritik hasar ve şifanın SON çarpanıdır, kalkana uygulanmaz. İSABET/KAÇINMA: accuracy = accuracyBase + accuracyPerLuck x luck; evasion = min(evasionMax, floor(dex / dexPerEvasionStep) x evasionPerStep) (tam sayı adımlı, azalan getiri yok: her dexPerEvasionStep dex +evasionPerStep); hasar veren her vuruşun (fiziksel ve büyülü) hit şansı = clamp(accuracy - evasion, 0, hit.max) (alt sınır YOK: hit şansı %0 olabilir); iska = dodge olayı. Şifa/kalkan/buff/kendine etki/yer etkisi (zehir, yanan zemin) isabet kontrolü yapmaz. PRIMARY: her class'ın bir primary statı vardır; en yüksek statıysa (eşitlik dahil) primaryBonus aktiftir: str = Resilience (karaktere uygulanan her debuff, uygulanırken resilienceChance ihtimalle 1 tur kısalır, en az 1 kalır), dex = Hunter's Mark (hedefinden daha hızlıysa hasar veren vuruşlar hunterMarkMult kadar fazla vurur), int = Mana Echo (her skill sonrası manaEchoChance ihtimalle MP bedelinin yarısı, yukarı yuvarla, geri gelir), luck = Lucky Escape (savaşta bir kez ölümcül vuruşta surviveChance ihtimalle 1 canla kurtulur). Class'larda dört stat toplamı 30. Skill ölçek çarpanları (scaling) hepsi 1. HASAR: özellik x scaling x güç (+ ekler), zırh yüzdesel düşürür: azalma = armor / (armor + armor.k). Her skill etkisi hangi özelliğe bağlandığını (scale) kendisi söyler. Çağrılan birimler summon.damageTakenMultiplier kat hasar yer. DİZİLİM: her taraf formation.rows sıra x formation.lanes şerit; yakın dövüş skill'leri düşmanın en öndeki formation.meleeRows dolu sırasına vurabilir. Alan skill'leri merkez birimin çevresinde artı şekliyle vurur (area.radius), column skill'leri seçilen birimin şeridindeki herkese. Sıra: her tikte herkesin sayacı hız kadar dolar, threshold'a ulaşan oynar. Sayılar GEÇİCİDİR. HASSASİYET: weaknesses[tür etiketi][element] = alınan hasar çarpanı. YAN KOMŞULUK (formation.sideNeighbors): yan vuruşlu skill (Bone Slash) hedefin EKRANDA üstündeki ve altındaki birime vurur (YALNIZCA aynı sıradaki şerit komşuları; hedefin önü/arkası asla); harita data/battle-layout.json hücre koordinatlarından src/engine/formation.ts > computeSideNeighbors ile (maxDx = yatay tolerans) üretilir, tests/side-neighbors.test.ts verinin layout ile eşleştiğini denetler; layout değişirse haritayı yeniden üret. Her hücre için up/down: yakından uzağa aday hücreler, çalışma zamanında her yönün ilk dolu adayı vurulur. HIZ: spdBase + spdPerDex x dex (0 dex = spdBase).",
+  "_not": "STAT SİSTEMİ: 4 temel özellik (str, int, dex, luck). Can = hpBase + hpPerStr x str; Mana = mpBase + mpPerInt x int (TÜM class'larda aynı taban: mpBase 30; class bazlı MP override yok); Hız = spdBase + spdPerDex x dex. TURN BAŞI YENİLENME (turns modu): can = round(str x hpRegenPerStr) (düz), MP = round(int x mpRegenPerInt) (0 int = 0; class'larda sabit mpRegen yok). KRİTİK: şans = critChanceBase + critChancePerLuck x luck; çarpan SABİT critMult (luck artırmaz); kritik hasar ve şifanın SON çarpanıdır, kalkana uygulanmaz. İSABET/KAÇINMA: accuracy = accuracyBase + accuracyPerLuck x luck; evasion = min(evasionMax, floor(dex / dexPerEvasionStep) x evasionPerStep) (tam sayı adımlı, azalan getiri yok: her dexPerEvasionStep dex +evasionPerStep); hasar veren her vuruşun (fiziksel ve büyülü) hit şansı = clamp(accuracy - evasion, 0, hit.max) (alt sınır YOK: hit şansı %0 olabilir); İSKA TEK ZARDAN AYRIŞIR (vuruş başına tek zar r): r < hit şansı = isabet; hit şansı <= r < accuracy = 'dodge' olayı (hedefin KAÇINMASI yüzünden; UI hedefin üstünde Dodge); r >= accuracy = 'miss' olayı (saldıranın ISABETİ yüzünden; UI saldıranın üstünde MISS). RAGE (rage bloğu, yalnızca class verisinde resource: 'rage' olan birimlerde): 0-max, savaş başında 0; skill ile hasar vererek kazanılır (her isabet eden vuruşta min(perHitCap, hitBase + perHpPercent x [hasarın hedefin maks canına yüzdesi]); bir skill kullanımında en yüksek tek hedefin toplamı alınır, perCastCap'i geçemez); zamanla azalmaz, alınan hasarla artmaz; skill bedeli cost.resource 'rage' olabilir. Şifa/kalkan/buff/kendine etki/yer etkisi (zehir, yanan zemin) isabet kontrolü yapmaz. PRIMARY: her class'ın bir primary statı vardır; en yüksek statıysa (eşitlik dahil) primaryBonus aktiftir: str = Resilience (karaktere uygulanan her debuff, uygulanırken resilienceChance ihtimalle 1 tur kısalır, en az 1 kalır), dex = Hunter's Mark (hedefinden daha hızlıysa hasar veren vuruşlar hunterMarkMult kadar fazla vurur), int = Mana Echo (her skill sonrası manaEchoChance ihtimalle MP bedelinin yarısı, yukarı yuvarla, geri gelir), luck = Lucky Escape (savaşta bir kez ölümcül vuruşta surviveChance ihtimalle 1 canla kurtulur). Class'larda dört stat toplamı 30. Skill ölçek çarpanları (scaling) hepsi 1. HASAR: özellik x scaling x güç (+ ekler), zırh yüzdesel düşürür: azalma = armor / (armor + armor.k). Her skill etkisi hangi özelliğe bağlandığını (scale) kendisi söyler. Çağrılan birimler summon.damageTakenMultiplier kat hasar yer. DİZİLİM: her taraf formation.rows sıra x formation.lanes şerit; yakın dövüş skill'leri düşmanın en öndeki formation.meleeRows dolu sırasına vurabilir. Alan skill'leri merkez birimin çevresinde artı şekliyle vurur (area.radius), column skill'leri seçilen birimin şeridindeki herkese. Sıra: her tikte herkesin sayacı hız kadar dolar, threshold'a ulaşan oynar. Sayılar GEÇİCİDİR. HASSASİYET: weaknesses[tür etiketi][element] = alınan hasar çarpanı. YAN KOMŞULUK (formation.sideNeighbors): yan vuruşlu skill (Bone Slash) hedefin EKRANDA üstündeki ve altındaki birime vurur (YALNIZCA aynı sıradaki şerit komşuları; hedefin önü/arkası asla); harita data/battle-layout.json hücre koordinatlarından src/engine/formation.ts > computeSideNeighbors ile (maxDx = yatay tolerans) üretilir, tests/side-neighbors.test.ts verinin layout ile eşleştiğini denetler; layout değişirse haritayı yeniden üret. Her hücre için up/down: yakından uzağa aday hücreler, çalışma zamanında her yönün ilk dolu adayı vurulur. HIZ: spdBase + spdPerDex x dex (0 dex = spdBase).",
   "attributes": {
     "hpBase": 20,
     "hpPerStr": 6,
-    "mpBase": 10,
+    "mpBase": 30,
     "mpPerInt": 2,
     "spdBase": 7,
     "spdPerDex": 0.4,
@@ -11,7 +11,7 @@
     "critChancePerLuck": 0.005,
     "critMult": 1.5,
     "hpRegenPerStr": 0.25,
-    "mpRegenPerInt": 0.25,
+    "mpRegenPerInt": 0.33,
     "accuracyBase": 0.8,
     "accuracyPerLuck": 0.01,
     "dexPerEvasionStep": 5,
@@ -21,6 +21,13 @@
   "hit": {
     "max": 1,
     "aiKillMin": 0.5
+  },
+  "rage": {
+    "max": 100,
+    "hitBase": 10,
+    "perHpPercent": 0.6,
+    "perHitCap": 25,
+    "perCastCap": 50
   },
   "scaling": {
     "str": 1,
@@ -240,6 +247,108 @@
             9
           ],
           "down": []
+        }
+      ]
+    },
+    "screenGrid": {
+      "party": [
+        {
+          "col": 3,
+          "row": 0
+        },
+        {
+          "col": 3,
+          "row": 1
+        },
+        {
+          "col": 3,
+          "row": 2
+        },
+        {
+          "col": 2,
+          "row": 0
+        },
+        {
+          "col": 2,
+          "row": 1
+        },
+        {
+          "col": 2,
+          "row": 2
+        },
+        {
+          "col": 1,
+          "row": 0
+        },
+        {
+          "col": 1,
+          "row": 1
+        },
+        {
+          "col": 1,
+          "row": 2
+        },
+        {
+          "col": 0,
+          "row": 0
+        },
+        {
+          "col": 0,
+          "row": 1
+        },
+        {
+          "col": 0,
+          "row": 2
+        }
+      ],
+      "enemy": [
+        {
+          "col": 0,
+          "row": 0
+        },
+        {
+          "col": 0,
+          "row": 1
+        },
+        {
+          "col": 0,
+          "row": 2
+        },
+        {
+          "col": 1,
+          "row": 0
+        },
+        {
+          "col": 1,
+          "row": 1
+        },
+        {
+          "col": 1,
+          "row": 2
+        },
+        {
+          "col": 2,
+          "row": 0
+        },
+        {
+          "col": 2,
+          "row": 1
+        },
+        {
+          "col": 2,
+          "row": 2
+        },
+        {
+          "col": 3,
+          "row": 0
+        },
+        {
+          "col": 3,
+          "row": 1
+        },
+        {
+          "col": 3,
+          "row": 2
         }
       ]
     }

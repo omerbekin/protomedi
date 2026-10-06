@@ -6,13 +6,15 @@
  * Mechanics bölümündeki ilgili metin güncel mi kontrol edilmelidir (CLAUDE.md kuralı).
  */
 import layout from '../../data/battle-layout.json';
-import { content, describePassive, describeSkill, describeStat, TARGET_TEXT } from '../engine';
+import { content, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, TARGET_TEXT } from '../engine';
 import { TARGET_BADGE } from '../engine/skill-info';
 import type { Attribute, CombatantDef, Element, Formulas, SkillDef, StatKind, Stats } from '../engine';
 import { primaryBonusInfo, primaryBonusLines } from '../engine/stat-info';
 import { buildGrounds, buildStatuses, skillOwner, searchText, avatarMap, groupByDir } from '../gallery/catalog';
 import type { GroundEntry, Owner, StatusEntry } from '../gallery/catalog';
 import { STAT_COLOR, STAT_ICON, STAT_LABEL } from '../ui/stat-icons';
+import { shapeMiniGrid, skillMiniGrid } from '../ui/shape-diagram';
+import type { MiniShape } from '../ui/shape-diagram';
 
 const f: Formulas = content.formulas;
 const pct = (v: number, digits = 0): string => `${(v * 100).toFixed(digits).replace(/\.0+$/, '')}%`;
@@ -34,6 +36,8 @@ export interface WikiArticle {
   icon: string;
   accent: string;
   blocks: WikiBlock[];
+  /** Küçük şekil şemaları (Area shapes makalesi): etiket + mini ızgara. */
+  shapes?: Array<{ label: string; shape: MiniShape }>;
   search: string;
 }
 
@@ -53,6 +57,8 @@ export interface WikiSkill {
   initialCooldown: string;
   lines: string[];
   kinds: Array<string | undefined>;
+  /** AOE şekil skill'inde küçük şekil şeması (kapsanan hücreler + anchor); diğerlerinde yok. */
+  shape?: MiniShape;
   search: string;
 }
 
@@ -67,6 +73,8 @@ export interface WikiStatRow {
 export interface WikiUnit {
   id: string;
   kind: 'class' | 'summon';
+  /** Test class'ı (ör. Geometer): rastgele takımlara girmez; wiki 'TEST' etiketi gösterir. */
+  testOnly: boolean;
   name: string;
   role: string;
   color: string;
@@ -173,6 +181,7 @@ export function buildSkill(skill: SkillDef): WikiSkill {
     initialCooldown: info.initialCooldown,
     lines: info.lines,
     kinds: info.kinds,
+    ...(skillMiniGrid(skill, f.formation) ? { shape: skillMiniGrid(skill, f.formation)! } : {}),
     search: searchText(skill.name, owner.name, info.targetBadge, info.target, info.cost, ...info.lines, ...elements, TARGET_BADGE[skill.target], TARGET_TEXT[skill.target]),
   };
 }
@@ -216,6 +225,7 @@ function buildUnit(kind: WikiUnit['kind'], def: CombatantDef, files: WikiFiles):
   return {
     id: def.id,
     kind,
+    testOnly: !!def.testOnly,
     name: def.name,
     role: def.role ?? (kind === 'summon' ? 'Summon' : ''),
     color: def.color,
@@ -247,9 +257,20 @@ const GOLD = '#e8c47e';
 const ELEMENT_COLOR = layout.colors.element as Record<string, string>;
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
-function article(id: string, group: string, title: string, icon: string, blocks: WikiBlock[], accent = GOLD): WikiArticle {
+function article(id: string, group: string, title: string, icon: string, blocks: WikiBlock[], accent = GOLD, shapes?: WikiArticle['shapes']): WikiArticle {
   const text = blocks.flatMap((b) => (b.kind === 'p' ? [b.text] : b.kind === 'list' ? b.items : [...b.head, ...b.rows.flat()]));
-  return { id, group, title, icon, accent, blocks, search: searchText(title, group, ...text) };
+  return { id, group, title, icon, accent, blocks, ...(shapes?.length ? { shapes } : {}), search: searchText(title, group, ...text) };
+}
+
+/** Veride kullanılan her şekil için bir örnek şema (aynı rozetli skill'ler tek kez): etiket = rozet (Row, Column, Block 2x3, Cross). */
+function shapeExamples(): NonNullable<WikiArticle['shapes']> {
+  const seen = new Map<string, MiniShape>();
+  for (const s of allSkills()) {
+    const shape = shapeMiniGrid(s.area, f.formation);
+    const badge = shape ? describeSkill(s, statsFor(s), f, unitDefs(), effectDefs()).targetBadge : '';
+    if (shape && !seen.has(badge)) seen.set(badge, shape);
+  }
+  return [...seen].map(([label, shape]) => ({ label, shape }));
 }
 const p = (text: string): WikiBlock => ({ kind: 'p', text });
 const list = (...items: string[]): WikiBlock => ({ kind: 'list', items });
@@ -263,7 +284,7 @@ export function buildGettingStarted(): WikiArticle[] {
   const pool = content.battles[content.DEFAULT_BATTLE]?.random?.pool.length ?? Object.keys(content.classes).length;
   return [
     article('goal', 'Basics', 'The goal', 'sword', [
-      p(`Pick a team of ${teamSize()} different classes (${pool} classes to choose from) and fight an enemy team that is picked the same way. Defeat every enemy unit to win; if your whole team falls, you lose.`),
+      p(`Pick a team of ${teamSize()} different classes (${pool} classes to choose from) and fight an enemy team that is picked the same way. Teams do not have to be this size: a side can field anywhere from 1 to ${f.formation.rows * f.formation.lanes} units. Defeat every enemy unit to win; if your whole team falls, you lose.`),
       p('You control your own team; the enemy team is played by the computer. Pick a skill, then pick its target (hover a target to preview the expected result).'),
     ]),
     article('turns', 'Basics', 'Turn order and the SPD counter', 'hourglass', [
@@ -272,13 +293,13 @@ export function buildGettingStarted(): WikiArticle[] {
       p('A stunned unit skips its next turn. Status durations count down on the turns of the unit that carries them.'),
     ]),
     article('formation', 'Basics', 'Formation and rows', 'team', [
-      p(`Each side stands on a ${rows} x ${lanes} grid: ${rows} rows deep and ${lanes} lanes wide (${rows * lanes} cells). A team of ${teamSize()} never fills the whole grid.`),
+      p(`Each side stands on a ${rows} x ${lanes} grid: ${rows} rows deep and ${lanes} lanes wide (${rows * lanes} cells). A normal team of ${teamSize()} leaves cells empty; a side of ${rows * lanes} fills the whole grid. Empty cells matter: a unit can step onto one with the Move action (see Actions in the Mechanics section).`),
       p(`Melee skills can only reach the first ${f.formation.meleeRows === 1 ? 'occupied row' : `${f.formation.meleeRows} occupied rows`} of the enemy team, so the units in front shield the ones behind them. Ranged and magic skills reach anyone. Some melee skills say they charge or reach further; their description tells you.`),
       p('Melee classes are placed in front. A melee unit only stands in a back row once the rows before it are full, so fighters in front, archers and mages behind is the normal picture.'),
-      p('Area skills hit the chosen unit and its neighbours in a plus shape; column skills hit the whole lane of the chosen unit.'),
+      p('Area skills hit a group of cells around the cell you pick, in a fixed shape (a whole row, a whole column, a block or a cross; see Area shapes in the Mechanics section). You can pick an empty cell too, as long as the shape still covers an enemy. Older area skills hit the chosen unit and its neighbours in a plus shape; column skills hit the whole lane of the chosen unit.'),
     ]),
     article('mana', 'Basics', 'MP and cooldowns', 'droplet', [
-      p(`Skills cost MP. At the start of its own turn, every unit regains MP equal to Intelligence x ${num(a.mpRegenPerInt)} (rounded; 0 Intelligence regains nothing) and HP equal to Strength x ${num(a.hpRegenPerStr)}.`),
+      p(`Skills cost MP. Every unit has ${a.mpBase} base MP (the same for all classes) plus ${a.mpPerInt} per point of Intelligence. At the start of its own turn, every unit regains MP equal to Intelligence x ${num(a.mpRegenPerInt)} (rounded; 0 Intelligence regains nothing) and HP equal to Strength x ${num(a.hpRegenPerStr)}. The Rest action restores extra MP on demand.`),
       p('Strong skills also have a cooldown: after you use one, you cannot use it again for that many of your own turns. The skill button shows the turns left.'),
       p(`Some powerful skills (usually the fourth one) start the battle on cooldown: they are not ready until the unit has taken up to ${f.cooldown.maxInitial} turns. The skill description says "Opens on cooldown" for these. Summoned units do not have this delay.`),
     ]),
@@ -371,11 +392,13 @@ export function buildMechanics(): WikiArticle[] {
       ),
     ]),
     article('hit-chance', 'Damage', 'Accuracy, evasion and hit chance', 'blast', [
-      p(`Every damaging hit (physical and magic) first rolls to hit: hit chance = attacker accuracy - target evasion, never above ${pct(f.hit.max)}. It can drop to 0%.`),
+      p(`Every damaging hit (physical and magic) first rolls to hit: hit chance = attacker accuracy - target evasion, never above ${pct(f.hit.max)}. It can drop to 0%. One roll decides the outcome: a hit, a Dodge or a Miss.`),
       list(
         `Accuracy = ${pct(a.accuracyBase)} + ${pct(a.accuracyPerLuck, 1)} per Luck.`,
         `Evasion = ${pct(a.evasionPerStep)} for every ${a.dexPerEvasionStep} Dexterity, in whole steps only (maximum ${pct(a.evasionMax)}).`,
-        'A dodged hit deals no damage and applies none of the skill\'s effects.',
+        'Dodge: the attacker\'s accuracy was good enough but the target\'s evasion made the hit fail. "Dodge" shows above the target.',
+        'Miss: the attacker\'s own accuracy was not enough, no matter the evasion. "MISS" shows above the attacker.',
+        'A dodged or missed hit deals no damage and applies none of the skill\'s effects.',
         'Heals, shields, buffs, effects on yourself and ground effects (poison, fire on the ground) never miss.',
       ),
     ]),
@@ -391,6 +414,29 @@ export function buildMechanics(): WikiArticle[] {
       p('A bet skill puts part of the caster\'s HP or MP at stake before the hit, then rolls a die. On a win the hit is multiplied (and may grow with the stake); on a loss the hit is weaker or misses, and the stake is lost. A won bet keeps the stake.'),
       list(...bets.map((b) => b.text)),
     ], '#b8892e'),
+    article('rage', 'Special rules', 'Rage', 'rage', [
+      p(`Some classes have a Rage bar next to their HP and MP: ${Object.values(content.classes).filter((c) => c.maxRage !== undefined).map((c) => c.name).join(', ') || 'none yet'}.`),
+      list(...describeRage(f)),
+      p(`Skills that cost Rage: ${allSkills().filter((s) => s.cost.resource === 'rage').map((s) => `${s.name} (${s.cost.amount})`).join(', ') || 'none yet'}.`),
+    ], '#c0392b'),
+    article('area-shapes', 'Special rules', 'Area shapes', 'blast', [
+      p('Some skills hit a shape made of cells instead of one target. You pick an anchor cell (it may be empty); every living enemy standing inside the shape is hit. Row means the same depth (all lanes of one row); column means one lane across all rows.'),
+      list(
+        'Row: the whole row of the anchor cell.',
+        'Column: the whole lane of the anchor cell, across every row.',
+        'Block (for example 2x3): that many rows by that many lanes. The anchor cell is the bottom-left corner of the block as seen on screen, so the block extends to the right and upwards. If it would stick out of the grid it slides back inside (its size never shrinks), so every cell is a valid anchor. Your side and the enemy side are mirrored, so "left" is the front row on the enemy side and the back row on your side.',
+        'Cross: the anchor cell and the 4 cells next to it (one row in front or behind, one lane above or below). Cells outside the grid are skipped.',
+      ),
+      p('Melee skills with a shape only hit enemies that melee can reach (the front rows); enemies in the shape but out of reach are not hit. A shape is valid only if it covers at least one enemy that can be hit. Shape skills ignore taunt. Test classes such as the Geometer carry one skill per shape; they never appear in random teams.'),
+    ], '#c9a0ff', shapeExamples()),
+    article('actions', 'Special rules', 'Actions: Rest, Skip Turn and Move', 'boot', [
+      p('Besides its four skills, every unit can use three global actions. They cost nothing and each ends the turn.'),
+      list(...Object.values(content.globalSkills).map((d) => {
+        const info = describeGlobalSkill(d, f);
+        return `${info.name}: ${[info.summary, ...info.lines].map((s) => s.replace(/\.$/, '')).join('. ')}.`;
+      })),
+      p('The enemy team uses these actions too: it rests when a strong skill is out of MP, waits when nothing useful can be done, and moves fragile units out of melee reach.'),
+    ], '#9ec5e8'),
     article('echo', 'Special rules', 'Ready again immediately', 'echo', [
       p('Some passives let a damaging skill with a cooldown be ready again right after it is cast, with a set chance. Classes with such a passive: ' + Object.values(content.classes).filter((c) => c.passive?.effect.type === 'spellEcho').map((c) => `${c.name} (${c.passive!.name})`).join(', ') + '.'),
     ]),
@@ -411,7 +457,7 @@ export function buildMechanics(): WikiArticle[] {
       p(`Skills that shield: ${skillsWith((e) => e.type === 'shield').join(', ') || 'none yet'}.`),
     ]),
     article('control', 'Special rules', 'Taunt, guard and mana burn', 'guardian', [
-      p('Taunt forces enemies to target the taunting unit for some turns (it can end early if the unit loses enough HP). Guard makes a protector take a share of the damage dealt to an ally. Mana burn removes MP from a target (and may give some of it to the caster) without hurting its HP.'),
+      p(`Taunt forces enemies to target the taunting unit for some turns (it can end early if the unit loses enough HP, or at once if the unit is hit by a control status: ${Object.values(content.statuses).filter((d) => d.breaksTaunt).map((d) => d.name).join(', ') || 'none'}). Guard makes a protector take a share of the damage dealt to an ally. Mana burn removes MP from a target (and may give some of it to the caster) without hurting its HP.`),
       p(`Taunt: ${skillsWith((e) => e.type === 'taunt').join(', ') || 'none'}. Guard: ${skillsWith((e) => e.type === 'guard').join(', ') || 'none'}. Mana burn: ${skillsWith((e) => e.type === 'manaBurn').join(', ') || 'none'}.`),
     ]),
   );

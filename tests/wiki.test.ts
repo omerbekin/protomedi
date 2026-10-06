@@ -79,7 +79,7 @@ describe('Wiki kataloğu (sağ üst kitap simgesi)', () => {
     const ids = wiki.mechanics.map((a) => a.id);
     for (const k of ['str', 'int', 'dex', 'luck', 'hp', 'mp', 'spd', 'critChance', 'accuracy', 'evasion', 'armor', 'magicArmor']) expect(ids, k).toContain(`stat-${k}`);
     for (const k of ['str', 'dex', 'int', 'luck']) expect(ids).toContain(`bonus-${k}`);
-    for (const k of ['damage-formula', 'hit-chance', 'ground', 'gamble', 'thorns', 'summons', 'revive']) expect(ids, k).toContain(k);
+    for (const k of ['damage-formula', 'hit-chance', 'ground', 'gamble', 'thorns', 'summons', 'revive', 'rage', 'actions', 'area-shapes']) expect(ids, k).toContain(k);
     for (const name of ['Resilience', "Hunter's Mark", 'Mana Echo', 'Lucky Escape']) expect(wiki.mechanics.some((a) => a.title === name), name).toBe(true);
     for (const a of [...wiki.mechanics, ...wiki.gettingStarted]) {
       expect(a.blocks.length, a.id).toBeGreaterThan(0);
@@ -88,6 +88,21 @@ describe('Wiki kataloğu (sağ üst kitap simgesi)', () => {
         expect(t, `${a.id} şimdiki değer sızdı`).not.toMatch(/\(now |, now |undefined|NaN/);
       }
     }
+  });
+
+  it('Rage, global eylemler (Rest/Skip/Move) ve miss/dodge ayrımı Mechanics içinde yazılıdır; sayılar veriden', () => {
+    const text = (id: string) => wiki.mechanics.find((a) => a.id === id)!.blocks.flatMap(blockText).join(' ');
+    const r = content.formulas.rage;
+    expect(text('rage')).toContain(`0 to ${r.max}`);
+    expect(text('rage')).toContain(String(r.perHitCap));
+    expect(text('rage')).toContain(content.skills.abyssal_cry!.name);
+    for (const d of Object.values(content.globalSkills)) expect(text('actions'), d.id).toContain(d.name);
+    expect(text('actions')).toContain(`${content.globalSkills.rest!.mp} MP`);
+    expect(text('actions')).toContain('next turn arrives in half the time');
+    const hit = text('hit-chance');
+    expect(hit).toContain('Dodge');
+    expect(hit).toContain('MISS');
+    expect(wiki.gettingStarted.flatMap((a) => a.blocks.flatMap(blockText)).join(' ')).toContain(`${content.formulas.attributes.mpBase} base MP`);
   });
 
   it('bahis (gamble) skilleri Mechanics içinde yazılıdır', () => {
@@ -124,5 +139,19 @@ describe('Wiki kataloğu (sağ üst kitap simgesi)', () => {
   it('stripNow: şimdiki değer parçalarını atar', () => {
     expect(stripNow('Max MP: +2 per point (now 40)')).toBe('Max MP: +2 per point');
     expect(stripNow('Accuracy: +1% per point (base 80%, now 90%); misses')).toBe('Accuracy: +1% per point; misses');
+  });
+});
+
+describe('Wiki: test class\'ı ve alan şekilleri', () => {
+  it('testOnly class (Geometer) wiki\'de görünür ve testOnly işaretlidir; diğerleri değil', () => {
+    const t = wiki.classes.find((c) => c.id === 'aoe_tester')!;
+    expect(t.testOnly).toBe(true);
+    expect(t.skills.map((s) => s.id)).toEqual(['shape_row', 'shape_column', 'shape_rect', 'shape_plus']);
+    for (const c of wiki.classes.filter((x) => x.id !== 'aoe_tester')) expect(c.testOnly, c.id).toBe(false);
+  });
+
+  it('Mechanics: "Area shapes" makalesi row/column/block/cross kurallarını anlatır', () => {
+    const text = wiki.mechanics.find((a) => a.id === 'area-shapes')!.blocks.flatMap(blockText).join(' ');
+    for (const w of ['Row', 'Column', 'Block', 'Cross', 'bottom-left', 'slides', 'empty']) expect(text, w).toContain(w);
   });
 });

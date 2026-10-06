@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { Battle, chooseAction, content } from '../src/engine';
 import type { AiConfig } from '../src/engine';
 
-const ai = content.aiConfig;
+/** Class skill kuralları testleri global skill'siz YZ ile (global skill kuralları: tests/ai-global.test.ts); tam savaş testleri content.aiConfig'i (global dahil) kullanır. */
+const ai: AiConfig = { ...content.aiConfig, global: undefined };
 const turnsBattle = (seed = 1) => new Battle(content.battleSetup('first-battle', seed, 'turns'));
 /** Stat toplamı 30 olduğundan canlar düşük; AI senaryoları (can oranı, öldürme eşiği) sağlam birimler varsayar: can en az 100. */
 const sturdy = (b: Battle): Battle => {
@@ -191,8 +192,8 @@ describe('yapay zeka: genel kurallar', () => {
       const b = turnsBattle(seed);
       for (let i = 0; i < 60 && !b.winner; i++) {
         const actor = b.currentUid!;
-        const choice = chooseAction(b, actor, ai);
-        const r = choice ? b.useSkill(actor, choice.skillId, choice.targetUid) : b.skipTurn();
+        const choice = chooseAction(b, actor, content.aiConfig);
+        const r = b.applyChoice(actor, choice); // seçim global skill (Rest/Skip/Move) da olabilir
         expect(r.ok, `seed ${seed} tur ${i}`).toBe(true);
       }
     }
@@ -219,9 +220,7 @@ describe('yapay zeka: genel kurallar', () => {
       const b = turnsBattle(seed);
       for (let i = 0; i < 500 && !b.winner; i++) {
         const actor = b.currentUid!;
-        const choice = chooseAction(b, actor, ai);
-        if (choice) b.useSkill(actor, choice.skillId, choice.targetUid);
-        else b.skipTurn();
+        b.applyChoice(actor, chooseAction(b, actor, content.aiConfig));
       }
       results[b.winner ?? 'none']++;
     }
@@ -324,8 +323,8 @@ describe('yapay zeka: yeni sınıflar ve menzil/taunt kuralları', () => {
       const b = new Battle(content.battleSetup('random-battle', seed, 'turns'));
       for (let i = 0; i < 500 && !b.winner; i++) {
         const actor = b.currentUid!;
-        const choice = chooseAction(b, actor, ai);
-        const r = choice ? b.useSkill(actor, choice.skillId, choice.targetUid) : b.skipTurn();
+        const choice = chooseAction(b, actor, content.aiConfig);
+        const r = b.applyChoice(actor, choice); // seçim global skill (Rest/Skip/Move) da olabilir
         expect(r.ok, `seed ${seed} tur ${i}`).toBe(true);
       }
     }

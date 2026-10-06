@@ -11,6 +11,11 @@ export interface TurnSlot {
   slot: number;
   spd: number;
   counter: number;
+  /**
+   * Skip Turn hız desteği varsa, desteksiz hız. `spd` o zaman desteklidir ve destek birimin BİR SONRAKİ turuna kadar sürer:
+   * tahmin (predictQueue), birim bir kez oynadıktan sonra spd'yi buna döndürür.
+   */
+  baseSpd?: number;
 }
 
 /** Eşit sayaçta: sayacı yüksek olan, sonra `firstSide` tarafı, sonra düşük yuva, sonra uid. */
@@ -56,6 +61,10 @@ export function predictQueue(
     if (!next) break;
     queue.push(next.uid);
     next.counter -= threshold;
+    if (next.baseSpd !== undefined) {
+      next.spd = next.baseSpd; // Skip Turn desteği oynadığı turla biter
+      next.baseSpd = undefined;
+    }
   }
   return queue;
 }

@@ -1,5 +1,5 @@
 import type { Rng } from './rng';
-import { armorReduction, attributePower, hitChance } from './stats';
+import { armorReduction, attributePower, hitChance, hitOutcome, type HitOutcome } from './stats';
 import type { Attribute, Formulas, Stats } from './types';
 
 /** Bir hasar etkisinin hesap girdisi (skill etkisi + hedefe özel ekler). */
@@ -54,6 +54,11 @@ export function rollCrit(stats: Pick<Stats, 'critChance' | 'critMult'>, rng: Rng
 /** İsabet zarı: her çağrıda bir sayı tüketir. true = vurdu (şans = hitChance: saldırganın accuracy'si - hedefin evasion'ı). */
 export function rollHit(attacker: Pick<Stats, 'accuracy'>, defender: Pick<Stats, 'evasion'>, formulas: Formulas, rng: Rng): boolean {
   return rng.next() < hitChance(attacker, defender, formulas);
+}
+
+/** İsabet zarı, üç sonuçlu: 'hit' / 'dodge' (hedef kaçındı) / 'miss' (saldıran isabet ettiremedi). rollHit ile AYNI tek zarı tüketir (vuruş başına bir rng.next). */
+export function rollHitOutcome(attacker: Pick<Stats, 'accuracy'>, defender: Pick<Stats, 'evasion'>, formulas: Formulas, rng: Rng): HitOutcome {
+  return hitOutcome(attacker, defender, formulas, rng.next());
 }
 
 /** Şifa miktarının aralığı (kritik hariç). */

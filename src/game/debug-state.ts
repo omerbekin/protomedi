@@ -23,7 +23,9 @@ export interface DebugState {
   enemyAiOff: boolean;
   /** Skill galerisi: oynatma bitince birimleri eski haline getir. */
   galleryReset: boolean;
-  /** Motora uygulanan bayraklar (hasar çarpanı, kritik/kaçınma zorlaması). */
+  /** Maç kaydı (Debug > Copy match data): savaş başından itibaren her hamle ve AI karar gerekçesi hafifçe kaydedilir. Sim/headless'ta kayıt yoktur. */
+  matchLog: boolean;
+  /** Motora uygulanan bayraklar (hasar çarpanı, kritik/kaçınma/iska zorlaması). */
   flags: DebugFlags;
 }
 
@@ -35,7 +37,8 @@ export const debugState: DebugState = {
   hideNumbers: false,
   enemyAiOff: false,
   galleryReset: true,
-  flags: { damageMult: 1, crit: 'auto', dodge: 'auto' },
+  matchLog: true,
+  flags: { damageMult: 1, crit: 'auto', dodge: 'auto', miss: 'auto' },
 };
 
 /** Phaser tween/zamanlayıcı hız çarpanı: duraklatma 0, atlama çok hızlı, aksi halde seçilen hız. */
@@ -115,5 +118,6 @@ export function tweaksSummary(s: DebugState, freeMp: boolean): string {
   if (s.flags.damageMult !== 1) parts.push(`damage ${s.flags.damageMult}x`);
   if (s.flags.crit !== 'auto') parts.push(`${s.flags.crit} crit`);
   if (s.flags.dodge !== 'auto') parts.push(`${s.flags.dodge} dodge`);
+  if (s.flags.miss && s.flags.miss !== 'auto') parts.push(`${s.flags.miss} miss`);
   return parts.join(', ') || 'none';
 }

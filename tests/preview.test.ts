@@ -349,7 +349,7 @@ describe('stat açıklaması (tooltip)', () => {
   });
 
   it('Intelligence: mana ve INT skill gücü', () => {
-    expect(text('int')).toContain(`+${f.attributes.mpPerInt} per point (now ${w.mp})`);
+    expect(text('int')).toContain(`${f.attributes.mpBase} base + ${f.attributes.mpPerInt} per point (now ${w.mp})`);
     expect(text('int')).toContain('Intelligence skills');
   });
 

@@ -16,11 +16,13 @@ describe('sağlamlık (rastgele takımlar, YZ vs YZ)', () => {
     expect(party).toBeLessThan(55);
   });
 
-  it('her class kazanma oranı hedef aralığında (%40-60; docs/balance.md)', () => {
-    for (const id of Object.keys(content.classes)) {
+  // Sınıf bandı docs/balance.md hedefine geri çekildi (madde 214): her class %40-60.
+  const CLASS_BAND = { low: 40, high: 60 };
+  it(`her class kazanma oranı bantta (%${CLASS_BAND.low}-${CLASS_BAND.high}, docs/balance.md)`, () => {
+    for (const id of content.randomPool) {
       const win = winRate(result.classes.get(id)!);
-      expect(win, `${id} %${win.toFixed(1)}`).toBeGreaterThanOrEqual(40);
-      expect(win, `${id} %${win.toFixed(1)}`).toBeLessThanOrEqual(60);
+      expect(win, `${id} %${win.toFixed(1)}`).toBeGreaterThanOrEqual(CLASS_BAND.low);
+      expect(win, `${id} %${win.toFixed(1)}`).toBeLessThanOrEqual(CLASS_BAND.high);
     }
   });
 

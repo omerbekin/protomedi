@@ -74,7 +74,7 @@ function describeStatBase(kind: StatKind, stats: Stats, f: Formulas): StatInfo {
       return {
         title: `Intelligence ${stats.int}`,
         lines: [
-          `Max MP: +${a.mpPerInt} per point (now ${stats.mp})`,
+          `Max MP: ${a.mpBase} base + ${a.mpPerInt} per point (now ${stats.mp})`,
           `MP regen: +${num(a.mpRegenPerInt)} per point at the start of each turn (now ${stats.mpRegen}; 0 INT = none)`,
           `Intelligence skills (magic damage, heals, magic shields) use ${num(f.scaling.int)}x of INT`,
         ],
@@ -101,7 +101,7 @@ function describeStatBase(kind: StatKind, stats: Stats, f: Formulas): StatInfo {
     case 'hp':
       return { title: `Health ${stats.hp}`, lines: [`Max HP comes from Strength (+${a.hpPerStr} per point)`, `Regenerates ${Math.round(stats.hpRegen)} at the start of each of its turns (Strength x ${num(a.hpRegenPerStr)})`, 'At 0 HP the unit falls'] };
     case 'mp':
-      return { title: `Mana ${stats.mp}`, lines: [`Max MP comes from Intelligence (+${a.mpPerInt} per point)`, `Regenerates ${stats.mpRegen} at the start of each of its turns (Intelligence x ${num(a.mpRegenPerInt)})`] };
+      return { title: `Mana ${stats.mp}`, lines: [`Max MP = ${a.mpBase} base (the same for every class) + ${a.mpPerInt} per Intelligence point`, `Regenerates ${stats.mpRegen} at the start of each of its turns (Intelligence x ${num(a.mpRegenPerInt)})`] };
     case 'spd':
       return { title: `Speed ${stats.spd}`, lines: [`Comes from Dexterity (+${num(a.spdPerDex)} per point)`, 'Decides how soon the unit acts: higher speed means more turns'] };
     case 'critChance':
@@ -154,6 +154,7 @@ export function describeClass(def: CombatantDef, skills: Record<string, SkillDef
   const lines = [
     `STR ${s.str}   DEX ${s.dex}   INT ${s.int}   LUCK ${s.luck}`,
     `HP ${s.hp}   MP ${s.mp}   SPD ${s.spd}   Armor ${num1(s.armor)}${s.magicArmor > 0 ? `   Magic armor ${num1(s.magicArmor)}` : ''}   Crit ${pct(s.critChance, 1)}   ACC ${pct(s.accuracy)}   EVA ${pct(s.evasion)}`,
+    ...(def.maxRage !== undefined ? [`Rage 0/${def.maxRage}: gained by damaging with skills (+${_f.rage.hitBase} to +${_f.rage.perHitCap} per hit), spent by Rage skills`] : []),
     ...(def.passive ? [`Passive - ${def.passive.name}: ${describePassive(def.passive, def.stats, _f)}`] : []),
     `Skills: ${names}`,
   ];

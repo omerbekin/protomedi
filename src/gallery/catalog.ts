@@ -223,6 +223,8 @@ export interface CharacterEntry {
   attributes: Attributes;
   stats: { hp: number; mp: number; spd: number; evasion: number; accuracy: number; critChance: number; armor: number; magicArmor: number; mpRegen: number; hpRegen: number };
   tags: string[];
+  /** Test class'ı (ör. Geometer): rastgele takımlara girmez; galeride 'TEST' rozeti. */
+  testOnly: boolean;
   skills: SkillRef[];
   passive: PassiveDef | null;
   /** Gerçek sprite anim dosyaları (idle, ...); boşsa oyunda placeholder çizilir. */
@@ -251,6 +253,7 @@ const toEntry = (kind: CharacterEntry['kind'], def: CombatantDef, files: AssetFi
     attributes: def.attributes,
     stats: { hp: st.hp, mp: st.mp, spd: st.spd, evasion: st.evasion, accuracy: st.accuracy, critChance: st.critChance, armor: st.armor, magicArmor: st.magicArmor, mpRegen: st.mpRegen, hpRegen: st.hpRegen },
     tags: def.tags ?? [],
+    testOnly: !!def.testOnly,
     skills: def.skills.flatMap((id) => (content.skills[id] ? [skillRef({ ...content.skills[id]!, id })] : [])),
     passive: def.passive ?? null,
     sprites,

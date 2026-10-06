@@ -1,11 +1,12 @@
-import { damageRange, rollCrit, rollDamage, rollHeal, rollHit, shieldAmount } from './formulas';
+import { damageRange, rollCrit, rollDamage, rollHeal, shieldAmount } from './formulas';
+import { isShapeArea, shapeCells } from './area-shape';
 import { pickSideNeighbors } from './formation';
 import { betMultipliers, betStake } from './gamble';
 import { Rng } from './rng';
 import { damageSpecFor, type DamageEffect } from './spec';
-import { armorReduction, attributePower } from './stats';
+import { armorReduction, attributePower, hitOutcome } from './stats';
 import { advanceTurn, predictQueue, turnProgress, type TurnSlot } from './turn-order';
-import type { BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GroundDef, GroundEffect, Side, SkillDef, SkillEffect, Status, StatusDef } from './types';
+import type { ActionInfo, BattleAction, BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GlobalSkillDef, GroundDef, GroundEffect, Side, SkillDef, SkillEffect, Status, StatusDef } from './types';
 
 export interface BattleSetup {
   seed: number;
@@ -15,6 +16,8 @@ export interface BattleSetup {
   partySlots?: number[];
   enemySlots?: number[];
   skills: Record<string, SkillDef>;
+  /** Global skill'ler (data/global-skills.json): rest / skip_turn / move_tile; yoksa hiçbir birim global skill kullanamaz. */
+  globalSkills?: Record<string, GlobalSkillDef>;
   /** Buff/debuff tanımları (data/statuses.json). */
   statuses?: Record<string, StatusDef>;
   /** Yerde kalan etki tanımları (data/grounds.json). */
@@ -33,17 +36,63 @@ export interface DebugFlags {
   damageMult: number;
   /** always: her vuruş kritik; never: hiç kritik yok. */
   crit: 'auto' | 'always' | 'never';
-  /** always: hasar veren her vuruş iska olur (kaçınılır); never: hiç iska yok. */
+  /** always: hasar veren her vuruş iska olur ('dodge' olayı: hedef kaçındı); never: hiç iska yok (dodge da miss de). */
   dodge: 'auto' | 'always' | 'never';
+  /** always: hasar veren her vuruş 'miss' olur (saldıranın isabeti yetmedi); dodge 'always' ile birlikteyse dodge kazanır. Yoksa/auto: oyun kuralı. */
+  miss?: 'auto' | 'always';
 }
+
+/** Yapay zeka (ya da arayüz) seçimini motora çevirmek için yapısal giriş: skillId bir class skill'i ya da global skill id'si olabilir. */
+export interface ChoiceLike {
+  skillId: string;
+  targetUid?: string;
+  /** Move Tile: hedef boş yuva. */
+  slot?: number;
+}
+
+/** Global skill'in oyun içi sonucu için birim başına son eylem türü (yapay zeka salınımı önlemek için okur). */
+export type LastActionKind = 'skill' | 'rest' | 'skip' | 'move' | 'pass';
 
 export type ActionResult = { ok: true; events: BattleEvent[] } | { ok: false; reason: string };
 export type CanUse = { ok: true } | { ok: false; reason: string };
 
 type Listener = (event: BattleEvent) => void;
+
+/** Bir eylemin (skill / global skill / pas) uygulanmadan hemen önceki bilgisi (BattleObserver.before). */
+export interface ObservedAction {
+  kind: 'skill' | 'global' | 'pass';
+  actorUid: string;
+  /** skill: skill id'si; global: global skill id'si. */
+  id?: string;
+  /** skill: vurulacak/etkilenecek birimler (alan skill'inde pencere); global move: yok. */
+  targetUids?: string[];
+  /** Alan/şerit skill'inde merkez hücre; Move Tile'da hedef yuva. */
+  center?: number;
+  /** Alan/şerit skill'inde kapsanan tüm hücreler (boş olanlar dahil). */
+  cells?: number[];
+}
+
+/**
+ * Salt-okunur gözlemci (maç kaydı için; src/engine/match-log.ts). Motorun durumunu ve rastgele sayı akışını DEĞİŞTİRMEZ: yalnızca çağrılır.
+ * before: geçerli bir eylem, durum değişmeden hemen önce; after: eylem bitti (kazanan belirlendi, sıra henüz ilerlemedi). Sersemlik pasında before gelmez, yalnızca after gelir.
+ */
+export interface BattleObserver {
+  before?(info: ObservedAction): void;
+  after?(actorUid: string): void;
+}
 type Emit = (event: BattleEvent) => void;
 
 const opposite = (side: Side): Side => (side === 'party' ? 'enemy' : 'party');
+
+/**
+ * Boş yuva "hedef kimliği": Move Tile'ın hedefi birim değil boş bir yuvadır (hedef türü 'empty_tile'). `targetUid` alanı taşıyan arayüz/YZ yolları
+ * için yuva `tile:<yuva>` biçiminde yazılır; useSkill/act bunu yuvaya çevirir (slot parametresi de aynı işi görür).
+ */
+export const tileUid = (slot: number): string => `tile:${slot}`;
+export const slotOfTileUid = (uid?: string): number | undefined => {
+  const m = /^tile:(\d+)$/.exec(uid ?? '');
+  return m ? Number(m[1]) : undefined;
+};
 
 /**
  * Savaş durumu ve kuralları. Saf TypeScript; aynı seed + aynı eylemler = aynı olaylar.
@@ -64,7 +113,9 @@ export class Battle {
   /** Debug: true iken hiçbir skill MP harcamaz ve MP yetersizliği engel olmaz (iki taraf için de). */
   freeMp = false;
   /** Debug bayrakları (yalnızca debug menüsünden değişir; varsayılanlar oyunu hiç etkilemez, rastgele sayı akışı da aynı kalır). */
-  readonly debug: DebugFlags = { damageMult: 1, crit: 'auto', dodge: 'auto' };
+  readonly debug: DebugFlags = { damageMult: 1, crit: 'auto', dodge: 'auto', miss: 'auto' };
+  /** İsteğe bağlı gözlemci (maç kaydı); yoksa hiçbir şey değişmez. */
+  observer: BattleObserver | null = null;
   /** debugCast sürerken true: menzil/taunt kısıtları yok sayılır. */
   private debugCasting = false;
   /** Şu an işlenen skill yakın dövüş (motion 'melee') mü: dikenli (thorns) durum yalnızca bu vuruşları yansıtır. */
@@ -79,6 +130,11 @@ export class Battle {
   /** Luck-primary "Lucky Escape" hakkını kullanmış birimler. */
   private readonly luckySaved = new Set<string>();
   private summonCount = 0;
+  /** Birim başına üst üste Skip Turn sayısı (başka bir eylem sıfırlar) ve son eylem türü. */
+  private readonly skipStreak = new Map<string, number>();
+  private readonly lastKind = new Map<string, LastActionKind>();
+  /** Şu an işlenen skill'in Rage kazancı: hedef uid -> o hedefe yapılan vuruşların kazancı toplamı (yalnızca Rage'li kullanıcıda; yoksa null). */
+  private rageTally: Map<string, number> | null = null;
   /** Başlangıç cooldown'u olan birimler: ilk turunun başında azalmayacak skill'ler (uid -> skill id'leri). */
   private readonly initialHold = new Map<string, Set<string>>();
   private groundCount = 0;
@@ -136,6 +192,21 @@ export class Battle {
     return this.combatants.filter((c) => c.side === side && c.hp > 0);
   }
 
+  /** Birimin son eylem türü (skill / rest / skip / move / pass); henüz eylemi yoksa tanımsız. */
+  lastActionOf(uid: string): LastActionKind | undefined {
+    return this.lastKind.get(uid);
+  }
+
+  /** Birimin üst üste kaç kez Skip Turn kullandığı. */
+  skipStreakOf(uid: string): number {
+    return this.skipStreak.get(uid) ?? 0;
+  }
+
+  private noteAction(uid: string, kind: LastActionKind): void {
+    this.lastKind.set(uid, kind);
+    this.skipStreak.set(uid, kind === 'skip' ? (this.skipStreak.get(uid) ?? 0) + 1 : 0);
+  }
+
   /** Bir tarafın canlı birimleri, öndekinden arkadakine (slot sırası). */
   livingByDepth(side: Side): Combatant[] {
     return this.living(side).sort((a, b) => a.slot - b.slot);
@@ -178,15 +249,33 @@ export class Battle {
     return Math.max(f.damage.minDamage, Math.round(amount * weak * (1 - red)));
   }
 
-  /** Sıra hesabında kullanılan hız: stat x durum çarpanları (Slow/Haste). */
-  speedOf(c: Combatant): number {
+  /** Skip Turn hız desteği (birim uid -> +oran; 1 = %100): birimin bir sonraki turunun başlamasına kadar sürer. */
+  private readonly speedBoost = new Map<string, number>();
+
+  /** Birimin Skip Turn hız desteği (0 = yok; 1 = +%100: sayaç iki kat hızlı dolar). Bir sonraki turu başlayınca sıfırlanır. UI hız çubuğu/rozeti için. */
+  speedBoostOf(uid: string): number {
+    return this.speedBoost.get(uid) ?? 0;
+  }
+
+  /** Destek HARİÇ hız: stat x durum çarpanları (Slow/Haste). */
+  baseSpeedOf(c: Combatant): number {
     return Math.max(1, Math.round(c.stats.spd * this.statusMult(c, 'speedMult')));
   }
 
-  /** Dex-primary Hunter's Mark: saldıran hedefinden daha HIZLIYSA (geçerli hız, Slow/Haste dahil) hasar çarpanı 1 + hunterMark; değilse 1. */
+  /**
+   * Sıra hesabında kullanılan hız: stat x (durum çarpanları + Skip Turn desteği). Destek TOPLAMSALdır (yüzdeler toplanır):
+   * Haste (x1,4) + %100 = x2,4; Slow (x0,7) + %100 = x1,7; durumsuz = x2.
+   */
+  speedOf(c: Combatant): number {
+    const boost = this.speedBoostOf(c.uid);
+    if (boost <= 0) return this.baseSpeedOf(c);
+    return Math.max(1, Math.round(c.stats.spd * (this.statusMult(c, 'speedMult') + boost)));
+  }
+
+  /** Dex-primary Hunter's Mark: saldıran hedefinden daha HIZLIYSA (geçerli hız, Slow/Haste dahil; geçici Skip desteği hariç) hasar çarpanı 1 + hunterMark; değilse 1. */
   hunterMarkMult(actor: Combatant, target: Combatant): number {
     const m = actor.stats.hunterMark ?? 0;
-    return m > 0 && this.speedOf(actor) > this.speedOf(target) ? 1 + m : 1;
+    return m > 0 && this.baseSpeedOf(actor) > this.baseSpeedOf(target) ? 1 + m : 1;
   }
 
   /** 'everyone' hedefli skill'lerde bir etkinin bu hedefe uygulanıp uygulanmadığı (diğer skill'lerde hep evet). */
@@ -305,10 +394,20 @@ export class Battle {
     return radius >= 2 && dr === 1 && dl === 1;
   }
 
-  /** Alan/şerit skill'inin merkez hücreye göre kapsadığı tüm hücreler (boş olanlar dahil; gösterim için). */
-  areaCells(skillId: string, centerSlot: number): number[] {
+  /** Şekil (hücre kümesi) tabanlı alan skill'i mi (area.shape: row | column | rect | plus)? Eski `area.radius` ve column_enemies skill'leri şekil DEĞİLdir (davranışları aynen). */
+  isShapeSkill(skillId: string): boolean {
+    const skill = this.skill(skillId);
+    return skill?.target === 'area_enemies' && isShapeArea(skill.area);
+  }
+
+  /**
+   * Alan/şerit skill'inin anchor (merkez) hücreye göre kapsadığı tüm hücreler (boş olanlar dahil; gösterim için), yuva sırasıyla.
+   * `board`: hücrelerin ait olduğu tahta (varsayılan 'enemy'); yalnızca şekil skill'lerinde önemlidir (rect'in ekrandaki sol-alt köşesi tahtaya göre ayna).
+   */
+  areaCells(skillId: string, centerSlot: number, board: Side = 'enemy'): number[] {
     const skill = this.skill(skillId);
     if (!skill) return [];
+    if (this.isShapeSkill(skillId)) return shapeCells(skill.area!, centerSlot, board, this.setup.formulas.formation);
     const total = this.setup.formulas.formation.rows * this.setup.formulas.formation.lanes;
     return Array.from({ length: total }, (_, i) => i).filter((i) => this.inShape(skill, centerSlot, i));
   }
@@ -323,7 +422,41 @@ export class Battle {
     if (!skill) return [];
     const actor = this.get(actorUid);
     const board = actor ? opposite(actor.side) : 'enemy';
+    if (this.isShapeSkill(skillId)) {
+      // Şekil hücre kümesi 'vurulabilir hücreler'i belirler; yakın dövüşte erişilemeyen (arkadaki) hücreler validTargets ile elenir
+      const cells = new Set(this.areaCells(skillId, centerSlot, board));
+      return this.validTargets(actorUid, skillId).filter((c) => c.board === board && cells.has(c.slot));
+    }
     return this.validTargets(actorUid, skillId).filter((c) => c.board === board && this.inShape(skill, centerSlot, c.slot));
+  }
+
+  /**
+   * UI için: bu alan skill'inin SEÇİLEBİLİR anchor hücreleri (hedef tahtasında, artan sırada). Boş hücre de anchor olabilir: şekil en az bir
+   * vurulabilir (canlı, erişilebilir) düşmanı kapsıyorsa geçerlidir. Alan skill'i değilse boş liste.
+   */
+  shapeAnchors(actorUid: string, skillId: string): number[] {
+    const actor = this.get(actorUid);
+    if (!actor || !this.isAreaSkill(skillId)) return [];
+    const total = this.setup.formulas.formation.rows * this.setup.formulas.formation.lanes;
+    return Array.from({ length: total }, (_, i) => i).filter((i) => this.areaWindowAt(actorUid, skillId, i).length > 0);
+  }
+
+  /**
+   * UI hover: anchor hücreye atılırsa kapsanan hücreler (tahtaya sığdırılmış), vurulacak birimler (uid, yuva sırasıyla) ve geçerlilik.
+   * valid=false ise reason nedeni yazar; cells yine de döner (hücre aralık dışı değilse) ki UI şekli soluk gösterebilsin. Savaşı değiştirmez.
+   */
+  shapePreviewCells(actorUid: string, skillId: string, anchorSlot: number): { cells: number[]; targets: string[]; valid: boolean; reason?: string } {
+    const actor = this.get(actorUid);
+    const total = this.setup.formulas.formation.rows * this.setup.formulas.formation.lanes;
+    if (!actor || !this.skill(skillId)) return { cells: [], targets: [], valid: false, reason: 'Unknown unit or skill' };
+    if (!this.isAreaSkill(skillId)) return { cells: [], targets: [], valid: false, reason: 'Not an area skill' };
+    if (!Number.isInteger(anchorSlot) || anchorSlot < 0 || anchorSlot >= total) return { cells: [], targets: [], valid: false, reason: 'Invalid cell' };
+    const board = opposite(actor.side);
+    const cells = this.areaCells(skillId, anchorSlot, board);
+    const targets = this.areaWindowAt(actorUid, skillId, anchorSlot).map((c) => c.uid);
+    if (targets.length > 0) return { cells, targets, valid: true };
+    const inShape = this.livingByDepth(opposite(actor.side)).some((c) => c.board === board && cells.includes(c.slot));
+    return { cells, targets, valid: false, reason: inShape ? 'No target in reach' : 'No enemy in the area' };
   }
 
   /** Merkez olarak seçilen birimin hücresine göre areaWindowAt. */
@@ -397,6 +530,8 @@ export class Battle {
           .sort((x, y) => x.slot - y.slot);
       case 'everyone':
         return [...this.livingByDepth(actor.side), ...this.livingByDepth(opposite(actor.side))];
+      case 'empty_tile':
+        return []; // hedef birim değil boş yuva: freeTiles(uid)
     }
   }
 
@@ -417,6 +552,7 @@ export class Battle {
     }
     const { resource, amount } = skill.cost;
     if (resource === 'mp' && !this.freeMp && actor.mp < amount) return { ok: false, reason: 'Not enough MP' };
+    if (resource === 'rage' && (actor.rage ?? 0) < amount) return { ok: false, reason: 'Not enough rage' };
     if (resource === 'hp' && actor.hp <= amount) return { ok: false, reason: 'Not enough HP' };
     if (skill.effects.some((e) => e.type === 'summon') && this.freeSlots(this.summonBoard(actorUid, skillId)).length === 0) {
       return { ok: false, reason: 'No free slot' };
@@ -430,9 +566,160 @@ export class Battle {
     return (this.get(actorUid)?.skills ?? []).some((id) => this.canUse(actorUid, id).ok);
   }
 
+  /** Class skill'i ya da (skillId global bir id ise) global skill kullanır; global skill'de `slot` Move Tile'ın hedef boş yuvasıdır. */
   useSkill(actorUid: string, skillId: string, targetUid?: string, slot?: number): ActionResult {
+    if (this.globalDef(skillId)) return this.useGlobal(actorUid, skillId, slot ?? slotOfTileUid(targetUid));
     return this.cast(actorUid, skillId, targetUid, slot, false);
   }
+
+  /** Tek giriş noktası: class skill'i ya da global skill ({kind:'global', id, slot?}). */
+  act(actorUid: string, action: BattleAction): ActionResult {
+    return action.kind === 'global' ? this.useGlobal(actorUid, action.id, action.slot ?? slotOfTileUid(action.targetUid)) : this.cast(actorUid, action.skillId, action.targetUid, action.slot, false);
+  }
+
+  /** Yapay zeka seçimini uygular; seçim yoksa (null) turu pas geçer (skipTurn). */
+  applyChoice(actorUid: string, choice: ChoiceLike | null): ActionResult {
+    if (!choice) return this.skipTurn();
+    return this.useSkill(actorUid, choice.skillId, choice.targetUid, choice.slot);
+  }
+
+  /** Global skill tanımı (data/global-skills.json). */
+  globalDef(id: string): GlobalSkillDef | undefined {
+    return this.setup.globalSkills?.[id];
+  }
+
+  /** Bu savaşta tanımlı global skill id'leri (rest, skip_turn, move_tile). */
+  globalSkillIds(): string[] {
+    return Object.keys(this.setup.globalSkills ?? {});
+  }
+
+  /**
+   * Birimin Move Tile için seçebileceği boş yuvalar (kendi tarafında, ÜZERİNDE CANLI BİRİM OLMAYAN yuvalar; küçükten büyüğe).
+   * Kural (Ömer): ölü bir dostun yuvasına geçiş YASAK (diriltme için ayrılmıştır); bu yuvalar `fallenSlots` ile ayrıca verilir
+   * (UI soluk "reserved" hücre gösterebilir). Çağrılar için freeSlots değişmedi. Düşman tahtasına sızmış birim hareket edemez.
+   */
+  freeTiles(actorUid: string): number[] {
+    const actor = this.get(actorUid);
+    if (!actor || actor.hp <= 0 || actor.board !== actor.side) return [];
+    const reserved = new Set(this.fallenSlots(actor.side));
+    return this.freeSlots(actor.side).filter((s) => !reserved.has(s));
+  }
+
+  /** Bir tarafın tahtasında diriltilmeyi bekleyen (düşmüş, çağrı olmayan) dostların boş yuvaları. */
+  fallenSlots(side: Side): number[] {
+    return this.combatants
+      .filter((c) => c.side === side && c.board === side && c.hp <= 0 && !c.summoned && !this.combatants.some((o) => o.hp > 0 && o.board === side && o.slot === c.slot))
+      .map((c) => c.slot)
+      .sort((a, b) => a - b);
+  }
+
+  /**
+   * Birimin `slot` yuvasındaki (varsayılan: şu anki) SIRA SIRALAMASI: kendi tahtasındaki canlı birimlerin dolu sıraları arasında kaçıncı (0 = en önde).
+   * Düşmanın yakın dövüşü sıralamaya göre işler (meleeRows + reach'ten küçükse hedeflenebilir).
+   */
+  rowRank(uid: string, slot?: number): number {
+    const c = this.get(uid);
+    if (!c) return 0;
+    const at = slot ?? c.slot;
+    const rows = new Set(this.combatants.filter((o) => o.uid !== uid && o.hp > 0 && o.board === c.board && o.side === c.side).map((o) => this.rowOf(o.slot)));
+    rows.add(this.rowOf(at));
+    return [...rows].sort((a, b) => a - b).indexOf(this.rowOf(at));
+  }
+
+  /** Birim `slot` yuvasındayken yakın dövüş skill'i (reach ile) kullanabilir mi? (canUse'taki 'Melee: front row only' kuralı, varsayımsal yuva için). */
+  canMeleeFrom(uid: string, slot: number, reach = 0): boolean {
+    const c = this.get(uid);
+    if (!c) return false;
+    const rows = this.combatants.filter((o) => o.uid !== uid && o.hp > 0 && o.board === c.board && o.side === c.side).map((o) => this.rowOf(o.slot));
+    const front = Math.min(this.rowOf(slot), ...rows);
+    return this.rowOf(slot) <= front + reach;
+  }
+
+  /** Global skill şu an kullanılabilir mi (sıra, mod, MP dolu mu, üst üste skip sınırı, boş yuva)? `slot`: Move Tile hedefi (verilirse geçerli olmalı). */
+  canUseGlobal(actorUid: string, id: string, slot?: number): CanUse {
+    const def = this.globalDef(id);
+    if (!def) return { ok: false, reason: 'Unknown action' };
+    if (this.winner) return { ok: false, reason: 'Battle is over' };
+    const actor = this.get(actorUid);
+    if (!actor) return { ok: false, reason: 'No such unit' };
+    if (actor.hp <= 0) return { ok: false, reason: 'Unit is dead' };
+    if (actor.summoned) return { ok: false, reason: 'Summoned units cannot use this' };
+    if (this.mode === 'turns' && this.currentUid !== actorUid) return { ok: false, reason: "Not this unit's turn" };
+    if (def.turnsOnly && this.mode !== 'turns') return { ok: false, reason: 'Only in turn mode' };
+    if (def.kind === 'rest') {
+      if (actor.maxMp <= 0) return { ok: false, reason: 'No MP' };
+      if (actor.mp >= actor.maxMp) return { ok: false, reason: 'MP is full' };
+    } else if (def.kind === 'skip') {
+      if (this.skipStreakOf(actorUid) >= (def.maxConsecutive ?? 1)) return { ok: false, reason: 'Cannot skip again' };
+    } else {
+      if (actor.board !== actor.side) return { ok: false, reason: 'Cannot move here' };
+      const free = this.freeTiles(actorUid);
+      if (free.length === 0) return { ok: false, reason: 'No empty cell' };
+      if (slot !== undefined && this.fallenSlots(actor.side).includes(slot)) return { ok: false, reason: 'That cell is reserved for a fallen ally' };
+      if (slot !== undefined && !free.includes(slot)) return { ok: false, reason: 'Invalid cell' };
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Global skill kullanır ve turu bitirir. rest: +def.mp MP (üst sınırı aşmaz; olay mpRegen). skip: turu geçer; sayaç normal düşer ama birimin bir sonraki turuna
+   * kadar hızı +def.speedBonus (1 = %100: sayaç iki kat hızlı dolar, sıradaki tur yarı sürede gelir; olay turnSkipped voluntary + speedBoost), üst üste en çok
+   * def.maxConsecutive kez; cooldown/MP sayaçları normal işler.
+   * move: kendi tarafındaki boş `slot` yuvasına geçer (olay moved {actor, from, to}); sıra, ön sıra kuralı, aura/yan komşuluk, taunt/guard yeni yuvaya göre kendiliğinden güncellenir
+   * (hepsi yuvadan hesaplanır). Olay akışı her zaman 'globalUsed' ile başlar.
+   */
+  useGlobal(actorUid: string, id: string, slot?: number): ActionResult {
+    const def = this.globalDef(id);
+    const can = this.canUseGlobal(actorUid, id, slot);
+    if (!can.ok) return can;
+    if (def!.kind === 'move' && slot === undefined) return { ok: false, reason: 'Pick an empty cell' };
+    const actor = this.get(actorUid)!;
+    const events: BattleEvent[] = [];
+    const emit: Emit = (e) => {
+      events.push(e);
+      this.record(e);
+    };
+    this.observer?.before?.({ kind: 'global', actorUid, id, ...(slot !== undefined ? { center: slot } : {}) });
+    emit({ type: 'globalUsed', actor: actor.uid, id });
+    if (def!.kind === 'rest') {
+      const gain = Math.min(def!.mp ?? 0, actor.maxMp - actor.mp);
+      actor.mp += gain;
+      emit({ type: 'mpRegen', actor: actor.uid, amount: gain, after: actor.mp });
+    } else if (def!.kind === 'skip') {
+      // Sayaç normal düşer (taşan kısım korunur); bunun yerine bir sonraki tura kadar hız +speedBonus (varsayılan %100) artar.
+      const bonus = this.mode === 'turns' ? Math.max(0, def!.speedBonus ?? 1) : 0;
+      if (bonus > 0) this.speedBoost.set(actor.uid, bonus);
+      emit({ type: 'turnSkipped', actor: actor.uid, voluntary: true, ...(bonus > 0 ? { speedBoost: bonus } : {}) });
+    } else {
+      const from = actor.slot;
+      actor.slot = slot!;
+      emit({ type: 'moved', actor: actor.uid, from, to: actor.slot });
+    }
+    this.noteAction(actor.uid, def!.kind === 'rest' ? 'rest' : def!.kind === 'skip' ? 'skip' : 'move');
+    this.finishAction(actor, emit);
+    return { ok: true, events };
+  }
+
+  /** Aktörün şu an yapabileceği tüm eylemler: class skill'leri ve global skill'ler (ok: kullanılabilir mi, reason: neden değil, slots: Move Tile yuvaları). */
+  listActions(actorUid: string): ActionInfo[] {
+    const actor = this.get(actorUid);
+    if (!actor) return [];
+    const out: ActionInfo[] = actor.skills.map((id) => {
+      const c = this.canUse(actorUid, id);
+      return { kind: 'skill', id, ok: c.ok, ...(c.ok ? {} : { reason: c.reason }) };
+    });
+    for (const id of this.globalSkillIds()) {
+      const c = this.canUseGlobal(actorUid, id);
+      out.push({ kind: 'global', id, ok: c.ok, ...(c.ok ? {} : { reason: c.reason }), ...(this.globalDef(id)?.kind === 'move' && c.ok ? { slots: this.freeTiles(actorUid) } : {}) });
+    }
+    return out;
+  }
+
+  /** Şu an kullanılabilir (ok) eylemler. */
+  legalActions(actorUid: string): ActionInfo[] {
+    return this.listActions(actorUid).filter((a) => a.ok);
+  }
+
 
   /**
    * Debug: skill'i bedel, bekleme, menzil, sıra ve kullanıcının skill listesi kurallarını yok sayarak oynatır (animasyon/ses galerisi).
@@ -462,16 +749,22 @@ export class Battle {
     let targets = this.validTargets(actorUid, skillId);
     if (debug && targets.length === 0 && !this.needsSlotChoice(skillId)) return { ok: false, reason: skill.target === 'dead_ally' ? 'No fallen ally' : 'No target' };
     let centerSlot: number | undefined;
+    let centerCells: number[] | undefined;
     const hit = new Set<string>();
     const splashUids = new Set<string>();
     if (this.isAreaSkill(skillId)) {
-      // Merkez: seçilen birimin hücresi ya da (boş olabilen) seçilen hücre
-      const anchor = targetUid ? targets.find((c) => c.uid === targetUid) : undefined;
+      // Merkez (anchor): seçilen birimin hücresi ya da (boş olabilen) seçilen hücre. Şekil skill'inde anchor birimi erişim dışında (arkada) da olabilir.
+      const board = opposite(actor.side);
+      const shape = this.isShapeSkill(skillId);
+      const anchorUnit = targetUid ? (shape ? this.get(targetUid) : targets.find((c) => c.uid === targetUid)) : undefined;
+      const anchor = anchorUnit && anchorUnit.hp > 0 && (!shape || anchorUnit.board === board) ? anchorUnit : undefined;
       const total = this.setup.formulas.formation.rows * this.setup.formulas.formation.lanes;
       const center = anchor ? anchor.slot : (slot ?? (debug ? targets[0]?.slot : undefined));
       if (center === undefined || !Number.isInteger(center) || center < 0 || center >= total) return { ok: false, reason: 'Invalid target' };
       targets = this.areaWindowAt(actorUid, skillId, center);
+      if (shape && !debug && targets.length === 0) return { ok: false, reason: 'No target in the area' };
       centerSlot = center;
+      centerCells = this.areaCells(skillId, center, board);
     } else if (skill.target === 'random_enemies') {
       // Rastgele (seed'li) farklı `count` düşman
       const pool = [...targets];
@@ -497,16 +790,24 @@ export class Battle {
       this.record(e);
     };
 
-    emit({ type: 'skillUsed', actor: actor.uid, skill: skill.id, targets: targets.map((t) => t.uid), ...(centerSlot !== undefined ? { center: centerSlot } : {}) });
+    if (!debug) this.observer?.before?.({ kind: 'skill', actorUid, id: skillId, targetUids: targets.map((t) => t.uid), ...(centerSlot !== undefined ? { center: centerSlot, cells: centerCells } : {}) });
+    emit({ type: 'skillUsed', actor: actor.uid, skill: skill.id, targets: targets.map((t) => t.uid), ...(centerSlot !== undefined ? { center: centerSlot, anchor: centerSlot, cells: centerCells } : {}) });
 
     if (!debug && this.mode === 'turns' && (skill.cooldown ?? 0) > 0) actor.cooldowns[skill.id] = skill.cooldown!;
 
     const { resource, amount: cost } = skill.cost;
     if (!debug && cost > 0 && !(resource === 'mp' && this.freeMp)) {
-      actor[resource] -= cost;
-      emit({ type: 'resource', actor: actor.uid, resource, amount: cost, after: actor[resource] });
+      if (resource === 'rage') {
+        actor.rage = (actor.rage ?? 0) - cost;
+        emit({ type: 'rage', actor: actor.uid, delta: -cost, after: actor.rage, max: actor.maxRage ?? 0 });
+      } else {
+        actor[resource] -= cost;
+        emit({ type: 'resource', actor: actor.uid, resource, amount: cost, after: actor[resource] });
+      }
     }
 
+    // Rage'li kullanıcı: bu skill'in isabet eden hasar vuruşları hedef başına toplanır (strike doldurur), skill bitince tek kazanç olarak işlenir
+    this.rageTally = !debug && actor.maxRage !== undefined ? new Map() : null;
     this.castMelee = skill.motion === 'melee';
     for (const effect of skill.effects) {
       const ts = this.effectTargets(skill, effect, targets, actor);
@@ -521,7 +822,7 @@ export class Battle {
               // Şerit skill'inde her yeni hedef bir öncekinin `falloff` katı hasar alır (öndekinden arkadakine)
               const mult = (effect.falloff ? Math.pow(effect.falloff, idx) : 1) * betMult * (splashUids.has(target.uid) ? skill.splash?.mult ?? 1 : 1);
               const r = this.strike(actor, target, effect, emit, mult, idx === 0);
-              if (!r.dodged) hit.add(target.uid);
+              if (r.landed) hit.add(target.uid);
               // Çifte vuruş: aynı vuruş bir kez daha (zar her hedef için bir kez atılır)
               if (effect.repeatChance && this.rng.next() < effect.repeatChance && target.hp > 0) {
                 if (!repeatAnnounced) {
@@ -529,7 +830,7 @@ export class Battle {
                   emit({ type: 'passive', actor: actor.uid, passive: 'gamble_double', name: 'Double Hit' });
                 }
                 const r2 = this.strike(actor, target, effect, emit, mult, false);
-                if (!r2.dodged) hit.add(target.uid);
+                if (r2.landed) hit.add(target.uid);
               }
             });
           }
@@ -558,6 +859,7 @@ export class Battle {
             target.magicShield = 0;
             target.statuses = [];
             target.turnCounter = 0;
+            if (target.maxRage !== undefined) target.rage = 0;
             this.announcedDead.delete(target.uid);
             emit({ type: 'revive', source: actor.uid, target: target.uid, hpAfter: target.hp, mpAfter: target.mp });
           }
@@ -635,7 +937,7 @@ export class Battle {
         }
         case 'ground': {
           if (centerSlot === undefined) break;
-          const slots = this.areaCells(skillId, centerSlot);
+          const slots = centerCells ?? this.areaCells(skillId, centerSlot, opposite(actor.side));
           const g: GroundEffect = {
             id: `g${this.groundCount++}`,
             ground: effect.ground,
@@ -690,6 +992,20 @@ export class Battle {
 
     this.castMelee = false;
 
+    // Rage kazancı: skill başına tek (en yüksek tek hedefin toplamı; perCastCap ile sınırlı), yalnızca isabet eden hasar vuruşlarından
+    if (this.rageTally && this.rageTally.size > 0 && actor.maxRage !== undefined) {
+      const cap = f.rage.perCastCap;
+      const gain = Math.round(Math.min(cap, Math.max(...this.rageTally.values())));
+      const after = Math.min(actor.maxRage, (actor.rage ?? 0) + gain);
+      const delta = after - (actor.rage ?? 0);
+      this.rageTally = null;
+      if (delta > 0) {
+        actor.rage = after;
+        emit({ type: 'rage', actor: actor.uid, delta, after, max: actor.maxRage });
+      }
+    }
+    this.rageTally = null;
+
     // Int-primary Mana Echo: skill sonrası ihtimalle MP bedelinin yarısı (yukarı yuvarla, en az 1) geri gelir; bedelsiz skill'de zar atılmaz
     if (!debug && resource === 'mp' && cost > 0 && !this.freeMp && (actor.stats.manaEcho ?? 0) > 0 && this.rng.next() < actor.stats.manaEcho) {
       const back = Math.min(Math.max(1, Math.ceil(cost / 2)), actor.maxMp - actor.mp);
@@ -707,7 +1023,10 @@ export class Battle {
       emit({ type: 'passive', actor: actor.uid, passive: actor.passive!.id, name: actor.passive!.name });
     }
 
-    if (!debug) this.finishAction(actor, emit);
+    if (!debug) {
+      this.noteAction(actor.uid, 'skill');
+      this.finishAction(actor, emit);
+    }
     return { ok: true, events };
   }
 
@@ -744,7 +1063,9 @@ export class Battle {
       events.push(e);
       this.record(e);
     };
+    this.observer?.before?.({ kind: 'pass', actorUid: actor.uid });
     emit({ type: 'turnSkipped', actor: actor.uid });
+    this.noteAction(actor.uid, 'pass');
     this.finishAction(actor, emit);
     return { ok: true, events };
   }
@@ -764,6 +1085,7 @@ export class Battle {
       else if (this.living('party').length === 0) this.winner = 'enemy';
       if (this.winner) emit({ type: 'battleEnd', winner: this.winner });
     }
+    this.observer?.after?.(actor.uid);
     if (this.mode === 'turns' && !this.winner) {
       actor.turnCounter -= this.setup.formulas.turn.threshold;
       this.advance(emit);
@@ -781,6 +1103,7 @@ export class Battle {
     this.currentUid = next?.uid ?? null;
     const actor = next ? this.get(next.uid) : undefined;
     if (!next || !actor) return;
+    this.speedBoost.delete(actor.uid); // Skip Turn desteği, birimin sıradaki turu başlayınca biter
     // Kendi turunun başında: bekleme süreleri 1 azalır
     const held = this.initialHold.get(actor.uid);
     this.initialHold.delete(actor.uid);
@@ -848,7 +1171,14 @@ export class Battle {
   private turnSlots(): TurnSlot[] {
     return this.combatants
       .filter((c) => c.hp > 0)
-      .map((c) => ({ uid: c.uid, side: c.side, slot: c.slot, spd: this.speedOf(c), counter: c.turnCounter }));
+      .map((c) => ({
+        uid: c.uid,
+        side: c.side,
+        slot: c.slot,
+        spd: this.speedOf(c),
+        counter: c.turnCounter,
+        ...(this.speedBoostOf(c.uid) > 0 ? { baseSpd: this.baseSpeedOf(c) } : {}),
+      }));
   }
 
   private addStatus(target: Combatant, status: Status, emit: Emit): void {
@@ -862,20 +1192,28 @@ export class Battle {
     target.statuses = target.statuses.filter((s) => !(s.kind === status.kind && (status.kind !== 'regen' || s.source === status.source)));
     target.statuses.push(status);
     emit({ type: 'status', target: target.uid, status: status.kind, turns: status.turns, source: status.source });
+    // Kontrol (CC) durumu (data/statuses.json > breaksTaunt, şu an Stun): taunt'ı olan birim bunu yerse taunt uygulandığı AN silinir (süre kısalsa da, 1 tur olsa da)
+    if (this.statusDef(status.kind)?.breaksTaunt && target.statuses.some((s) => s.kind === 'taunt')) {
+      target.statuses = target.statuses.filter((s) => s.kind !== 'taunt');
+      emit({ type: 'statusEnd', target: target.uid, status: 'taunt', broken: true });
+    }
   }
 
   /**
-   * Tek bir hasar vuruşu: isabet zarı (accuracy vs evasion; iska = dodge olayı) -> zar -> kritik (SON çarpan) -> guard paylaşımı -> kalkan -> can.
+   * Tek bir hasar vuruşu: isabet zarı (TEK zar; accuracy vs evasion; iska = 'dodge' (hedef kaçındı) ya da 'miss' (saldıran isabet ettiremedi) olayı)
+   * -> zar -> kritik (SON çarpan) -> guard paylaşımı -> kalkan -> can.
    * `powerMult`: arkaya sıçrayan kısmî hasar için güç çarpanı.
    */
-  private strike(actor: Combatant, target: Combatant, effect: DamageEffect, emit: Emit, powerMult: number, extras: boolean): { dodged: boolean } {
+  private strike(actor: Combatant, target: Combatant, effect: DamageEffect, emit: Emit, powerMult: number, extras: boolean): { landed: boolean } {
     const f = this.setup.formulas;
-    // Zarlar her zaman atılır (debug zorlaması rastgele sayı akışını değiştirmez)
-    const hitRoll = rollHit(actor.stats, target.stats, f, this.rng);
-    const dodged = this.debug.dodge === 'auto' ? !hitRoll : this.debug.dodge === 'always';
-    if (dodged) {
-      emit({ type: 'dodge', source: actor.uid, target: target.uid });
-      return { dodged: true };
+    // Zarlar her zaman atılır (debug zorlaması rastgele sayı akışını değiştirmez); vuruş başına TEK zar üç sonuca ayrışır
+    let outcome = hitOutcome(actor.stats, target.stats, f, this.rng.next());
+    if (this.debug.dodge === 'always') outcome = 'dodge';
+    else if (this.debug.miss === 'always') outcome = 'miss';
+    else if (this.debug.dodge === 'never') outcome = 'hit';
+    if (outcome !== 'hit') {
+      emit({ type: outcome, source: actor.uid, target: target.uid });
+      return { landed: false };
     }
     const spec = damageSpecFor(actor, target, effect, f, powerMult, extras, this.damageTakenMult(target), this.hunterMarkMult(actor, target));
     const targetStats = this.effectiveStats(target);
@@ -896,6 +1234,12 @@ export class Battle {
       hpLoss = this.applyHit(actor, target, total, effect.damageType, crit, emit, false);
     }
 
+    // Rage: isabet eden hasar vuruşu, vurulan hasarın hedefin maks canına yüzdesine göre kazanç (hedef başına toplanır; formulas.json > rage)
+    if (this.rageTally && actor.maxRage !== undefined) {
+      const r = f.rage;
+      const gain = Math.min(r.perHitCap, r.hitBase + r.perHpPercent * ((total / Math.max(1, target.maxHp)) * 100));
+      this.rageTally.set(target.uid, (this.rageTally.get(target.uid) ?? 0) + gain);
+    }
     if (effect.lifesteal && actor.hp > 0) {
       this.applyHeal(actor, actor, Math.round(hpLoss * effect.lifesteal), false, emit);
     }
@@ -927,7 +1271,7 @@ export class Battle {
     this.reflectThorns(actor, target, emit);
     this.announceIfDead(target, emit);
     if (guardian) this.announceIfDead(guardian, emit);
-    return { dodged: false };
+    return { landed: true };
   }
 
   /**
@@ -1070,15 +1414,24 @@ export class Battle {
     c.magicShield = 0;
     c.statuses = [];
     c.turnCounter = 0;
+    if (c.maxRage !== undefined) c.rage = 0;
     this.announcedDead.delete(c.uid);
     this.record({ type: 'revive', source: c.uid, target: c.uid, hpAfter: c.hp, mpAfter: c.mp });
     return { ok: true, events: [] };
   }
 
-  /** Debug: can ya da manayı ayarlar (can 0 = öldür; ölü birimde can > 0 = diriltir). */
-  debugSetResource(uid: string, resource: 'hp' | 'mp', value: number): ActionResult {
+  /** Debug: can, mana ya da Rage'i ayarlar (can 0 = öldür; ölü birimde can > 0 = diriltir; rage yalnızca Rage'li birimde). */
+  debugSetResource(uid: string, resource: 'hp' | 'mp' | 'rage', value: number): ActionResult {
     const c = this.get(uid);
     if (!c) return { ok: false, reason: 'No such unit' };
+    if (resource === 'rage') {
+      if (c.maxRage === undefined) return { ok: false, reason: 'Unit has no rage' };
+      const v = Math.max(0, Math.min(c.maxRage, Math.round(value)));
+      const before = c.rage ?? 0;
+      c.rage = v;
+      if (v !== before) this.record({ type: 'rage', actor: c.uid, delta: v - before, after: v, max: c.maxRage });
+      return { ok: true, events: [] };
+    }
     const max = resource === 'hp' ? c.maxHp : c.maxMp;
     const v = Math.max(0, Math.min(max, Math.round(value)));
     if (resource === 'hp') {
@@ -1185,6 +1538,7 @@ function createCombatant(def: CombatantDef, side: Side, slot: number, uid: strin
     charge: 0,
     turnCounter: 0,
     cooldowns: {},
+    ...(def.maxRage !== undefined ? { rage: 0, maxRage: def.maxRage } : {}),
   };
 }
 

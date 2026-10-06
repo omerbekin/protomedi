@@ -7,13 +7,14 @@
   "role": "Melee Bruiser",
   "frontPriority": 1,
   "attributes": {
-    "str": 16,
+    "str": 15,
     "int": 8,
     "dex": 4,
-    "luck": 2
+    "luck": 3
   },
   "primary": "str",
-  "armor": 12,
+  "resource": "rage",
+  "armor": 9,
   "magicArmor": 0,
   "ai": "aggressive",
   "skills": [

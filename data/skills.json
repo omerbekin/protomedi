@@ -49,7 +49,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.4
+        "power": 1.3
       }
     ],
     "vfx": "whirlwind",
@@ -75,7 +75,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.8,
+        "power": 0.58,
         "element": "holy"
       }
     ],
@@ -103,13 +103,13 @@
       {
         "type": "heal",
         "scale": "int",
-        "power": 1.15
+        "power": 0.9
       },
       {
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.975,
+        "power": 0.85,
         "element": "holy"
       }
     ],
@@ -150,7 +150,7 @@
         "ground": "holy_fire",
         "turns": 2,
         "scale": "int",
-        "power": 0.7
+        "power": 0.56
       }
     ],
     "vfx": "judgment",
@@ -186,7 +186,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 2.2,
+        "power": 2.25,
         "element": "fire"
       }
     ],
@@ -215,7 +215,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.5,
+        "power": 1.58,
         "element": "ice"
       }
     ],
@@ -236,7 +236,7 @@
     "target": "area_enemies",
     "cost": {
       "resource": "mp",
-      "amount": 24
+      "amount": 20
     },
     "cooldown": 3,
     "initialCooldown": 1,
@@ -248,7 +248,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.25,
+        "power": 1.28,
         "element": "fire"
       },
       {
@@ -288,7 +288,7 @@
     "target": "single_ally",
     "cost": {
       "resource": "mp",
-      "amount": 10
+      "amount": 8
     },
     "cooldown": 3,
     "motion": "cast",
@@ -297,7 +297,7 @@
       {
         "type": "shield",
         "scale": "int",
-        "power": 1.25
+        "power": 1.7
       }
     ],
     "vfx": "barrier",
@@ -322,7 +322,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.955,
+        "power": 2.1,
         "element": "dark"
       }
     ],
@@ -351,7 +351,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.25,
+        "power": 1.35,
         "element": "dark"
       },
       {
@@ -386,7 +386,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 0.4
+        "power": 0.44
       },
       {
         "type": "status",
@@ -419,7 +419,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 1,
+        "power": 1.08,
         "falloff": 0.7
       }
     ],
@@ -448,7 +448,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 0.7
+        "power": 0.74
       }
     ],
     "area": {
@@ -478,7 +478,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 2.55,
+        "power": 2.65,
         "ignoreDefense": 0.5
       }
     ],
@@ -502,7 +502,8 @@
         }
       ],
       "reserveMp": 2
-    }
+    },
+    "initialCooldown": 2
   },
   "thorn_whip": {
     "id": "thorn_whip",
@@ -520,7 +521,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.2,
+        "power": 1.12,
         "element": "nature"
       },
       {
@@ -610,7 +611,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1,
+        "power": 0.92,
         "element": "nature"
       }
     ],
@@ -694,7 +695,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.7,
+        "power": 3.0,
         "element": "arcane"
       },
       {
@@ -756,7 +757,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 2.55,
+        "power": 3.6,
         "bonusPerMissingMana": 1,
         "element": "arcane"
       }
@@ -796,7 +797,7 @@
         "scale": "int",
         "power": 0.3,
         "shieldType": "magic",
-        "bonusPerMana": 0.5
+        "bonusPerMana": 0.6
       }
     ],
     "vfx": "spellward",
@@ -987,8 +988,8 @@
     "icon": "warcry",
     "target": "self",
     "cost": {
-      "resource": "mp",
-      "amount": 15
+      "resource": "rage",
+      "amount": 40
     },
     "cooldown": 5,
     "motion": "cast",
@@ -1069,7 +1070,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.4
+        "power": 0.8
       },
       {
         "type": "status",
@@ -1103,7 +1104,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.2
+        "power": 1.3
       }
     ],
     "vfx": "fistcrush",
@@ -1125,7 +1126,7 @@
     "target": "dead_ally",
     "cost": {
       "resource": "mp",
-      "amount": 30
+      "amount": 20
     },
     "cooldown": 6,
     "motion": "cast",
@@ -1160,7 +1161,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.8,
+        "power": 1.7,
         "repeatChance": 0.25
       }
     ],
@@ -1300,5 +1301,136 @@
       ],
       "reserveMp": 2
     }
+  },
+  "shape_row": {
+    "_not": "TEST (Geometer): hedef hücrenin bulunduğu SIRADAKİ (aynı derinlik, ekranda dikey şerit) tüm hücrelere vurur. Görsel: tebeşir-ışık kalemi sıranın dış hattını çizer, rünler basılır, ışıklı cetvel sırayı yukarıdan aşağı süpürür.",
+    "id": "shape_row",
+    "name": "Row Sweep",
+    "icon": "rowsweep",
+    "target": "area_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 10
+    },
+    "cooldown": 2,
+    "motion": "cast",
+    "fx": "#b07cff",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 0.9,
+        "element": "arcane"
+      }
+    ],
+    "area": {
+      "shape": "row"
+    },
+    "vfx": "shaperow",
+    "sfx": [
+      "chalkDraw",
+      "runeFlare",
+      "ruleSnap"
+    ]
+  },
+  "shape_column": {
+    "_not": "TEST (Geometer): hedef hücrenin ŞERİDİNDEKİ (4 sıra boyunca, ekranda yatay) tüm hücrelere vurur. Görsel: kalem şeridi önden arkaya çizer, ışık mızrağı şeridi önden arkaya deler.",
+    "id": "shape_column",
+    "name": "Column Spear",
+    "icon": "columnspear",
+    "target": "area_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 10
+    },
+    "cooldown": 2,
+    "motion": "cast",
+    "fx": "#b07cff",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 0.9,
+        "element": "arcane"
+      }
+    ],
+    "area": {
+      "shape": "column"
+    },
+    "vfx": "shapecolumn",
+    "sfx": [
+      "chalkDraw",
+      "runeFlare",
+      "ruleSnap"
+    ]
+  },
+  "shape_rect": {
+    "_not": "TEST (Geometer): 2 sıra x 3 şerit dikdörtgen; fare hücresi ekranda SOL-ALT köşe; tahta dışına taşarsa kaydırılır. Görsel: kalem dikdörtgeni sol-alt köşeden çizer, her hücreye aynı anda kare taş mühür çöker.",
+    "id": "shape_rect",
+    "name": "Block Slam",
+    "icon": "blockslam",
+    "target": "area_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 10
+    },
+    "cooldown": 2,
+    "motion": "cast",
+    "fx": "#b07cff",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 0.9,
+        "element": "arcane"
+      }
+    ],
+    "area": {
+      "shape": "rect",
+      "rows": 2,
+      "cols": 3,
+      "anchor": "bottom_left"
+    },
+    "vfx": "shaperect",
+    "sfx": [
+      "chalkDraw",
+      "runeFlare",
+      "stampSlam"
+    ]
+  },
+  "shape_plus": {
+    "_not": "TEST (Geometer): hedef + 4 yön komşusu (+ şekli); tahta dışı atlanır. Görsel: artı hattı merkezden büyür, merkez rün parlar, dört yöne ışık ışınları kollara fırlar.",
+    "id": "shape_plus",
+    "name": "Cross Burst",
+    "icon": "crossburst",
+    "target": "area_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 10
+    },
+    "cooldown": 2,
+    "motion": "cast",
+    "fx": "#b07cff",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 0.9,
+        "element": "arcane"
+      }
+    ],
+    "area": {
+      "shape": "plus"
+    },
+    "vfx": "shapeplus",
+    "sfx": [
+      "chalkDraw",
+      "runeFlare",
+      "ruleSnap"
+    ]
   }
 }

@@ -1,6 +1,7 @@
+import { isShapeArea, shapeBadge } from './area-shape';
 import { betMultipliers, betStake } from './gamble';
 import { attributePower } from './stats';
-import type { Attribute, CombatantDef, Element, Formulas, GroundDef, PassiveDef, SkillDef, SkillTarget, Stats, StatusDef } from './types';
+import type { AreaDef, Attribute, CombatantDef, Element, Formulas, GlobalSkillDef, GroundDef, PassiveDef, SkillDef, SkillTarget, Stats, StatusDef } from './types';
 
 /** Skill'in oyuncuya gösterilen genel bilgileri (tooltip). Metinler İngilizce (oyun içi arayüz). */
 export interface SkillInfo {
@@ -29,6 +30,7 @@ export const TARGET_TEXT: Record<SkillTarget, string> = {
   everyone: 'Everyone',
   random_enemies: 'Random enemies',
   self: 'Self',
+  empty_tile: 'Empty cell',
 };
 
 /** Sağ üst rozet için kısa hedef türü (tooltip düzeni). */
@@ -43,13 +45,29 @@ export const TARGET_BADGE: Record<SkillTarget, string> = {
   everyone: 'Everyone',
   random_enemies: 'Random',
   self: 'Self',
+  empty_tile: 'Empty Cell',
 };
 
 /** Rozet metni: alan skill'inde yarıçap ("AoE · r1"), rastgele skill'de hedef sayısı ("Random · 3") rozette yazar, açıklamada değil. */
 export function targetBadge(skill: SkillDef): string {
+  if (skill.target === 'area_enemies' && isShapeArea(skill.area)) return shapeBadge(skill.area);
   if (skill.target === 'area_enemies') return `${TARGET_BADGE.area_enemies} · r${skill.area?.radius ?? 1}`;
   if (skill.target === 'random_enemies') return `${TARGET_BADGE.random_enemies} · ${skill.count ?? 3}`;
   return TARGET_BADGE[skill.target];
+}
+
+/** Şekil skill'inin sade açıklaması (hedef satırı). */
+function shapeText(area: AreaDef): string {
+  switch (area.shape) {
+    case 'row':
+      return 'Hits the whole row of the target';
+    case 'column':
+      return 'Hits the whole column';
+    case 'plus':
+      return 'Hits a cross: the target and the 4 cells next to it';
+    default:
+      return `Hits a ${area.rows ?? 1}x${area.cols ?? 1} block; your cursor cell is its bottom-left corner`;
+  }
 }
 
 export const ATTRIBUTE_NAME: Record<Attribute, string> = { str: 'STR', int: 'INT', dex: 'DEX', luck: 'LUCK' };
@@ -84,6 +102,68 @@ export function describePassive(passive: PassiveDef, stats: Stats, formulas: For
     case 'armorAura':
       return `You and the allies right next to you (front, back, left, right) gain bonus armor equal to ${pct(e.pct)} of your own armor (+${Math.round(stats.armor * e.pct)} now). A unit benefits from at most ${e.maxStacks} such auras.`;
   }
+}
+
+/** Global skill'in (Rest / Skip Turn / Move) oyuncuya gösterilen bilgisi; sayılar data/global-skills.json'dan. Metinler İngilizce. */
+export interface GlobalSkillInfo {
+  id: string;
+  name: string;
+  icon: string;
+  /** Hedef türü metni ve rozeti ('Self' / 'Empty cell'). */
+  target: string;
+  targetBadge: string;
+  /** Hep bedelsiz: 'Free'. */
+  cost: string;
+  /** Kısa özet (data'daki text). */
+  summary: string;
+  lines: string[];
+  /** Yalnızca turns modunda kullanılabilir mi (Skip Turn). */
+  turnsOnly: boolean;
+}
+
+export function describeGlobalSkill(def: GlobalSkillDef, _formulas?: Formulas): GlobalSkillInfo {
+  const lines: string[] = [];
+  if (def.kind === 'rest') {
+    lines.push(`Restores ${def.mp ?? 0} MP (never above your maximum)`, 'Ends your turn');
+  } else if (def.kind === 'skip') {
+    const bonus = def.speedBonus ?? 1;
+    lines.push(
+      `Pass the turn: +${pct(bonus)} speed until your next turn${bonus === 1 ? ' (the speed meter fills twice as fast)' : ''}`,
+      'Enemies can still act in between',
+      'Cooldowns, regeneration and effects tick as usual',
+      `At most ${def.maxConsecutive ?? 1} in a row`,
+      'Turn mode only',
+    );
+  } else {
+    lines.push(
+      'Move to an empty cell of your own side (a cell with no living unit) and end your turn',
+      'Your row decides who can hit you in melee and whether you can use melee skills',
+      'Auras, side neighbors and taunt/guard follow your new cell',
+    );
+  }
+  return {
+    id: def.id,
+    name: def.name,
+    icon: def.icon,
+    target: TARGET_TEXT[def.target === 'empty_tile' ? 'empty_tile' : 'self'],
+    targetBadge: TARGET_BADGE[def.target === 'empty_tile' ? 'empty_tile' : 'self'],
+    cost: 'Free',
+    summary: def.text,
+    lines,
+    turnsOnly: !!def.turnsOnly,
+  };
+}
+
+/** Rage kaynağının açıklaması (class kartı, tooltip ve wiki): kazanç formülü ve üst sınır formulas.json > rage'den. */
+export function describeRage(f: Formulas): string[] {
+  const r = f.rage;
+  const n = (v: number) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100));
+  return [
+    `Rage: a bar from 0 to ${r.max}; you start every battle with 0`,
+    `Every damaging hit that lands with a skill gives ${n(r.hitBase)} Rage plus ${n(r.perHpPercent)} per 1% of the target's max HP it takes (at most ${n(r.perHitCap)} per hit)`,
+    `A skill that hits several targets gives the Rage of the best single target, never more than ${n(r.perCastCap)} per cast`,
+    'Rage never fades and is not gained from damage you take; skills that cost Rage need enough of it',
+  ];
 }
 
 export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas, units: Record<string, CombatantDef> = {}, defs: EffectDefs = {}): SkillInfo {
@@ -141,6 +221,8 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       add(e.gainRatio ? `Steals ${e.amount} MP: you gain ${pct(e.gainRatio)} of it` : `Burns ${e.amount} MP`);
     } else if (e.type === 'taunt') {
       add(`Taunt ${e.turns} turns: enemies must target you${e.breakRatio ? ` (ends after losing ${pct(e.breakRatio)} HP)` : ''}`);
+      const cc = Object.values(defs.statuses ?? {}).filter((d) => d.breaksTaunt).map((d) => d.name);
+      if (cc.length > 0) add(`Ends at once if you get ${cc.join(' or ')}`);
       if (e.allyDamageMult !== undefined) add(`Your allies take ${pct(1 - e.allyDamageMult)} less damage while it lasts`);
     } else if (e.type === 'status') {
       const def = defs.statuses?.[e.status];
@@ -165,7 +247,7 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
   const initialTurns = Math.min(formulas.cooldown?.maxInitial ?? 0, Math.floor(skill.initialCooldown ?? 0));
   return {
     name: skill.name,
-    target: skill.target === 'area_enemies' ? `Area (radius ${skill.area?.radius ?? 1})` : skill.target === 'random_enemies' ? `${skill.count ?? 3} random enemies` : TARGET_TEXT[skill.target],
+    target: skill.target === 'area_enemies' && isShapeArea(skill.area) ? shapeText(skill.area) : skill.target === 'area_enemies' ? `Area (radius ${skill.area?.radius ?? 1})` : skill.target === 'random_enemies' ? `${skill.count ?? 3} random enemies` : TARGET_TEXT[skill.target],
     targetBadge: targetBadge(skill),
     cost: amount > 0 ? `${amount} ${resource.toUpperCase()}` : 'Free',
     cooldown: (skill.cooldown ?? 0) > 0 ? `${skill.cooldown} turns` : 'None',

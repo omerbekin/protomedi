@@ -31,7 +31,11 @@ export interface SimResult {
 
 const bump = (m: Map<string, number>, key: string, by = 1) => m.set(key, (m.get(key) ?? 0) + by);
 
-export function simulate(runs: number, firstSeed = 1, battleId: string = content.DEFAULT_BATTLE): SimResult {
+/**
+ * `sizes`: takım boyutları (taraf başına 1..12; varsayılan 5-5). Global skill (Rest/Skip Turn/Move Tile) kullanımları `skillUses` içinde
+ * skill id'leriyle ('rest', 'skip_turn', 'move_tile') sayılır; toplam hamle sayısı `moves`.
+ */
+export function simulate(runs: number, firstSeed = 1, battleId: string = content.DEFAULT_BATTLE, sizes: content.TeamSizes = {}): SimResult {
   const classes = new Map<string, ClassStat>();
   const stat = (id: string): ClassStat => {
     let s = classes.get(id);
@@ -41,12 +45,12 @@ export function simulate(runs: number, firstSeed = 1, battleId: string = content
     }
     return s;
   };
-  for (const id of Object.keys(content.classes)) stat(id);
+  for (const id of content.randomPool) stat(id);
   const comps = new Map<string, { games: number; wins: number }>();
   const result: SimResult = { runs, partyWins: 0, enemyWins: 0, draws: 0, totalTurns: 0, classes, comps };
 
   for (let i = 0; i < runs; i++) {
-    const setup = content.battleSetup(battleId, firstSeed + i, 'turns');
+    const setup = content.battleSetup(battleId, firstSeed + i, 'turns', sizes);
     const battle = new Battle(setup);
     const idOf = (uid: string) => battle.get(uid)?.defId ?? '?';
 
@@ -54,7 +58,7 @@ export function simulate(runs: number, firstSeed = 1, battleId: string = content
       const actor = battle.currentActor;
       if (!actor) break;
       const choice = chooseAction(battle, actor.uid, content.aiConfig);
-      const r = choice ? battle.useSkill(actor.uid, choice.skillId, choice.targetUid) : battle.skipTurn();
+      const r = battle.applyChoice(actor.uid, choice); // seçim yoksa pas; global skill (rest/skip_turn/move_tile) de buradan geçer
       if (!r.ok) break; // YZ geçersiz hamle önermemeli; olursa raporu bozmamak için dur
       const s = stat(actor.defId);
       s.moves++;

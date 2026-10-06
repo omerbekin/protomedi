@@ -25,6 +25,19 @@ export function hitChance(attacker: Pick<Stats, 'accuracy'>, defender: Pick<Stat
   return Math.min(formulas.hit.max, Math.max(0, attacker.accuracy - defender.evasion));
 }
 
+/**
+ * Bir vuruşun üç sonucu, TEK zardan (r): r < hit şansı = 'hit'; hit şansı <= r < accuracy = 'dodge' (hedefin kaçınması yüzünden: accuracy yeterdi,
+ * evasion düşürdü); r >= accuracy = 'miss' (saldıranın isabeti yetmedi). Olasılıklar: dodge = accuracy - hit şansı, miss = 1 - accuracy.
+ */
+export type HitOutcome = 'hit' | 'dodge' | 'miss';
+
+export function hitOutcome(attacker: Pick<Stats, 'accuracy'>, defender: Pick<Stats, 'evasion'>, formulas: Formulas, roll: number): HitOutcome {
+  const hit = hitChance(attacker, defender, formulas);
+  if (roll < hit) return 'hit';
+  const accuracy = Math.min(formulas.hit.max, Math.max(0, attacker.accuracy));
+  return roll < accuracy ? 'dodge' : 'miss';
+}
+
 /** Temel özelliklerden türev stat'ları hesaplar (can, mana, hız, yenilenmeler, kritik, isabet, kaçınma, primary bonusu). */
 export function deriveStats(data: CombatantData, formulas: Formulas): Stats {
   const a = formulas.attributes;
@@ -71,7 +84,9 @@ export function buildDef(data: CombatantData, formulas: Formulas): CombatantDef 
     ...(data.role ? { role: data.role } : {}),
     attributes: { ...data.attributes },
     ...(data.primary ? { primary: data.primary } : {}),
+    ...(data.testOnly ? { testOnly: true } : {}),
     stats: deriveStats(data, formulas),
+    ...(data.resource === 'rage' ? { maxRage: formulas.rage.max } : {}),
     skills: [...data.skills],
     ...(data.tags ? { tags: [...data.tags] } : {}),
     ...(data.ai ? { ai: data.ai } : {}),

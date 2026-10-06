@@ -93,6 +93,10 @@ export interface CombatantData {
   attributes: Attributes;
   /** Class'ın primary statı (toplam stat 30 kuralı ve primary bonusu yalnızca class'larda). */
   primary?: Attribute;
+  /** true: test amaçlı class (AOE şekil test karakteri): rastgele takım havuzundan ve denge simülasyonundan HARİÇ; takım seçiminde/debug'da seçilebilir, wiki/galeride görünür. */
+  testOnly?: boolean;
+  /** Sınıfın özel kaynağı: 'rage' ise birim Rage barıyla (0-formulas.rage.max) savaşa başlar; yoksa Rage yoktur. */
+  resource?: 'rage';
   armor: number;
   magicArmor: number;
   /** Sınıfa özel taban isabet (yoksa formulas.json > attributes.accuracyBase; şu an hiçbir class'ta tanımlı değil). */
@@ -119,7 +123,11 @@ export interface CombatantDef {
   role?: string;
   attributes: Attributes;
   primary?: Attribute;
+  /** true: test amaçlı class (rastgele havuz ve denge simülasyonu dışı). */
+  testOnly?: boolean;
   stats: Stats;
+  /** Rage'li class: Rage barının üst sınırı (formulas.json > rage.max); Rage'siz class'ta tanımsız. */
+  maxRage?: number;
   skills: string[];
   tags?: string[];
   ai?: string;
@@ -128,7 +136,7 @@ export interface CombatantDef {
 
 export type Element = 'physical' | 'fire' | 'ice' | 'holy' | 'dark' | 'nature' | 'arcane';
 
-export type SkillTarget = 'single_enemy' | 'all_enemies' | 'area_enemies' | 'column_enemies' | 'everyone' | 'random_enemies' | 'single_ally' | 'dead_ally' | 'all_allies' | 'self';
+export type SkillTarget = 'empty_tile' | 'single_enemy' | 'all_enemies' | 'area_enemies' | 'column_enemies' | 'everyone' | 'random_enemies' | 'single_ally' | 'dead_ally' | 'all_allies' | 'self';
 
 /**
  * Bahis (gamble): hasar etkisi atılmadan önce kullanıcı kaynağından (can ya da MP) bir miktarı BAHSE koyar ve bir zar atılır (seed'li RNG, skill başına bir kez).
@@ -209,7 +217,8 @@ export type SkillEffectKind =
 export type SkillEffect = SkillEffectKind & { side?: 'allies' | 'enemies' };
 
 export interface SkillCost {
-  resource: 'mp' | 'hp';
+  /** mp: mana; hp: can; rage: Rage barı (yalnızca Rage'li class'lar; yetmiyorsa kullanılamaz). */
+  resource: 'mp' | 'hp' | 'rage';
   amount: number;
 }
 
@@ -235,6 +244,8 @@ export interface SkillAiCond {
   minSelfHpRatioAfter?: number;
   /** Kullanıcının MP oranı (bedel ödenmeden) en az bu. */
   minSelfMpRatio?: number;
+  /** Kullanıcının Rage'i (bedel ödenmeden) en az bu kadar (Rage'siz birimde sağlanmaz). */
+  minSelfRage?: number;
   /** Savaşta oynanan toplam tur (tüm birimler) en az bu. */
   minBattleTurns?: number;
   /** Canı `woundedBelowRatio` altındaki en az bu kadar dost var. */
@@ -304,8 +315,32 @@ export interface SkillDef {
    * pattern 'perpendicular': hedefin aynı sıradaki sol ve sağ şerit komşuları (saldırı ön-arka ekseninde geldiği için yan hücreler).
    */
   splash?: { pattern: 'perpendicular'; mult?: number };
-  /** target 'area_enemies': oyuncu merkez birimi seçer. radius 1: merkez + önü/arkası/sağı/solu (artı şekli); radius 2: öne/arkaya/sağa/sola 2'şer + çaprazlara 1'er. */
-  area?: { radius: 1 | 2 };
+  /**
+   * target 'area_enemies': oyuncu bir ANCHOR hücre seçer (boş hücre de olabilir). Eski biçim `{ radius }`: radius 1 = merkez + önü/arkası/sağı/solu (artı şekli);
+   * radius 2 = öne/arkaya/sağa/sola 2'şer + çaprazlara 1'er. Yeni biçim `{ shape }` (hücre kümesi şekilleri, bkz. area-shape.ts): row | column | rect | plus.
+   */
+  area?: AreaDef;
+}
+
+/** Alan şekilleri (area-shape.ts): row = hedefin SIRASI (aynı derinlik), column = hedefin ŞERİDİ, rect = rows x cols dikdörtgen (anchor sol-alt köşe), plus = hedef + 4 yön komşusu. */
+export type AreaShapeKind = 'row' | 'column' | 'rect' | 'plus';
+
+export interface AreaDef {
+  /** Eski biçim: merkez + yarıçap (shape yoksa). */
+  radius?: 1 | 2;
+  shape?: AreaShapeKind;
+  /** rect: dikdörtgenin sıra (derinlik) sayısı. */
+  rows?: number;
+  /** rect: dikdörtgenin şerit sayısı. */
+  cols?: number;
+  /** rect: fare hücresinin dikdörtgendeki köşesi (şimdilik yalnızca ekranda sol-alt). */
+  anchor?: 'bottom_left';
+}
+
+/** Bir hücrenin ekran konumu (dizin, 0 tabanlı): col = soldan sağa (derinlik ekseni), row = yukarıdan aşağıya (şerit ekseni). */
+export interface ScreenCell {
+  col: number;
+  row: number;
 }
 
 export interface Formulas {
@@ -334,6 +369,12 @@ export interface Formulas {
   };
   /** İsabet kontrolü: hit şansı = accuracy - evasion, [0, max] arasına sıkıştırılır (%0 olabilir). aiKillMin: yapay zekanın "öldürür" sayması için gereken en az hit şansı. */
   hit: { max: number; aiKillMin: number };
+  /**
+   * Rage (Warrior): her hasar veren ve İSABET eden vuruşta kazanç = min(perHitCap, hitBase + perHpPercent x vurulan hasarın hedefin maks canına yüzdesi).
+   * Bir skill kullanımında (tüm vuruşlar bittikten sonra) toplam kazanç: her hedefe yapılan vuruşların kazancı toplanır, EN YÜKSEK hedefin toplamı alınır
+   * (çok hedefli skill'de hedef sayısı kazancı artırmaz), perCastCap'i geçemez. Rage zamanla azalmaz; yalnızca skill hasarıyla kazanılır (alınan hasarla DEĞİL).
+   */
+  rage: { max: number; hitBase: number; perHpPercent: number; perHitCap: number; perCastCap: number };
   /** Primary stat pasif bonusları (yalnızca class'ın en yüksek statı primary ise aktif). */
   primaryBonus: {
     str: { resilienceChance: number };
@@ -357,6 +398,11 @@ export interface Formulas {
     meleeRows: number;
     /** Yan vuruş komşuluğu (ekran geometrisinden, bkz. formation.ts): tahta başına her hücrenin üst/alt komşu adayları. Yoksa eski kural (aynı sıra, şerit farkı 1). */
     sideNeighbors?: { maxDx: number; party: { up: number[]; down: number[] }[]; enemy: { up: number[]; down: number[] }[] };
+    /**
+     * Ekran ızgarası (layout koordinatlarından, formation.ts > computeScreenGrid): tahta başına her yuvanın EKRANDAKİ sütun (soldan sağa) ve satır (yukarıdan aşağıya) dizini.
+     * 'rect' şeklinin "sol-alt" köşesi bu uzayda tanımlıdır; oyuncu ve düşman tarafı aynalı olduğu için aynı yuvanın ekran sütunu iki tarafta farklıdır. Yoksa rect şekli çalışmaz.
+     */
+    screenGrid?: { party: ScreenCell[]; enemy: ScreenCell[] };
   };
   turn: { threshold: number; queueLength: number };
   /** Cooldown kuralları: `maxInitial` = bir skill'in savaş başı başlangıç cooldown'unun (initialCooldown) üst sınırı. */
@@ -381,6 +427,8 @@ export interface StatusDef {
   damageTakenMult?: number;
   healTakenMult?: number;
   skipTurn?: boolean;
+  /** true: bu durum bir birime uygulandığı AN o birimin kendi taunt'ı silinir (kontrol/CC durumu; şu an yalnızca Stun). Yeni durum eklemek tek satır. */
+  breaksTaunt?: boolean;
 }
 
 /** data/grounds.json girişi: yerde kalan etki türü. */
@@ -469,12 +517,15 @@ export interface Combatant {
   turnCounter: number;
   /** Beklemede olan skill'ler: skillId -> kalan tur (her kendi turunun başında 1 azalır). */
   cooldowns: Record<string, number>;
+  /** Rage (yalnızca Rage'li class'ta; diğerlerinde tanımsız): mevcut değer ve üst sınır. Savaş başında 0. */
+  rage?: number;
+  maxRage?: number;
 }
 
 /** Motorun UI'a yayınladığı olay akışı. UI yalnızca bunları dinler. */
 export type BattleEvent =
   | { type: 'battleStart'; seed: number; combatants: Combatant[] }
-  | { type: 'skillUsed'; actor: string; skill: string; targets: string[]; /** Alan/şerit skill'inde seçilen merkez hücre. */ center?: number }
+  | { type: 'skillUsed'; actor: string; skill: string; targets: string[]; /** Alan/şerit skill'inde seçilen merkez (anchor) hücre. */ center?: number; /** Alan skill'inde seçilen anchor hücre (center ile aynı). */ anchor?: number; /** Alan/şerit skill'inde kapsanan TÜM hücreler (boş olanlar dahil, yuva sırasıyla; hedef tahtasında). */ cells?: number[] }
   | { type: 'resource'; actor: string; resource: 'mp' | 'hp'; amount: number; after: number }
   | {
       type: 'damage';
@@ -490,7 +541,12 @@ export type BattleEvent =
       /** Guard ile korumacıya aktarılan hasar. */
       redirected?: boolean;
     }
+  /**
+   * İska (tek zardan ayrıştırılır): 'dodge' = hedefin KAÇINMASI yüzünden vurulamadı (UI: hedefin üstünde "Dodge");
+   * 'miss' = saldıranın İSABETİ (accuracy) yetmediği için vurulamadı (UI: saldıranın üstünde "MISS"). İkisinde de `source` saldıran, `target` hedef.
+   */
   | { type: 'dodge'; source: string; target: string }
+  | { type: 'miss'; source: string; target: string }
   | { type: 'heal'; source: string; target: string; amount: number; hpAfter: number; crit: boolean }
   /** amount negatifse kalkan tüketildi (ör. Shield Crush). */
   | { type: 'shield'; source: string; target: string; amount: number; shieldAfter: number; magicShieldAfter: number; magic: boolean }
@@ -502,12 +558,58 @@ export type BattleEvent =
   /** Düşmüş bir birim olduğu yerde dirildi. */
   | { type: 'revive'; source: string; target: string; hpAfter: number; mpAfter: number }
   | { type: 'mpRegen'; actor: string; amount: number; after: number }
+  /** Rage değişimi (yalnızca Rage'li birim): delta + = kazanç (skill hasar verince), - = bedel (Abyssal Cry); after = yeni değer, max = üst sınır. */
+  | { type: 'rage'; actor: string; delta: number; after: number; max: number }
+  /** Global skill kullanıldı (rest / skip_turn / move_tile); ayrıntı olayları (mpRegen, turnSkipped, moved) hemen arkasından gelir. */
+  | { type: 'globalUsed'; actor: string; id: string }
+  /** Birim kendi tarafındaki boş yuvaya geçti (Move Tile); yeni yuva Combatant.slot'ta da güncellenir. */
+  | { type: 'moved'; actor: string; from: number; to: number }
   /** Bir pasif tetiklendi (UI kısa bir yazı gösterir). */
   | { type: 'passive'; actor: string; passive: string; name: string }
   | { type: 'turnStart'; actor: string; queue: string[] }
-  | { type: 'turnSkipped'; actor: string; stunned?: boolean }
+  /** stunned: sersemlediği için oynayamadı; voluntary: Skip Turn global skill'i ile isteyerek geçti (speedBoost: sonraki tura kadar hız desteği, 1 = +%100; `battle.speedBoostOf(uid)` aynı değeri verir); ikisi de yoksa: yapacak hamlesi olmadığı için pas. */
+  | { type: 'turnSkipped'; actor: string; stunned?: boolean; voluntary?: boolean; speedBoost?: number }
   /** Yerde kalan bir etki bırakıldı / bitti. */
   | { type: 'ground'; id: string; ground: string; board: Side; slots: number[]; turns: number }
   | { type: 'groundEnd'; id: string }
   | { type: 'death'; target: string }
   | { type: 'battleEnd'; winner: Side };
+
+/**
+ * Global skill: her birimin class skill'lerine EK kullanabildiği ortak eylemler (data/global-skills.json). Skill listesinde (class'ın 4 skill'i) yer almaz.
+ * kind: rest (MP kazan), skip (turu geç, sonraki tura kadar %100 hız desteği), move (kendi tarafındaki boş yuvaya geç; target 'empty_tile').
+ */
+export interface GlobalSkillDef {
+  id: string;
+  name: string;
+  /** İkon türü (src/ui/icon-kinds.ts). */
+  icon: string;
+  kind: 'rest' | 'skip' | 'move';
+  /** self: hedef yok; empty_tile: kendi tarafındaki boş (canlı olmayan) bir yuva seçilir. */
+  target: 'self' | 'empty_tile';
+  /** rest: kazanılan MP (maks MP'yi aşmaz). */
+  mp?: number;
+  /** skip: bir sonraki tura kadar hız desteği (1 = +%100: sayaç iki kat hızlı dolar; Haste/Slow ile toplamsal). */
+  speedBonus?: number;
+  /** skip: üst üste en çok kaç kez kullanılabilir (sonra normal bir eylem gerekir). */
+  maxConsecutive?: number;
+  /** true: yalnızca turns modunda anlamlı (test modunda devre dışı). */
+  turnsOnly?: boolean;
+  /** Oyuncuya gösterilen kısa açıklama (İngilizce); sayılar skill-info tarafından veriden eklenir. */
+  text: string;
+}
+
+/** Bir birimin yapabileceği tek bir eylem (battle.act girdisi; yapay zeka seçimi de bu şekle çevrilir). */
+export type BattleAction =
+  | { kind: 'skill'; skillId: string; targetUid?: string; slot?: number }
+  | { kind: 'global'; id: string; slot?: number; /** Move Tile: slot yerine `tile:<yuva>` kimliği de kabul edilir. */ targetUid?: string };
+
+/** battle.listActions satırı: bir eylem ve şu an kullanılabilir olup olmadığı. */
+export interface ActionInfo {
+  kind: 'skill' | 'global';
+  id: string;
+  ok: boolean;
+  reason?: string;
+  /** Yalnızca Move Tile: seçilebilecek boş yuvalar (küçükten büyüğe). */
+  slots?: number[];
+}

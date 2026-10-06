@@ -154,6 +154,39 @@ export const PIXEL_FX: Record<string, Draw> = {
     for (let i = 0; i < path.length - 1; i++) g.line(path[i]![0] - 0.6, path[i]![1], path[i + 1]![0] - 0.6, path[i + 1]![1], 'g', 1);
     for (const [bx, by, tx, ty] of [[10, 24, 3, 22], [19, 17, 27, 14.5], [11, 10, 4, 7.5], [17, 25, 24, 27]] as const) thorn(g, bx, by, tx, ty, 3.4);
   },
+  // ---------- Geometer (şekil skill'leri) efektleri ----------
+  // Rün karosu: kare çerçeve + köşe çentikleri + açısal haritacı rünü (eşkenar dörtgen, artı, merkez nokta); zemine yassı basılır
+  gridrune: (g) => {
+    g.rect(3, 3, 26, 26, 'A').rect(5, 5, 22, 22, '.');
+    g.rect(3, 3, 26, 1.4, 'a').rect(3, 3, 1.4, 26, 'a');
+    for (const [x, y] of [[3, 3], [26, 3], [3, 26], [26, 26]] as const) g.rect(x, y, 3, 3, 'z');
+    g.line(16, 7.5, 24.5, 16, 'a', 1.6).line(24.5, 16, 16, 24.5, 'a', 1.6).line(16, 24.5, 7.5, 16, 'a', 1.6).line(7.5, 16, 16, 7.5, 'a', 1.6);
+    g.line(16, 8.5, 23.5, 16, 'z', 0.6).line(8.5, 16, 16, 8.5, 'z', 0.6);
+    g.line(16, 11, 16, 21, 'w', 0.8).line(11, 16, 21, 16, 'w', 0.8);
+    g.disc(16, 16, 1.8, 'w');
+  },
+  // Kare taş mühür (Block Slam): kalın taş blok; ön yüzünde ışıyan oyma kare rün
+  gridseal: (g) => {
+    g.rect(3, 9, 26, 20, 'd').rect(3, 9, 26, 3, 'l').rect(3, 12, 26, 14, 'm').rect(3, 26, 26, 3, 'd');
+    g.rect(3, 9, 1.5, 20, 'l').rect(27.5, 12, 1.5, 17, 'd');
+    g.rect(8, 14, 16, 10, 'A').rect(9, 15, 14, 8, 'm');
+    g.rect(9, 15, 14, 1, 'a').rect(9, 22, 14, 1, 'a').rect(9, 15, 1, 8, 'a').rect(22, 15, 1, 8, 'a');
+    g.line(16, 16, 20.5, 19, 'z', 1).line(20.5, 19, 16, 22, 'z', 1).line(16, 22, 11.5, 19, 'z', 1).line(11.5, 19, 16, 16, 'z', 1);
+    g.disc(16, 19, 1.2, 'w');
+    g.line(6, 13, 7.5, 17, 'd', 0.5).line(25, 21, 23.5, 25, 'd', 0.5).rect(26, 13, 1.5, 1.5, 'l');
+  },
+  // Kalem ucu kıvılcımı: tebeşir-ışık kaleminin ucu (küçük kare çekirdekli dört köşeli yıldız)
+  gridspark: (g) => {
+    sparkle(g, 16, 16, 14, 'a');
+    sparkle(g, 16, 16, 9, 'z');
+    g.rect(13.5, 13.5, 5, 5, 'w');
+  },
+  // Işık mızrağı (Column Spear): sağa bakan uzun ışık mızrağı; uç beyaz, gövde arcane, kuyrukta söner
+  lightspear: (g) => {
+    g.poly([0, 13.5, 6, 14.6, 22, 14.6, 22, 17.4, 6, 17.4, 0, 18.5], 'A');
+    g.line(3, 16, 22, 16, 'a', 2.2).line(7, 16, 22, 16, 'z', 1.2).line(12, 16, 22, 16, 'w', 0.5);
+    g.poly([20, 10, 31.5, 16, 20, 22, 22.5, 16], 'z').poly([21.5, 12.8, 29, 16, 21.5, 19.2, 23.2, 16], 'w');
+  },
   smoke: (g) => {
     g.disc(16, 16, 11, 'd').disc(13, 13, 7, 'm');
   },

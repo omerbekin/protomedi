@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Battle, chooseAction, content, describeSkill, previewSkill } from '../src/engine';
-import type { BattleEvent, BattleMode, SkillDef, SkillEffect } from '../src/engine';
+import type { AiConfig, BattleEvent, BattleMode, SkillDef, SkillEffect } from '../src/engine';
 
 // Gambler class'ı ve onun yeni motor kuralları: çifte vuruş (repeatChance), bahis (bet), rastgele durum (randomStatus).
 // Sayılar veriden okunur; zorlanan sonuçlar için skill kopyaları (winChance 0/1 gibi) yalnızca testte kullanılır.
 
-const ai = content.aiConfig;
+const ai: AiConfig = { ...content.aiConfig, global: undefined }; // class skill kararları (global skill: tests/ai-global.test.ts)
 const ATTRS = ['str', 'int', 'dex', 'luck'] as const;
 const cells = (map: Record<number, string>) => Array.from({ length: 12 }, (_, i) => map[i] ?? '');
 
@@ -310,7 +310,7 @@ describe('yapay zeka ve simülasyon', () => {
       for (let i = 0; i < 500 && !b.winner; i++) {
         const actor = b.currentUid!;
         const choice = chooseAction(b, actor, ai);
-        const r = choice ? b.useSkill(actor, choice.skillId, choice.targetUid) : b.skipTurn();
+        const r = b.applyChoice(actor, choice);
         expect(r.ok, `seed ${seed} tur ${i}`).toBe(true);
       }
       expect(b.winner, `seed ${seed}`).not.toBeNull();
@@ -340,7 +340,7 @@ describe('yapay zeka ve simülasyon', () => {
         const c = b.get(actor)!;
         const choice = chooseAction(b, actor, ai);
         if (c.defId === 'gambler' && choice) used.add(choice.skillId);
-        const r = choice ? b.useSkill(actor, choice.skillId, choice.targetUid) : b.skipTurn();
+        const r = b.applyChoice(actor, choice);
         expect(r.ok).toBe(true);
       }
     }

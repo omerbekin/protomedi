@@ -1,5 +1,5 @@
 {
-  "_not": "Süreli durumlar (buff/debuff). Süre, durumu taşıyanın kendi turlarıyla sayılır. speedMult: hız çarpanı; damageTakenMult: alınan hasar çarpanı; healTakenMult: alınan şifa çarpanı; skipTurn: sıradaki turu pas geçirir. taunt/guard/regen özel kodlu durumlardır (motorda). Yeni bir durum = buraya bir giriş + skill'de {type:'status'} etkisi. İleride durumların birbiriyle etkileşimi için burası genişletilecek.",
+  "_not": "Süreli durumlar (buff/debuff). Süre, durumu taşıyanın kendi turlarıyla sayılır. speedMult: hız çarpanı; damageTakenMult: alınan hasar çarpanı; healTakenMult: alınan şifa çarpanı; skipTurn: sıradaki turu pas geçirir. breaksTaunt: bu durum uygulandığı AN taşıyıcının taunt'ı silinir (CC durumu; şu an yalnızca Stun). taunt/guard/regen özel kodlu durumlardır (motorda). Yeni bir durum = buraya bir giriş + skill'de {type:'status'} etkisi. İleride durumların birbiriyle etkileşimi için burası genişletilecek.",
   "slow": {
     "name": "Slow",
     "type": "debuff",
@@ -30,6 +30,7 @@
     "icon": "bash",
     "color": "#ffd166",
     "skipTurn": true,
+    "breaksTaunt": true,
     "text": "Skips its next turn"
   },
   "fortify": {

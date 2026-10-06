@@ -56,6 +56,7 @@ export const ICON_KINDS = [
   'overflow',
   'nullsphere',
   'flask',
+  'rest',
   'team',
   'dice',
   'robot',
@@ -69,6 +70,7 @@ export const ICON_KINDS = [
   'info',
   'frame',
   'book',
+  'clipboard',
   'pause',
   'ffwd',
   'drop',
@@ -96,6 +98,13 @@ export const ICON_KINDS = [
   'highstakes',
   'cardtrick',
   'allin',
+  /** Geometer (AOE şekil test sınıfı): logo, pasif ve 4 şekil skill'i. */
+  'geometerlogo',
+  'testrig',
+  'rowsweep',
+  'columnspear',
+  'blockslam',
+  'crossburst',
 ] as const;
 
 export type IconKind = (typeof ICON_KINDS)[number];

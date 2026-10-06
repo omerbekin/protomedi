@@ -61,7 +61,7 @@ describe('hasar skill\'leri', () => {
     const b = newBattle();
     const before = b.get(E_WARRIOR)!.hp;
     const events = act(b, WARRIOR, 'melee_attack', E_WARRIOR);
-    expect(events.map((e) => e.type)).toEqual(['skillUsed', 'damage', 'damage']); // Double Strike: iki vuruş
+    expect(events.map((e) => e.type)).toEqual(['skillUsed', 'damage', 'damage', 'rage']); // Double Strike: iki vuruş; Warrior'a Rage kazandırır
     const hits = ofType(events, 'damage');
     const dmg = hits[1]!;
     expect(hits[0]!.amount).toBeGreaterThan(0);
@@ -375,6 +375,6 @@ describe('savaş sonu ve determinizm', () => {
     const seen: string[] = [];
     b.on((e) => seen.push(e.type));
     act(b, WARRIOR, 'melee_attack', E_WARRIOR);
-    expect(seen).toEqual(['skillUsed', 'damage', 'damage']);
+    expect(seen).toEqual(['skillUsed', 'damage', 'damage', 'rage']);
   });
 });

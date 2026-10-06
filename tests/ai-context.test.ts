@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { Battle, chooseAction, content, previewSkill } from '../src/engine';
-import type { BattleSetup } from '../src/engine';
+import type { AiConfig, BattleSetup } from '../src/engine';
 
 /**
  * Yapay zeka bağlam testleri: her 4. skill (ve Judgment) için "koşul sağlanınca seçilir, sağlanmayınca seçilmez".
  * Bağlam kuralları veride (data/skills.json > skill.ai); karar saf ve belirleyicidir.
  */
-const ai = content.aiConfig;
+/** Bağlam kuralları global skill'siz YZ ile ölçülür (global skill kuralları: tests/ai-global.test.ts). */
+const ai: AiConfig = { ...content.aiConfig, global: undefined };
 const cells = (map: Record<number, string>) => Array.from({ length: 12 }, (_, i) => map[i] ?? '');
 
 /** Hücre listeli takımlarla savaş (uid'ler slot sırasıyla party-0.., enemy-0..); canlar en az 100, aktörün MP'si dolu. */
@@ -160,9 +161,11 @@ describe('YZ bağlam: Gambler - All In', () => {
 describe('YZ bağlam: Anti-Mage - Void Strike', () => {
   it('hedefin manası eksikse (mana yakılmış) Void Strike seçilir; mana doluyken seçilmez', () => {
     const drained = mk({ 0: 'antimage' }, { 0: 'mage' });
+    drained.get('enemy-0')!.hp = drained.get('enemy-0')!.maxHp = 5000; // mana yakılmış hedef öldürülmesin: bağlam "tactic" olarak sınanır
     drained.get('enemy-0')!.mp = 0;
     expect(choose(drained)).toMatchObject({ skillId: 'void_strike', reason: 'tactic' });
     const full = mk({ 0: 'antimage' }, { 0: 'mage' });
+    full.get('enemy-0')!.hp = full.get('enemy-0')!.maxHp = 5000;
     expect(choose(full)?.skillId).not.toBe('void_strike');
   });
 });
@@ -171,6 +174,7 @@ describe('YZ bağlam: Warrior - Abyssal Cry (can bedeli + %50 hasar azaltma)', (
   const FOES = { 0: 'mage', 1: 'archer', 2: 'undead', 3: 'gambler', 4: 'antimage' };
   const war = (tweak?: (b: Battle) => void) => {
     const b = mk({ 0: 'warrior', 1: 'paladin', 2: 'druid' }, FOES);
+    b.get('party-0')!.rage = b.get('party-0')!.maxRage; // Abyssal Cry Rage ister (bedel: rage)
     tweak?.(b);
     return b;
   };
@@ -276,7 +280,7 @@ describe('YZ bağlam: MP ayırma ve genel özellikler', () => {
   });
 
   it('tüm 4. skill\'lerde ve Judgment\'ta bağlam ipucu (ai) tanımlı; yuva ağırlığı kalmadı', () => {
-    for (const cl of Object.values(content.classes)) {
+    for (const cl of Object.values(content.classes).filter((c) => !c.testOnly)) {
       const id = cl.skills[3]!;
       if (cl.id === 'druid' || cl.id === 'undead') continue; // çağrılar: "summon" önceliği bağlamı verir (maxSummons, boş yer, MP)
       expect(content.skills[id]!.ai, id).toBeDefined();
@@ -290,9 +294,9 @@ describe('YZ bağlam: MP ayırma ve genel özellikler', () => {
       const b = new Battle(content.battleSetup('random-battle', seed, 'turns'));
       for (let i = 0; i < 600 && !b.winner; i++) {
         const actor = b.currentUid!;
-        const choice = chooseAction(b, actor, ai);
-        if (choice) expect(b.canUse(actor, choice.skillId).ok, `seed ${seed}: ${choice.skillId}`).toBe(true);
-        const r = choice ? b.useSkill(actor, choice.skillId, choice.targetUid) : b.skipTurn();
+        const choice = chooseAction(b, actor, content.aiConfig);
+        if (choice) expect((b.globalDef(choice.skillId) ? b.canUseGlobal(actor, choice.skillId, choice.slot) : b.canUse(actor, choice.skillId)).ok, `seed ${seed}: ${choice.skillId}`).toBe(true);
+        const r = b.applyChoice(actor, choice);
         expect(r.ok, `seed ${seed} tur ${i}`).toBe(true);
       }
     }

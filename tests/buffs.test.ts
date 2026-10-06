@@ -99,6 +99,7 @@ describe('durumlar: hız, alınan hasar, alınan şifa, sersemleme', () => {
     const w = b.get('party-0')!;
     const cryRatio = (content.skills.abyssal_cry!.effects[0] as { ratio: number }).ratio;
     expect(cryRatio).toBeGreaterThan(0); // değer veriden okunur (Ömer kararı: maks canın %30'u)
+    w.rage = w.maxRage; // Abyssal Cry'ın bedeli Rage
     const events = act(b, 'party-0', 'abyssal_cry');
     expect(ofType(events, 'damage')[0]).toMatchObject({ target: 'party-0', source: 'party-0', amount: Math.round(w.maxHp * cryRatio) });
     expect(w.hp).toBe(w.maxHp - Math.round(w.maxHp * cryRatio));
@@ -118,6 +119,7 @@ describe('durumlar: hız, alınan hasar, alınan şifa, sersemleme', () => {
   it('Abyssal Cry canı düşük birimi öldürmez', () => {
     const b = calm(grid(cells({ 0: 'warrior' }), cells({ 0: 'archer' })));
     b.get('party-0')!.hp = 3;
+    b.get('party-0')!.rage = b.get('party-0')!.maxRage;
     act(b, 'party-0', 'abyssal_cry');
     expect(b.get('party-0')!.hp).toBe(1);
   });

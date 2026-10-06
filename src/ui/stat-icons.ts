@@ -54,3 +54,7 @@ export const STAT_LABEL: Record<StatKind, string> = {
 /** Stat olmayan arayüz ikonları (skill düğmesindeki bekleme süresi). */
 export const UI_ICON: Record<'hourglass', IconKind> = { hourglass: 'hourglass' };
 export const UI_COLOR = '#d9c9a3';
+
+/** Rage kaynağı (Warrior): skill maliyeti ve bar için alev ikonu + kırmızı-turuncu renk (data/battle-layout.json > colors.rage ile aynı). */
+export const RAGE_ICON: IconKind = 'flame';
+export const RAGE_COLOR = '#ff7a2f';

@@ -31,7 +31,7 @@ describe('skill verisi', () => {
       expect(SKILL_TARGETS).toContain(s.target);
       expect(MOTIONS).toContain(s.motion);
       expect(s.fx).toMatch(HEX);
-      expect(['mp', 'hp']).toContain(s.cost.resource);
+      expect(['mp', 'hp', 'rage']).toContain(s.cost.resource);
       expect(s.cost.amount).toBeGreaterThanOrEqual(0);
       expect(s.effects.length).toBeGreaterThan(0);
       for (const e of s.effects) {
@@ -255,7 +255,10 @@ describe('class havuzu', () => {
     // class havuzu veriden okunur (data/classes); takım havuzu (random-battle) tüm class'ları içerir
     const files = readdirSync(join(__dirname, '..', 'data', 'classes')).filter((f) => f.endsWith('.json')).map((f) => f.replace(/\.json$/, ''));
     expect(Object.keys(content.classes).sort()).toEqual(files.sort());
-    expect([...content.battles['random-battle']!.random!.pool].sort()).toEqual(Object.keys(content.classes).sort());
+    expect([...content.battles['random-battle']!.random!.pool].sort()).toEqual(content.randomPool.slice().sort()); // havuz = testOnly olmayan class'lar
+    expect(content.selectableClasses.sort()).toEqual(Object.keys(content.classes).sort());
+    expect(content.classes.aoe_tester!.testOnly).toBe(true);
+    expect(content.randomPool).not.toContain('aoe_tester');
     expect(Object.keys(content.classes)).toContain('gambler');
     for (const def of Object.values(content.classes)) expect(def.skills, def.id).toHaveLength(4);
   });
@@ -263,6 +266,7 @@ describe('class havuzu', () => {
   it('class id, sprite id ve görsel dosyası birbirine bağlı (görsel class\'a aittir, taraf fark etmez)', () => {
     for (const [id, def] of Object.entries(content.classes)) {
       expect(def.id).toBe(id);
+      if (def.testOnly) { expect(existsSync(join(__dirname, '..', 'assets', 'sprites', def.spriteId, 'idle.png')), id).toBe(true); continue; } // test class'ı başka class'ın görselini geçici kullanır
       expect(def.spriteId, id).toBe(id);
       // Sprite'ı henüz çizilmemiş class'lar placeholder (class rengine boyalı blok) kullanır; sprite gelince listeden çıkarılır.
       if (!PLACEHOLDER_SPRITE_CLASSES.includes(id)) expect(existsSync(join(__dirname, '..', 'assets', 'sprites', id, 'idle.png')), `assets/sprites/${id}/idle.png`).toBe(true);
@@ -279,7 +283,7 @@ describe('class havuzu', () => {
 });
 
 describe('güç sınırları (kalkan ve çağrı çok güçlü olmasın)', () => {
-  const classHps = Object.values(content.classes).map((d) => d.stats.hp);
+  const classHps = Object.values(content.classes).filter((d) => !d.testOnly).map((d) => d.stats.hp);
   /** Stat toplamı 30 olunca en zayıf class canı çok düşüktür (mage 38); koruma sınırları ortalama canı baz alır. */
   const avgHp = classHps.reduce((a, b) => a + b, 0) / classHps.length;
 
@@ -310,6 +314,7 @@ describe('güç sınırları (kalkan ve çağrı çok güçlü olmasın)', () =>
 
 describe('savaş tanımı', () => {
   const classIds = Object.keys(content.classes);
+  const poolIds = content.randomPool;
 
   it('sabit savaşın listeleri tanımlı class\'lara işaret ediyor ve yuvalara sığıyor', () => {
     for (const b of Object.values(content.battles)) {
@@ -325,7 +330,7 @@ describe('savaş tanımı', () => {
   it('rastgele savaşın havuzu tüm class\'lar ve her taraf için en az bir yuva boş kalıyor (çağrı yeri)', () => {
     const b = content.battles['random-battle']!;
     expect(b.random).toBeDefined();
-    expect([...b.random!.pool].sort()).toEqual([...classIds].sort());
+    expect([...b.random!.pool].sort()).toEqual([...poolIds].sort()); // testOnly class'lar havuzda yok
     expect(b.random!.size).toBeLessThanOrEqual(b.random!.pool.length);
     expect(b.random!.size).toBeLessThan(b.slots.party);
     expect(b.random!.size).toBeLessThan(b.slots.enemy);
@@ -375,6 +380,7 @@ describe('görsel veri: skill ikonları, class logoları, stat ikonları, hareke
       ...Object.values(UI_ICON),
       ...Object.values(content.statuses).map((s) => s.icon),
       ...Object.values(content.grounds).map((g) => g.icon),
+      ...Object.values(content.globalSkills).map((g) => g.icon), // Rest / Skip Turn / Move
       'shield', // zırh aurası rozeti
       'skull', // ölümcül hasar işareti
       'hourglass', // kalan tur

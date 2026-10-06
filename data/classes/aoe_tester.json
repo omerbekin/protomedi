@@ -1,0 +1,36 @@
+{
+  "id": "aoe_tester",
+  "name": "Geometer",
+  "spriteId": "mage",
+  "color": "#b07cff",
+  "logo": "geometerlogo",
+  "role": "AOE Test",
+  "testOnly": true,
+  "frontPriority": 7,
+  "attributes": {
+    "str": 3,
+    "int": 17,
+    "dex": 5,
+    "luck": 5
+  },
+  "primary": "int",
+  "armor": 4,
+  "magicArmor": 0,
+  "ai": "aggressive",
+  "skills": [
+    "shape_row",
+    "shape_column",
+    "shape_rect",
+    "shape_plus"
+  ],
+  "passive": {
+    "id": "geometry_test",
+    "name": "Test Rig",
+    "icon": "testrig",
+    "text": "Test passive with no effect: this class only exists to try out area shapes.",
+    "effect": {
+      "type": "spellEcho",
+      "chance": 0
+    }
+  }
+}

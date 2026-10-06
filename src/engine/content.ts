@@ -3,8 +3,10 @@
 import aiJson from '../../data/ai.json';
 import formulasJson from '../../data/formulas.json';
 import skillsJson from '../../data/skills.json';
+import globalSkillsJson from '../../data/global-skills.json';
 import firstBattle from '../../data/battles/first-battle.json';
 import randomBattle from '../../data/battles/random-battle.json';
+import aoeTester from '../../data/classes/aoe_tester.json';
 import antimage from '../../data/classes/antimage.json';
 import archer from '../../data/classes/archer.json';
 import defender from '../../data/classes/defender.json';
@@ -22,7 +24,7 @@ import type { AiConfig } from './ai';
 import type { BattleSetup } from './battle';
 import { Rng } from './rng';
 import { buildDef } from './stats';
-import type { BattleMode, CombatantData, CombatantDef, Formulas, GroundDef, SkillDef, StatusDef } from './types';
+import type { BattleMode, CombatantData, CombatantDef, Formulas, GlobalSkillDef, GroundDef, SkillDef, StatusDef } from './types';
 
 export interface BattleDef {
   id: string;
@@ -47,12 +49,21 @@ const classData: Record<string, CombatantData> = {
   defender,
   antimage,
   gambler,
+  aoe_tester: aoeTester,
 } as unknown as Record<string, CombatantData>;
 
 /** Oynanabilir tüm class'lar: iki taraf da aynı havuzdan çeker, görseli sınıfa bağlıdır. */
 export const classes: Record<string, CombatantDef> = Object.fromEntries(
   Object.entries(classData).map(([id, data]) => [id, buildDef(data, formulas)]),
 );
+
+/**
+ * Rastgele takım havuzuna ve denge simülasyonuna giren class id'leri: `testOnly` olmayanlar. Test class'ları (ör. aoe_tester) `classes`ta ve
+ * `selectableClasses`ta durur (takım seçimi, debug, wiki, galeri) ama rastgele takımlara ve sim'e girmez.
+ */
+export const randomPool: string[] = Object.keys(classes).filter((id) => !classes[id]!.testOnly);
+/** Oyuncunun takım seçiminde seçebileceği tüm class id'leri (test class'ları dahil). */
+export const selectableClasses: string[] = Object.keys(classes);
 
 /** Class olmayan, yalnızca skill ile çağrılan birimler. */
 export const summons: Record<string, CombatantDef> = {
@@ -70,6 +81,8 @@ const stripNotes = <T>(o: unknown): Record<string, T> =>
 
 /** Buff/debuff tanımları (data/statuses.json). */
 export const statuses = stripNotes<StatusDef>(statusesJson);
+/** Global skill'ler (data/global-skills.json): rest, skip_turn, move_tile. Class'ların 4 skill'inden ve `skills` tablosundan AYRIDIR. */
+export const globalSkills = stripNotes<GlobalSkillDef>(globalSkillsJson);
 /** Yerde kalan etki tanımları (data/grounds.json). */
 export const grounds = stripNotes<GroundDef>(groundsJson);
 
@@ -86,6 +99,21 @@ export const DEFAULT_BATTLE = 'random-battle';
 export interface Teams {
   party: string[];
   enemies: string[];
+}
+
+/**
+ * Takım boyutu seçenekleri: her taraf 1..CELL_COUNT (formasyon yuva sayısı = rows x lanes = 12) birim alabilir; 5-5 varsayılandır
+ * (data/battles/random-battle.json > random.size). partySize/enemySize yalnızca takım RASTGELE çekilirken kullanılır
+ * (sınıf listesi verilmişse listenin uzunluğu geçerlidir). Boyut havuzdaki sınıf sayısını aşarsa sınıflar tekrar eder (ilk tur hep farklı).
+ */
+export interface TeamSizes {
+  partySize?: number;
+  enemySize?: number;
+}
+
+/** Geçerli takım boyutu (1..CELL_COUNT, tam sayı). */
+export function clampTeamSize(n: number): number {
+  return Math.max(1, Math.min(CELL_COUNT, Math.floor(Number.isFinite(n) ? n : 1)));
 }
 
 function lookup<T>(table: Record<string, T>, id: string, what: string): T {
@@ -106,19 +134,27 @@ export function arrangeTeam(ids: string[]): string[] {
     .map((x) => x.id);
 }
 
-/** Fisher-Yates karıştırma (seed'li) ve ilk `size` eleman. */
+/**
+ * Fisher-Yates karıştırma (seed'li) ve ilk `size` eleman. size havuzu aşarsa yeni bir karıştırma turuyla tamamlanır
+ * (her turda sınıflar farklıdır; yinelenme ancak havuz bittikten sonra). size <= havuz için sonuç eskisiyle birebir aynıdır.
+ */
 function draw(pool: string[], size: number, rng: Rng): string[] {
-  const items = [...pool];
-  for (let i = items.length - 1; i > 0; i--) {
-    const j = rng.int(0, i);
-    [items[i], items[j]] = [items[j]!, items[i]!];
+  const out: string[] = [];
+  if (pool.length === 0) return out;
+  while (out.length < size) {
+    const items = [...pool];
+    for (let i = items.length - 1; i > 0; i--) {
+      const j = rng.int(0, i);
+      [items[i], items[j]] = [items[j]!, items[i]!];
+    }
+    out.push(...items.slice(0, size - out.length));
   }
-  return items.slice(0, Math.min(size, items.length));
+  return out;
 }
 
 /** Verilen class listesinden rastgele (seed'li) farklı `size` class seçer ve dizer. Takım seçim ekranının "Randomize" düğmesi. */
-export function randomTeam(seed: number, size = 4, pool: string[] = Object.keys(classes)): string[] {
-  return arrangeTeam(draw(pool, size, new Rng((seed ^ 0x51ed270b) >>> 0)));
+export function randomTeam(seed: number, size = 4, pool: string[] = randomPool): string[] {
+  return arrangeTeam(draw(pool, clampTeamSize(size), new Rng((seed ^ 0x51ed270b) >>> 0)));
 }
 
 /**
@@ -126,13 +162,15 @@ export function randomTeam(seed: number, size = 4, pool: string[] = Object.keys(
  * her taraf kendi içinde farklı class'lardan oluşur (iki tarafta aynı class olabilir) ve dizilir.
  * Savaşın kendi rastgeleliğinden bağımsızdır (ayrı bir RNG akışı kullanır).
  */
-export function rollTeams(battleId: string, seed: number): Teams {
+export function rollTeams(battleId: string, seed: number, sizes: TeamSizes = {}): Teams {
   const def = lookup(battles, battleId, 'Savaş');
   if (!def.random) return { party: [...(def.party ?? [])], enemies: [...(def.enemies ?? [])] };
   const rng = new Rng((seed ^ 0x9e3779b9) >>> 0);
+  const partySize = clampTeamSize(sizes.partySize ?? def.random.size);
+  const enemySize = clampTeamSize(sizes.enemySize ?? def.random.size);
   return {
-    party: arrangeTeam(draw(def.random.pool, def.random.size, rng)),
-    enemies: arrangeTeam(draw(def.random.pool, def.random.size, rng)),
+    party: arrangeTeam(draw(def.random.pool, partySize, rng)),
+    enemies: arrangeTeam(draw(def.random.pool, enemySize, rng)),
   };
 }
 
@@ -218,8 +256,12 @@ export function randomCells(ids: string[], seed: number): string[] {
   return cells;
 }
 
-/** `teams` verilirse onlar kullanılır; verilmezse seed'e göre belirlenir. */
-export function battleSetup(battleId: string, seed: number, mode: BattleMode = 'turns', teams?: Teams, arrange = true): BattleSetup {
+/**
+ * `teams` verilirse onlar kullanılır (taraf başına 1..12 birim, uzunluk serbest; yalnızca bir taraf verilirse diğeri seed'e göre çekilir);
+ * verilmezse seed'e göre belirlenir (`partySize`/`enemySize` ile boyut seçilir, varsayılan 5-5). `arrange` true: liste sınıf id'leridir (otomatik dizilir);
+ * false: liste hücre listesidir (dizin = yuva, '' = boş).
+ */
+export function battleSetup(battleId: string, seed: number, mode: BattleMode = 'turns', teams?: Partial<Teams> & TeamSizes, arrange = true): BattleSetup {
   const def = lookup(battles, battleId, 'Savaş');
   // Her taraf için {birim listesi, her birimin yuvası}. Birim sırası (uid'ler) girdi sırasıdır.
   const layout = (ids: string[], slots: number[]) => ({ ids: ids.filter((_, i) => slots[i]! >= 0), slots: slots.filter((s) => s >= 0) });
@@ -234,26 +276,20 @@ export function battleSetup(battleId: string, seed: number, mode: BattleMode = '
     });
     return { ids, slots };
   };
-  let party: { ids: string[]; slots: number[] };
-  let enemies: { ids: string[]; slots: number[] };
-  if (teams) {
-    if (arrange) {
+  const random = !!def.random;
+  const rolled = teams?.party && teams.enemies ? undefined : rollTeams(battleId, seed, { partySize: teams?.partySize, enemySize: teams?.enemySize });
+  const build = (given: string[] | undefined, rolledIds: string[] | undefined, mix: number): { ids: string[]; slots: number[] } => {
+    if (given) {
+      if (!arrange) return fromCells(given); // hücre listesi (oyuncunun seçim ekranında elle dizdiği; dizin = yuva, '' = boş)
       // sınıf listesi: önce önceliğe göre sıralanır, sonra otomatik dizilir
-      const p = arrangeTeam(teams.party);
-      const e = arrangeTeam(teams.enemies);
-      party = layout(p, defaultSlots(p));
-      enemies = layout(e, defaultSlots(e));
-    } else {
-      // hücre listesi (oyuncunun seçim ekranında elle dizdiği; dizin = yuva, '' = boş)
-      party = fromCells(teams.party);
-      enemies = fromCells(teams.enemies);
+      const a = arrangeTeam(given.slice(0, CELL_COUNT));
+      return layout(a, defaultSlots(a));
     }
-  } else {
-    const rolled = rollTeams(battleId, seed);
-    const random = !!def.random;
-    party = layout(rolled.party, random ? randomSlots(rolled.party, seed ^ 0x1111) : defaultSlots(rolled.party));
-    enemies = layout(rolled.enemies, random ? randomSlots(rolled.enemies, seed ^ 0x2222) : defaultSlots(rolled.enemies));
-  }
+    const ids = rolledIds ?? [];
+    return layout(ids, random ? randomSlots(ids, seed ^ mix) : defaultSlots(ids));
+  };
+  const party = build(teams?.party, rolled?.party, 0x1111);
+  const enemies = build(teams?.enemies, rolled?.enemies, 0x2222);
   return {
     seed,
     mode,
@@ -262,6 +298,7 @@ export function battleSetup(battleId: string, seed: number, mode: BattleMode = '
     partySlots: party.slots,
     enemySlots: enemies.slots,
     skills,
+    globalSkills,
     statuses,
     grounds,
     formulas,

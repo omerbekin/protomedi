@@ -25,6 +25,7 @@ import {
 import { BattleScene } from '../game/scenes/BattleScene';
 import { newSeed } from '../game/seed';
 import { debugButton, debugSection, type DebugMenu } from './debug-menu';
+import { copyMatchData } from './match-copy';
 
 /** Sekme sırası (menü bu sırayla gösterir). */
 export const DEBUG_TABS = ['Battle', 'Unit', 'Skills', 'Sounds', 'Tweaks', 'Info'];
@@ -41,6 +42,7 @@ let forcePortrait = false;
 let seedDraft = '';
 let hpDraft = '';
 let mpDraft = '';
+let rageDraft = '';
 
 const FORCE_LABEL = { auto: 'Normal', always: 'Always', never: 'Never' } as const;
 
@@ -114,6 +116,30 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     hint: 'Start a new battle with random teams and a new seed',
     run: () => battle()?.scene.restart({ seed: newSeed(), teams: undefined }),
   });
+  // Geometer (aoe_tester) test battle: player team = Geometer + 4 random classes, 5 random enemies, test mode (no turn order, no cooldowns)
+  debug.register({
+    id: 'battle.test-aoe',
+    tab: 'Battle',
+    section: 'Battle',
+    dock: { group: 'Battle flow', order: 9, icon: 'blast', short: 'Test AOE shapes' },
+    label: 'Test AOE shapes',
+    hint: 'Start a test battle with the Geometer (row, column, block and cross shapes) on your team against 5 random enemies; test mode: no turn order, no cooldowns',
+    run: () => {
+      const seed = newSeed();
+      const mates = content.randomTeam(seed, 4);
+      const data = {
+        seed,
+        mode: 'test' as const,
+        teams: { party: content.randomCells(content.arrangeTeam(['aoe_tester', ...mates]), seed), enemies: content.randomCells(content.randomTeam(seed + 7, 5), seed + 7) },
+        partySize: 5,
+        enemySize: 5,
+      };
+      // from the battle: restart it; from team select (or anywhere else): start the battle scene
+      const b = battle();
+      if (b) b.scene.restart(data);
+      else game.scene.getScenes(true)[0]?.scene.start(BattleScene.KEY, data);
+    },
+  });
   debug.register({
     id: 'battle.rematch',
     tab: 'Battle',
@@ -176,7 +202,7 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     id: 'battle.free-mp',
     tab: 'Battle',
     section: 'Control',
-    dock: { group: 'Combat tweaks', order: 3, icon: 'freemp', short: 'Free MP', on: () => BattleScene.freeMp },
+    dock: { group: 'Combat tweaks', order: 4, icon: 'freemp', short: 'Free MP', on: () => BattleScene.freeMp },
     label: () => (BattleScene.freeMp ? 'Free MP: on' : 'Free MP: off'),
     on: () => BattleScene.freeMp,
     hint: 'Skills cost no mana (both sides)',
@@ -193,7 +219,7 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     id: 'tweak.enemy-ai',
     tab: 'Battle',
     section: 'Control',
-    dock: { group: 'Combat tweaks', order: 4, icon: 'helm', short: 'Enemy AI', on: () => debugState.enemyAiOff, state: () => (debugState.enemyAiOff ? 'OFF' : 'ON') },
+    dock: { group: 'Combat tweaks', order: 5, icon: 'helm', short: 'Enemy AI', on: () => debugState.enemyAiOff, state: () => (debugState.enemyAiOff ? 'OFF' : 'ON') },
     label: () => (debugState.enemyAiOff ? 'Enemy AI: off' : 'Enemy AI: on'),
     on: () => debugState.enemyAiOff,
     hint: 'Off: enemies never act and their turns are skipped (turn mode)',
@@ -299,7 +325,7 @@ export function registerDebugTools({ game, debug }: Ctx): void {
       if (unit) {
         const line = document.createElement('div');
         line.className = 'debug-note dim';
-        line.textContent = `${unit.side === 'party' ? 'Player' : 'Enemy'} ${unit.name}: ${unit.hp <= 0 ? 'DEAD' : `HP ${unit.hp}/${unit.maxHp}, MP ${unit.mp}/${unit.maxMp}`}`;
+        line.textContent = `${unit.side === 'party' ? 'Player' : 'Enemy'} ${unit.name}: ${unit.hp <= 0 ? 'DEAD' : `HP ${unit.hp}/${unit.maxHp}, MP ${unit.mp}/${unit.maxMp}${unit.maxRage !== undefined ? `, Rage ${unit.rage ?? 0}/${unit.maxRage}` : ''}`}`;
         el.append(line);
       }
       el.append(noteLine('unit'));
@@ -308,6 +334,10 @@ export function registerDebugTools({ game, debug }: Ctx): void {
       const mp = (label: string, preset: ResourcePreset): HTMLElement => debugButton(label, act((u) => b.debugSetResource(u.uid, 'mp', resourceValue(u.maxMp, preset))));
       el.append(...debugSection('Health', hp('HP 1', 'one'), hp('HP 25%', 'quarter'), hp('HP 50%', 'half'), hp('HP full', 'full')));
       el.append(...debugSection('Mana', mp('MP 0', 'zero'), mp('MP 50%', 'half'), mp('MP full', 'full')));
+      if (unit?.maxRage !== undefined) {
+        const rage = (label: string, preset: ResourcePreset): HTMLElement => debugButton(label, act((u) => b.debugSetResource(u.uid, 'rage', resourceValue(u.maxRage ?? 0, preset))), { icon: 'flame', title: `Set this unit's Rage (${label})` });
+        el.append(...debugSection('Rage', rage('Rage 0', 'zero'), rage('Rage 50%', 'half'), rage('Rage full', 'full')));
+      }
 
       const numberRow = (placeholder: string, get: () => string, set: (v: string) => void, apply: (n: number) => (u: Combatant) => { ok: boolean; reason?: string }): HTMLElement => {
         const input = document.createElement('input');
@@ -333,6 +363,7 @@ export function registerDebugTools({ game, debug }: Ctx): void {
       el.append(
         numberRow('Exact HP', () => hpDraft, (v) => (hpDraft = v), (n) => (u) => b.debugSetResource(u.uid, 'hp', n)),
         numberRow('Exact MP', () => mpDraft, (v) => (mpDraft = v), (n) => (u) => b.debugSetResource(u.uid, 'mp', n)),
+        ...(unit?.maxRage !== undefined ? [numberRow('Exact Rage', () => rageDraft, (v) => (rageDraft = v), (n) => (u) => b.debugSetResource(u.uid, 'rage', n))] : []),
       );
 
       el.append(
@@ -429,6 +460,23 @@ export function registerDebugTools({ game, debug }: Ctx): void {
       const s = battle();
       if (!s) return;
       s.battle.debugClearCooldowns();
+      s.debugAfterChange();
+    },
+  });
+  debug.register({
+    id: 'unit.set-rage',
+    dockOnly: true,
+    tab: 'Unit',
+    section: 'Quick',
+    dock: { group: 'Units', order: 6, icon: 'flame', short: 'Set rage' },
+    label: 'Set rage',
+    hint: 'Fill the Rage bar of the picked unit (or of your first Rage unit, e.g. the Warrior); exact values are in the Unit tab',
+    run: () => {
+      const s = battle();
+      if (!s) return;
+      const picked = s.debugUnit;
+      const u = picked?.maxRage !== undefined ? picked : s.debugUnits().find((c) => c.maxRage !== undefined && c.hp > 0);
+      if (u) s.battle.debugSetResource(u.uid, 'rage', u.maxRage ?? 0);
       s.debugAfterChange();
     },
   });
@@ -715,6 +763,20 @@ export function registerDebugTools({ game, debug }: Ctx): void {
       },
     });
   }
+  for (const v of ['auto', 'always'] as const) {
+    debug.register({
+      id: `tweak.miss.${v}`,
+      tab: 'Tweaks',
+      section: 'Misses (attacker misses)',
+      label: v === 'auto' ? 'Miss: normal' : 'Always miss',
+      hint: v === 'auto' ? 'Misses follow the accuracy rule' : 'Every damaging hit misses: a pale MISS appears above the attacker (Always dodge wins if both are on)',
+      on: () => (debugState.flags.miss ?? 'auto') === v,
+      run: () => {
+        debugState.flags.miss = v;
+        applyFlags();
+      },
+    });
+  }
   debug.register({
     id: 'tweak.crit-cycle',
     dockOnly: true,
@@ -742,6 +804,20 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     },
   });
 
+  debug.register({
+    id: 'tweak.miss-cycle',
+    dockOnly: true,
+    tab: 'Tweaks',
+    section: 'Quick',
+    dock: { group: 'Combat tweaks', order: 3, icon: 'arrow', short: 'Miss', on: () => (debugState.flags.miss ?? 'auto') !== 'auto', state: () => ((debugState.flags.miss ?? 'auto') === 'auto' ? 'Auto' : 'Always') },
+    label: () => `Miss: ${(debugState.flags.miss ?? 'auto') === 'auto' ? 'Auto' : 'Always'}`,
+    hint: 'Tap to toggle misses: automatic (accuracy rule) or always (a pale MISS above the attacker)',
+    run: () => {
+      debugState.flags.miss = (debugState.flags.miss ?? 'auto') === 'auto' ? 'always' : 'auto';
+      applyFlags();
+    },
+  });
+
   // ===== Tools: shortcuts to the tab / page that holds each tool =====
   const shortcut = (id: string, order: number, icon: string, short: string, tab: string, hint: string): void =>
     debug.register({ id, dockOnly: true, tab, section: 'Tools', dock: { group: 'Tools', order, icon, short }, label: short, hint, run: () => debug.openTab(tab) });
@@ -757,6 +833,29 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     hint: 'Open the asset gallery page (sounds, icons and more) in a new browser tab',
     run: openAssetGallery,
   });
+  for (const [id, victory, order, icon, short] of [['tools.result-victory', true, 5, 'sword', 'Preview victory'], ['tools.result-defeat', false, 6, 'skull', 'Preview defeat']] as const) {
+    debug.register({
+      id,
+      dockOnly: true,
+      tab: 'Battle',
+      section: 'Tools',
+      dock: { group: 'Tools', order, icon, short },
+      label: short,
+      hint: `Show the ${victory ? 'VICTORY' : 'DEFEAT'} screen with the stats so far, without ending the battle (Esc or Enter closes it)`,
+      run: () => battle()?.showResult(victory, true),
+    });
+  }
+  // Match record (every move + AI reasons) to the clipboard: paste it to ask "why did unit X do move Y?" (src/engine/match-log.ts, docs/design/match-log.md)
+  debug.register({
+    id: 'tools.copy-match',
+    dockOnly: true,
+    tab: 'Battle',
+    section: 'Tools',
+    dock: { group: 'Tools', order: 7, icon: 'clipboard', short: 'Copy match data' },
+    label: 'Copy match data',
+    hint: 'Copy the match record to the clipboard: every move so far with the state before it, the result, and for AI moves all candidates with their scores and why one was chosen. Works mid-battle and in test mode',
+    run: () => void copyMatchData({ get: () => battle()?.matchLogData() ?? null }),
+  });
   shortcut('tools.seed', 3, 'clover', 'Seed & link', 'Battle', 'Open the Battle tab: copy this battle\'s seed or link, or restart with a typed seed');
   shortcut('tools.info', 4, 'info', 'Info', 'Info', 'Open the Info tab: live stats, turn queue and AI decisions');
 
@@ -768,6 +867,7 @@ export function registerDebugTools({ game, debug }: Ctx): void {
         [
           c.hp <= 0 ? 'DEAD' : `HP ${c.hp}/${c.maxHp}`,
           `MP ${c.mp}/${c.maxMp}`,
+          c.maxRage !== undefined ? `Rage ${c.rage ?? 0}/${c.maxRage}` : '',
           `STR ${c.stats.str} DEX ${c.stats.dex} INT ${c.stats.int} LCK ${c.stats.luck}`,
           c.stats.primary ? `Primary: ${c.stats.primary.toUpperCase()}${c.stats.primaryActive ? "" : " (inactive)"}` : "",
           `SPD ${c.stats.spd}`,

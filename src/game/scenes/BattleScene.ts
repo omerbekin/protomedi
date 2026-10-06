@@ -1,17 +1,25 @@
 import Phaser from 'phaser';
 import layout from '../../../data/battle-layout.json';
-import { Battle, chooseAction, content, describePassive, describeSkill, describeStat, previewSkill, armorReduction } from '../../engine';
+import { Battle, MatchLog, chooseAction, content, explainChoice, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, previewSkill, armorReduction } from '../../engine';
 import type { BattleEvent, BattleMode, Combatant, SkillDef, StatKind, Teams, TargetPreview } from '../../engine';
-import { PRIMARY_GOLD, STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON } from '../../ui/stat-icons';
+import { PRIMARY_GOLD, RAGE_COLOR, RAGE_ICON, STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON } from '../../ui/stat-icons';
 import { avatarTexture, backgroundKey, characterTexture, hasBackground, preloadAssets } from '../assets';
 import { CombatantView, color, slow, textStyle } from '../combatant-view';
 import { ensureIcon, ensureSkillIcon } from '../icons';
-import { initialSeed, newSeed } from '../seed';
+import { initialSeed, initialSizes, newSeed } from '../seed';
+import { clampSize } from '../team-select-model';
 import { GOLD, SERIF, cornerOrnaments, ensureGrain, frameRect, glowRect, gradientRect, makeBadge, makePanel } from '../ui-frame';
 import { playSfx } from '../audio';
-import { debugState, effectiveTimeScale } from '../debug-state';
+import { BattleStats, showResultScreen } from '../result-screen';
+import type { ResultScreen } from '../result-screen';
+import { debugState, effectiveTimeScale, tweaksSummary } from '../debug-state';
 import { VFX, groundArea, meleeApproach, summonFx, thornReflectFx } from '../vfx';
 import type { VfxKind } from '../../ui/vfx-kinds';
+import { skillMiniGrid } from '../../ui/shape-diagram';
+import type { MiniShape } from '../../ui/shape-diagram';
+import { drawMiniShape, miniShapeSize } from '../shape-draw';
+import { boardBounds, cellCenter, cellQuad, pickCell, shapeMarks } from '../shape-geometry';
+import type { Pt } from '../shape-geometry';
 
 export interface BattleSceneData {
   seed: number;
@@ -20,9 +28,21 @@ export interface BattleSceneData {
   mode: BattleMode;
   /** Takım seçim ekranından gelen takımlar; yoksa seed'e göre rastgele. */
   teams: Teams | undefined;
+  /** Rastgele takım boyutları (1-12); yoksa önceki savaşın / adresin boyutu (varsayılan 5-5). */
+  partySize: number;
+  enemySize: number;
 }
 
+/** Üç küçük global eylem düğmesinin (Rest / Skip Turn / Move) sütunu: 4 skill düğmesinin hemen sağında, tooltip plaketinin solunda. */
+const GLOBAL_BTN = { w: 64, h: 44, gap: 2 };
+/** Global eylem düğmelerinin ikon rengi. */
+const GLOBAL_ACCENT: Record<string, string> = { rest: '#9cc4ff', skip: '#e8dcc0', move: '#e8c47e' };
+
 const { width: W, height: H, colors } = layout;
+
+/** AOE shape floor plates: warm gold for a valid shape, pale red for an anchor that would hit nothing. */
+const SHAPE_GOLD = 0xffb347;
+const SHAPE_BAD = 0xc05858;
 
 /** A chip in the first row of the info plaque (cost, cooldown). */
 interface InfoMeta {
@@ -53,6 +73,9 @@ export class BattleScene extends Phaser.Scene {
   static freeMp = false;
   mode: BattleMode = 'turns';
   teams: Teams | undefined = undefined;
+  /** Takım boyutları (rastgele takım çekilirken; savaş başlayınca gerçek boyuttan okunur). */
+  partySize = initialSizes().party;
+  enemySize = initialSizes().enemies;
   /** turns mode: let the AI play the player's party too (debug). */
   autoPlay = false;
   /** Human-readable description of the last AI decision (debug info). */
@@ -70,6 +93,10 @@ export class BattleScene extends Phaser.Scene {
   private infoTip?: Tip;
   private statHitsOn = true;
   private areaMarker?: Phaser.GameObjects.Container;
+  /** Area marker parts that must sit above the units (anchor diamond, reason / shift labels). */
+  private areaTop?: Phaser.GameObjects.Container;
+  /** AOE shape targeting (Geometer): the pointer zone over the target board and the hover / touch state. */
+  private shapeTarget?: { actor: string; skill: string; side: 'party' | 'enemy'; slots: Pt[]; zone: Phaser.GameObjects.Zone; hover: number | null; downWasHover: boolean };
   private groundViews = new Map<string, Phaser.GameObjects.Container>();
   private badgeKeys = new Map<string, string>();
   private slotMarkers?: Phaser.GameObjects.Container;
@@ -84,6 +111,18 @@ export class BattleScene extends Phaser.Scene {
   /** The pre-selected / chosen skill of the acting player unit (waits for a target tap or confirmation). */
   private selected: { actor: string; skill: string } | null = null;
   private eventQueue: Promise<void> = Promise.resolve();
+  private stats!: BattleStats;
+  /** Maç kaydı (hamleler + AI gerekçeleri; Debug > Copy match data ve sonuç ekranı kullanır). */
+  private matchLog?: MatchLog;
+  private resultScreen?: ResultScreen;
+  /** Move Tile seçimi açık mı (altın hücre vurguları gösteriliyor)? */
+  private moveMode: { actor: string } | null = null;
+  private moveMarkers?: Phaser.GameObjects.Container;
+  /** Global düğmelerin nesneleri (birim tooltip'i açıkken gizlenir). */
+  private globalItems: Phaser.GameObjects.GameObject[] = [];
+  /** Rage barının ekranda gösterilen değeri (olaylar oynatıldıkça animasyonla güncellenir; motor değerinin gerisinde kalabilir). */
+  private rageShown = new Map<string, number>();
+  private rageBar?: { uid: string; redraw: () => void };
 
   constructor() {
     super(BattleScene.KEY);
@@ -95,6 +134,13 @@ export class BattleScene extends Phaser.Scene {
     this.showSlots = data.showSlots ?? this.showSlots;
     this.mode = data.mode ?? this.mode;
     if ('teams' in data) this.teams = data.teams;
+    if (data.partySize !== undefined) this.partySize = clampSize(data.partySize);
+    if (data.enemySize !== undefined) this.enemySize = clampSize(data.enemySize);
+    this.moveMode = null;
+    this.moveMarkers = undefined;
+    this.globalItems = [];
+    this.rageShown = new Map();
+    this.rageBar = undefined;
     this.views = new Map();
     this.lastSkill = new Map();
     this.controlled = null;
@@ -106,6 +152,8 @@ export class BattleScene extends Phaser.Scene {
     this.infoTip = undefined;
     this.slotMarkers = undefined;
     this.areaMarker = undefined;
+    this.areaTop = undefined;
+    this.shapeTarget = undefined;
     this.groundViews = new Map();
     this.badgeKeys = new Map();
     this.unitTipKey = '';
@@ -125,7 +173,11 @@ export class BattleScene extends Phaser.Scene {
     this.drawBackground(def?.background ?? '');
     this.drawSlots();
 
-    this.battle = new Battle(content.battleSetup(this.battleId, this.seed, this.mode, this.teams, false));
+    this.battle = new Battle(content.battleSetup(this.battleId, this.seed, this.mode, this.teams ? { ...this.teams } : { partySize: this.partySize, enemySize: this.enemySize }, false));
+    // Gerçek boyutlar (takım seçiminden gelen hücre listeleri dahil): "New Game" ve Team Select bunları korur
+    this.partySize = this.battle.combatants.filter((c) => c.side === 'party' && !c.summoned).length || this.partySize;
+    this.enemySize = this.battle.combatants.filter((c) => c.side === 'enemy' && !c.summoned).length || this.enemySize;
+    for (const c of this.battle.combatants) if (c.maxRage !== undefined) this.rageShown.set(c.uid, c.rage ?? 0);
     this.battle.freeMp = BattleScene.freeMp;
     Object.assign(this.battle.debug, debugState.flags);
     this.applyDebugTiming();
@@ -133,7 +185,24 @@ export class BattleScene extends Phaser.Scene {
     for (const c of this.battle.combatants) this.addView(c);
     this.uiActor = this.battle.currentUid;
     this.renderTurnBar(this.battle.turnQueue());
-    this.battle.on((e) => this.enqueue(e));
+    this.stats = new BattleStats(this.battle);
+    this.matchLog?.stop();
+    this.matchLog = debugState.matchLog
+      ? new MatchLog(this.battle, () => {
+          const tweaks = tweaksSummary(debugState, BattleScene.freeMp);
+          return {
+            version: typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : undefined,
+            builtAt: typeof __BUILD_TIME__ === 'string' ? __BUILD_TIME__ : undefined,
+            commit: typeof __GIT_COMMIT__ === 'string' && __GIT_COMMIT__ ? __GIT_COMMIT__ : undefined,
+            ...(tweaks !== 'none' ? { note: `debug tweaks: ${tweaks}` } : {}),
+          };
+        })
+      : undefined;
+    this.resultScreen = undefined;
+    this.battle.on((e) => {
+      this.stats.record(e);
+      this.enqueue(e);
+    });
 
     this.hint = this.add.text(W / 2, layout.commandPanel.y - 60, '', textStyle(38, colors.selected)).setOrigin(0.5).setDepth(4400).setVisible(false);
 
@@ -158,7 +227,7 @@ export class BattleScene extends Phaser.Scene {
         list.push({ icon: def?.icon ?? 'flame', color: def?.color ?? '#ffffff', text: String(g.turns), debuff: true, turns: true });
       }
       const bonus = this.battle.effectiveStats(c).armor - c.stats.armor;
-      if (bonus > 0) list.push({ icon: 'shield', color: '#c9d1dc', text: `+${bonus}`, debuff: false, turns: false });
+      if (Math.round(bonus) > 0) list.push({ icon: 'shield', color: '#c9d1dc', text: `+${Math.round(bonus)}`, debuff: false, turns: false });
       const key = JSON.stringify(list);
       if (this.badgeKeys.get(c.uid) === key) continue;
       this.badgeKeys.set(c.uid, key);
@@ -182,6 +251,10 @@ export class BattleScene extends Phaser.Scene {
   private bindSkillHotkeys(): void {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.key === 'Escape' && this.moveMode) {
+        this.cancelMove();
+        return;
+      }
       const n = '1234'.indexOf(e.key) + 1;
       if (n === 0) return;
       const skillId = this.activeActor?.skills[n - 1];
@@ -345,7 +418,7 @@ export class BattleScene extends Phaser.Scene {
       for (const c of this.battle.combatants) if (c.side === side && !c.summoned && c.slot < cells.length) cells[c.slot] = c.defId;
       return cells;
     };
-    this.scene.start('TeamSelectScene', { teams: { party: ids('party'), enemies: ids('enemy') } });
+    this.scene.start('TeamSelectScene', { teams: { party: ids('party'), enemies: ids('enemy') }, sizes: { party: this.partySize, enemies: this.enemySize } });
   }
 
   // --- Skill selection: the first usable skill comes pre-selected; the player confirms with a tap ---
@@ -353,6 +426,11 @@ export class BattleScene extends Phaser.Scene {
   /** Makes sure the acting player unit has a valid selected skill (the first usable one by default). */
   private ensureSelection(): void {
     const actor = this.activeActor;
+    if (this.moveMode) {
+      // Move Tile seçimi açıkken skill ön seçimi yapılmaz; geçersizleştiyse (sıra değişti, hamle bitti) kapanır
+      if (actor && actor.uid === this.moveMode.actor && this.playerCanAct && this.battle.canUseGlobal(actor.uid, 'move_tile').ok) return;
+      this.cancelMoveQuiet();
+    }
     if (!actor || !this.playerCanAct) {
       if (this.selected) this.clearSelection();
       return;
@@ -458,6 +536,10 @@ export class BattleScene extends Phaser.Scene {
    * Hovering it previews the area; clicking casts the skill there.
    */
   private showTargetCells(actorUid: string, skillId: string): void {
+    if (this.battle.isShapeSkill(skillId)) {
+      this.showShapeTargeting(actorUid, skillId);
+      return;
+    }
     const side = this.targetSide(actorUid);
     const skill = content.skills[skillId];
     const hex = skill && this.isHarmful(skill) ? colors.glowBad : colors.glowGood;
@@ -499,6 +581,169 @@ export class BattleScene extends Phaser.Scene {
     this.clearPreviewsOnly();
     this.clearAreaMarker();
     this.refreshGlows();
+  }
+
+  // --- AOE shapes (row / column / rect / plus): every cell of the target board is an anchor, covered cells light up as floor plates ---
+
+  private slotsOf(side: 'party' | 'enemy'): Pt[] {
+    return side === 'party' ? layout.partySlots : layout.enemySlots;
+  }
+
+  /**
+   * Shape skills are aimed at CELLS (empty ones too): one pointer zone over the target board resolves the cell under the pointer
+   * (floor tile first, then the unit's body). Mouse: hover previews, click casts. Touch: the first tap previews, a second tap on the same cell casts.
+   * Selectable anchors show as faint floor tiles; cells where the shape would hit nothing stay almost invisible.
+   */
+  private showShapeTargeting(actorUid: string, skillId: string): void {
+    const side = this.targetSide(actorUid);
+    const slots = this.slotsOf(side);
+    const lanes = content.GRID.lanes;
+    const anchors = new Set(this.battle.shapeAnchors(actorUid, skillId));
+    const g = this.add.graphics();
+    for (let slot = 0; slot < content.CELL_COUNT; slot++) {
+      const quad = cellQuad(slots, lanes, slot);
+      const ok = anchors.has(slot);
+      g.fillStyle(SHAPE_GOLD, ok ? 0.1 : 0.02).fillPoints(quad, true);
+      g.lineStyle(ok ? 3 : 1, ok ? SHAPE_GOLD : 0x8a7a5a, ok ? 0.5 : 0.16).strokePoints(quad, true);
+    }
+    this.slotMarkers = this.add.container(0, 0, [g]).setDepth(40);
+    const body = { w: layout.spriteBox.width, h: layout.spriteBox.height };
+    const b = boardBounds(slots, body);
+    const y1 = Math.min(b.y1, layout.commandPanel.y - 2);
+    const zone = this.add.zone(b.x0, b.y0, b.x1 - b.x0, y1 - b.y0).setOrigin(0, 0).setDepth(3600).setInteractive();
+    const state = { actor: actorUid, skill: skillId, side, slots, zone, hover: null as number | null, downWasHover: false };
+    this.shapeTarget = state;
+    const at = (p: Phaser.Input.Pointer) => pickCell(slots, lanes, p.x, p.y, body);
+    zone.on('pointermove', (p: Phaser.Input.Pointer) => this.setShapeHover(at(p)));
+    zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      const cell = at(p);
+      state.downWasHover = cell !== null && cell === state.hover;
+      this.setShapeHover(cell);
+    });
+    zone.on('pointerup', (p: Phaser.Input.Pointer) => {
+      const cell = at(p);
+      if (cell === null) return;
+      if (p.wasTouch && !state.downWasHover) return; // touch: the first tap only previews
+      if (!this.battle.shapePreviewCells(actorUid, skillId, cell).valid) return;
+      this.perform(actorUid, skillId, '', cell);
+    });
+    zone.on('pointerout', (p: Phaser.Input.Pointer) => {
+      if (!p.wasTouch) this.setShapeHover(null); // touch keeps its preview after the finger lifts
+    });
+  }
+
+  /** The pointer moved to another cell (or off the board): refresh the hover preview, the covered-cell plates and the unit tooltip. */
+  private setShapeHover(slot: number | null): void {
+    const st = this.shapeTarget;
+    if (!st || st.hover === slot) return;
+    st.hover = slot;
+    if (slot === null) {
+      this.endAreaPreview();
+      this.hoverView = undefined;
+      this.hideUnitTip();
+      return;
+    }
+    const info = this.battle.shapePreviewCells(st.actor, st.skill, slot);
+    const previews = info.valid ? previewSkill(this.battle, st.actor, st.skill, undefined, slot) : [];
+    this.showPreviews(previews);
+    this.refreshGlows(previews.map((p) => p.uid));
+    this.showShapeMarker(st.side, info, slot, st.skill);
+    const occupant = this.battle.living(st.side).find((c) => c.slot === slot);
+    const view = occupant ? this.views.get(occupant.uid) : undefined;
+    if (view) {
+      this.hoverView = view;
+      this.showUnitTip(view);
+    } else {
+      this.hoverView = undefined;
+      this.hideUnitTip();
+    }
+  }
+
+  /**
+   * The hovered shape on the floor: one tile per covered cell (empty ones too; tiles with a target are stronger), the anchor (pointer cell)
+   * outlined bright with a small diamond above it. A rect that had to slide back into the grid also marks its real bottom-left corner.
+   * Invalid anchors are drawn pale red with the reason ('No enemy in the area').
+   */
+  private showShapeMarker(side: 'party' | 'enemy', info: { cells: number[]; targets: string[]; valid: boolean; reason?: string }, anchor: number, skillId: string): void {
+    this.clearAreaMarker();
+    if (info.cells.length === 0) return;
+    const slots = this.slotsOf(side);
+    const lanes = content.GRID.lanes;
+    const skill = content.skills[skillId];
+    const marks = shapeMarks(skill?.area?.shape === 'rect', info.cells, anchor, side, content.formulas.formation);
+    const hit = new Set(this.battle.living(side).filter((c) => info.targets.includes(c.uid)).map((c) => c.slot));
+    const col = info.valid ? SHAPE_GOLD : SHAPE_BAD;
+    const g = this.add.graphics();
+    for (const cell of info.cells) {
+      const quad = cellQuad(slots, lanes, cell);
+      const strong = info.valid && hit.has(cell);
+      g.fillStyle(col, info.valid ? (strong ? 0.6 : 0.4) : 0.2).fillPoints(quad, true);
+      g.lineStyle(strong ? 4 : 3, col, info.valid ? 0.95 : 0.55).strokePoints(quad, true);
+    }
+    // The anchor (pointer cell): bright outline
+    g.lineStyle(5, 0xfff2b0, info.valid ? 1 : 0.6).strokePoints(cellQuad(slots, lanes, anchor), true);
+    const top: Phaser.GameObjects.GameObject[] = [];
+    const ac = cellCenter(slots, anchor);
+    const dia = (cx: number, cy: number, r: number, fill: number) => this.add.polygon(0, 0, [cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy], fill, 1).setOrigin(0, 0).setStrokeStyle(3, 0x1a0f06, 1);
+    top.push(dia(ac.x, ac.y - 215, 15, info.valid ? 0xfff2b0 : 0xe08a8a));
+    if (marks.shifted && marks.corner !== null) {
+      // Real bottom-left corner of the slid block: a bracket in the corner of that tile
+      const q = cellQuad(slots, lanes, marks.corner, 1);
+      const bl = q.reduce((m, pt) => (pt.x - pt.y < m.x - m.y ? pt : m));
+      const i = q.indexOf(bl);
+      const toward = (to: Pt): Pt => ({ x: bl.x + (to.x - bl.x) * 0.3, y: bl.y + (to.y - bl.y) * 0.3 });
+      const n1 = toward(q[(i + 1) % 4]!);
+      const n2 = toward(q[(i + 3) % 4]!);
+      g.lineStyle(6, 0xffffff, 1).beginPath().moveTo(n1.x, n1.y).lineTo(bl.x, bl.y).lineTo(n2.x, n2.y).strokePath();
+      const xs = info.cells.map((c) => cellCenter(slots, c).x);
+      const ys = info.cells.map((c) => cellCenter(slots, c).y);
+      top.push(this.shapeLabel((Math.min(...xs) + Math.max(...xs)) / 2, Math.min(...ys) - 235, 'Block slid to fit: the bracket marks its bottom-left corner', 0xfff2b0));
+    }
+    if (!info.valid && info.reason) top.push(this.shapeLabel(ac.x, ac.y - 130, info.reason, 0xf2a0a0));
+    this.areaMarker = this.add.container(0, 0, [g]).setDepth(60);
+    this.areaTop = this.add.container(0, 0, top).setDepth(3550);
+    this.tweens.add({ targets: this.areaMarker, alpha: 0.8, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
+
+  /** A small dark plaque with a line of text (reason / hint) above the board. */
+  private shapeLabel(x: number, y: number, text: string, hex: number): Phaser.GameObjects.Container {
+    const t = this.add.text(0, 0, text, { fontFamily: layout.fontFamily, fontSize: '22px', fontStyle: 'bold', color: `#${hex.toString(16).padStart(6, '0')}`, stroke: '#0c0805', strokeThickness: 3 }).setOrigin(0.5);
+    const w = t.width + 24;
+    const h = t.height + 10;
+    const bg = this.add.graphics();
+    bg.fillStyle(0x0c0805, 0.9).fillRoundedRect(-w / 2, -h / 2, w, h, 8);
+    bg.lineStyle(2, hex, 0.9).strokeRoundedRect(-w / 2, -h / 2, w, h, 8);
+    const px = Math.max(w / 2 + 8, Math.min(W - w / 2 - 8, x));
+    return this.add.container(px, y, [bg, t]);
+  }
+
+  /**
+   * Quiet floor flash while a shape skill plays (events carry the covered cells): the covered tiles fade in softly as a telegraph,
+   * then `hit()` (the moment the effect lands, the same moment the damage numbers start) flashes them once and fades them out.
+   */
+  private beginShapeFlash(board: 'party' | 'enemy', cells: number[]): { hit: () => void } | null {
+    if (cells.length === 0) return null;
+    const slots = this.slotsOf(board);
+    const lanes = content.GRID.lanes;
+    const g = this.add.graphics();
+    for (const cell of cells) {
+      const quad = cellQuad(slots, lanes, cell);
+      g.fillStyle(SHAPE_GOLD, 0.55).fillPoints(quad, true);
+      g.lineStyle(4, 0xfff2b0, 1).strokePoints(quad, true);
+    }
+    g.setDepth(62).setAlpha(0);
+    const lead = this.tweens.add({ targets: g, alpha: 0.35, duration: slow(220), ease: 'Sine.easeOut' });
+    let done = false;
+    return {
+      hit: () => {
+        if (done) return;
+        done = true;
+        lead.stop();
+        if (!g.active) return;
+        g.setAlpha(0.9);
+        this.tweens.add({ targets: g, alpha: 0, duration: slow(460), ease: 'Quad.easeOut', onComplete: () => g.destroy() });
+      },
+    };
   }
 
   /** Whirlwind-like skills (melee, everyone in reach): the front row the skill will sweep is shown as a vertical band. */
@@ -565,9 +810,18 @@ export class BattleScene extends Phaser.Scene {
     if (this.areaMarker) this.tweens.killTweensOf(this.areaMarker);
     this.areaMarker?.destroy();
     this.areaMarker = undefined;
+    this.areaTop?.destroy();
+    this.areaTop = undefined;
   }
 
   private clearSlotMarkers(): void {
+    if (this.shapeTarget) {
+      const hadHover = this.shapeTarget.hover !== null;
+      this.shapeTarget.zone.destroy();
+      this.shapeTarget = undefined;
+      if (hadHover) this.hideUnitTip();
+      this.hoverView = undefined;
+    }
     if (!this.slotMarkers) return;
     this.tweens.killTweensOf(this.slotMarkers.list);
     this.slotMarkers.destroy();
@@ -594,6 +848,7 @@ export class BattleScene extends Phaser.Scene {
   private onSkillClick(skillId: string): void {
     const actor = this.activeActor;
     if (!actor || !this.playerCanAct || !this.battle.canUse(actor.uid, skillId).ok) return;
+    this.cancelMoveQuiet();
     if (this.selected?.skill === skillId && this.selected.actor === actor.uid && this.battle.needsSlotChoice(skillId)) return;
     if (this.selected?.skill === skillId && this.selected.actor === actor.uid && !this.battle.needsTargetChoice(skillId)) {
       const first = this.battle.validTargets(actor.uid, skillId)[0];
@@ -610,6 +865,7 @@ export class BattleScene extends Phaser.Scene {
 
   private perform(actor: string, skill: string, target: string, slot?: number): void {
     if (this.battle.mode === 'test') this.lastSkill.set(actor, skill);
+    this.cancelMoveQuiet();
     this.clearSelection();
     this.hideInfoTip();
     this.hideUnitTip();
@@ -617,6 +873,179 @@ export class BattleScene extends Phaser.Scene {
     this.busy = true;
     this.refreshCommands();
     this.settle();
+  }
+
+  // --- Global actions: Rest, Skip Turn, Move Tile (small buttons at the right end of the command panel) ---
+
+  /** A global action button was pressed: Rest and Skip act at once; Move opens the empty-cell picker (press again or Esc cancels). */
+  private onGlobalClick(id: string): void {
+    const actor = this.activeActor;
+    const def = this.battle.globalDef(id);
+    if (!actor || !def || !this.playerCanAct || !this.battle.canUseGlobal(actor.uid, id).ok) return;
+    if (def.kind === 'move') {
+      if (this.moveMode) this.cancelMove();
+      else this.startMove(actor);
+      return;
+    }
+    this.performGlobal(actor.uid, id);
+  }
+
+  private performGlobal(actor: string, id: string, slot?: number): void {
+    this.cancelMoveQuiet();
+    this.clearSelection();
+    this.hideInfoTip();
+    this.hideUnitTip();
+    if (!this.battle.useGlobal(actor, id, slot).ok) {
+      this.refreshCommands();
+      return;
+    }
+    this.busy = true;
+    this.refreshCommands();
+    this.settle();
+  }
+
+  private startMove(actor: Combatant): void {
+    this.clearSelection();
+    this.moveMode = { actor: actor.uid };
+    this.refreshCommands();
+    this.showMoveMarkers(actor);
+  }
+
+  /** Leaves Move selection (no redraw): used right before something else takes over. */
+  private cancelMoveQuiet(): void {
+    this.moveMode = null;
+    this.moveMarkers?.destroy(true);
+    this.moveMarkers = undefined;
+  }
+
+  private cancelMove(): void {
+    if (!this.moveMode) return;
+    this.cancelMoveQuiet();
+    this.hideInfoTip();
+    this.refreshCommands();
+  }
+
+  /** Gold floor cells on every empty cell of the actor's side; a fallen ally's cell is dim with a skull (moving there blocks the revive). */
+  private showMoveMarkers(actor: Combatant): void {
+    this.moveMarkers?.destroy(true);
+    const free = this.battle.freeTiles(actor.uid);
+    const fallen = new Set(this.battle.fallenSlots(actor.side));
+    const floor: Phaser.GameObjects.GameObject[] = [];
+    const top: Phaser.GameObjects.GameObject[] = [];
+    // A fallen ally's cell is reserved (the engine does not offer it): shown faint with a skull, not clickable
+    for (const slot of fallen) {
+      if (free.includes(slot)) continue;
+      const pos = this.cellPos(actor.side, slot);
+      const hex = color(colors.lethal);
+      floor.push(this.add.ellipse(pos.x, pos.y - 4, 116, 44, hex, 0.06).setStrokeStyle(3, hex, 0.35));
+      top.push(this.add.image(pos.x, pos.y - 46, ensureIcon(this, 'skull', colors.lethal, false)).setDisplaySize(34, 34).setAlpha(0.45));
+      const hit = this.add.ellipse(pos.x, pos.y - 24, 150, 90, 0xffffff, 0.001).setDepth(4200).setInteractive();
+      hit.on('pointerover', () => this.showMoveTip(actor, slot, true));
+      hit.on('pointerout', () => this.hideInfoTip());
+      top.push(hit);
+    }
+    for (const slot of free) {
+      const pos = this.cellPos(actor.side, slot);
+      const warn = false;
+      const hex = color(colors.selected);
+      const ring = this.add.ellipse(pos.x, pos.y - 4, 116, 44, hex, warn ? 0.1 : 0.2).setStrokeStyle(5, hex, warn ? 0.6 : 1);
+      const dot = this.add.ellipse(pos.x, pos.y - 4, 20, 8, hex, warn ? 0.45 : 0.85);
+      const icon = this.add.image(pos.x, pos.y - 58, ensureIcon(this, warn ? 'skull' : 'boot', warn ? colors.lethal : colors.selected, false)).setDisplaySize(44, 44).setAlpha(warn ? 0.75 : 1);
+      this.tweens.add({ targets: icon, y: icon.y - 8, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.tweens.add({ targets: [ring, dot], alpha: warn ? 0.7 : 0.78, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      // The hit area sits above the units, so a sprite standing in front of the cell cannot swallow the tap
+      const hit = this.add.ellipse(pos.x, pos.y - 24, 150, 90, 0xffffff, 0.001).setDepth(4200).setInteractive({ useHandCursor: true });
+      hit.on('pointerover', () => {
+        ring.setFillStyle(hex, warn ? 0.3 : 0.5).setStrokeStyle(7, hex, 1);
+        this.showMoveTip(actor, slot, warn);
+      });
+      hit.on('pointerout', () => {
+        ring.setFillStyle(hex, warn ? 0.1 : 0.2).setStrokeStyle(5, hex, warn ? 0.6 : 1);
+        this.hideInfoTip();
+      });
+      hit.on('pointerup', () => this.performGlobal(actor.uid, 'move_tile', slot));
+      floor.push(ring, dot);
+      top.push(icon, hit);
+    }
+    this.moveMarkers = this.add.container(0, 0, [...floor, ...top]).setDepth(40);
+    for (const o of top) (o as Phaser.GameObjects.Components.Depth & Phaser.GameObjects.GameObject).setDepth?.(4200);
+  }
+
+  /** Tooltip over an empty cell while choosing where to move: its row and what it means for melee; warns about a fallen ally's cell. */
+  private showMoveTip(actor: Combatant, slot: number, warn: boolean): void {
+    this.hideInfoTip();
+    const rows: Array<[string, string?]> = [[`Row ${this.battle.rowOf(slot) + 1}${this.battle.rowOf(slot) === 0 ? ' (front)' : ''}`]];
+    const hasMelee = actor.skills.some((id) => content.skills[id]?.motion === 'melee' && content.skills[id]?.target !== 'self');
+    if (hasMelee) rows.push(this.battle.canMeleeFrom(actor.uid, slot) ? ['Melee skills usable from here', colors.heal] : ['Too far back for melee skills', colors.targetHighlight]);
+    if (warn) {
+      const fallenUnit = this.battle.combatants.find((c) => c.side === actor.side && c.board === c.side && c.hp <= 0 && !c.summoned && c.slot === slot);
+      rows.push([`${fallenUnit ? fallenUnit.name : 'A fallen ally'} fell here: the cell is reserved for their resurrection`, colors.lethal]);
+    }
+    rows.push([warn ? 'You cannot move here' : 'Click to move here and end your turn', colors.muted]);
+    this.placeInfoTip(this.makeInfo(warn ? 'Reserved cell' : 'Move here', warn ? colors.lethal : colors.selected, ensureIcon(this, warn ? 'skull' : 'boot', warn ? colors.lethal : colors.selected, true), rows, warn ? 'Reserved' : 'Empty cell'));
+  }
+
+  private showGlobalTip(actor: Combatant, id: string): void {
+    const def = this.battle.globalDef(id);
+    if (!def) return;
+    this.hideInfoTip();
+    const info = describeGlobalSkill(def, content.formulas);
+    const detail = info.lines.filter((l) => !(def.kind === 'skip' && l.includes('speed meter')) && !(def.kind === 'move' && l.startsWith('Move to an empty')));
+    const rows: Array<[string, string?]> = [[info.summary, colors.text], ...(def.kind === 'skip' ? [['Next turn arrives in half the time', colors.heal] as [string, string]] : []), ...detail.map((l): [string, string?] => [l, colors.muted])];
+    const can = this.battle.canUseGlobal(actor.uid, id);
+    const reason = !can.ok ? can.reason : !this.playerCanAct ? 'Not your turn' : '';
+    if (reason) rows.push([reason, colors.lethal]);
+    else if (def.kind === 'move') rows.push(['Click, then pick an empty cell (Esc cancels)', colors.targetHighlight]);
+    if (def.kind === 'move' && this.battle.fallenSlots(actor.side).length > 0) rows.push(["A fallen ally's cell stays reserved for their resurrection", colors.muted]);
+    this.placeInfoTip(this.makeInfo(info.name, colors.text, ensureIcon(this, def.icon, GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e', true), rows, info.targetBadge, [{ text: info.cost, hex: colors.muted }]));
+  }
+
+  /** The three small global buttons: a column at the right end of the command panel (they never touch the 4 skill buttons). */
+  private globalButtons(actor: Combatant): Phaser.GameObjects.GameObject[] {
+    const p = layout.commandPanel;
+    const { w, h, gap } = GLOBAL_BTN;
+    const x = this.globalX();
+    const out: Phaser.GameObjects.GameObject[] = [];
+    this.battle.globalSkillIds().forEach((id, i) => {
+      const def = this.battle.globalDef(id)!;
+      const can = this.battle.canUseGlobal(actor.uid, id);
+      const enabled = this.playerCanAct && can.ok;
+      const active = def.kind === 'move' && this.moveMode?.actor === actor.uid;
+      const y = p.y + 12 + i * (h + gap);
+      const frame = this.add.graphics();
+      const paint = (pressed: boolean): void => {
+        frame.clear();
+        const hot = pressed || active;
+        const [top, bottom] = hot ? [0x6e4f33, 0x2f2012] : [0x3b2b1d, 0x1a110b];
+        const a = enabled ? 1 : 0.45;
+        if (active) glowRect(frame, x, y, w, h, GOLD.bright, 0.9, 7);
+        gradientRect(frame, x, y, w, h, top, bottom, a);
+        frameRect(frame, x, y, w, h, { edge: active ? GOLD.bright : GOLD.edge, light: active ? 0xfff0c0 : GOLD.light, alpha: a, bevel: 3 });
+      };
+      paint(false);
+      const accent = GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e';
+      const icon = this.add.image(x + w / 2, y + h / 2, ensureIcon(this, def.icon, accent, false)).setDisplaySize(34, 34).setAlpha(enabled ? 1 : 0.35);
+      const bg = this.add.rectangle(x, y, w, h, 0x000000, 0.001).setOrigin(0, 0).setInteractive({ useHandCursor: enabled });
+      bg.on('pointerover', () => this.showGlobalTip(actor, id));
+      bg.on('pointerout', () => {
+        this.hideInfoTip();
+        paint(false);
+      });
+      if (enabled) {
+        bg.on('pointerdown', () => paint(true));
+        bg.on('pointerup', () => {
+          paint(false);
+          this.onGlobalClick(id);
+        });
+      }
+      out.push(frame, icon, bg);
+    });
+    this.globalItems = out;
+    return out;
+  }
+
+  private setGlobalVisible(on: boolean): void {
+    for (const o of this.globalItems) if (o.active) (o as Phaser.GameObjects.GameObject & { setVisible(v: boolean): unknown }).setVisible(on);
   }
 
   /** Çok vuruşlu skill'in sıradaki vuruş animasyonu (VfxCtx.gate): ilgili hasar olayından hemen önce oynar. */
@@ -689,7 +1118,7 @@ export class BattleScene extends Phaser.Scene {
    * to the mouse). First row: icon + title (+ cost / cooldown chips), the badge sits at the top right. Below it the
    * description rows: the font shrinks (and long content flows into a second column) until everything fits.
    */
-  private makeInfo(title: string, titleColor: string, iconKey: string | undefined, rows: Array<[string, string?]>, badge?: string, meta: InfoMeta[] = []): Tip {
+  private makeInfo(title: string, titleColor: string, iconKey: string | undefined, rows: Array<[string, string?]>, badge?: string, meta: InfoMeta[] = [], shape?: MiniShape | null): Tip {
     const p = layout.commandPanel;
     const x = this.infoTipX();
     const width = W - 24 - x;
@@ -711,12 +1140,16 @@ export class BattleScene extends Phaser.Scene {
     }
     const badgeObjs = badge ? makeBadge(this, width, 0, badge, 14) : [];
     const badgeW = badgeObjs.length ? (badgeObjs[1] as Phaser.GameObjects.Text).width + 20 : 0;
+    // AOE shape diagram (mini grid: covered cells painted, anchor marked) left of the badge
+    const shapeSize = shape ? miniShapeSize(shape) : { w: 0, h: 0 };
+    const shapeW = shape ? shapeSize.w + 10 : 0;
+    if (shape) items.push(drawMiniShape(this, width - badgeW - shapeW, 0, shape));
     // meta chips (cost, cooldown) right after the title
     const isz = 18;
     const metaTexts = meta.map((m) => this.add.text(0, 0, m.text, { fontFamily: layout.fontFamily, fontSize: '17px', fontStyle: 'bold', color: m.hex, stroke: '#0c0805', strokeThickness: 3 }).setOrigin(0, 0.5));
     const metaW = meta.reduce((w, m, i) => w + (m.icon ? isz + 4 : 0) + metaTexts[i]!.width + 18, 0);
     const titleText = this.add.text(left, iconSize / 2, title, { fontFamily: SERIF, fontSize: '25px', fontStyle: 'bold', color: titleColor, stroke: '#0c0805', strokeThickness: 4 }).setOrigin(0, 0.5);
-    const room = width - left - badgeW - metaW - 20;
+    const room = width - left - badgeW - shapeW - metaW - 20;
     if (titleText.width > room) titleText.setScale(Math.max(0.6, room / titleText.width));
     items.push(titleText);
     let mx = left + titleText.displayWidth + 18;
@@ -785,8 +1218,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private infoTipX(): number {
+    return this.globalX() + GLOBAL_BTN.w + 14; // right after the global action column
+  }
+
+  /** Left edge of the small global action column (right after the 4 skills). */
+  private globalX(): number {
     const p = layout.commandPanel;
-    return this.skillsLeft() + 4 * (p.buttonWidth + p.gap) + 10; // right after the 4 skills
+    return this.skillsLeft() + 4 * (p.buttonWidth + p.gap) + 10;
   }
 
   private showSkillTip(actor: Combatant, skill: SkillDef): void {
@@ -796,7 +1234,9 @@ export class BattleScene extends Phaser.Scene {
       k === 'shield' ? colors.shield : k === 'magicShield' ? colors.magicShield : k ? colors.element[k] : undefined;
     const rows: Array<[string, string?]> = info.lines.map((l, i): [string, string?] => [l, kindColor(info.kinds[i])]);
     const meta: InfoMeta[] = [];
-    if (skill.cost.amount > 0) {
+    if (skill.cost.resource === 'rage' && skill.cost.amount > 0) {
+      meta.push({ icon: ensureIcon(this, RAGE_ICON, RAGE_COLOR, false), text: `RAGE ${skill.cost.amount}`, hex: RAGE_COLOR });
+    } else if (skill.cost.amount > 0) {
       const kind = skill.cost.resource === 'mp' ? 'mp' : 'hp';
       meta.push({ icon: ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false), text: info.cost, hex: colors.text });
     } else meta.push({ text: info.cost, hex: colors.muted });
@@ -808,7 +1248,7 @@ export class BattleScene extends Phaser.Scene {
       const can = this.battle.canUse(actor.uid, skill.id);
       if (!can.ok && (can.reason.startsWith('Not enough') || can.reason === 'No target in reach' || can.reason.startsWith('Melee'))) rows.push([can.reason, colors.lethal]);
     }
-    this.placeInfoTip(this.makeInfo(info.name, colors.text, ensureSkillIcon(this, skill), rows, info.targetBadge, meta));
+    this.placeInfoTip(this.makeInfo(info.name, colors.text, ensureSkillIcon(this, skill), rows, info.targetBadge, meta, skillMiniGrid(skill, content.formulas.formation)));
   }
 
   private showStatTip(kind: StatKind, actor: Combatant): void {
@@ -821,6 +1261,7 @@ export class BattleScene extends Phaser.Scene {
   private hideInfoTip(): void {
     this.infoTip?.container.destroy();
     this.infoTip = undefined;
+    this.setGlobalVisible(true);
   }
 
   private unitTipLines(c: Combatant): string[] {
@@ -828,6 +1269,7 @@ export class BattleScene extends Phaser.Scene {
     const pct = (a: number) => `${Math.round(armorReduction(a, f) * 100)}%`;
     const lines = [`HP ${c.hp} / ${c.maxHp}`];
     if (c.maxMp > 0) lines.push(`MP ${c.mp} / ${c.maxMp}`);
+    if (c.maxRage !== undefined) lines.push(`Rage ${c.rage ?? 0} / ${c.maxRage}`);
     if (c.shield > 0) lines.push(`Shield ${c.shield}`);
     if (c.magicShield > 0) lines.push(`Magic shield ${c.magicShield}`);
     if (c.statuses.length > 0) lines.push(`Status: ${c.statuses.map((s) => `${s.kind} ${s.turns}`).join(', ')}`);
@@ -849,6 +1291,7 @@ export class BattleScene extends Phaser.Scene {
     this.unitTipKey = lines.join('|');
     this.hideInfoTip();
     this.placeInfoTip(this.makeUnitInfo(c));
+    this.setGlobalVisible(false); // the unit info is wider than the plaque: the global buttons step aside while it shows
   }
 
   /**
@@ -857,13 +1300,13 @@ export class BattleScene extends Phaser.Scene {
    */
   private makeUnitInfo(c: Combatant): Tip {
     const p = layout.commandPanel;
-    const x0 = this.infoTipX();
+    const x0 = this.globalX(); // the unit info is wide: it covers the global column (the buttons hide while it shows)
     this.statHitsOn = false;
     const items = this.drawStatsBlock(c, x0);
     this.statHitsOn = true;
 
     // Skills (2 x 2 icons) next to the block
-    const sx = x0 + 480;
+    const sx = x0 + 468;
     c.skills.slice(0, 4).forEach((id, i) => {
       const skill = content.skills[id];
       if (!skill) return;
@@ -919,13 +1362,14 @@ export class BattleScene extends Phaser.Scene {
       if (!actor) return;
       const idle = actor.side === 'enemy' && debugState.enemyAiOff && !this.autoPlay; // debug: enemies do nothing
       const aiTurn = actor.side === 'enemy' || this.autoPlay;
-      if (!aiTurn && battle.hasUsableSkill(actor.uid)) return; // the player's move
+      if (!aiTurn && (actor.summoned ? battle.hasUsableSkill(actor.uid) : battle.legalActions(actor.uid).length > 0)) return; // the player's move (class skills or Rest / Skip / Move)
       this.busy = true;
       this.refreshCommands();
       await this.wait(layout.animation.aiThinkMs);
       if (battle !== this.battle || !this.scene.isActive()) return;
       if (idle) {
         this.lastAi = `Enemy ${actor.name}: AI off, skipped`;
+        this.matchLog?.noteAi(null);
         this.battle.skipTurn();
         this.settle();
         return;
@@ -936,16 +1380,19 @@ export class BattleScene extends Phaser.Scene {
 
   private runAi(actor: Combatant): void {
     const choice = chooseAction(this.battle, actor.uid, content.aiConfig);
+    this.matchLog?.noteAi(explainChoice(this.battle, actor.uid, content.aiConfig)); // match record: why this move (does not change the decision)
     const who = `${actor.side === 'enemy' ? 'Enemy ' : 'Player '}${actor.name}`;
     if (choice) {
       const skill = content.skills[choice.skillId];
-      const target = choice.targetUid ? this.battle.get(choice.targetUid) : undefined;
+      const globalName = this.battle.globalDef(choice.skillId)?.name;
+      const target = choice.targetUid && !choice.targetUid.startsWith('tile:') ? this.battle.get(choice.targetUid) : undefined;
       const targetName = target ? `${target.side === 'enemy' ? 'Enemy ' : 'Player '}${target.name}` : '';
-      this.lastAi = `${who}: ${skill?.name ?? choice.skillId}${target ? ` on ${targetName}` : ''} (${choice.reason})`;
+      const where = choice.slot !== undefined ? ` to cell ${choice.slot + 1}` : '';
+      this.lastAi = `${who}: ${skill?.name ?? globalName ?? choice.skillId}${target ? ` on ${targetName}` : ''}${where} (${choice.reason})`;
     } else {
       this.lastAi = `${who}: no useful action, skipped`;
     }
-    const result = choice ? this.battle.useSkill(actor.uid, choice.skillId, choice.targetUid) : this.battle.skipTurn();
+    const result = this.battle.applyChoice(actor.uid, choice);
     if (!result.ok) this.battle.skipTurn(); // safety net: never get stuck on an invalid choice
     this.settle();
   }
@@ -980,7 +1427,7 @@ export class BattleScene extends Phaser.Scene {
         const actor = this.battle.get(e.actor);
         const skill = content.skills[e.skill];
         if (actor && skill) this.announce(`${actor.side === 'enemy' ? 'Enemy ' : ''}${actor.name} uses ${skill.name}`);
-        return this.playSkillMotion(e.actor, e.skill, e.targets, e.center, this.skillResults.get(e));
+        return this.playSkillMotion(e.actor, e.skill, e.targets, e.anchor ?? e.center, this.skillResults.get(e), e.cells);
       }
       case 'resource': {
         const view = this.views.get(e.actor);
@@ -1013,10 +1460,50 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       case 'dodge':
+        // Evasion: the TARGET slips away ("Dodge" above the target); no hit reaction, no number
         await this.passHitGate();
         this.views.get(e.target)?.dodge();
         await this.wait(slow(90));
         return;
+      case 'miss':
+        // Accuracy: the ATTACKER misses (pale "MISS" above the attacker); the target does not react
+        await this.passHitGate();
+        this.views.get(e.source)?.missText();
+        await this.wait(slow(90));
+        return;
+      case 'rage': {
+        const view = this.views.get(e.actor);
+        if (e.delta !== 0) view?.floatText(`${e.delta > 0 ? '+' : ''}${e.delta} Rage`, colors.rage, e.delta > 0 ? 38 : 44);
+        this.tweenRage(e.actor, e.after);
+        await this.wait(slow(60));
+        return;
+      }
+      case 'globalUsed': {
+        const actor = this.battle.get(e.actor);
+        const view = this.views.get(e.actor);
+        const def = this.battle.globalDef(e.id);
+        if (actor && def) {
+          const who = `${actor.side === 'enemy' ? 'Enemy ' : ''}${actor.name}`;
+          this.announce(def.kind === 'rest' ? `${who} uses Rest` : def.kind === 'skip' ? `${who} skips the turn` : `${who} moves`);
+        }
+        if (def?.kind === 'rest') {
+          playSfx(this, 'gasp');
+          view?.ring(colors.mpFill, 0.9);
+        } else if (def?.kind === 'skip') playSfx(this, 'fistWhoosh');
+        await this.wait(slow(120));
+        return;
+      }
+      case 'moved': {
+        const view = this.views.get(e.actor);
+        const c = this.battle.get(e.actor);
+        if (view && c) {
+          const to = this.cellPos(c.board, e.to);
+          playSfx(this, 'armorRun');
+          await view.moveTo(to.x, to.y);
+        }
+        this.refreshCommands();
+        return;
+      }
       case 'heal': {
         const target = this.views.get(e.target);
         if (e.crit) {
@@ -1066,6 +1553,7 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       case 'revive':
+        if (this.rageShown.has(e.target)) this.setRageShown(e.target, 0);
         this.views.get(e.target)?.revive(e.hpAfter, e.mpAfter);
         await this.wait(slow(500));
         this.refreshCommands();
@@ -1107,6 +1595,10 @@ export class BattleScene extends Phaser.Scene {
       case 'turnSkipped': {
         const actor = this.battle.get(e.actor);
         this.views.get(e.actor)?.floatText(e.stunned ? 'Stunned' : 'Skipped', e.stunned ? colors.targetHighlight : colors.turnCell, 48);
+        if (e.voluntary) {
+          await this.wait(slow(320)); // chosen skip: already announced by globalUsed
+          return;
+        }
         if (actor) this.announce(`${actor.side === 'enemy' ? 'Enemy ' : ''}${actor.name} ${e.stunned ? 'is stunned and loses the turn' : 'has nothing to cast and skips the turn'}`);
         await this.wait(500);
         return;
@@ -1123,8 +1615,72 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** Sets the displayed Rage right away (no animation) and redraws the bar if it belongs to the acting unit. */
+  private setRageShown(uid: string, value: number): void {
+    this.rageShown.set(uid, value);
+    if (this.rageBar?.uid === uid) this.rageBar.redraw();
+  }
+
+  /** Animates the Rage bar of a unit to a new value (events are played in order, so the bar follows the log, not the engine). */
+  private tweenRage(uid: string, to: number): void {
+    const from = this.rageShown.get(uid) ?? to;
+    this.tweens.addCounter({
+      from,
+      to,
+      duration: 380,
+      ease: 'Quad.easeOut',
+      onUpdate: (t) => this.setRageShown(uid, t.getValue() ?? to),
+      onComplete: () => this.setRageShown(uid, to),
+    });
+  }
+
+  /**
+   * Thin RAGE bar under the 4th skill button (red-orange, value written on it); only for classes with a Rage resource.
+   * Hover explains the resource. `x`, `y`, `w` follow the skill button above it.
+   */
+  private rageBarItems(actor: Combatant, x: number, y: number, w: number): Phaser.GameObjects.GameObject[] {
+    const max = actor.maxRage ?? 0;
+    const h = 14;
+    const g = this.add.graphics();
+    const label = this.add.text(x + w / 2, y + h / 2 - 1, '', { fontFamily: layout.fontFamily, fontSize: '13px', fontStyle: 'bold', color: '#fff3dc', stroke: '#2a0a02', strokeThickness: 3 }).setOrigin(0.5);
+    const icon = this.add.image(x + 9, y + h / 2, ensureIcon(this, RAGE_ICON, RAGE_COLOR, false)).setDisplaySize(15, 15);
+    const redraw = (): void => {
+      if (!g.active) return;
+      const v = Math.max(0, Math.min(max, this.rageShown.get(actor.uid) ?? actor.rage ?? 0));
+      const frac = max > 0 ? v / max : 0;
+      g.clear();
+      g.fillStyle(0x050302, 1).fillRect(x - 1, y - 1, w + 2, h + 2);
+      g.fillStyle(color(colors.rageDark), 1).fillRect(x, y, w, h);
+      if (frac > 0) {
+        g.fillGradientStyle(0xffa23a, 0xffa23a, 0xd8341c, 0xd8341c, 1).fillRect(x, y, Math.max(2, w * frac), h);
+        g.fillStyle(0xffffff, 0.2).fillRect(x, y, Math.max(2, w * frac), 3);
+      }
+      frameRect(g, x - 1, y - 1, w + 2, h + 2, { bevel: 1, edge: GOLD.dark, light: GOLD.edge, shadow: 0.2 });
+      label.setText(`${Math.round(v)}/${max}`);
+    };
+    redraw();
+    this.rageBar = { uid: actor.uid, redraw };
+    const hit = this.add.rectangle(x, y, w, h, 0x000000, 0.001).setOrigin(0, 0).setInteractive();
+    hit.on('pointerover', () => {
+      this.hideInfoTip();
+      this.placeInfoTip(this.makeInfo('Rage', RAGE_COLOR, ensureIcon(this, RAGE_ICON, RAGE_COLOR, true), [[`Rage ${Math.round(this.rageShown.get(actor.uid) ?? actor.rage ?? 0)} / ${max}`, colors.text], ...describeRage(content.formulas).map((l): [string, string?] => [l, colors.muted])], 'Resource'));
+    });
+    hit.on('pointerout', () => this.hideInfoTip());
+    return [g, icon, label, hit];
+  }
+
   /** The skill's motion: melee = lunge, ranged/cast = wind-up + projectile, sky = falls from above, support = ring. */
-  private async playSkillMotion(actorUid: string, skillId: string, targetUids: string[], center?: number, result?: { bet?: 'win' | 'lose'; doubleHit?: boolean }): Promise<void> {
+  private async playSkillMotion(actorUid: string, skillId: string, targetUids: string[], center?: number, result?: { bet?: 'win' | 'lose'; doubleHit?: boolean }, eventCells?: number[]): Promise<void> {
+    // Shape skills (Geometer): the covered floor cells flash quietly while the effect plays and once more the moment it lands
+    const flash = center !== undefined && this.battle.isShapeSkill(skillId) ? this.beginShapeFlash(this.targetSide(actorUid), eventCells ?? this.battle.areaCells(skillId, center, this.targetSide(actorUid))) : null;
+    try {
+      await this.playSkillMotionCore(actorUid, skillId, targetUids, center, result, eventCells);
+    } finally {
+      flash?.hit();
+    }
+  }
+
+  private async playSkillMotionCore(actorUid: string, skillId: string, targetUids: string[], center?: number, result?: { bet?: 'win' | 'lose'; doubleHit?: boolean }, eventCells?: number[]): Promise<void> {
     const skill = content.skills[skillId];
     const actor = this.views.get(actorUid);
     const targets = targetUids.flatMap((uid) => this.views.get(uid) ?? []);
@@ -1138,7 +1694,7 @@ export class BattleScene extends Phaser.Scene {
     const vfx = skill.vfx ? VFX[skill.vfx as VfxKind] : undefined;
     if (!vfx) for (const id of skill.sfx ?? []) playSfx(this, id); // efekti kodda olmayan skill'in sesleri başta çalar (Radiance)
     if (vfx) {
-      const cells = center !== undefined && this.battle.isAreaSkill(skillId) ? this.battle.areaCells(skillId, center).map((slot) => this.cellPos(board, slot)) : [];
+      const cells = center !== undefined && this.battle.isAreaSkill(skillId) ? (eventCells ?? this.battle.areaCells(skillId, center, board)).map((slot) => this.cellPos(board, slot)) : [];
       // Whirlwind gibi tüm düşmanlara vuran yakın dövüş: hedeflerin ön sırasının orta hücresi
       let rowCenter: { x: number; y: number } | undefined;
       if (skill.target === 'all_enemies' && skill.motion === 'melee' && targets.length > 0) {
@@ -1629,7 +2185,7 @@ export class BattleScene extends Phaser.Scene {
     edge.fillStyle(0x000000, 0.2).fillRect(0, p.y + 9, W, 6);
     edge.fillStyle(GOLD.dark, 0.9).fillRect(0, H - 3, W, 3);
     // Vertical gold dividers between the stats block, the skills and the info plaque
-    for (const dx of [this.skillsLeft() - 104, this.infoTipX() - 7]) {
+    for (const dx of [this.skillsLeft() - 104, this.globalX() - 7, this.infoTipX() - 7]) {
       edge.fillGradientStyle(GOLD.edge, GOLD.edge, GOLD.dark, GOLD.dark, 0.9).fillRect(dx, p.y + 12, 2, H - p.y - 24);
     }
     this.refreshCommands();
@@ -1658,13 +2214,20 @@ export class BattleScene extends Phaser.Scene {
       frameRect(plaque, W / 2 - pw / 2, p.y - 42, pw, 40, { bevel: 3, shadow: 0.25 });
       items.push(plaque, label);
       let x = this.skillsLeft();
+      const hasRage = actor.maxRage !== undefined;
+      const btnY = p.y + (H - p.y - p.buttonHeight) / 2;
+      const btnH = hasRage ? p.buttonHeight - 18 : p.buttonHeight; // Rage classes: the buttons give up 18px so the Rage bar fits under the 4th
+      this.rageBar = undefined;
       for (const [idx, skillId] of actor.skills.entries()) {
         const skill = content.skills[skillId];
         if (!skill) continue;
         const enabled = this.playerCanAct && this.battle.canUse(actor.uid, skillId).ok;
-        items.push(...this.skillButton(x, p.y + (H - p.y - p.buttonHeight) / 2, actor, skill, enabled, idx === 3, idx + 1));
+        items.push(...this.skillButton(x, btnY, actor, skill, enabled, idx === 3, idx + 1, btnH));
+        if (hasRage && idx === 3) items.push(...this.rageBarItems(actor, x, btnY + btnH + 6, p.buttonWidth));
         x += p.buttonWidth + p.gap;
       }
+      if (!actor.summoned) items.push(...this.globalButtons(actor)); // summons never use global actions
+      else this.globalItems = [];
       if (actor.passive) items.push(...this.passiveBadge(this.skillsLeft() - 92, p.y + (H - p.y) / 2, actor));
     }
     this.commandLayer = this.add.container(0, 0, items).setDepth(4600);
@@ -1804,8 +2367,8 @@ export class BattleScene extends Phaser.Scene {
       case 'critChance': return `CRIT ${(s.critChance * 100).toFixed(1).replace(/\.0$/, '')}%`;
       case 'accuracy': return `ACC ${Math.round(s.accuracy * 100)}%`;
       case 'evasion': return `EVA ${Math.round(s.evasion * 100)}%`;
-      case 'armor': return `ARM ${Number(s.armor.toFixed(1))}`;
-      case 'magicArmor': return `M.ARM ${Number(s.magicArmor.toFixed(1))}`;
+      case 'armor': return `ARM ${Math.round(s.armor)}`;
+      case 'magicArmor': return `M.ARM ${Math.round(s.magicArmor)}`;
       default: return '';
     }
   }
@@ -1824,26 +2387,29 @@ export class BattleScene extends Phaser.Scene {
   private skillSubItems(actor: Combatant, skill: SkillDef, cx: number, cy: number, alpha: number): Phaser.GameObjects.GameObject[] {
     const turns = this.battle.mode === 'turns';
     const remaining = turns ? (actor.cooldowns[skill.id] ?? 0) : 0;
-    const parts: Array<{ icon?: string; text: string; hex: string }> = [];
+    const parts: Array<{ icon?: string; text: string; hex: string; px?: number }> = [];
     const hourglass = ensureIcon(this, UI_ICON.hourglass, UI_COLOR, false);
     if (remaining > 0) parts.push({ icon: hourglass, text: String(remaining), hex: colors.targetHighlight });
     else {
-      if (skill.cost.amount > 0) {
+      if (skill.cost.amount > 0 && skill.cost.resource === 'rage') {
+        parts.push({ icon: ensureIcon(this, RAGE_ICON, RAGE_COLOR, false), text: `RAGE ${skill.cost.amount}`, hex: RAGE_COLOR, px: 15 });
+      } else if (skill.cost.amount > 0) {
         const kind = skill.cost.resource === 'mp' ? 'mp' : 'hp';
         parts.push({ icon: ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false), text: String(skill.cost.amount), hex: colors.text });
       }
       if (turns && (skill.cooldown ?? 0) > 0) parts.push({ icon: hourglass, text: String(skill.cooldown), hex: colors.muted });
     }
     const isz = 18;
-    const texts = parts.map((pt) => this.add.text(0, cy, pt.text, textStyle(17, pt.hex)).setOrigin(0, 0.5));
-    const total = parts.reduce((w, _pt, i) => w + isz + 3 + texts[i]!.width, 0) + Math.max(0, parts.length - 1) * 10;
+    const texts = parts.map((pt) => this.add.text(0, cy, pt.text, textStyle(pt.px ?? 17, pt.hex)).setOrigin(0, 0.5));
+    const gapBetween = parts.some((pt) => pt.px) ? 6 : 10; // Rage cost text is long: tighter spacing so it fits the button
+    const total = parts.reduce((w, _pt, i) => w + isz + 3 + texts[i]!.width, 0) + Math.max(0, parts.length - 1) * gapBetween;
     let x = cx - total / 2;
     const out: Phaser.GameObjects.GameObject[] = [];
     parts.forEach((pt, i) => {
       out.push(this.add.image(x + isz / 2, cy, pt.icon!).setDisplaySize(isz, isz).setAlpha(alpha));
       texts[i]!.setPosition(x + isz + 3, cy).setAlpha(alpha);
       out.push(texts[i]!);
-      x += isz + 3 + texts[i]!.width + 10;
+      x += isz + 3 + texts[i]!.width + gapBetween;
     });
     return out;
   }
@@ -1855,8 +2421,9 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** A compact skill button: icon, name and cost. Hovering shows details; disabled buttons still show them. */
-  private skillButton(x: number, y: number, actor: Combatant, skill: SkillDef, enabled: boolean, ultimate = false, hotkey = 0): Phaser.GameObjects.GameObject[] {
-    const { buttonWidth: bw, buttonHeight: bh, iconSize } = layout.commandPanel;
+  private skillButton(x: number, y: number, actor: Combatant, skill: SkillDef, enabled: boolean, ultimate = false, hotkey = 0, height?: number): Phaser.GameObjects.GameObject[] {
+    const { buttonWidth: bw, buttonHeight: bhFull, iconSize } = layout.commandPanel;
+    const bh = height ?? bhFull;
     const chosen = this.selected?.actor === actor.uid && this.selected.skill === skill.id && this.playerCanAct;
     const dim = enabled ? 1 : 0.45;
     // Carved frame: dark leather gradient, bronze/gold edge; the strong 4th skill is richer, the chosen one glows
@@ -1900,32 +2467,23 @@ export class BattleScene extends Phaser.Scene {
     return [frame, bg, ...shine, icon, name, ...sub, ...(key ? [key] : [])];
   }
 
-  private plainButton(x: number, y: number, w: number, h: number, label: string, onTap: () => void): Phaser.GameObjects.GameObject[] {
-    const bg = this.add.rectangle(x, y, w, h, color(colors.button)).setOrigin(0, 0).setStrokeStyle(5, color(colors.buttonBorder));
-    const text = this.add.text(x + w / 2, y + h / 2, label, textStyle(44)).setOrigin(0.5);
-    bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerdown', () => bg.setFillStyle(color(colors.buttonPressed)));
-    bg.on('pointerout', () => bg.setFillStyle(color(colors.button)));
-    bg.on('pointerup', () => {
-      bg.setFillStyle(color(colors.button));
-      onTap();
-    });
-    return [bg, text];
+  /** Match record text (all moves so far, with AI reasons) and the move count; null if recording is off. Works mid-battle. */
+  matchLogData(): { text: string; moves: number } | null {
+    return this.matchLog ? { text: this.matchLog.serialize(), moves: this.matchLog.moveCount } : null;
   }
 
-  private showResult(victory: boolean): void {
-    const overlay = this.add.rectangle(0, 0, W, H, 0x000000, 0).setOrigin(0, 0).setDepth(6000);
-    const title = this.add
-      .text(W / 2, H / 2 - 110, victory ? 'Victory!' : 'Defeat', textStyle(140, victory ? colors.damage : colors.hpFillEnemy))
-      .setOrigin(0.5)
-      .setDepth(6001)
-      .setAlpha(0);
-    const buttons = [
-      ...this.plainButton(W / 2 - 400, H / 2 + 20, 380, 120, 'Rematch', () => this.scene.restart({ seed: newSeed(), teams: this.teams })),
-      ...this.plainButton(W / 2 + 20, H / 2 + 20, 380, 120, 'Change teams', () => this.goToTeamSelect()),
-    ];
-    for (const item of buttons) (item as Phaser.GameObjects.Components.Depth & Phaser.GameObjects.GameObject).setDepth(6002);
-    this.tweens.add({ targets: overlay, fillAlpha: 0.55, duration: 300 });
-    this.tweens.add({ targets: title, alpha: 1, duration: 300 });
+  /** End-of-battle screen (src/game/result-screen.ts). `preview` = debug: shows it without ending the battle. */
+  showResult(victory: boolean, preview = false): void {
+    this.resultScreen?.destroy();
+    this.resultScreen = showResultScreen(this, {
+      victory,
+      battle: this.battle,
+      stats: this.stats,
+      avatar: (unit, cx, cy, size) => this.avatarImage(unit, cx, cy, size),
+      onNewGame: () => this.scene.restart({ seed: newSeed(), teams: undefined, partySize: this.partySize, enemySize: this.enemySize }), // fresh random seed + random teams of the same sizes, skips team select
+      onTeamSelect: () => this.goToTeamSelect(),
+      matchData: () => this.matchLogData(),
+      preview,
+    });
   }
 }

@@ -50,6 +50,11 @@ export const VFX_KINDS = [
   'duelbet',
   'cardfan',
   'allin',
+  /** Geometer (AOE şekilleri): tebeşir-ışık kalemi şeklin dış hattını çizer; süpüren cetvel, ışık mızrağı, taş mühürler, artı ışınları. */
+  'shaperow',
+  'shapecolumn',
+  'shaperect',
+  'shapeplus',
 ] as const;
 
 /** Kullanılmayan ama bilerek saklanan yedek efektler. */

@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import type { CombatantDef } from '../engine';
 import { avatarTexture, characterTexture } from './assets';
 import { cornerOrnaments, frameRect, GOLD, makePanel, SERIF } from './ui-frame';
+import type { MiniShape } from '../ui/shape-diagram';
+import { drawMiniShape, miniShapeSize } from './shape-draw';
 
 /**
  * Menü ekranları (takım seçimi) için ortak çizim yardımcıları: atmosferik arka plan, altın yazı, düğme, tooltip, kafa portresi.
@@ -332,6 +334,8 @@ export interface TipContent {
   icon?: string;
   /** Sağ üst rozet (hedef türü, arketip). */
   badge?: string;
+  /** AOE şekil şeması (mini ızgara): rozetin soluna çizilir. */
+  shape?: MiniShape;
   rows: Array<[string, string?]>;
   width?: number;
 }
@@ -355,6 +359,11 @@ export function buildTip(scene: Phaser.Scene, c: TipContent): { container: Phase
     g.lineStyle(2, GOLD.edge, 1).strokeRoundedRect(w - pad - bw, pad, bw, bh, 6);
     badge.setPosition(w - pad - bw + 10, pad + 3);
     body.push(g, badge);
+    if (c.shape) {
+      const sz = miniShapeSize(c.shape);
+      body.push(drawMiniShape(scene, w - pad - bw - 10 - sz.w, pad - 6, c.shape));
+      y = Math.max(y, pad - 6 + sz.h + 6);
+    }
   }
   const rule = scene.add.graphics();
   rule.lineStyle(1, GOLD.edge, 0.7).lineBetween(pad, y, w - pad, y);

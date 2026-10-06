@@ -93,6 +93,14 @@ describe('debug menüsü: bölümlü yapı', () => {
     expect(dockBadge(speed.dock!.on!(), speed.dock!.state!())).toEqual({ text: '1x', kind: 'val' });
   });
 
+  it('Tools bölümünde "Copy match data" düğmesi var (maç kaydı panoya): ikon + kısa yazı + açıklama', () => {
+    const a = actions.find((x) => x.id === 'tools.copy-match')!;
+    expect(a).toBeTruthy();
+    expect(a.dock).toMatchObject({ group: 'Tools', icon: 'clipboard', short: 'Copy match data' });
+    expect(a.hint).toMatch(/clipboard/i);
+    expect(wordCount(a.dock!.short)).toBeLessThanOrEqual(SHORT_MAX_WORDS);
+  });
+
   it('Sounds sekmesinde başta "Open Asset Gallery" paneli var', () => {
     const soundPanels = panels.filter((p) => p.tab === 'Sounds');
     expect(soundPanels.length).toBeGreaterThanOrEqual(2);
@@ -100,7 +108,7 @@ describe('debug menüsü: bölümlü yapı', () => {
   });
 
   it('eylem etiketi ve dock kısayolları ikon listesiyle tutarlı (yeni ikonlar kayıtlı)', () => {
-    for (const k of ['restart', 'eye', 'swap', 'info', 'frame']) expect(ICON_KINDS as readonly string[]).toContain(k);
+    for (const k of ['restart', 'eye', 'swap', 'info', 'frame', 'clipboard']) expect(ICON_KINDS as readonly string[]).toContain(k);
   });
 });
 
@@ -123,5 +131,14 @@ describe('debug-layout yardımcıları', () => {
     expect(labelBase('Team select')).toBe('Team select');
     expect(wordCount('  Clear all cooldowns ')).toBe(3);
     expect(DOCK_HINT).toBe('Hover a button for details');
+  });
+
+  it('Test AOE shapes: Battle flow bölümünde, ikonlu, kısa yazılı ve açıklamalı hızlı düğme (Geometer test savaşı)', () => {
+    const a = actions.find((x) => x.id === 'battle.test-aoe')!;
+    expect(a).toBeDefined();
+    expect(a.dock!.group).toBe('Battle flow');
+    expect(a.dock!.short).toBe('Test AOE shapes');
+    expect(isIconKind(a.dock!.icon as string)).toBe(true);
+    expect(a.hint).toMatch(/Geometer/);
   });
 });

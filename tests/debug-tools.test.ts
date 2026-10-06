@@ -22,13 +22,13 @@ describe('debug: varsayılan bayraklar oyunu değiştirmez', () => {
   it('aynı seed ve girdilerle debug bayrakları varsayılanken sonuç birebir aynı', () => {
     const run = (touch: boolean) => {
       const b = mk(7);
-      if (touch) Object.assign(b.debug, { damageMult: 1, crit: 'auto', dodge: 'auto' });
+      if (touch) Object.assign(b.debug, { damageMult: 1, crit: 'auto', dodge: 'auto', miss: 'auto' });
       const a = b.get('party-0')!;
       for (const id of a.skills) b.useSkill(a.uid, id, b.livingByDepth('enemy')[0]!.uid);
       return JSON.stringify(b.log);
     };
     expect(run(true)).toBe(run(false));
-    expect(new Battle(content.battleSetup('first-battle', 1, 'test')).debug).toEqual({ damageMult: 1, crit: 'auto', dodge: 'auto' });
+    expect(new Battle(content.battleSetup('first-battle', 1, 'test')).debug).toEqual({ damageMult: 1, crit: 'auto', dodge: 'auto', miss: 'auto' });
   });
 
   it('bayrak değişse de rastgele sayı akışı kayma yapmaz (zarlar hep atılır)', () => {
@@ -39,7 +39,7 @@ describe('debug: varsayılan bayraklar oyunu değiştirmez', () => {
       const t = b.livingByDepth('enemy')[0]!;
       b.useSkill(a.uid, a.skills[0]!, t.uid);
       b.useSkill(a.uid, a.skills[0]!, t.uid);
-      return b.log.filter((e) => e.type === 'dodge' || e.type === 'damage').map((e) => e.type);
+      return b.log.filter((e) => e.type === 'dodge' || e.type === 'miss' || e.type === 'damage').map((e) => e.type);
     };
     expect(hits(true)).toEqual(hits(false));
   });

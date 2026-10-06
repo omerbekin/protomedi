@@ -5,6 +5,7 @@ import type { CombatantDef } from '../engine';
  * Takım seçim ekranının saf (Phaser'sız) mantığı: arketip etiketi, sınıf kartı yerleşimi, yeni seçilen sınıfın hücresi.
  * Test edilebilsin diye sahneden ayrıdır; sınıf listesi her zaman veriden (data/classes) gelir.
  */
+/** Varsayılan takım boyutu (random-battle.json > random.size ile aynı); ekranda her taraf 1..CELL_COUNT arası ayarlanabilir. */
 export const TEAM_SIZE = 5;
 
 /** Kısa arketip etiketi (kartta). Sınıfın `role` alanı varsa o; yoksa skill verisinden türetilir. */
@@ -32,6 +33,19 @@ export function rangeOf(def: CombatantDef): string {
   const motion = content.skills[def.skills[0] ?? '']?.motion;
   return content.isMeleeClass(def.id) ? 'Melee' : motion === 'ranged' ? 'Ranged' : 'Caster';
 }
+
+/** Test class'ı mı (ör. Geometer)? Kartta 'TEST' rozeti taşır, rastgele takımlara girmez ama elle eklenebilir. */
+export const isTestClass = (def: CombatantDef): boolean => !!def.testOnly;
+
+/** Sınıf kartlarının sırası: seçilebilir tüm sınıflar (test class'ları dahil), test class'ları SONDA. */
+export function rosterIds(): string[] {
+  const all = content.selectableClasses;
+  const test = (id: string) => !!content.classes[id]?.testOnly;
+  return [...all.filter((id) => !test(id)), ...all.filter(test)];
+}
+
+/** Randomize / `?seed=` akışının havuzu: test class'ları HARİÇ (content.randomPool). */
+export const randomizePool = (): string[] => content.randomPool;
 
 export interface RosterLayout {
   cols: number;
@@ -86,3 +100,74 @@ export function freeCellFor(cells: string[], id: string): number {
 }
 
 export const teamCount = (cells: string[]): number => cells.filter(Boolean).length;
+
+// --- Takım boyutu (her taraf 1..12; oyuncu ve düşman ayrı) ---
+
+export interface SideSizes {
+  party: number;
+  enemies: number;
+}
+
+/** Geçerli takım boyutu (1..CELL_COUNT, tam sayı); motorun `clampTeamSize` kuralı. */
+export const clampSize = (n: number): number => content.clampTeamSize(n);
+
+/** Varsayılan boyut: savaş verisindeki random.size (yoksa 5). */
+export function defaultTeamSize(): number {
+  const size = content.battles[content.DEFAULT_BATTLE]?.random?.size;
+  return clampSize(typeof size === 'number' ? size : TEAM_SIZE);
+}
+
+/** Adres parametresi ("3", "12", "99", "abc") -> boyut; geçersizse `fallback`; aralık dışı kısılır. */
+export function parseSizeParam(raw: string | null | undefined, fallback: number): number {
+  if (raw === null || raw === undefined || raw.trim() === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? clampSize(n) : fallback;
+}
+
+/** Adresteki `?party=3&enemies=8` boyutları (yoksa varsayılan 5-5). */
+export function sizesFromSearch(search: string, fallback: number = defaultTeamSize()): SideSizes {
+  const q = new URLSearchParams(search);
+  return { party: parseSizeParam(q.get('party'), fallback), enemies: parseSizeParam(q.get('enemies'), fallback) };
+}
+
+/** Seçicinin + / - adımı (sınırlarda durur). */
+export const stepSize = (current: number, delta: number): number => clampSize(current + delta);
+
+/** Durum yazısı: "You: 5  Enemy: 5". */
+export const sizeSummary = (s: SideSizes): string => `You: ${s.party}  Enemy: ${s.enemies}`;
+
+/** Takımda eksik kalan kişi sayısı (fazlaysa 0). */
+export const missingCount = (cells: string[], size: number): number => Math.max(0, size - teamCount(cells));
+
+/** Takım seçilen boyuta tam eşit mi? (START için her iki taraf da dolu olmalı.) */
+export const isTeamFull = (cells: string[], size: number): boolean => size >= 1 && teamCount(cells) === size;
+
+/** START uyarısı: "Player team needs 2 more classes   ·   Enemy team needs 1 more class" (hepsi doluysa boş). */
+export function missingMessage(teams: { party: string[]; enemies: string[] }, sizes: SideSizes): string {
+  const parts: string[] = [];
+  for (const [side, name] of [['party', 'Player'], ['enemies', 'Enemy']] as const) {
+    const n = missingCount(teams[side], sizes[side]);
+    if (n > 0) parts.push(`${name} team needs ${n} more ${n === 1 ? 'class' : 'classes'}`);
+  }
+  return parts.join('   ·   ');
+}
+
+/** Boyut küçülünce fazla birimleri sondan (en yüksek hücre numarasından) çıkarır; yeni liste döner. */
+export function trimToSize(cells: string[], size: number): string[] {
+  const out = [...cells];
+  let n = teamCount(out);
+  for (let i = out.length - 1; i >= 0 && n > size; i--) {
+    if (out[i]) {
+      out[i] = '';
+      n--;
+    }
+  }
+  return out;
+}
+
+/** Üst bardaki doluluk elmasları: n elmas `maxWidth` içine sığacak şekilde adım (en çok `maxStep`) ve ilk elmasın kaydırması. */
+export function pipLayout(n: number, maxWidth: number, maxStep = 30): { step: number; width: number } {
+  const count = Math.max(1, n);
+  const step = Math.min(maxStep, count > 1 ? maxWidth / count : maxStep);
+  return { step, width: step * count };
+}

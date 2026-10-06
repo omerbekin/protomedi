@@ -1,4 +1,5 @@
 // Dizilimin EKRAN geometrisine göre komşuluk haritası (saf yardımcılar; layout verisi dışarıdan verilir).
+import type { ScreenCell } from './types';
 
 export interface CellPoint {
   x: number;
@@ -38,4 +39,17 @@ export function pickSideNeighbors(map: SideCandidates | undefined, isOccupied: (
     if (hit !== undefined) out.push(hit);
   }
   return out.sort((a, b) => a - b);
+}
+
+/**
+ * Ekran ızgarası: her yuvanın EKRANDAKİ sütun (soldan sağa) ve satır (yukarıdan aşağıya) dizini (layout ayak noktalarından).
+ * Dizilim paralelkenar olduğu için eksenler ayrışır: sütun = sıranın (derinliğin) ortalama x'inin sıralaması, satır = şeridin ortalama y'sinin sıralaması.
+ * Oyuncu tarafında derin sıra ekranda solda, düşman tarafında önde sıra solda olur (ayna); "sol-alt" köşe bu uzayda tanımlanır (area-shape.ts).
+ */
+export function computeScreenGrid(slots: readonly CellPoint[], rows: number, lanes: number): ScreenCell[] {
+  const mean = (idx: number[], f: (p: CellPoint) => number) => idx.reduce((t, i) => t + f(slots[i]!), 0) / idx.length;
+  const rank = (keys: number[]): number[] => keys.map((k, i) => keys.filter((o, j) => o < k || (o === k && j < i)).length);
+  const colRank = rank(Array.from({ length: rows }, (_, r) => mean(Array.from({ length: lanes }, (_, l) => r * lanes + l), (p) => p.x)));
+  const rowRank = rank(Array.from({ length: lanes }, (_, l) => mean(Array.from({ length: rows }, (_, r) => r * lanes + l), (p) => p.y)));
+  return slots.slice(0, rows * lanes).map((_, i) => ({ col: colRank[Math.floor(i / lanes)]!, row: rowRank[i % lanes]! }));
 }

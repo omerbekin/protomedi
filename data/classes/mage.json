@@ -7,8 +7,8 @@
   "role": "Elemental Mage",
   "frontPriority": 7,
   "attributes": {
-    "str": 5,
-    "int": 20,
+    "str": 6,
+    "int": 19,
     "dex": 3,
     "luck": 2
   },

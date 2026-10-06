@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
-import type { SkillDef } from '../engine';
+import layout from '../../data/battle-layout.json';
+import { content, type SkillDef } from '../engine';
+import { shapeCells } from '../engine/area-shape';
 import type { VfxKind } from '../ui/vfx-kinds';
 import type { CombatantView } from './combatant-view';
 import { color, slow } from './combatant-view';
@@ -2289,6 +2291,629 @@ const allin = async (c: VfxCtx) => {
   }
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
+// GEOMETER (haritacı büyücü; AOE şekil skill'leri)
+//
+// Ortak dil: Geometer asasını yere vurur, ayağının dibinde küçük bir rün belirir; tebeşir-ışık kalemi zemin boyunca şeklin
+// başlangıç noktasına koşar ve şeklin DIŞ HATTINI hücre kenarları boyunca çizer (zemindeki gerçek ızgara: her hücre, komşu
+// yuvalara olan kaymalarla kurulan bir paralelkenardır). Sonra kapsanan her hücreye rün karosu basılır ve hücre arcane ışıkla
+// dolar; patlama şekle özgüdür (süpüren cetvel, ışık mızrağı, düşen taş mühürler, artı ışınları). Hasar rakamları her hedefe
+// ışığın değdiği anda çıkar (`syncHits`: ilk hedefte Promise çözülür, sonrakiler `gate` ile kendi anlarını bekler).
+
+type Pt = { x: number; y: number };
+interface GridCell extends Pt {
+  slot: number;
+  r: number;
+  l: number;
+}
+interface Survey {
+  /** Kapsanan hücreler (yuva sırasıyla); konum = zemindeki hücre merkezi. */
+  cells: GridCell[];
+  /** Bir sıra (R) / bir şerit (L) ilerleyince ekrandaki kayma: hücre paralelkenarının kenar vektörleri. */
+  R: Pt;
+  L: Pt;
+  /** Şeklin dış hattı (kapalı çokgen, köşeler sırayla). */
+  loop: Pt[];
+  /** İç (iki kapsanan hücrenin paylaştığı) kenarlar. */
+  inner: Array<[Pt, Pt]>;
+  /** Anchor (tıklanan) hücre; yoksa ilk hücre. */
+  anchor: GridCell;
+}
+
+const GEO_CHALK = ['#ffffff', '#f4ecff', '#e3ccff'];
+const GEO_ARCANE = ['#ffffff', '#e3ccff', '#c9a8ff', '#b07cff'];
+/** Zemin katmanları: karakterlerin (derinlik = ayak y'si, 785+) ALTINDA; efekt parıltıları DEPTH üstünde. */
+const FLOOR = { fill: 43, glow: 44, core: 45, rune: 46, bar: 47 };
+const CHALK_STEP = 4;
+
+const ptDist = (a: Pt, b: Pt) => Math.hypot(b.x - a.x, b.y - a.y);
+const polyLen = (pts: Pt[]) => pts.reduce((s, p, i) => (i ? s + ptDist(pts[i - 1]!, p) : 0), 0);
+
+/** Açık çoklu çizgide `d` mesafesindeki nokta. */
+function pointAt(pts: Pt[], d: number): Pt {
+  let left = Math.max(0, d);
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const seg = ptDist(a, b);
+    if (left <= seg || i === pts.length - 1) {
+      const k = seg ? Math.min(1, left / seg) : 0;
+      return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+    }
+    left -= seg;
+  }
+  return pts[pts.length - 1] ?? { x: 0, y: 0 };
+}
+
+/** `p`'nin a->b doğrusu üzerindeki ilerlemesi (0 = a, 1 = b). */
+const along = (p: Pt, a: Pt, b: Pt) => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  return ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1);
+};
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => (resolve = r));
+  return { promise, resolve };
+}
+
+/**
+ * Şeklin zemindeki ızgarası. Hücreler motorun şekil hesabından (`shapeCells`, hedef tahtasına göre ayna dahil) gelir; yoksa
+ * `VfxCtx.cells` konumlarından yuvaya eşlenir. Konumlar `battle-layout.json` yuvalarından okunur (BattleScene.cellPos ile aynı).
+ */
+function survey(c: VfxCtx): Survey {
+  const slots = (c.board === 'party' ? layout.partySlots : layout.enemySlots) as Pt[];
+  const { rows, lanes } = content.GRID;
+  const at = (slot: number): GridCell => ({ slot, r: Math.floor(slot / lanes), l: slot % lanes, x: slots[slot]?.x ?? 0, y: (slots[slot]?.y ?? 0) - 4 });
+  let list: number[] = [];
+  if (c.skill.area?.shape && c.center !== undefined) list = shapeCells(c.skill.area, c.center, c.board, content.formulas.formation);
+  if (!list.length && c.cells.length)
+    list = c.cells.map((q) => slots.reduce((best, s, i) => (ptDist(s, q) < ptDist(slots[best]!, q) ? i : best), 0));
+  if (!list.length) list = c.targets.map((t) => t.combatant.slot);
+  list = [...new Set(list)].sort((a, b) => a - b);
+  const cells = list.map(at);
+  const R = { x: slots[lanes]!.x - slots[0]!.x, y: slots[lanes]!.y - slots[0]!.y };
+  const L = { x: slots[1]!.x - slots[0]!.x, y: slots[1]!.y - slots[0]!.y };
+  const corner = (q: GridCell, dr: number, dl: number): Pt => ({ x: q.x + (dr * R.x) / 2 + (dl * L.x) / 2, y: q.y + (dr * R.y) / 2 + (dl * L.y) / 2 });
+  const has = (r: number, l: number) => r >= 0 && r < rows && l >= 0 && l < lanes && list.includes(r * lanes + l);
+  const outer: Array<[Pt, Pt]> = [];
+  const inner: Array<[Pt, Pt]> = [];
+  for (const q of cells) {
+    const edges: Array<[number, number, Pt, Pt]> = [
+      [q.r - 1, q.l, corner(q, -1, -1), corner(q, -1, 1)],
+      [q.r + 1, q.l, corner(q, 1, -1), corner(q, 1, 1)],
+      [q.r, q.l - 1, corner(q, -1, -1), corner(q, 1, -1)],
+      [q.r, q.l + 1, corner(q, -1, 1), corner(q, 1, 1)],
+    ];
+    for (const [nr, nl, a, b] of edges) {
+      if (!has(nr, nl)) outer.push([a, b]);
+      else if (nr * lanes + nl > q.slot) inner.push([a, b]); // paylaşılan kenar bir kez
+    }
+  }
+  // dış kenarları uç uca ekleyip kapalı çokgen kur (yuva aralıkları 59/60 px gibi 1 px oynayabilir: uçlar yakınlıkla eşlenir)
+  const near = (a: Pt, b: Pt) => ptDist(a, b) < 4;
+  const loop: Pt[] = [];
+  if (outer.length) {
+    const used = new Set<number>();
+    let cur = outer[0]![1];
+    loop.push(outer[0]![0]);
+    used.add(0);
+    while (used.size < outer.length) {
+      loop.push(cur);
+      const i = outer.findIndex((e, k) => !used.has(k) && (near(e[0], cur) || near(e[1], cur)));
+      if (i < 0) break;
+      used.add(i);
+      const e = outer[i]!;
+      cur = near(e[0], cur) ? e[1] : e[0];
+    }
+  }
+  const anchor = cells.find((q) => q.slot === c.center) ?? cells[0] ?? at(0);
+  return { cells, R, L, loop, inner, anchor };
+}
+
+/** Kapalı çokgeni `start` noktasından başlayan (ve orada biten) açık çoklu çizgiye çevirir. */
+function loopFrom(loop: Pt[], start: Pt): Pt[] {
+  if (loop.length < 2) return [start, start];
+  let best = 0;
+  let bestD = Infinity;
+  let proj = start;
+  for (let i = 0; i < loop.length; i++) {
+    const a = loop[i]!;
+    const b = loop[(i + 1) % loop.length]!;
+    const k = Math.max(0, Math.min(1, along(start, a, b)));
+    const p = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+    const d = ptDist(p, start);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+      proj = p;
+    }
+  }
+  const out: Pt[] = [proj];
+  for (let k = 1; k <= loop.length; k++) out.push(loop[(best + k) % loop.length]!);
+  out.push(proj);
+  return out;
+}
+
+/**
+ * Tebeşir-ışık mürekkebi: zemine 4 piksellik tebeşir taneleri basar (açık mor/beyaz, arada küçük boşluklu: tebeşir dokusu),
+ * altında yumuşak arcane ışıma. Hepsi iki Graphics'te birikir (kare başına yeniden çizim yok).
+ */
+class ChalkInk {
+  readonly glow: Phaser.GameObjects.Graphics;
+  readonly core: Phaser.GameObjects.Graphics;
+  private n = 0;
+  constructor(
+    private scene: Phaser.Scene,
+    private hex: string,
+    private strength = 1,
+  ) {
+    this.glow = scene.add.graphics().setDepth(FLOOR.glow);
+    this.core = scene.add.graphics().setDepth(FLOOR.core);
+  }
+  dot(p: Pt): void {
+    const i = this.n++;
+    const x = snap(p.x);
+    const y = snap(p.y);
+    if (i % 2 === 0) this.glow.fillStyle(color(this.hex), 0.42 * this.strength).fillRect(x - 10, y - 6, 20, 12);
+    if (i % 4 === 0) this.glow.fillStyle(color(this.hex), 0.16 * this.strength).fillRect(x - 16, y - 10, 32, 20);
+    if ((i * 37) % 23 < 2) return; // tebeşir tanesi boşluğu
+    this.core.fillStyle(color(GEO_CHALK[(i * 7) % 3]!), (0.8 + ((i * 13) % 5) * 0.05) * this.strength).fillRect(x - 3, y - 3, 6, 6);
+    if (i % 3 === 0) this.core.fillStyle(color(this.hex), 0.9 * this.strength).fillRect(x - 3 + ((i * 5) % 3) * 2, y + 3, 2, 2);
+  }
+  /** a -> b doğrusunu tek seferde basar. */
+  line(a: Pt, b: Pt): void {
+    const len = ptDist(a, b);
+    for (let s = 0; s <= len; s += CHALK_STEP) this.dot({ x: a.x + ((b.x - a.x) * s) / len, y: a.y + ((b.y - a.y) * s) / len });
+  }
+  clear(): void {
+    this.glow.clear();
+    this.core.clear();
+    this.n = 0;
+  }
+  fade(delay: number, dur: number): void {
+    this.scene.tweens.add({ targets: [this.glow, this.core], alpha: 0, delay: slow(delay), duration: slow(dur), onComplete: () => (this.glow.destroy(), this.core.destroy()) });
+  }
+}
+
+/** Çoklu çizgi boyunca ilerleyen kalem: `to(d)` aradaki yolu mürekkeple basar, kalemin ucunu döndürür. */
+class ChalkPen {
+  readonly len: number;
+  private done = -CHALK_STEP;
+  constructor(
+    private pts: Pt[],
+    private ink: ChalkInk,
+    private step = CHALK_STEP,
+  ) {
+    this.len = polyLen(pts);
+  }
+  to(d: number): Pt {
+    const end = Math.min(this.len, d);
+    for (let s = this.done + this.step; s <= end; s += this.step) {
+      this.ink.dot(pointAt(this.pts, s));
+      this.done = s;
+    }
+    return pointAt(this.pts, end);
+  }
+}
+
+/** Kısa, yumuşak arcane ışık sütunu (hücre parlaması): yerden yükselir, söner. */
+const arcanePillarTexture = (scene: Phaser.Scene) =>
+  softTexture(scene, 'fx:arcanepillar', 16, 64, (x, y) => {
+    const u = Math.abs((x + 0.5) / 16 - 0.5) * 2;
+    const body = (1 - u ** 1.6) ** 1.1;
+    const top = Math.min(1, (y + 1) / 44);
+    return { c: u < 0.3 ? '#ffffff' : u < 0.66 ? '#e3ccff' : '#b07cff', a: body * top };
+  });
+
+function arcanePillar(scene: Phaser.Scene, x: number, y: number, w: number, h: number, dur = 520): void {
+  const img = scene.add.image(x, y, arcanePillarTexture(scene)).setOrigin(0.5, 1).setDisplaySize(w, h).setDepth(DEPTH + 8).setAlpha(0);
+  const sy = img.scaleY;
+  img.setScale(img.scaleX, sy * 0.25);
+  scene.tweens.add({ targets: img, alpha: 0.8, scaleY: sy, duration: slow(110), ease: 'Quad.easeOut' });
+  scene.tweens.add({ targets: img, alpha: 0, scaleX: img.scaleX * 0.4, delay: slow(130), duration: slow(dur), ease: 'Quad.easeIn', onComplete: () => img.destroy() });
+}
+
+/** Hücre dolguları ve rün karoları (zemine basılı); `flare` hücreyi parlatır (vuruş anı). */
+class SurveyMarks {
+  private fills = new Map<number, Phaser.GameObjects.Graphics>();
+  private runes = new Map<number, Phaser.GameObjects.Image>();
+  private all: Phaser.GameObjects.GameObject[] = [];
+  constructor(
+    private c: VfxCtx,
+    private s: Survey,
+    private hex: string,
+  ) {}
+  private runeW(): number {
+    return Math.min(Math.abs(this.s.R.x) || 160, 160) * 0.62;
+  }
+  /** Hücreyi arcane ışıkla doldurur ve rün karosunu basar. */
+  stamp(q: GridCell, delay = 0): void {
+    const scene = this.c.scene;
+    void wait(scene, slow(delay)).then(() => {
+      const k = 0.84;
+      const pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([dr, dl]) => new Phaser.Math.Vector2(q.x + (dr! * this.s.R.x * k) / 2 + (dl! * this.s.L.x * k) / 2, q.y + (dr! * this.s.R.y * k) / 2 + (dl! * this.s.L.y * k) / 2));
+      const g = scene.add.graphics().setDepth(FLOOR.fill).setAlpha(0);
+      g.fillStyle(color(this.hex), 1).fillPoints(pts, true);
+      scene.tweens.add({ targets: g, alpha: 0.4, duration: slow(160) });
+      const rune = sprite(scene, 'gridrune', this.hex, q.x, q.y, this.runeW(), FLOOR.rune).setAlpha(0);
+      const base = rune.scaleX;
+      rune.setScale(base * 1.4, base * 1.4 * 0.42);
+      scene.tweens.add({ targets: rune, scaleX: base, scaleY: base * 0.42, alpha: 1, duration: slow(170), ease: 'Back.easeOut' });
+      burst(scene, q.x, q.y - 4, { colors: GEO_ARCANE, n: 3, speed: [40, 130], angle: [-Math.PI * 0.85, -Math.PI * 0.15], gravity: 200, life: [300, 520], size: [6, 10] });
+      this.fills.set(q.slot, g);
+      this.runes.set(q.slot, rune);
+      this.all.push(g, rune);
+    });
+  }
+  /** Vuruş anı: hücre beyaza yakın parlar, rün sıçrar, ışık sütunu ve kıvılcımlar yükselir. */
+  flare(q: GridCell, power = 1): void {
+    const scene = this.c.scene;
+    const g = this.fills.get(q.slot);
+    const rune = this.runes.get(q.slot);
+    if (g) scene.tweens.add({ targets: g, alpha: { from: 0.75, to: 0.34 }, duration: slow(380), ease: 'Quad.easeOut' });
+    if (rune) {
+      rune.setTintFill(0xffffff);
+      void wait(scene, slow(90)).then(() => rune.active && rune.clearTint());
+    }
+    arcanePillar(scene, q.x, q.y + 6, 70 * power, 190 * power);
+    burst(scene, q.x, q.y - 8, { colors: GEO_ARCANE, n: Math.round(8 * power), speed: [90, 300], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 520, life: [320, 640], size: [6, 12] });
+    void ring(scene, q.x, q.y, { r: Math.abs(this.s.R.x) * 0.42 * power, flat: 0.32, n: 18, colors: GEO_ARCANE, dur: 360, size: 8 });
+  }
+  fade(delay: number, dur = 520): void {
+    const list = this.all;
+    this.c.scene.tweens.add({ targets: list, alpha: 0, delay: slow(delay), duration: slow(dur), onComplete: () => list.forEach((o) => o.destroy()) });
+  }
+}
+
+/** Hedeflerin hasar olayları `c.targets` sırasıyla gelir: ilk hedefin vuruş anında çözülür; sonrakiler `gate` ile kendi anını bekler. */
+function syncHits(c: VfxCtx, arrivals: Array<Promise<void>>, fallback: Promise<void>): Promise<void> {
+  const chain = (i: number) => {
+    if (i >= arrivals.length) return;
+    c.gate(
+      i === 1 ? 1 : 0,
+      async () => {
+        await arrivals[i];
+        chain(i + 1);
+      },
+      () => undefined,
+    );
+  };
+  return (arrivals[0] ?? fallback).then(() => chain(1));
+}
+
+/** Hedefin bulunduğu hücre (yoksa en yakın kapsanan hücre). */
+const cellOf = (s: Survey, t: CombatantView): GridCell =>
+  s.cells.find((q) => q.slot === t.combatant.slot) ?? s.cells.reduce((m, q) => (ptDist(q, feet(t)) < ptDist(m, feet(t)) ? q : m), s.cells[0] ?? s.anchor);
+
+/**
+ * Ortak açılış: Geometer asasını yere vurur (cast), ayağının dibinde küçük bir rün belirir; kalem ucu zemin boyunca şeklin
+ * başlangıç noktasına koşar (soluk kesikli iz bırakır).
+ */
+async function geoOpen(c: VfxCtx, hex: string, start: Pt): Promise<void> {
+  c.sfx('chalkDraw');
+  const f = feet(c.actor);
+  const dir = dirTo(c.actor, start);
+  const sig = sprite(c.scene, 'gridrune', hex, f.x + dir * 40, f.y - 2, 76, FLOOR.rune).setAlpha(0.95);
+  const base = sig.scaleX;
+  sig.setScale(base * 0.2, base * 0.08);
+  c.scene.tweens.add({ targets: sig, scaleX: base, scaleY: base * 0.42, duration: slow(200), ease: 'Back.easeOut' });
+  c.scene.tweens.add({ targets: sig, alpha: 0, delay: slow(1100), duration: slow(500), onComplete: () => sig.destroy() });
+  await c.windUp(hex);
+  c.actor.play('cast');
+  const from = { x: sig.x, y: sig.y };
+  const trail = new ChalkInk(c.scene, hex, 0.5);
+  const pen = new ChalkPen([from, start], trail, 12);
+  const head = sprite(c.scene, 'gridspark', hex, from.x, from.y, 30, DEPTH + 20);
+  await counter(c.scene, slow(220), (u) => {
+    const p = pen.to(pen.len * u);
+    head.setPosition(snap(p.x), snap(p.y));
+  }, 'Quad.easeIn');
+  head.destroy();
+  trail.fade(150, 420);
+}
+
+/** Dış hattı iki kalemle çizer: `start`tan iki yöne ayrılıp karşı noktada buluşurlar (uçlarından tebeşir tozu düşer). */
+async function traceOutline(c: VfxCtx, s: Survey, ink: ChalkInk, start: Pt, ms: number, hex: string): Promise<void> {
+  const path = loopFrom(s.loop, start);
+  const half = polyLen(path) / 2;
+  const pens = [new ChalkPen(path, ink), new ChalkPen([...path].reverse(), ink)];
+  const heads = pens.map(() => sprite(c.scene, 'gridspark', hex, start.x, start.y, 34, DEPTH + 20));
+  let dustAt = 0;
+  await counter(c.scene, slow(ms), (u) => {
+    pens.forEach((p, i) => {
+      const q = p.to(half * u);
+      heads[i]!.setPosition(snap(q.x), snap(q.y)).setRotation(u * 6);
+      if (u * ms >= dustAt) burst(c.scene, q.x, q.y - 2, { colors: GEO_CHALK, n: 1, speed: [20, 90], angle: [-Math.PI * 0.9, -Math.PI * 0.1], gravity: 320, life: [220, 400], size: [6, 9] });
+    });
+    if (u * ms >= dustAt) dustAt += 40;
+  }, 'Sine.easeInOut');
+  const meet = heads[0]!;
+  burst(c.scene, meet.x, meet.y - 4, { colors: GEO_ARCANE, n: 6, speed: [60, 200], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 400, life: [300, 520], size: [6, 10] });
+  for (const h of heads) c.scene.tweens.add({ targets: h, alpha: 0, scale: h.scaleX * 1.8, duration: slow(160), onComplete: () => h.destroy() });
+}
+
+/** İç kenarlar (hücreleri ayıran çizgiler) bir anda belirir: ızgara "oturur". */
+function snapInner(c: VfxCtx, s: Survey, hex: string): ChalkInk {
+  const ink = new ChalkInk(c.scene, hex, 0.6);
+  for (const [a, b] of s.inner) ink.line(a, b);
+  ink.core.setAlpha(0);
+  ink.glow.setAlpha(0);
+  c.scene.tweens.add({ targets: [ink.core, ink.glow], alpha: 1, duration: slow(120) });
+  return ink;
+}
+
+/**
+ * Row Sweep: kalem SIRANIN üst ucundan (ilk şerit) iki yana ayrılıp dış hattı çizer; rünler yukarıdan aşağı basılır; sonra
+ * hattın üstünde ışıklı bir cetvel (sıra genişliğinde yatay ışık çubuğu) sırayı yukarıdan aşağı süpürür, değdiği hücre parlar.
+ */
+const shaperow = async (c: VfxCtx) => {
+  const hex = c.skill.fx;
+  const s = survey(c);
+  const byLane = [...s.cells].sort((a, b) => a.l - b.l);
+  const first = byLane[0] ?? s.anchor;
+  const last = byLane[byLane.length - 1] ?? s.anchor;
+  const start = { x: first.x - s.L.x / 2, y: first.y - s.L.y / 2 };
+  const end = { x: last.x + s.L.x / 2, y: last.y + s.L.y / 2 };
+  await geoOpen(c, hex, start);
+  const ink = new ChalkInk(c.scene, hex);
+  await traceOutline(c, s, ink, start, 460, hex);
+  const inner = snapInner(c, s, hex);
+  const marks = new SurveyMarks(c, s, hex);
+  c.sfx('runeFlare');
+  byLane.forEach((q, i) => marks.stamp(q, i * 70));
+  await wait(c.scene, slow(byLane.length * 70 + 110));
+  // süpüren cetvel
+  c.sfx('ruleSnap');
+  const arrivals = c.targets.map(() => deferred());
+  const tAt = c.targets.map((t) => along(cellOf(s, t), start, end));
+  const passed = new Set<number>();
+  const done = deferred();
+  const hits = syncHits(c, arrivals.map((a) => a.promise), done.promise);
+  const bar = c.scene.add.graphics().setDepth(FLOOR.bar);
+  const half = Math.abs(s.R.x) * 0.5 + 16;
+  const SWEEP = 420;
+  void counter(c.scene, slow(SWEEP), (u) => {
+    bar.clear();
+    for (let k = 3; k >= 0; k--) {
+      const v = u - k * 0.05;
+      if (v < 0) continue;
+      const p = { x: start.x + (end.x - start.x) * v, y: start.y + (end.y - start.y) * v };
+      const a = k ? 0.12 * (4 - k) : 1;
+      bar.fillStyle(color(hex), 0.3 * a).fillRect(snap(p.x - half - 8), snap(p.y - 8), snap(half * 2 + 16), 16);
+      if (!k) {
+        bar.fillStyle(color('#e3ccff'), 0.95).fillRect(snap(p.x - half), snap(p.y - 3), snap(half * 2), 6);
+        bar.fillStyle(0xffffff, 1).fillRect(snap(p.x - half + 10), snap(p.y - 1), snap(half * 2 - 20), 2);
+      }
+    }
+    const head = { x: start.x + (end.x - start.x) * u, y: start.y + (end.y - start.y) * u };
+    if (Math.random() < 0.6) burst(c.scene, head.x + rnd(-half, half), head.y - 4, { colors: GEO_CHALK, n: 1, speed: [40, 140], angle: [-Math.PI * 0.9, -Math.PI * 0.1], gravity: 260, life: [260, 460], size: [6, 10] });
+    for (const q of byLane) {
+      if (passed.has(q.slot) || along(q, start, end) > u) continue;
+      passed.add(q.slot);
+      marks.flare(q);
+    }
+    tAt.forEach((t, i) => {
+      if (t <= u) arrivals[i]!.resolve();
+    });
+  }, 'Sine.easeInOut').then(() => {
+    for (const a of arrivals) a.resolve();
+    done.resolve();
+    c.scene.tweens.add({ targets: bar, alpha: 0, duration: slow(200), onComplete: () => bar.destroy() });
+    c.actor.play('idle');
+    ink.fade(250, 520);
+    inner.fade(250, 520);
+    marks.fade(300, 560);
+  });
+  await hits;
+};
+
+/**
+ * Column Spear: kalem ŞERİDİN ön ucundan (Geometer'e en yakın sıra) arka ucuna iki kenar boyunca çizer; rünler önden arkaya
+ * basılır; sonra bel hizasında bir ışık mızrağı şeridi önden arkaya deler, geçtiği her hücrede ışık sütunu yükselir.
+ */
+const shapecolumn = async (c: VfxCtx) => {
+  const hex = c.skill.fx;
+  const s = survey(c);
+  const byRow = [...s.cells].sort((a, b) => a.r - b.r);
+  const near = byRow[0] ?? s.anchor;
+  const far = byRow[byRow.length - 1] ?? s.anchor;
+  const start = { x: near.x - s.R.x / 2, y: near.y - s.R.y / 2 };
+  const end = { x: far.x + s.R.x / 2, y: far.y + s.R.y / 2 };
+  await geoOpen(c, hex, start);
+  const ink = new ChalkInk(c.scene, hex);
+  await traceOutline(c, s, ink, start, 520, hex);
+  const inner = snapInner(c, s, hex);
+  const marks = new SurveyMarks(c, s, hex);
+  c.sfx('runeFlare');
+  byRow.forEach((q, i) => marks.stamp(q, i * 50));
+  await wait(c.scene, slow(byRow.length * 50 + 110));
+  // ışık mızrağı
+  c.sfx('ruleSnap');
+  const dir = Math.sign(end.x - start.x) || 1;
+  const lift = 74;
+  const from = { x: start.x - dir * 150, y: start.y - lift };
+  const to = { x: end.x + dir * 190, y: end.y - lift };
+  const spear = sprite(c.scene, 'lightspear', hex, from.x, from.y, 240, DEPTH + 30).setFlipX(dir < 0);
+  burst(c.scene, from.x + dir * 90, from.y, { colors: GEO_ARCANE, n: 10, speed: [80, 260], gravity: 0, life: [220, 420], size: [6, 10] });
+  const arrivals = c.targets.map(() => deferred());
+  const tAt = c.targets.map((t) => along({ x: cellOf(s, t).x, y: 0 }, { x: from.x, y: 0 }, { x: to.x, y: 0 }));
+  const passed = new Set<number>();
+  const done = deferred();
+  const hits = syncHits(c, arrivals.map((a) => a.promise), done.promise);
+  const trail = c.scene.add.graphics().setDepth(DEPTH + 26);
+  const FLY = 360;
+  void counter(c.scene, slow(FLY), (u) => {
+    const x = from.x + (to.x - from.x) * u;
+    const y = from.y + (to.y - from.y) * u;
+    spear.setPosition(snap(x), snap(y));
+    // iz: mızrağın arkasında incelen ışık çizgisi (en çok 520 px)
+    const back = Math.min(Math.abs(x - from.x), 520);
+    const bx0 = dir > 0 ? x - 90 - back : x + 90;
+    trail.clear();
+    trail.fillStyle(color(hex), 0.28).fillRect(snap(bx0), snap(y - 8), snap(back), 16);
+    trail.fillStyle(color('#e3ccff'), 0.85).fillRect(snap(dir > 0 ? bx0 + back * 0.35 : bx0), snap(y - 2), snap(back * 0.65), 4);
+    for (const q of byRow) {
+      if (passed.has(q.slot) || along({ x: q.x, y: 0 }, { x: from.x, y: 0 }, { x: to.x, y: 0 }) > u) continue;
+      passed.add(q.slot);
+      marks.flare(q, 0.9);
+      burst(c.scene, q.x, y, { colors: GEO_ARCANE, n: 6, speed: [120, 320], angle: dir > 0 ? [-0.6, 0.6] : [Math.PI - 0.6, Math.PI + 0.6], gravity: 300, life: [240, 460], size: [6, 10] });
+    }
+    tAt.forEach((t, i) => {
+      if (t <= u) {
+        if (!passed.has(-1 - i)) {
+          passed.add(-1 - i);
+          const tv = c.targets[i]!;
+          hit(c.scene, tv.container.x, y, GEO_ARCANE, 0.8);
+          c.scene.tweens.add({ targets: tv.container, x: tv.container.x + dir * 12, duration: slow(50), yoyo: true });
+        }
+        arrivals[i]!.resolve();
+      }
+    });
+  }).then(() => {
+    for (const a of arrivals) a.resolve();
+    done.resolve();
+    c.scene.tweens.add({ targets: [spear, trail], alpha: 0, duration: slow(180), onComplete: () => (spear.destroy(), trail.destroy()) });
+    shake(c.scene, 120, 0.003);
+    c.actor.play('idle');
+    ink.fade(250, 520);
+    inner.fade(250, 520);
+    marks.fade(300, 560);
+  });
+  await hits;
+};
+
+/**
+ * Block Slam: kalem dikdörtgeni ekrandaki SOL-ALT köşesinden (anchor köşesi) iki yöne çizer, iç ızgara oturur, tüm hücrelere
+ * rün basılır; sonra her hücrenin üstünden kare taş mühür AYNI ANDA zemine çöker (gölgeleri büyür), ezer, toz kalkar.
+ */
+const shaperect = async (c: VfxCtx) => {
+  const hex = c.skill.fx;
+  const s = survey(c);
+  const maxY = Math.max(...s.loop.map((p) => p.y));
+  const start = s.loop.filter((p) => Math.abs(p.y - maxY) < 1).reduce((m, p) => (p.x < m.x ? p : m), s.loop[0] ?? s.anchor);
+  await geoOpen(c, hex, start);
+  const ink = new ChalkInk(c.scene, hex);
+  await traceOutline(c, s, ink, start, 500, hex);
+  const inner = snapInner(c, s, hex);
+  const marks = new SurveyMarks(c, s, hex);
+  c.sfx('runeFlare');
+  s.cells.forEach((q, i) => marks.stamp(q, (i % 3) * 25));
+  await wait(c.scene, slow(200));
+  // gölgeler büyür, mühürler düşer
+  const size = Math.min(Math.abs(s.R.x) || 160, 170) * 0.82;
+  const seals = s.cells.map((q) => {
+    const shadow = c.scene.add.ellipse(q.x, q.y + 2, size * 0.3, size * 0.1, 0x000000, 0.35).setDepth(FLOOR.bar);
+    c.scene.tweens.add({ targets: shadow, scaleX: 2.6, scaleY: 2.6, duration: slow(300), ease: 'Quad.easeIn' });
+    const img = sprite(c.scene, 'gridseal', hex, q.x, q.y - 560, size, q.y + 3).setOrigin(0.5, 29 / 32);
+    return { q, img, shadow, delay: rnd(0, 0.08) };
+  });
+  const FALL = 300;
+  await counter(c.scene, slow(FALL), (u) => {
+    for (const k of seals) {
+      const v = Math.max(0, Math.min(1, (u - k.delay) / (1 - k.delay)));
+      k.img.setPosition(k.q.x, snap(k.q.y + 4 - 560 * (1 - v * v)));
+    }
+  });
+  // çarpma
+  c.sfx('stampSlam');
+  flash(c.scene, hex, 0.2, 260);
+  shake(c.scene, 280, 0.01);
+  for (const k of seals) {
+    k.shadow.destroy();
+    marks.flare(k.q, 0.8);
+    dustCloud(c.scene, k.q.x, k.q.y + 4, { n: 3, spread: size * 0.7, rise: 60, size: [64, 104], tint: 0xd8cbb6, life: 760 });
+    burst(c.scene, k.q.x, k.q.y - 6, { colors: [...DUST, '#e3ccff'], n: 6, speed: [80, 260], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 700, life: [300, 600], size: [8, 14] });
+    const base = k.img.scaleY;
+    c.scene.tweens.add({ targets: k.img, scaleY: base * 0.86, duration: slow(60), yoyo: true });
+    c.scene.tweens.add({ targets: k.img, y: k.img.y + 14, alpha: 0, delay: slow(220), duration: slow(340), ease: 'Quad.easeIn', onComplete: () => k.img.destroy() });
+  }
+  for (const t of c.targets) c.scene.tweens.add({ targets: t.container, y: t.container.y + 8, duration: slow(60), yoyo: true });
+  void wait(c.scene, slow(200)).then(() => {
+    c.actor.play('idle');
+    ink.fade(300, 520);
+    inner.fade(300, 520);
+    marks.fade(350, 560);
+  });
+  await wait(c.scene, slow(40));
+};
+
+/**
+ * Cross Burst: artı şeklinin dış hattı MERKEZ hücreden dışa doğru büyüyerek çizilir; merkeze rün basılır ve parlar, sonra
+ * merkezden dört yöne ışık ışınları kollara fırlar; ışının değdiği her kol hücresi parlar.
+ */
+const shapeplus = async (c: VfxCtx) => {
+  const hex = c.skill.fx;
+  const s = survey(c);
+  const mid = s.anchor;
+  await geoOpen(c, hex, mid);
+  // artı hattı merkezden dışa büyür (her karede yeniden basılır)
+  const ink = new ChalkInk(c.scene, hex);
+  const grow = sprite(c.scene, 'gridspark', hex, mid.x, mid.y, 40, DEPTH + 20);
+  await counter(c.scene, slow(440), (u) => {
+    const e = 1 - (1 - u) ** 2;
+    ink.clear();
+    const pts = s.loop.map((p) => ({ x: mid.x + (p.x - mid.x) * e, y: mid.y + (p.y - mid.y) * e }));
+    for (let i = 0; i < pts.length; i++) ink.line(pts[i]!, pts[(i + 1) % pts.length]!);
+    grow.setRotation(u * 5);
+  }, 'Linear');
+  grow.destroy();
+  const inner = snapInner(c, s, hex);
+  const marks = new SurveyMarks(c, s, hex);
+  // merkez rünü
+  c.sfx('runeFlare');
+  marks.stamp(mid);
+  await wait(c.scene, slow(170));
+  const arms = s.cells.filter((q) => q.slot !== mid.slot);
+  const arrivals = c.targets.map(() => deferred());
+  const tArm = c.targets.map((t) => cellOf(s, t));
+  const done = deferred();
+  const hits = syncHits(c, arrivals.map((a) => a.promise), done.promise);
+  marks.flare(mid, 1.15);
+  void ring(c.scene, mid.x, mid.y, { r: Math.abs(s.R.x) * 0.6, flat: 0.32, n: 30, colors: GEO_ARCANE, dur: 420, size: 10 });
+  tArm.forEach((q, i) => q.slot === mid.slot && arrivals[i]!.resolve());
+  await wait(c.scene, slow(90));
+  // dört yöne ışınlar
+  c.sfx('ruleSnap');
+  for (const q of arms) marks.stamp(q);
+  const beams = c.scene.add.graphics().setDepth(FLOOR.bar);
+  const heads = arms.map(() => sprite(c.scene, 'gridspark', hex, mid.x, mid.y, 30, DEPTH + 20));
+  const reached = new Set<number>();
+  const SHOOT = 200;
+  void counter(c.scene, slow(SHOOT), (u) => {
+    beams.clear();
+    arms.forEach((q, i) => {
+      // ışın hücre merkezini biraz geçip kolun dış kenarına kadar uzanır
+      const tip = { x: mid.x + (q.x - mid.x) * 1.45 * u, y: mid.y + (q.y - mid.y) * 1.45 * u };
+      const len = ptDist(mid, tip);
+      const n = Math.max(1, Math.floor(len / 6));
+      for (let k = 0; k <= n; k++) {
+        const p = { x: mid.x + ((tip.x - mid.x) * k) / n, y: mid.y + ((tip.y - mid.y) * k) / n };
+        beams.fillStyle(color(hex), 0.28).fillRect(snap(p.x - 8), snap(p.y - 6), 16, 12);
+        beams.fillStyle(color(k % 3 ? '#e3ccff' : '#ffffff'), 0.95).fillRect(snap(p.x - 3), snap(p.y - 3), 6, 6);
+      }
+      heads[i]!.setPosition(snap(tip.x), snap(tip.y));
+      if (!reached.has(q.slot) && u * 1.45 >= 1) {
+        reached.add(q.slot);
+        marks.flare(q, 0.9);
+        tArm.forEach((t, j) => t.slot === q.slot && arrivals[j]!.resolve());
+      }
+    });
+  }, 'Quad.easeOut').then(() => {
+    for (const a of arrivals) a.resolve();
+    done.resolve();
+    for (const h of heads) c.scene.tweens.add({ targets: h, alpha: 0, duration: slow(160), onComplete: () => h.destroy() });
+    c.scene.tweens.add({ targets: beams, alpha: 0, duration: slow(300), onComplete: () => beams.destroy() });
+    shake(c.scene, 140, 0.004);
+    c.actor.play('idle');
+    ink.fade(250, 520);
+    inner.fade(250, 520);
+    marks.fade(300, 560);
+  });
+  await hits;
+};
+
 export const VFX: Record<VfxKind, (c: VfxCtx) => Promise<void>> = {
   doublestrike,
   charge,
@@ -2331,6 +2956,10 @@ export const VFX: Record<VfxKind, (c: VfxCtx) => Promise<void>> = {
   duelbet,
   cardfan,
   allin,
+  shaperow,
+  shapecolumn,
+  shaperect,
+  shapeplus,
 };
 
 /** Yerden yükselen toz bulutu: kabaran, yükselen, sönen gri-kahve dumanlar. */

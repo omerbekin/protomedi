@@ -7,9 +7,9 @@
   "role": "Mana Hunter",
   "frontPriority": 3.5,
   "attributes": {
-    "str": 4,
+    "str": 5,
     "int": 15,
-    "dex": 8,
+    "dex": 7,
     "luck": 3
   },
   "primary": "int",

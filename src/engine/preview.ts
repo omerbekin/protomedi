@@ -54,7 +54,9 @@ export function previewSkill(battle: Battle, actorUid: string, skillId: string, 
   let targets = battle.validTargets(actorUid, skillId);
   if (battle.skill(skillId)?.target === 'random_enemies') return []; // hedefler rastgele: önizleme yok
   if (battle.isAreaSkill(skillId)) {
-    const unit = targetUid ? targets.find((t) => t.uid === targetUid) : undefined;
+    // Şekil skill'inde anchor birimi erişim dışında (arkada) da olabilir: anchor yalnızca hücreyi belirler
+    const anchored = targetUid ? battle.get(targetUid) : undefined;
+    const unit = targetUid ? (battle.isShapeSkill(skillId) ? (anchored && anchored.hp > 0 && anchored.board !== actor.side ? anchored : undefined) : targets.find((t) => t.uid === targetUid)) : undefined;
     const center = unit ? unit.slot : slot;
     targets = center === undefined ? [] : battle.areaWindowAt(actorUid, skillId, center);
   } else if (battle.needsTargetChoice(skillId)) {

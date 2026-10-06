@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, accuracyOf, chooseAction, content, describeSkill, describeStat, hitChance, previewSkill } from '../src/engine';
+import { Battle, accuracyOf, chooseAction, content, describeSkill, describeStat, hitChance, hitOutcome, previewSkill, rollHitOutcome, Rng } from '../src/engine';
 import type { BattleEvent, BattleMode, Combatant } from '../src/engine';
 
 const f = content.formulas;
@@ -7,9 +7,9 @@ const teams = { party: ['warrior', 'archer', 'mage', 'paladin'], enemies: ['warr
 
 const mk = (seed: number, mode: BattleMode = 'test') => new Battle(content.battleSetup('first-battle', seed, mode, teams));
 const unit = (b: Battle, side: 'party' | 'enemy', defId: string): Combatant => b.combatants.find((c) => c.side === side && c.defId === defId)!;
-const strikes = (events: BattleEvent[]) => events.filter((e) => e.type === 'damage' || e.type === 'dodge');
+const strikes = (events: BattleEvent[]) => events.filter((e) => e.type === 'damage' || e.type === 'dodge' || e.type === 'miss');
 
-/** Verilen saldırı skill'ini farklı seed'lerde atar: kaç vuruş isabet etti (damage), kaç iska (dodge). */
+/** Verilen saldırı skill'ini farklı seed'lerde atar: kaç vuruş isabet etti (damage), kaç iska (dodge ya da miss). */
 function tally(skill: string, actorDef: string, targetDef: string, setStats: (a: Combatant, t: Combatant) => void, n = 600) {
   let hit = 0;
   let miss = 0;
@@ -45,7 +45,7 @@ describe('isabet kontrolü: hit şansı = accuracy - evasion (veriye bağlı)', 
     });
     expect(r.rate).toBeGreaterThan(0.56);
     expect(r.rate).toBeLessThan(0.64);
-    expect(r.miss).toBeGreaterThan(0); // iska = dodge olayı
+    expect(r.miss).toBeGreaterThan(0); // iska = dodge ya da miss olayı
   });
 
   it('büyülü saldırı da isabet kontrolüne girer', () => {
@@ -144,18 +144,19 @@ describe('seed\'li RNG ve iki mod', () => {
       for (const seed of [1, 7, 21]) expect(run(seed, mode)).toBe(run(seed, mode));
     });
 
-    it(`${mode} modu: hem isabet hem iska görülür ve iska 'dodge' olayıdır`, () => {
+    it(`${mode} modu: isabet, hedefin kaçınması (dodge) ve saldıranın iskası (miss) üç ayrı olay olarak görülür`, () => {
       const kinds = new Set<string>();
-      for (let seed = 1; seed <= 200 && kinds.size < 2; seed++) {
+      for (let seed = 1; seed <= 400 && kinds.size < 3; seed++) {
         const b = mk(seed, mode);
         const a = unit(b, 'party', 'archer');
         if (mode === 'turns') for (let i = 0; i < 200 && b.currentUid !== a.uid; i++) b.skipTurn();
         const t = unit(b, 'enemy', 'defender');
         t.stats.evasion = 0.5;
+        a.stats.accuracy = 0.8; // dodge bölgesi %50, miss bölgesi %20, isabet %30
         const r = b.useSkill(a.uid, 'quick_shot', t.uid);
         if (r.ok) for (const e of strikes(r.events)) kinds.add(e.type);
       }
-      expect([...kinds].sort()).toEqual(['damage', 'dodge']);
+      expect([...kinds].sort()).toEqual(['damage', 'dodge', 'miss']);
     });
   }
 
@@ -275,5 +276,107 @@ describe('arayüz bilgisi: skill ve stat tooltip', () => {
     expect(eva.lines.join('\n')).toContain(`${f.attributes.dexPerEvasionStep} Dex = +${Math.round(f.attributes.evasionPerStep * 100)}% evasion`);
     expect(eva.lines.join('\n')).toContain(`${Math.round(f.attributes.evasionMax * 100)}%`);
     expect(describeStat('critChance', s, f).lines.join('\n')).toContain(`fixed x${f.attributes.critMult}`);
+  });
+});
+
+describe('miss / dodge ayrımı: tek zardan üç sonuç', () => {
+  it('hitOutcome: r < hit şansı = isabet; hit şansı <= r < accuracy = dodge (hedef kaçındı); r >= accuracy = miss (saldıran isabet ettiremedi)', () => {
+    const atk = { accuracy: 0.8 };
+    const def = { evasion: 0.3 }; // hit şansı 0.5
+    expect(hitChance(atk, def, f)).toBeCloseTo(0.5, 10);
+    expect(hitOutcome(atk, def, f, 0)).toBe('hit');
+    expect(hitOutcome(atk, def, f, 0.4999)).toBe('hit');
+    expect(hitOutcome(atk, def, f, 0.5)).toBe('dodge');
+    expect(hitOutcome(atk, def, f, 0.7999)).toBe('dodge');
+    expect(hitOutcome(atk, def, f, 0.8)).toBe('miss');
+    expect(hitOutcome(atk, def, f, 0.9999)).toBe('miss');
+  });
+
+  it('evasion yok: iska yalnızca miss (accuracy yetmedi); accuracy >= %100 ise hiç miss yok; evasion accuracy\'yi aşarsa hit şansı 0 ama dodge yine accuracy ile sınırlı', () => {
+    expect(hitOutcome({ accuracy: 0.8 }, { evasion: 0 }, f, 0.79)).toBe('hit');
+    expect(hitOutcome({ accuracy: 0.8 }, { evasion: 0 }, f, 0.8)).toBe('miss');
+    expect(hitOutcome({ accuracy: 1.1 }, { evasion: 0 }, f, 0.9999)).toBe('hit');
+    expect(hitOutcome({ accuracy: 0.5 }, { evasion: 0.9 }, f, 0.4)).toBe('dodge'); // hit şansı 0: accuracy'nin tuttuğu bölge dodge
+    expect(hitOutcome({ accuracy: 0.5 }, { evasion: 0.9 }, f, 0.6)).toBe('miss');
+  });
+
+  it('rollHitOutcome vuruş başına TAM BİR rastgele sayı tüketir (RNG akışı eski haliyle aynı)', () => {
+    const a = new Rng(11);
+    const b = new Rng(11);
+    rollHitOutcome({ accuracy: 0.8 }, { evasion: 0.1 }, f, a);
+    b.next();
+    expect(a.next()).toBe(b.next());
+  });
+
+  it('olasılık dağılımı tek zardan gelir: hit = accuracy - evasion, dodge = evasion, miss = 1 - accuracy', () => {
+    let hit = 0;
+    let dodge = 0;
+    let miss = 0;
+    const N = 3000;
+    for (let seed = 1; seed <= N; seed++) {
+      const b = mk(seed);
+      const a = unit(b, 'party', 'archer');
+      const t = unit(b, 'enemy', 'warrior');
+      for (const c of b.combatants) c.stats.critChance = 0;
+      t.hp = t.maxHp = 100000;
+      a.stats.accuracy = 0.8;
+      t.stats.evasion = 0.3;
+      const r = b.useSkill(a.uid, 'quick_shot', t.uid);
+      if (!r.ok) throw new Error(r.reason);
+      for (const e of strikes(r.events)) {
+        if (e.type === 'damage') hit++;
+        else if (e.type === 'dodge') dodge++;
+        else miss++;
+      }
+    }
+    const total = hit + dodge + miss;
+    expect(hit / total).toBeGreaterThan(0.46);
+    expect(hit / total).toBeLessThan(0.54);
+    expect(dodge / total).toBeGreaterThan(0.26);
+    expect(dodge / total).toBeLessThan(0.34);
+    expect(miss / total).toBeGreaterThan(0.16);
+    expect(miss / total).toBeLessThan(0.24);
+  });
+
+  it('olay şeması: dodge ve miss ikisinde de source = saldıran, target = hedef; hasar/etki uygulanmaz', () => {
+    for (const [flag, type] of [['dodge', 'dodge'], ['miss', 'miss']] as const) {
+      const b = mk(1);
+      if (flag === 'dodge') b.debug.dodge = 'always';
+      else b.debug.miss = 'always';
+      const a = unit(b, 'party', 'archer');
+      const t = unit(b, 'enemy', 'warrior');
+      const hp = t.hp;
+      const r = b.useSkill(a.uid, 'quick_shot', t.uid);
+      expect(r.ok).toBe(true);
+      if (!r.ok) continue;
+      const ev = r.events.filter((e) => e.type === 'dodge' || e.type === 'miss' || e.type === 'damage');
+      expect(ev.length).toBeGreaterThan(0);
+      for (const e of ev) expect(e).toMatchObject({ type, source: a.uid, target: t.uid });
+      expect(t.hp).toBe(hp);
+    }
+  });
+
+  it('debug: dodge always dodge olayı üretir (miss always ile birlikteyse dodge kazanır); never her ikisini de kapatır', () => {
+    const kinds = (set: (b: Battle) => void) => {
+      const b = mk(2);
+      set(b);
+      for (const c of b.combatants) Object.assign(c.stats, { accuracy: 0, evasion: 0.9 }); // auto iken hep iska
+      const a = unit(b, 'party', 'archer');
+      const r = b.useSkill(a.uid, 'quick_shot', unit(b, 'enemy', 'warrior').uid);
+      return r.ok ? [...new Set(strikes(r.events).map((e) => e.type))] : [];
+    };
+    expect(kinds(() => {})).toEqual(['miss']); // accuracy 0: accuracy yüzünden iska
+    expect(kinds((b) => (b.debug.dodge = 'always'))).toEqual(['dodge']);
+    expect(kinds((b) => { b.debug.dodge = 'always'; b.debug.miss = 'always'; })).toEqual(['dodge']);
+    expect(kinds((b) => (b.debug.miss = 'always'))).toEqual(['miss']);
+    expect(kinds((b) => (b.debug.dodge = 'never'))).toEqual(['damage']);
+  });
+
+  it('çok vuruşlu skill (Double Strike): her vuruş kendi zarını atar; iska olan vuruş için ayrı miss/dodge olayı gelir', () => {
+    const b = mk(1);
+    b.debug.miss = 'always';
+    const w = unit(b, 'party', 'warrior');
+    const r = b.useSkill(w.uid, 'melee_attack', unit(b, 'enemy', 'warrior').uid);
+    expect(r.ok && r.events.filter((e) => e.type === 'miss')).toHaveLength(2);
   });
 });

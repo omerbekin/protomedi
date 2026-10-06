@@ -5,10 +5,12 @@ import type { CombatantDef, Teams } from '../../engine';
 import { backgroundKey, hasBackground, preloadAssets } from '../assets';
 import { ensureIcon, ensureSkillIcon } from '../icons';
 import { PRIMARY_GOLD, STAT_COLOR, STAT_ICON, STAT_LABEL } from '../../ui/stat-icons';
-import { newSeed } from '../seed';
+import { initialSizes, newSeed } from '../seed';
 import { buildBackdrop, buildTip, classAvatar, ensureGlow, fitText, fx, goldText, makeMenuButton, placeTip, serif } from '../menu-ui';
 import type { MenuButton, TipContent } from '../menu-ui';
-import { archetypeOf, freeCellFor, rangeOf, rosterLayout, TEAM_SIZE, teamCount } from '../team-select-model';
+import { archetypeOf, clampSize, freeCellFor, isTeamFull, isTestClass, missingMessage, pipLayout, randomizePool, rangeOf, rosterIds, rosterLayout, sizeSummary, stepSize, teamCount, trimToSize } from '../team-select-model';
+import { skillMiniGrid } from '../../ui/shape-diagram';
+import type { SideSizes } from '../team-select-model';
 import { cornerOrnaments, frameRect, glowRect, GOLD, makePanel } from '../ui-frame';
 
 const { width: W, height: H, colors } = layout;
@@ -20,7 +22,12 @@ type Side = 'party' | 'enemies';
 
 export interface TeamSelectData {
   teams: Teams;
+  /** Takım boyutları (her taraf 1-12); yoksa takımların doluluğu, o da yoksa adres/varsayılan 5-5. */
+  sizes: SideSizes;
 }
+
+/** Boyut seçicinin ayarları (START düğmesinin sağında). */
+const STEPPER = { cx: { party: 1340, enemies: 1640 } as Record<Side, number>, labelY: 984, rowY: 1030, btn: 52, valueW: 64 };
 
 // --- Yerleşim (1920x1080) ---
 const PANEL_Y = 146;
@@ -48,6 +55,10 @@ interface SlotRect {
   h: number;
   hot: Phaser.GameObjects.Graphics;
   body: Phaser.GameObjects.Container;
+}
+
+interface StepButton {
+  setEnabled(on: boolean): void;
 }
 
 interface HitRegion {
@@ -80,6 +91,10 @@ export class TeamSelectScene extends Phaser.Scene {
   static readonly KEY = 'TeamSelectScene';
 
   private teams: Record<Side, string[]> = { party: [], enemies: [] };
+  /** Seçilen takım boyutları (her taraf 1-12); START yalnızca iki takım da bu boyuta eşit olunca açılır. */
+  private sizes: SideSizes = initialSizes();
+  private sizeUi: Partial<Record<Side, { value: Phaser.GameObjects.Text; minus: StepButton; plus: StepButton }>> = {};
+  private sizeSummaryText?: Phaser.GameObjects.Text;
   private active: Side = 'party';
   private readonly emptyCells = (): string[] => Array.from({ length: CELLS }, () => '');
   private slotLayer: Record<Side, Phaser.GameObjects.Container | undefined> = { party: undefined, enemies: undefined };
@@ -103,10 +118,16 @@ export class TeamSelectScene extends Phaser.Scene {
 
   init(data: Partial<TeamSelectData>): void {
     const pad = (cells: string[]) => Array.from({ length: CELLS }, (_, i) => cells[i] ?? '');
-    if (data.teams) this.teams = { party: pad(data.teams.party), enemies: pad(data.teams.enemies) };
+    // Sizes: given by the caller, else the size of the given teams, else the page address (?party=3&enemies=8) / default 5-5
+    if (data.sizes) this.sizes = { party: clampSize(data.sizes.party), enemies: clampSize(data.sizes.enemies) };
+    else if (data.teams) this.sizes = { party: clampSize(teamCount(data.teams.party) || this.sizes.party), enemies: clampSize(teamCount(data.teams.enemies) || this.sizes.enemies) };
+    else this.sizes = initialSizes();
+    this.sizeUi = {};
+    this.sizeSummaryText = undefined;
+    if (data.teams) this.teams = { party: trimToSize(pad(data.teams.party), this.sizes.party), enemies: trimToSize(pad(data.teams.enemies), this.sizes.enemies) };
     else if (this.count('party') === 0 && this.count('enemies') === 0) this.randomize('party', false);
     if (this.count('enemies') === 0) this.randomize('enemies', false);
-    this.active = this.count('party') < TEAM_SIZE || this.count('enemies') >= TEAM_SIZE ? 'party' : 'enemies';
+    this.active = this.count('party') < this.sizes.party || this.count('enemies') >= this.sizes.enemies ? 'party' : 'enemies';
     this.slotLayer = { party: undefined, enemies: undefined };
     this.headLayer = { party: undefined, enemies: undefined };
     this.activeGlow = { party: undefined, enemies: undefined };
@@ -155,7 +176,7 @@ export class TeamSelectScene extends Phaser.Scene {
 
   private randomize(side: Side, redraw = true): void {
     const seed = newSeed() + (side === 'party' ? 1 : 977);
-    this.teams[side] = content.randomCells(content.randomTeam(seed, TEAM_SIZE), seed);
+    this.teams[side] = content.randomCells(content.randomTeam(seed, this.sizes[side], randomizePool()), seed);
     if (redraw) this.refresh();
   }
 
@@ -164,7 +185,7 @@ export class TeamSelectScene extends Phaser.Scene {
   }
 
   private ready(): boolean {
-    return this.count('party') === TEAM_SIZE && this.count('enemies') === TEAM_SIZE;
+    return isTeamFull(this.teams.party, this.sizes.party) && isTeamFull(this.teams.enemies, this.sizes.enemies);
   }
 
   private other(side: Side): Side {
@@ -193,18 +214,25 @@ export class TeamSelectScene extends Phaser.Scene {
         seed: newSeed(),
         mode: 'turns',
         battleId: content.DEFAULT_BATTLE,
+        partySize: this.sizes.party,
+        enemySize: this.sizes.enemies,
         teams: { party: [...this.teams.party], enemies: [...this.teams.enemies] } satisfies Teams, // cell lists (index = slot)
       });
     });
   }
 
   private missingText(): string {
-    const parts: string[] = [];
-    for (const side of ['party', 'enemies'] as const) {
-      const n = TEAM_SIZE - this.count(side);
-      if (n > 0) parts.push(`${SIDE_NAME[side]} team needs ${n} more ${n === 1 ? 'class' : 'classes'}`);
-    }
-    return parts.join('   ·   ');
+    return missingMessage(this.teams, this.sizes);
+  }
+
+  /** Changes the size of one team (1-12); extra members are dropped from the back cells, missing ones must be picked (or randomized). */
+  private setSize(side: Side, n: number): void {
+    const next = clampSize(n);
+    if (next === this.sizes[side]) return;
+    this.sizes[side] = next;
+    this.teams[side] = trimToSize(this.teams[side], next);
+    this.active = this.count(side) < next ? side : this.active;
+    this.refresh();
   }
 
   /** Adds a class to the active team (cell chosen by the formation rule); `from` is the card avatar position for the fly animation. */
@@ -214,8 +242,8 @@ export class TeamSelectScene extends Phaser.Scene {
     let side = cell?.side ?? this.active;
     let i = cell?.i ?? -1;
     const replacing = cell !== undefined && !!this.teams[side][i];
-    if (!replacing && this.count(side) >= TEAM_SIZE) {
-      this.setStatus(this.ready() ? 'Both teams are full. Tap a champion to remove it, or drag to rearrange.' : `${SIDE_NAME[side]} team is full.`, colors.lethal, true);
+    if (!replacing && this.count(side) >= this.sizes[side]) {
+      this.setStatus(this.ready() ? 'Both teams are full. Tap a champion to remove it, or drag to rearrange.' : `${SIDE_NAME[side]} team is full (${this.sizes[side]}). Change the size below, or tap a champion to remove it.`, colors.lethal, true);
       this.pulseActive(side);
       return;
     }
@@ -225,7 +253,7 @@ export class TeamSelectScene extends Phaser.Scene {
     const card = this.cards.get(id);
     if (card) this.flyAvatar(card, side, i);
     this.pop = { side, cell: i, delay: card && !cell ? 230 : 0 };
-    if (this.count(side) >= TEAM_SIZE && this.count(this.other(side)) < TEAM_SIZE) side = this.other(side);
+    if (this.count(side) >= this.sizes[side] && this.count(this.other(side)) < this.sizes[this.other(side)]) side = this.other(side);
     this.active = side;
     this.refresh();
   }
@@ -363,6 +391,54 @@ export class TeamSelectScene extends Phaser.Scene {
     );
     rand.container.setDepth(30);
     this.status = serif(this, W / 2, 957, '', 22, colors.muted, { stroke: 3 }).setOrigin(0.5).setDepth(30);
+    // Team sizes: two small steppers (- value +) right of START, plus a one-line summary
+    this.sizeSummaryText = serif(this, (STEPPER.cx.party + STEPPER.cx.enemies) / 2, 957, '', 22, '#ffe29a', { stroke: 3 }).setOrigin(0.5).setDepth(30);
+    for (const side of ['party', 'enemies'] as const) this.buildStepper(side);
+  }
+
+  /** `- 5 +` size picker for one team (44px+ touch targets). */
+  private buildStepper(side: Side): void {
+    const { cx: cxs, labelY, rowY, btn, valueW } = STEPPER;
+    const cx = cxs[side];
+    const hex = hexNum(SIDE_HEX[side]);
+    serif(this, cx, labelY, `${SIDE_NAME[side]} size`, 18, '#b9a27a', { spacing: 2, stroke: 3 }).setOrigin(0.5).setDepth(30);
+    const gap = 10;
+    const mk = (dx: number, sign: -1 | 1): StepButton => {
+      const g = this.add.graphics();
+      let enabled = true;
+      const draw = (hover: boolean): void => {
+        g.clear();
+        g.fillGradientStyle(hover && enabled ? 0x7a5532 : 0x5c4128, hover && enabled ? 0x7a5532 : 0x5c4128, 0x24170d, 0x24170d, enabled ? 1 : 0.55).fillRect(-btn / 2, -btn / 2, btn, btn);
+        frameRect(g, -btn / 2, -btn / 2, btn, btn, { bevel: 3, alpha: enabled ? 1 : 0.5 });
+        g.lineStyle(7, enabled ? 0xf3e4c4 : 0x7d6f62, 1).lineBetween(-11, 0, 11, 0);
+        if (sign > 0) g.lineBetween(0, -11, 0, 11);
+      };
+      draw(false);
+      const c = this.add.container(cx + dx, rowY, [g]).setDepth(30);
+      const zone = this.add.zone(0, 0, btn + 6, btn + 6).setInteractive({ useHandCursor: true });
+      c.add(zone);
+      zone.on('pointerover', () => draw(true));
+      zone.on('pointerout', () => draw(false));
+      zone.on('pointerdown', () => enabled && this.tweens.add({ targets: c, scale: 0.92, duration: 60 }));
+      zone.on('pointerup', () => {
+        this.tweens.add({ targets: c, scale: 1, duration: 80 });
+        this.setSize(side, stepSize(this.sizes[side], sign));
+      });
+      return {
+        setEnabled: (on: boolean) => {
+          enabled = on;
+          draw(false);
+        },
+      };
+    };
+    const half = valueW / 2 + gap + btn / 2;
+    const minus = mk(-half, -1);
+    const plus = mk(half, 1);
+    const plate = this.add.graphics().setDepth(30);
+    plate.fillStyle(0x0c0806, 0.85).fillRect(cx - valueW / 2, rowY - 24, valueW, 48);
+    frameRect(plate, cx - valueW / 2, rowY - 24, valueW, 48, { bevel: 3, edge: GOLD.edge, light: hex });
+    const value = goldText(this, cx, rowY + 1, String(this.sizes[side]), 34, 1).setOrigin(0.5).setDepth(31);
+    this.sizeUi[side] = { value, minus, plus };
   }
 
   private setStatus(text: string, hex: string, pulse = false): void {
@@ -424,7 +500,7 @@ export class TeamSelectScene extends Phaser.Scene {
     goldText(this, x + 36, y + 24, 'CLASSES', 26, 4).setOrigin(0, 0.5).setDepth(12);
     serif(this, x + w - 36, y + 25, 'Tap a class to add it to the glowing team  -  or drag it onto a slot', 18, '#a8946f', { bold: false, stroke: 2 }).setOrigin(1, 0.5).setDepth(12);
 
-    const ids = Object.keys(content.classes);
+    const ids = rosterIds();
     const area = { x: x + 24, y: y + 62, w: w - 48, h: h - 62 - 12 };
     const lay = rosterLayout(ids.length, area.w, area.h, CARD.w, CARD.h);
     const rowsWidth = (r: number) => Math.min(lay.cols, ids.length - r * lay.cols) * lay.cardW + (Math.min(lay.cols, ids.length - r * lay.cols) - 1) * lay.gap;
@@ -457,13 +533,15 @@ export class TeamSelectScene extends Phaser.Scene {
     const rows: Array<[string, string?]> = [[`Cost: ${info.cost}     Cooldown: ${info.cooldown}`, colors.muted]];
     info.lines.forEach((l, i) => rows.push([l, elementHex(info.kinds[i])]));
     if (info.initialCooldown) rows.push([info.initialCooldown, colors.muted]);
-    return { title: info.name, titleHex: '#f4ede1', icon: ensureSkillIcon(this, skill), badge: info.targetBadge, rows, width: 450 };
+    const shape = skillMiniGrid(skill, content.formulas.formation);
+    return { title: info.name, titleHex: '#f4ede1', icon: ensureSkillIcon(this, skill), badge: info.targetBadge, ...(shape ? { shape } : {}), rows, width: 450 };
   }
 
   private classTip(def: CombatantDef): TipContent {
     const f = content.formulas;
     const s = def.stats;
     const rows: Array<[string, string?]> = [];
+    if (isTestClass(def)) rows.push(['Test class: left out of random teams, add it by hand', '#ffb347']);
     if (def.primary) {
       const b = primaryBonusInfo(def.primary, f, true);
       rows.push([`Primary stat ${def.primary.toUpperCase()} - ${b.name}: ${b.detail}`, PRIMARY_GOLD]);
@@ -515,6 +593,14 @@ export class TeamSelectScene extends Phaser.Scene {
     medal.lineStyle(3, GOLD.edge, 1).strokeCircle(px + 4, py + ps - 6, 19);
     medal.lineStyle(1, GOLD.light, 0.8).strokeCircle(px + 4, py + ps - 6, 15);
     add(this.add.image(px + 4, py + ps - 6, ensureIcon(this, def.logo, def.color, false)).setDisplaySize(26, 26));
+
+    // TEST ribbon for test classes (bottom-right corner of the avatar plate)
+    if (isTestClass(def)) {
+      const tg = add(this.add.graphics());
+      tg.fillStyle(0x1a0f06, 1).fillRoundedRect(px + ps - 46, py + ps - 12, 54, 22, 5);
+      tg.fillStyle(0xffb347, 1).fillRoundedRect(px + ps - 44, py + ps - 10, 50, 18, 4);
+      add(serif(this, px + ps - 19, py + ps - 1, 'TEST', 14, '#2a1405', { spacing: 1, stroke: 0 }).setOrigin(0.5));
+    }
 
     // Selection marks (gems in the top corners)
     const gems = {} as CardView['gems'];
@@ -656,7 +742,7 @@ export class TeamSelectScene extends Phaser.Scene {
       }
       const sel = inTeam[this.active] > 0;
       c.selected.setVisible(sel);
-      c.outer.setAlpha(this.count(this.active) >= TEAM_SIZE && !sel ? 0.72 : 1);
+      c.outer.setAlpha(this.count(this.active) >= this.sizes[this.active] && !sel ? 0.72 : 1);
     }
   }
 
@@ -685,6 +771,14 @@ export class TeamSelectScene extends Phaser.Scene {
     for (const side of ['party', 'enemies'] as const) this.drawTeam(side);
     this.updateActiveVisuals();
     this.updateCards();
+    for (const side of ['party', 'enemies'] as const) {
+      const ui = this.sizeUi[side];
+      if (!ui) continue;
+      ui.value.setText(String(this.sizes[side]));
+      ui.minus.setEnabled(this.sizes[side] > 1);
+      ui.plus.setEnabled(this.sizes[side] < CELLS);
+    }
+    this.sizeSummaryText?.setText(sizeSummary(this.sizes));
     const ok = this.ready();
     this.startBtn?.setEnabled(ok);
     if (ok) this.setStatus('Both teams are ready - the battle awaits', '#ffe29a');
@@ -702,13 +796,16 @@ export class TeamSelectScene extends Phaser.Scene {
     const head = this.add.container(0, 0).setDepth(12);
     this.headLayer[side] = head;
     const hex = hexNum(SIDE_HEX[side]);
-    // Member count: five diamonds + number
+    // Member count: one diamond per place of the chosen team size + "n/size"
     const n = this.count(side);
+    const size = this.sizes[side];
+    const full = n >= size;
+    const pip = pipLayout(size, 300);
     const pg = this.add.graphics();
     const pipsX = px + 330;
     const pipsY = PANEL_Y + 42;
-    for (let k = 0; k < TEAM_SIZE; k++) {
-      const x = pipsX + k * 30;
+    for (let k = 0; k < size; k++) {
+      const x = pipsX + k * pip.step;
       const pts = [{ x, y: pipsY - 11 }, { x: x + 9, y: pipsY }, { x, y: pipsY + 11 }, { x: x - 9, y: pipsY }];
       pg.fillStyle(0x120c07, 1).fillPoints(pts, true);
       if (k < n) {
@@ -718,7 +815,7 @@ export class TeamSelectScene extends Phaser.Scene {
       pg.lineStyle(2, k < n ? GOLD.light : GOLD.dark, 1).strokePoints(pts, true);
     }
     head.add(pg);
-    head.add(serif(this, pipsX + TEAM_SIZE * 30 + 4, pipsY, `${n}/${TEAM_SIZE}`, 24, n === TEAM_SIZE ? '#ffe29a' : '#b9a27a').setOrigin(0, 0.5));
+    head.add(serif(this, pipsX + pip.width - pip.step / 2 + 14, pipsY, `${n}/${size}`, 24, full ? '#ffe29a' : '#b9a27a').setOrigin(0, 0.5));
 
     const layer = this.add.container(0, 0).setDepth(12);
     this.slotLayer[side] = layer;
@@ -731,6 +828,7 @@ export class TeamSelectScene extends Phaser.Scene {
         const cy = GRID_TOP + lane * (SLOT_H + LANE_GAP) + SLOT_H / 2;
         const def = team[i] ? content.classes[team[i]!] : undefined;
         const body = this.drawSlot(side, i, cx, cy, def, side === 'enemies');
+        if (!def && full) body.setAlpha(0.4); // team is full: free cells cannot take a new champion
         layer.add(body);
         const hot = this.add.graphics();
         glowRect(hot, cx - SLOT_W / 2, cy - SLOT_H / 2, SLOT_W, SLOT_H, GOLD.bright, fx(1), 4);
@@ -780,6 +878,12 @@ export class TeamSelectScene extends Phaser.Scene {
     const pf = this.add.graphics();
     frameRect(pf, ax, ay, as, as, { bevel: 3, edge: hex, light: GOLD.light });
     body.add(pf);
+    if (isTestClass(def)) {
+      const tg = this.add.graphics();
+      tg.fillStyle(0x1a0f06, 1).fillRoundedRect(ax + as - 40, ay + as - 14, 44, 18, 4);
+      tg.fillStyle(0xffb347, 1).fillRoundedRect(ax + as - 38, ay + as - 12, 40, 14, 3);
+      body.add([tg, serif(this, ax + as - 18, ay + as - 5, 'TEST', 11, '#2a1405', { spacing: 1, stroke: 0 }).setOrigin(0.5)]);
+    }
     // Name, archetype, logo
     const colX = ax + as + 12 + (hw * 2 - (ax + hw) - as - 12 - 8) / 2;
     const colW = hw * 2 - (ax + hw) - as - 12 - 8;

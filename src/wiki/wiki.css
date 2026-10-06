@@ -518,6 +518,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  align-items: center;
   margin: 4px 0;
 }
 
@@ -716,4 +717,63 @@
   .wk-sprite {
     max-height: 160px;
   }
+}
+
+/* AOE shape diagram (4x3 mini grid): painted cells are hit, the diamond marks the anchor (pointed cell) */
+.wk-shape {
+  display: inline-grid;
+  grid-template-columns: repeat(var(--cols, 4), 11px);
+  gap: 2px;
+  padding: 3px;
+  vertical-align: middle;
+  background: #0b0806;
+  border: 1px solid var(--w-gold-dark);
+  border-radius: 4px;
+}
+
+.wk-sc {
+  position: relative;
+  width: 11px;
+  height: 11px;
+  background: #3a2d1f;
+}
+
+.wk-sc.on {
+  background: #ffb347;
+}
+
+.wk-sc.anchor::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: #fff6d6;
+  border: 1px solid #1a0f06;
+  transform: rotate(45deg);
+}
+
+.wk-shapes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 8px 0 2px;
+}
+
+.wk-shapes figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+
+.wk-shapes figcaption {
+  font: 12.5px system-ui, sans-serif;
+  color: var(--w-muted);
+}
+
+.wk-chip.test {
+  color: #2a1405;
+  font-weight: bold;
+  background: #ffb347;
+  border-color: #ffb347;
 }

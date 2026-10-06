@@ -6,6 +6,7 @@ import layout from '../../data/battle-layout.json';
 import { applyFilter, chipBar, h, isolateKeys, openLightbox, searchable } from '../gallery/dom';
 import { iconUrl } from '../ui/dom-icons';
 import { STAT_COLOR } from '../ui/stat-icons';
+import type { MiniShape } from '../ui/shape-diagram';
 import { buildWiki } from './catalog';
 import type { WikiArticle, WikiBlock, WikiCatalog, WikiElement, WikiGround, WikiSkill, WikiStatus, WikiUnit } from './catalog';
 import { wikiFiles } from './files';
@@ -51,8 +52,16 @@ function table(head: string[], rows: string[][]): HTMLElement {
   return h('div', { class: 'wk-tablewrap' }, h('table', { class: 'wk-table' }, h('thead', {}, h('tr', {}, ...head.map((c) => h('th', { text: c })))), h('tbody', {}, ...rows.map((r) => h('tr', {}, ...r.map((c) => h('td', { text: c })))))));
 }
 
+/** AOE şekil şeması: 4x3 mini ızgara; boyalı hücreler vurulur, elmas imlecin gösterdiği (anchor) hücredir. */
+function shapeGrid(m: MiniShape): HTMLElement {
+  return h('div', { class: 'wk-shape', style: { '--cols': String(m.cols) }, title: 'Shape preview: the painted cells are hit; the diamond is the cell you point at' }, ...m.cells.map((c) => h('span', { class: `wk-sc${c.on ? ' on' : ''}${c.anchor ? ' anchor' : ''}` })));
+}
+
 function articleCard(a: WikiArticle): HTMLElement {
-  return searchable(h('article', { class: 'wk-card wk-article', style: { '--accent': a.accent } }, h('h3', {}, icon(a.icon, a.accent), h('span', { text: a.title })), ...blocks(a.blocks)), a.search);
+  const shapes = a.shapes?.length
+    ? h('div', { class: 'wk-shapes' }, ...a.shapes.map((s) => h('figure', {}, shapeGrid(s.shape), h('figcaption', { text: s.label }))))
+    : null;
+  return searchable(h('article', { class: 'wk-card wk-article', style: { '--accent': a.accent } }, h('h3', {}, icon(a.icon, a.accent), h('span', { text: a.title })), ...blocks(a.blocks), shapes), a.search);
 }
 
 /** Başlıkları gruplayan makale listesi (Mechanics, Getting Started). */
@@ -65,6 +74,7 @@ function articleGroups(list: WikiArticle[]): HTMLElement[] {
 function skillBlock(s: WikiSkill): HTMLElement {
   const meta = h('div', { class: 'wk-meta' },
     h('span', { class: 'wk-badge', text: s.targetBadge, title: s.targetText }),
+    s.shape ? shapeGrid(s.shape) : null,
     h('span', { class: 'wk-chip', text: `Cost: ${s.cost}` }),
     h('span', { class: 'wk-chip', text: `Cooldown: ${s.cooldown}` }),
     s.initialCooldown ? h('span', { class: 'wk-chip warn', text: s.initialCooldown }) : null);
@@ -90,7 +100,7 @@ function unitCard(u: WikiUnit): HTMLElement {
         art(u.spriteUrl, `${u.name} (full body)`, 'wk-sprite'),
         h('div', { class: 'wk-unit-mini' }, art(u.avatarUrl, `${u.name} avatar`, 'wk-avatar'), icon(u.logo, u.color, 'wk-icon logo'))),
       h('div', { class: 'wk-unit-main' },
-        h('h3', { class: 'wk-unit-name' }, h('span', { text: u.name }), u.role ? h('span', { class: 'wk-role', text: u.role }) : null, u.kind === 'class' ? h('span', { class: 'wk-chip', text: u.melee ? 'Melee' : 'Ranged' }) : h('span', { class: 'wk-chip', text: 'Summon' })),
+        h('h3', { class: 'wk-unit-name' }, h('span', { text: u.name }), u.role ? h('span', { class: 'wk-role', text: u.role }) : null, u.testOnly ? h('span', { class: 'wk-chip test', text: 'TEST', title: 'Test class: left out of random teams; add it by hand in team selection' }) : null, u.kind === 'class' ? h('span', { class: 'wk-chip', text: u.melee ? 'Melee' : 'Ranged' }) : h('span', { class: 'wk-chip', text: 'Summon' })),
         u.primary && u.primaryBonus
           ? h('div', { class: 'wk-primary' }, h('b', { text: `Primary ${u.attributes.find((a) => a.primary)?.label ?? ''}: ${u.primaryBonus.name}` }), h('span', { class: 'muted', text: ` ${u.primaryBonus.detail}` }), h('div', { class: 'muted small', text: u.primaryBonus.text }))
           : null,

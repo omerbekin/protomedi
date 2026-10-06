@@ -7,9 +7,9 @@
   "role": "Tank",
   "frontPriority": 0,
   "attributes": {
-    "str": 16,
+    "str": 15,
     "int": 10,
-    "dex": 2,
+    "dex": 3,
     "luck": 2
   },
   "primary": "str",
@@ -34,6 +34,6 @@
     }
   },
   "overrides": {
-    "hp": 150
+    "hp": 135
   }
 }

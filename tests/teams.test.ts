@@ -35,7 +35,7 @@ describe('seed\'e göre takım seçimi', () => {
   });
 
   it('her class her iki tarafta da yeterince sık görünür (adil dağılım)', () => {
-    const ids = Object.keys(content.classes);
+    const ids = content.randomPool;
     for (const side of ['party', 'enemies'] as const) {
       const counts = new Map<string, number>();
       for (const s of SEEDS) for (const id of content.rollTeams(BATTLE, s)[side]) counts.set(id, (counts.get(id) ?? 0) + 1);
@@ -83,7 +83,7 @@ describe('rastgele takımlarla tam savaşlar', () => {
       for (let i = 0; i < 400 && !b.winner; i++) {
         const actor = b.currentUid!;
         const choice = chooseAction(b, actor, content.aiConfig);
-        const r = choice ? b.useSkill(actor, choice.skillId, choice.targetUid) : b.skipTurn();
+        const r = b.applyChoice(actor, choice);
         expect(r.ok, `seed ${seed} tur ${i}`).toBe(true);
       }
       if (!b.winner) stuck++;

@@ -137,6 +137,32 @@ export function playingCard(g: PxGrid, cx: number, cy: number, w: number, h: num
 }
 
 
+/**
+ * GEOMETER skill ikonlarının ortak dili: haritacı parşömeni üstünde 4 sütun x 3 satır mürekkep ızgarası (savaş tahtasının ekrandaki
+ * düzeni: sütun = sıra/derinlik, satır = şerit). `lit` hücreleri [sütun, satır] arcane ışıkla dolar; sağ-alt köşe kıvrık.
+ */
+export function surveySheet(g: PxGrid, lit: Array<[number, number]>): void {
+  const x = 4;
+  const y = 7;
+  const c = 6;
+  g.rect(x - 2, y - 2, c * 4 + 4, c * 3 + 4, 'n').rect(x - 1.5, y - 1.5, c * 4 + 3, c * 3 + 3, 'e');
+  for (let i = 0; i <= 4; i++) g.line(x + i * c, y, x + i * c, y + c * 3, 'k', 0.5);
+  for (let j = 0; j <= 3; j++) g.line(x, y + j * c, x + c * 4, y + j * c, 'k', 0.5);
+  for (const [col, row] of lit) {
+    const cx = x + col * c;
+    const cy = y + row * c;
+    g.rect(cx + 0.5, cy + 0.5, c - 0.5, c - 0.5, 'a');
+    g.rect(cx + 0.5, cy + 0.5, c - 0.5, 0.5, 'z').rect(cx + 0.5, cy + 0.5, 0.5, c - 0.5, 'z');
+    g.rect(cx + 0.5, cy + c - 0.5, c - 0.5, 0.5, 'A').rect(cx + c - 0.5, cy + 0.5, 0.5, c - 0.5, 'A');
+    g.rect(cx + 2.5, cy + 2.5, 1, 1, 'w');
+  }
+  // kıvrık köşe
+  const rx = x + c * 4 + 2;
+  const by = y + c * 3 + 2;
+  g.poly([rx - 4, by, rx, by - 4, rx + 0.5, by + 0.5], '.');
+  g.poly([rx - 4, by, rx - 4, by - 4, rx, by - 4], 'n').line(rx - 4, by, rx, by - 4, 'b', 0.5);
+}
+
 /** Sivri uçlu, ortası şişkin savrulma izi (a -> b); `bulge` yana eğrilik (+ sağa), `w` en geniş yer. */
 export function streak(g: PxGrid, x0: number, y0: number, x1: number, y1: number, w: number, bulge: number, t: string): void {
   const len = Math.hypot(x1 - x0, y1 - y0) || 1;
@@ -688,6 +714,80 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     sparkle(g, 5, 5, 2.4, 'y');
   },
 
+  // ---------- GEOMETER (haritacı büyücü; AOE şekil test sınıfı) ----------
+  // Class logosu: ızgaralı harita parşömeni üstünde pirinç pergel; pergelin tebeşir ucu arcane bir yay çiziyor
+  geometerlogo: (g) => {
+    g.rect(3, 9.5, 26, 15.5, 'n').rect(3.5, 10, 25, 14.5, 'e');
+    for (let i = 0; i <= 4; i++) g.line(4 + i * 6, 10.5, 4 + i * 6, 24, 'k', 0.5);
+    for (let j = 0; j <= 2; j++) g.line(4, 10.5 + j * 6.75, 28, 10.5 + j * 6.75, 'k', 0.5);
+    g.rect(10.5, 17.75, 5.5, 6.25, 'a').rect(10.5, 17.75, 5.5, 0.5, 'z').rect(16.5, 17.75, 5.5, 6.25, 'a').rect(16.5, 17.75, 5.5, 0.5, 'z');
+    g.rect(16.5, 11, 5.5, 6.25, 'a').rect(16.5, 11, 5.5, 0.5, 'z');
+    // pergelin çizdiği tebeşir-ışık yayı (menteşe merkezli; iki ayağın ucundan geçer, parşömenin altından taşar)
+    g.ring(16, 4, 23.8, 'A', 2.2, 1.17, 1.97).ring(16, 4, 23.2, 'z', 1.1, 1.19, 1.95);
+    // bacaklar: sol iğne ucu, sağ tebeşir tutucu
+    g.line(15, 5, 7.5, 25.5, 'd', 2.2).line(15, 5, 7.5, 25.5, 'l', 1);
+    g.line(17, 5, 24.5, 25.5, 'd', 2.2).line(17, 5, 24.5, 25.5, 'l', 1);
+    g.line(7.5, 25.5, 7.2, 27.6, 'o', 1);
+    g.rect(22.8, 21, 3, 3.4, 'b').rect(22.8, 21, 3, 1, 'n');
+    g.disc(24.6, 26.4, 1.4, 'w');
+    // menteşe + tutamak
+    g.rect(15, 0, 2, 3, 'Y').rect(15, 0, 1, 3, 'y');
+    g.disc(16, 4.6, 3, 'Y').disc(16, 4.6, 2.2, 'y').disc(15.4, 4, 0.9, 'w');
+    sparkle(g, 28.5, 5, 2.6, 'z');
+    sparkle(g, 3.5, 6, 2, 'w');
+  },
+  // Test Rig (pasif): pirinç ölçü dişlisi ve önünde ahşap gönye (set square)
+  testrig: (g) => {
+    for (let i = 0; i < 8; i++) {
+      const a = (i * Math.PI) / 4 + 0.2;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      const p = (r: number, w: number) => [12 + c * r - s * w, 12 + s * r + c * w];
+      g.poly([...p(7, -2.4), ...p(11.5, -1.8), ...p(11.5, 1.8), ...p(7, 2.4)], 'Y');
+    }
+    g.disc(12, 12, 8.4, 'Y').disc(12, 12, 7, 'y').ring(12, 12, 4.6, 'Y', 0.8).disc(12, 12, 2.2, 'o');
+    for (let i = 0; i < 12; i++) {
+      const a = (i * Math.PI) / 6;
+      g.line(12 + Math.cos(a) * 5.4, 12 + Math.sin(a) * 5.4, 12 + Math.cos(a) * 6.6, 12 + Math.sin(a) * 6.6, 'Y', 0.5);
+    }
+    g.poly([6, 30.5, 30.5, 30.5, 30.5, 6], 'b').poly([6, 30.5, 30.5, 30.5, 30.5, 28.5, 8.5, 28.5], 'k');
+    g.poly([13.5, 27, 27, 27, 27, 13.5], '.');
+    g.line(8, 28.6, 29, 7.6, 'n', 0.6);
+    for (let k = 0; k < 9; k++) g.rect(9.5 + k * 2.4, 29, 0.5, k % 2 ? 1 : 1.5, 'n');
+    g.disc(27.5, 9.5, 0.9, 'z');
+  },
+  // Row Sweep: ızgara parşömeninde bir SIRA (ekranda dikey şerit) ışıyor; altında onu süpüren ışıklı cetvel
+  rowsweep: (g) => {
+    surveySheet(g, [[1, 0], [1, 1], [1, 2]]);
+    g.line(8.5, 1, 8.5, 5, 'z', 0.5).line(17.5, 1, 17.5, 5, 'z', 0.5).line(13, 0, 13, 4.5, 'w', 0.5);
+    g.rect(5, 26.5, 16, 3.4, 'b').rect(5, 26.5, 16, 0.9, 'n').rect(5, 29.4, 16, 0.6, 'k');
+    for (let k = 0; k < 8; k++) g.rect(5.8 + k * 2, 27.4, 0.5, k % 2 ? 0.9 : 1.6, 'k');
+    g.rect(4, 25.6, 18, 0.9, 'z').rect(6, 25.6, 14, 0.5, 'w');
+  },
+  // Column Spear: bir ŞERİT (ekranda yatay, öndeki sıradan arkaya) ışıyor; içinden geçen ışık mızrağı
+  columnspear: (g) => {
+    surveySheet(g, [[0, 1], [1, 1], [2, 1], [3, 1]]);
+    g.line(0, 16, 24, 16, 'z', 1.6).line(0, 16, 24, 16, 'w', 0.5);
+    g.line(0, 13.6, 5, 13.6, 'z', 0.5).line(0, 18.4, 4, 18.4, 'z', 0.5);
+    g.poly([23, 12, 31.8, 16, 23, 20], 'z').poly([23.8, 14.2, 29.6, 16, 23.8, 17.8], 'w');
+  },
+  // Block Slam: 2x3 hücrelik blok tek kare mühür gibi basılmış; üstünde düşüş çizgileri, köşelerinde çarpma kıvılcımı
+  blockslam: (g) => {
+    surveySheet(g, [[1, 0], [2, 0], [1, 1], [2, 1], [1, 2], [2, 2]]);
+    g.line(10, 7, 22, 7, 'w', 0.8).line(10, 25, 22, 25, 'w', 0.8).line(10, 7, 10, 25, 'w', 0.8).line(22, 7, 22, 25, 'w', 0.8);
+    g.line(16, 10.5, 20.5, 16, 'w', 0.6).line(20.5, 16, 16, 21.5, 'w', 0.6).line(16, 21.5, 11.5, 16, 'w', 0.6).line(11.5, 16, 16, 10.5, 'w', 0.6);
+    g.line(12, 0, 12, 3.6, 'z', 0.6).line(16, 0, 16, 4.2, 'w', 0.6).line(20, 0, 20, 3.6, 'z', 0.6);
+    g.line(9, 27, 6.5, 30.5, 'z', 0.6).line(23, 27, 25.5, 30.5, 'z', 0.6).line(16, 27.5, 16, 31, 'w', 0.6);
+  },
+  // Cross Burst: artı şeklindeki 5 hücre ışıyor; merkezden dört yöne ok uçları
+  crossburst: (g) => {
+    surveySheet(g, [[1, 0], [0, 1], [1, 1], [2, 1], [1, 2]]);
+    sparkle(g, 13, 16, 4.4, 'w');
+    g.poly([10.5, 4.6, 13, 0.6, 15.5, 4.6], 'z').poly([10.5, 27.4, 13, 31.4, 15.5, 27.4], 'z');
+    g.poly([2.6, 13.5, 0, 16, 2.6, 18.5], 'z').poly([22.6, 13.5, 26.2, 16, 22.6, 18.5], 'z');
+    g.rect(12.5, 2.4, 1, 1.4, 'w').rect(12.5, 28.2, 1, 1.4, 'w').rect(23.4, 15.5, 1.4, 1, 'w');
+  },
+
   // ---------- arayüz: debug dock ve ayarlar ----------
   flask: (g) => {
     g.rect(12, 3, 8, 10, 'c').rect(13, 4, 2, 8, 'w');
@@ -695,6 +795,18 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     g.rect(11, 1, 10, 3, 'b').rect(11, 1, 10, 1, 'n');
     g.disc(14, 23.5, 1.4, 'w').disc(19, 25, 1.1, 'w').disc(16, 17, 1, 'w');
     g.rect(9, 20, 14, 1, 'z');
+  },
+  // Dinlenme (Rest global skill'i): hilal ay + uyku "z"leri ve yıldızlar
+  rest: (g) => {
+    g.disc(12.5, 17, 11, 'y').disc(18, 12.5, 9.2, '.');
+    g.disc(8, 21, 3.4, 'Y').disc(7.4, 12.6, 1.6, 'Y');
+    const zed = (x: number, y: number, size: number, t: string, w = 1.6): void => {
+      g.line(x, y, x + size, y, t, w).line(x + size, y, x, y + size, t, w).line(x, y + size, x + size, y + size, t, w);
+    };
+    zed(19, 19, 8, 'w', 1.8);
+    zed(24, 9, 5, 'c', 1.5);
+    sparkle(g, 5, 6, 2.4, 'w');
+    sparkle(g, 27, 3.5, 1.8, 'y');
   },
   team: (g) => {
     for (const [cx, body, y0] of [[8, 'u', 12], [24, 'r', 12], [16, 'y', 8]] as const) {
@@ -770,6 +882,14 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     g.rect(7, 6, 15, 1, 'Y').rect(7, 24, 15, 1, 'Y');
     g.poly([15, 9, 20, 14, 15, 19, 10, 14], 'y').poly([15, 11, 18, 14, 15, 17, 12, 14], 'Y');
     g.rect(14, 13, 2, 2, 'w');
+  },
+  // Debug: panoya kopyala (kahverengi pano, üstte metal kıskaç, kâğıtta metin satırları ve tik)
+  clipboard: (g) => {
+    g.rect(5, 4, 22, 26, 'b').rect(5, 4, 22, 2, 'n').rect(5, 4, 2, 26, 'k');
+    g.rect(8, 8, 16, 20, 'w').rect(8, 8, 16, 1, 'l');
+    g.rect(11, 1, 10, 6, 'm').rect(11, 1, 10, 2, 'l').rect(14, 3, 4, 2, 'd');
+    g.rect(10, 12, 12, 2, 'm').rect(10, 16, 12, 2, 'm').rect(10, 20, 7, 2, 'm');
+    g.line(18, 24, 20, 26, 'g', 2).line(20, 26, 24, 20, 'g', 2);
   },
   frame: (g) => {
     g.rect(2, 4, 28, 24, 'b').rect(5, 7, 22, 18, 'c');

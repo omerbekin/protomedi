@@ -7,6 +7,8 @@ import { simulate, winRate } from './simulate';
 
 const runs = Number(process.argv[2] ?? 3000);
 const firstSeed = Number(process.argv[3] ?? 1);
+// Takım boyutları (isteğe bağlı): npm run sim -- 3000 1 5 5  (oyuncu, düşman; taraf başına 1..12)
+const sizes: content.TeamSizes = { ...(process.argv[4] ? { partySize: Number(process.argv[4]) } : {}), ...(process.argv[5] ? { enemySize: Number(process.argv[5]) } : {}) };
 const WIN_LOW = 40; // sınıf kazanma oranı hedef aralığı (balance.md: ±%10)
 const WIN_HIGH = 60;
 const SKILL_SHARE_LIMIT = 40; // tek bir (bedelli) skill'in o sınıfın hamlelerindeki payı
@@ -14,7 +16,7 @@ const SKILL_SHARE_LIMIT = 40; // tek bir (bedelli) skill'in o sınıfın hamlele
 const fmt = (n: number, d = 1) => n.toFixed(d).replace('.', ',');
 const pct = (n: number, total: number) => (total === 0 ? 0 : (n / total) * 100);
 
-const r = simulate(runs, firstSeed);
+const r = simulate(runs, firstSeed, content.DEFAULT_BATTLE, sizes);
 
 console.log('Proto denge simülatörü');
 console.log('======================');
@@ -27,7 +29,7 @@ if (r.draws > 0) console.log(`  Bitmeyen savaş        : ${r.draws} (%${fmt(pct(
 console.log(`  Ortalama savaş uzunluğu: ${fmt(r.totalTurns / runs)} tur (tüm birimlerin turları toplamı)`);
 console.log('  (İki taraf simetrik; eşit hızda önce oynayan taraf seed\'e göre değişir. Beklenen: %50 civarı.)');
 
-const rows = Object.keys(content.classes).map((id) => ({ id, name: content.classes[id]!.name, s: r.classes.get(id)! }));
+const rows = content.randomPool.map((id) => ({ id, name: content.classes[id]!.name, s: r.classes.get(id)! }));
 console.log('');
 console.log(`SINIF DENGESİ (hedef kazanma oranı %${WIN_LOW}-${WIN_HIGH}; sınıfın tek tarafta olduğu savaşlar)`);
 console.log('  sınıf     savaş  kazanma  ölüm   hasar  şifa  kalkan   (savaş başına, o sınıfın birimi)');
@@ -58,7 +60,7 @@ for (const { name, s } of rows) {
   const total = [...s.skillUses.values()].reduce((a, b) => a + b, 0);
   console.log(`  ${name}  (savaşa katılan birim başına ${fmt(s.moves / s.units)} hamle, ${fmt(s.skips / s.units)} pas)`);
   for (const [skillId, n] of [...s.skillUses].sort((a, b) => b[1] - a[1])) {
-    const skill = content.skills[skillId];
+    const skill = content.skills[skillId] ?? (content.globalSkills[skillId] ? { name: content.globalSkills[skillId]!.name, cost: { amount: 0 } } : undefined);
     const share = pct(n, total);
     const paid = (skill?.cost.amount ?? 0) > 0;
     const flag = paid && share > SKILL_SHARE_LIMIT ? '  <-- baskın' : '';
@@ -67,3 +69,20 @@ for (const { name, s } of rows) {
   }
 }
 console.log(skillWarnings.length ? `  UYARI: baskın skill: ${skillWarnings.join(', ')}` : '  Baskın (tek doğru hamle) skill yok.');
+
+console.log('');
+console.log("GLOBAL SKILL KULLANIMI (Rest / Skip Turn / Move Tile; hamlelerin yüzde kaçı)");
+const globalIds = Object.keys(content.globalSkills);
+let allMoves = 0;
+const allGlobal = new Map<string, number>();
+for (const { name, s } of rows) {
+  const total = [...s.skillUses.values()].reduce((a, b) => a + b, 0);
+  allMoves += total;
+  const parts = globalIds.map((id) => {
+    const n = s.skillUses.get(id) ?? 0;
+    allGlobal.set(id, (allGlobal.get(id) ?? 0) + n);
+    return `${content.globalSkills[id]!.name} %${fmt(pct(n, total), 1)}`;
+  });
+  console.log(`  ${name.padEnd(10)} ${parts.join('   ')}`);
+}
+console.log(`  TOPLAM     ${globalIds.map((id) => `${content.globalSkills[id]!.name} %${fmt(pct(allGlobal.get(id) ?? 0, allMoves), 1)}`).join('   ')}`);

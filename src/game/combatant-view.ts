@@ -39,7 +39,7 @@ export class CombatantView {
   readonly container: Phaser.GameObjects.Container;
   /** Ölüm animasyonu bitti: birim sahnede görünmez (diriltme hedefi olarak hayalet gösterilebilir). */
   private fallen = false;
-  private readonly baseY: number;
+  private baseY: number;
   readonly sprite: Phaser.GameObjects.Sprite;
   /** Ekranda kaplanan boyut (sprite, spriteBox içine oranı korunarak sığdırılır). */
   readonly w: number;
@@ -61,7 +61,7 @@ export class CombatantView {
   private glowKey = '';
   private readonly marker: Phaser.GameObjects.Triangle;
   private readonly realSprite: boolean;
-  private readonly homeX: number;
+  private homeX: number;
   private readonly hpY: number;
   private readonly shieldY: number;
   private previewItems: Phaser.GameObjects.GameObject[] = [];
@@ -527,6 +527,50 @@ export class CombatantView {
     const dir = this.combatant.side === 'enemy' ? 1 : -1;
     this.scene.tweens.add({ targets: this.sprite, x: dir * 46, duration: slow(120), yoyo: true, ease: 'Quad.easeOut' });
     this.floatText('Dodge', colors.dodge, 46);
+  }
+
+  /** Saldıranın isabeti yetmedi (accuracy yüzünden iska): saldıranın üstünde soluk "MISS" yazısı; kendisi kıpırdamaz. */
+  missText(): void {
+    this.floatText('MISS', colors.miss, 46);
+  }
+
+  /**
+   * Move Tile: birim yeni yuvaya kayar (kısa yürüyüş: küçük sıçrayışlarla, arkada hafif iz). Yeni yuva birimin yeni "evi" olur.
+   * Çubuklar, gölge ve rozetler container'ın içinde olduğundan birlikte gelir. Varışta çözülür.
+   */
+  moveTo(x: number, y: number, ms = 520): Promise<void> {
+    const dx = x - this.homeX;
+    this.homeX = x;
+    this.baseY = y;
+    if (dx !== 0) this.sprite.setFlipX(dx < 0); // yürüdüğü yöne bakar
+    this.container.setDepth(Math.max(y, this.container.y) + 2);
+    this.play('attack');
+    const hops = Math.max(2, Math.round(ms / 170));
+    this.scene.tweens.add({ targets: this.sprite, y: { from: 0, to: -16 }, duration: slow(ms) / (hops * 2), yoyo: true, repeat: hops - 1, ease: 'Sine.easeOut' });
+    let next = 0;
+    return new Promise((resolve) => {
+      this.scene.tweens.add({
+        targets: this.container,
+        x,
+        y,
+        duration: slow(ms),
+        ease: 'Sine.easeInOut',
+        onUpdate: () => {
+          const now = this.scene.time.now;
+          if (now >= next) {
+            this.afterimage(0xe8c47e, 0.28, 220);
+            next = now + 55;
+          }
+        },
+        onComplete: () => {
+          this.sprite.setY(0);
+          this.sprite.setFlipX(this.combatant.side === 'enemy');
+          this.container.setDepth(y);
+          this.play('idle');
+          resolve();
+        },
+      });
+    });
   }
 
   /**

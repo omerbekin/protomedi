@@ -1,0 +1,31 @@
+{
+  "_not": "GLOBAL SKILL'LER: her birimin class'ının 4 skill'ine EK kullanabildiği ortak eylemler (content.skills'e ve 'her class tam 4 skill' kuralına karışmaz). kind: rest = MP kazan (mp, maks MP'yi aşmaz) ve turu bitir; skip = turu geç, birimin BİR SONRAKİ turuna kadar hızı +speedBonus artar (1 = %100: sayaç iki kat hızlı dolar, sıradaki tur yarı sürede gelir; Haste/Slow ile toplamsal; birim hemen tekrar oynamaz, düşman araya girebilir), üst üste en çok maxConsecutive kez, yalnızca turns modunda (turnsOnly); move = kendi tarafındaki boş (canlı olmayan, ölü dost yuvası DEĞİL) bir yuvaya geç ve turu bitir (target 'empty_tile'). Yapay zekanın bunları ne zaman kullandığı data/ai.json > global bloğunda.",
+  "rest": {
+    "id": "rest",
+    "name": "Rest",
+    "icon": "rest",
+    "kind": "rest",
+    "target": "self",
+    "mp": 15,
+    "text": "Catch your breath and end your turn."
+  },
+  "skip_turn": {
+    "id": "skip_turn",
+    "name": "Skip Turn",
+    "icon": "hourglass",
+    "kind": "skip",
+    "target": "self",
+    "speedBonus": 1,
+    "maxConsecutive": 1,
+    "turnsOnly": true,
+    "text": "Pass the turn. Your speed is doubled until your next turn: the next turn arrives in half the time."
+  },
+  "move_tile": {
+    "id": "move_tile",
+    "name": "Move",
+    "icon": "boot",
+    "kind": "move",
+    "target": "empty_tile",
+    "text": "Step onto an empty cell of your own side and end your turn."
+  }
+}
