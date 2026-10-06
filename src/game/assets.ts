@@ -19,11 +19,19 @@ const backgroundFiles = import.meta.glob('../../assets/backgrounds/*.{png,jpg,jp
   import: 'default',
 }) as Record<string, string>;
 
+/** Kafa avatarları: assets/avatars/<id>.png (tools/import-characters-v2.py ile kafa kırpılarak üretilir). */
+const avatarFiles = import.meta.glob('../../assets/avatars/*.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
+
 export const ANIMATIONS = ['idle', 'attack', 'cast', 'hit', 'death', 'defend'] as const;
 export type AnimName = (typeof ANIMATIONS)[number];
 
 const spriteKey = (id: string, anim: string) => `sprite:${id}:${anim}`;
 const placeholderKey = (id: string) => `placeholder:${id}`;
+const avatarKey = (id: string) => `avatar:${id}`;
 export const backgroundKey = (id: string) => `bg:${id}`;
 
 function fileStem(path: string): string[] {
@@ -38,10 +46,20 @@ export function preloadAssets(scene: Phaser.Scene): void {
     const [id, anim] = fileStem(path);
     scene.load.image(spriteKey(id!, anim!), url);
   }
+  for (const [path, url] of Object.entries(avatarFiles)) {
+    const [, id] = fileStem(path);
+    scene.load.image(avatarKey(id!), url);
+  }
   for (const [path, url] of Object.entries(backgroundFiles)) {
     const [, id] = fileStem(path);
     scene.load.image(backgroundKey(id!), url);
   }
+}
+
+/** Kafa avatarının doku anahtarı; avatar dosyası yoksa null (çağıran eski kırpmaya/silüete döner). Kare, sağa bakar. */
+export function avatarTexture(scene: Phaser.Scene, spriteId: string): string | null {
+  const key = avatarKey(spriteId.replace(/^enemy_/, ''));
+  return scene.textures.exists(key) ? key : null;
 }
 
 export function hasBackground(scene: Phaser.Scene, id: string): boolean {

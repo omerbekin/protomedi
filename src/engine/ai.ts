@@ -1,4 +1,5 @@
 import type { Battle } from './battle';
+import { betStake } from './gamble';
 import { previewForTargets } from './preview';
 import { attributePower } from './stats';
 import type { Combatant, SkillDef } from './types';
@@ -9,7 +10,7 @@ import type { Combatant, SkillDef } from './types';
  * Öncelikler ve eşikler data/ai.json profillerinden gelir (karakterin `ai` alanı profil seçer).
  * Etki tahmini önizlemeyle aynı hesaptır (src/engine/preview.ts): zırh, menzil, taunt, kalkan hepsi hesaba girer.
  */
-export type AiPriority = 'kill' | 'heal' | 'summon' | 'shield' | 'aoe' | 'damage' | 'taunt' | 'guard' | 'burn';
+export type AiPriority = 'kill' | 'heal' | 'summon' | 'shield' | 'aoe' | 'damage' | 'taunt' | 'guard' | 'burn' | 'thorns';
 
 export interface AiProfile {
   priorities: AiPriority[];
@@ -25,6 +26,8 @@ export interface AiProfile {
   guardBelowRatio?: number;
   /** burn: en az bu kadar düşmanın yakılabilir manası varsa toplu mana yak. */
   burnMinTargets?: number;
+  /** thorns: dikenli kalkan açmak için en az bu kadar yakın dövüşçü (motion 'melee' skill'i olan) canlı düşman olmalı. Varsayılan 1. */
+  thornsMinMelee?: number;
   /** 4. (güçlü) skill'e verilen puan çarpanı: mantıklıysa (değer katıyorsa) önceliklendirilir. Varsayılan 1,5. */
   ultimateWeight?: number;
 }
@@ -64,6 +67,7 @@ interface Option {
   summon: boolean;
   taunt: boolean;
   guard: boolean;
+  thorns: boolean;
   cost: number;
   hpCost: boolean;
 }
@@ -110,7 +114,8 @@ function buildOptions(battle: Battle, actor: Combatant, profile: AiProfile): Opt
     const candidates = battle.validTargets(actor.uid, skillId);
     if (candidates.length === 0) continue;
     const area = skill.target === 'area_enemies' || skill.target === 'column_enemies';
-    const groups = area ? candidates.map((t) => battle.areaWindow(actor.uid, skillId, t.uid)) : battle.needsTargetChoice(skillId) ? candidates.map((t) => [t]) : [candidates];
+    // Yan vuruşlu (splash) tek hedef skill'inde grup = seçilen hedef + yanındakiler (ilk eleman seçilen hedeftir)
+    const groups = area ? candidates.map((t) => battle.areaWindow(actor.uid, skillId, t.uid)) : battle.needsTargetChoice(skillId) ? candidates.map((t) => [t, ...battle.splashTargets(skillId, t)]) : [candidates];
     const anchors = candidates.map((t) => t.uid);
     for (const [gi, targets] of groups.entries()) {
       const targetUid = area ? anchors[gi] : battle.needsTargetChoice(skillId) ? targets[0]!.uid : undefined;
@@ -139,17 +144,26 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
     summon: skill.effects.some((e) => e.type === 'summon'),
     taunt: skill.effects.some((e) => e.type === 'taunt'),
     guard: skill.effects.some((e) => e.type === 'guard'),
+    thorns: skill.effects.some((e) => e.type === 'thorns'),
     cost: skill.cost.amount * (skill.cost.resource === 'mp' ? profile.mpCostWeight : profile.hpCostWeight),
-    hpCost: skill.cost.resource === 'hp' && skill.cost.amount > 0,
+    hpCost: (skill.cost.resource === 'hp' && skill.cost.amount > 0) || skill.effects.some((e) => e.type === 'damage' && e.bet?.resource === 'hp'),
   };
+  // Bahis: kaybedilirse gidecek MP, bedele beklenen olarak eklenir (MP bahsi); can bahsi hpCost kuralıyla (düşük canda oynanmaz) sınırlanır
+  for (const e of skill.effects) {
+    if (e.type === 'damage' && e.bet?.resource === 'mp') {
+      const mpLeft = skill.cost.resource === 'mp' && !battle.freeMp ? actor.mp - skill.cost.amount : actor.mp;
+      o.cost += (1 - e.bet.winChance) * betStake(e.bet, actor.maxHp, actor.hp, mpLeft) * profile.mpCostWeight;
+    }
+  }
   const lifesteal = Math.max(0, ...skill.effects.map((e) => (e.type === 'damage' ? (e.lifesteal ?? 0) : 0)));
   for (const p of previews) {
     const target = battle.get(p.uid);
     if (!target) continue;
     if (p.damage) {
-      o.damage += p.damage.hpLoss + p.damage.absorbed;
-      if (p.damage.hpLoss >= target.hp) o.kills.push(target);
-      if (lifesteal > 0 && !p.damage.splash) o.selfHeal += p.damage.hpLoss * lifesteal;
+      // Beklenen hasar isabet şansıyla çarpılır; "öldürür" saymak için isabet şansı yeterince yüksek olmalı (formulas.json > hit.aiKillMin)
+      o.damage += (p.damage.hpLoss + p.damage.absorbed) * p.damage.hitChance;
+      if (p.damage.hpLoss >= target.hp && p.damage.hitChance >= battle.formulas.hit.aiKillMin) o.kills.push(target);
+      if (lifesteal > 0 && !p.damage.splash) o.selfHeal += p.damage.hpLoss * p.damage.hitChance * lifesteal;
     }
     if (p.heal) o.heal += p.heal.avg;
     if (skill.effects.some((e) => e.type === 'revive')) o.revive += target.maxHp;
@@ -188,7 +202,7 @@ type Picker = (battle: Battle, actor: Combatant, profile: AiProfile, options: Op
 const affordable = (actor: Combatant, profile: AiProfile) => (o: Option) =>
   !o.hpCost || ratio(actor) >= profile.minHpRatioForHpCost;
 
-const hasStatus = (c: Combatant, kind: 'taunt' | 'guard' | 'regen') => c.statuses.some((s) => s.kind === kind);
+const hasStatus = (c: Combatant, kind: 'taunt' | 'guard' | 'regen' | 'thorns') => c.statuses.some((s) => s.kind === kind);
 
 const PICKERS: Record<AiPriority, Picker> = {
   // Birini öldürebilen en iyi seçenek: en tehlikeli düşmanları öldüren, sonra en ucuz olan.
@@ -229,6 +243,14 @@ const PICKERS: Record<AiPriority, Picker> = {
     return best(options.filter((o) => o.taunt), (o) => -o.cost);
   },
 
+  // Thorns: kendinde yoksa ve karşıda yeterince yakın dövüşçü varsa dikenli kalkan aç (yansıyan hasar yalnızca melee vuruşlara işler).
+  thorns: (battle, actor, profile, options) => {
+    if (hasStatus(actor, 'thorns')) return undefined;
+    const melee = battle.living(actor.side === 'party' ? 'enemy' : 'party').filter((c) => c.skills.some((id) => battle.skill(id)?.motion === 'melee')).length;
+    if (melee < (profile.thornsMinMelee ?? 1)) return undefined;
+    return best(options.filter((o) => o.thorns), (o) => -o.cost);
+  },
+
   // Guard: canı eşiğin altındaki, korumasız (kendimiz olmayan) dostu koru; en yaralı olana öncelik.
   guard: (_b, actor, profile, options) => {
     const limit = profile.guardBelowRatio ?? 0;
@@ -258,7 +280,7 @@ const PICKERS: Record<AiPriority, Picker> = {
     if (damaging.length === 0) return undefined;
     // Odak, vurulabilecek (menzil ve taunt'a uyan) düşmanlar arasından seçilir
     const reachable = new Map<string, Combatant>();
-    for (const o of damaging) for (const t of o.targets) reachable.set(t.uid, t);
+    for (const o of damaging) for (const t of o.skill.target === 'single_enemy' ? o.targets.slice(0, 1) : o.targets) reachable.set(t.uid, t);
     const focus = best([...reachable.values()], (c) => (profile.focus === 'lowest_hp' ? -(c.hp + c.shield + c.magicShield) : -ratio(c)));
     const onFocus = damaging.filter((o) => (o.skill.target === 'all_enemies' || (o.skill.target === 'single_enemy' ? o.targets[0] === focus : o.targets.includes(focus!))));
     return best(onFocus.length > 0 ? onFocus : damaging, (o) => (o.damage + o.selfHeal + o.burn * BURN_WEIGHT) * ult(profile, o) - o.cost);

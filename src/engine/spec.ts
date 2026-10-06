@@ -16,6 +16,8 @@ export function damageSpecFor(
   powerMult = 1,
   extras = true,
   extraTaken = 1,
+  /** Saldıranın verdiği hasar çarpanı (Dex-primary Hunter's Mark: hedefinden hızlıysa 1 + hunterMark). */
+  dealtMult = 1,
 ): DamageSpec {
   // Tür hassasiyeti: ör. undead + holy, nature + fire
   const element = effect.element ?? 'physical';
@@ -39,6 +41,6 @@ export function damageSpecFor(
     power: effect.power * tagBonus * weak * powerMult * passiveMult,
     ...(effect.ignoreDefense ? { ignoreDefense: effect.ignoreDefense } : {}),
     extra,
-    takenMultiplier: (target.summoned ? formulas.summon.damageTakenMultiplier : 1) * extraTaken,
+    takenMultiplier: (target.summoned ? formulas.summon.damageTakenMultiplier : 1) * extraTaken * dealtMult, // Hunter's Mark tüm vuruşu (eklerle birlikte) çarpar
   };
 }

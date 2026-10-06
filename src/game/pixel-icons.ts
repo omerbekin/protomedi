@@ -1,4 +1,4 @@
-import { blade, flame, leafShape, orb, shieldShape, sparkle, type Draw } from './pixel-art';
+import { blade, flame, leafShape, orb, shieldShape, sparkle, type Draw, type PxGrid } from './pixel-art';
 
 /**
  * Tüm piksel art ikonlar (32x32). Anahtar = veri dosyalarındaki ikon adı (skill.icon, class.logo, passive.icon, status.icon, stat ikonu).
@@ -6,6 +6,164 @@ import { blade, flame, leafShape, orb, shieldShape, sparkle, type Draw } from '.
  */
 const TAU = Math.PI * 2;
 const polar = (cx: number, cy: number, r: number, a: number): [number, number] => [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+
+/**
+ * Kutsal halo: dolu, damalı geçişli radyal parlama (beyaz çekirdek -> altın -> koyu altın -> koyu kahve; koyu zeminde yumuşak sönen bir ışık hâlesi gibi okunur).
+ * Ham 64'lük pikselle çizilir (0,5 mantıksal birim), böylece geçişler ince damalı olur.
+ */
+export function holyHalo(g: PxGrid, cx: number, cy: number, r: number): void {
+  const bands: Array<[number, string, string]> = [
+    [0.3, 'w', 'w'],
+    [0.42, 'w', 'y'],
+    [0.56, 'y', 'y'],
+    [0.66, 'y', 'Y'],
+    [0.78, 'Y', 'Y'],
+    [0.84, 'Y', 'k'],
+    [0.93, 'k', 'o'],
+    [1, 'o', 'o'],
+  ];
+  for (let py = 0; py < 64; py++)
+    for (let px = 0; px < 64; px++) {
+      const d = Math.hypot((px + 0.5) / 2 - cx, (py + 0.5) / 2 - cy) / r;
+      if (d >= 1) continue;
+      const i = bands.findIndex((b) => d < b[0]);
+      const b = bands[i]!;
+      g.rect(px / 2, py / 2, 0.5, 0.5, (px + py) % 2 === 0 ? b[1] : b[2]);
+    }
+}
+
+/** Savaş çekici (kafa yukarıda, sap aşağıda). `outlined`: halo üstünde okunsun diye kendi koyu konturunu çizer (halo boşluk bırakmadığı için otomatik kontur yetmez). */
+export function holyHammer(g: PxGrid, outlined = false): void {
+  if (outlined) {
+    const e = 0.5;
+    const o = (x: number, y: number, w: number, h: number) => g.rect(x - e, y - e, w + e * 2, h + e * 2, 'o');
+    o(14.5, 15, 3, 14);
+    o(4.5, 7, 23, 9);
+    g.disc(16, 29, 2.2, 'o');
+  }
+  g.rect(14.5, 15, 3, 14, 'b').rect(14.5, 15, 1, 14, 'n').rect(16.5, 15, 1, 14, 'k');
+  g.line(14.5, 21, 17.5, 22.5, 'k').line(14.5, 25, 17.5, 26.5, 'k');
+  g.rect(6, 7, 20, 9, 'm').rect(6, 7, 20, 2.5, 'l').rect(6, 14, 20, 2, 'd');
+  g.rect(4.5, 8, 2, 7, 'd').rect(25.5, 8, 2, 7, 'd');
+  g.rect(14, 7, 4, 9, 'y').rect(15, 8, 1.5, 7, 'w');
+  g.disc(16, 11.5, 1.2, 'r');
+  g.disc(16, 29, 1.5, 'y');
+}
+
+// ---------- GAMBLER: ortak çizim parçaları (zar, altın para, iskambil kartı, para yığını) ----------
+type DieTones = { top: string; left: string; right: string; pip: string; edge?: string };
+const BONE_DIE: DieTones = { top: 'w', left: 'e', right: 'n', pip: 'k' };
+const GOLD_DIE: DieTones = { top: 'y', left: 'Y', right: 'b', pip: 'w' };
+
+/** Eş eksenli (izometrik) zar: üst yüz 1, sol yüz 2, sağ yüz 3 nokta. `w` = yarı genişlik; (cx, cy) üst yüzün merkezi. */
+export function isoDie(g: PxGrid, cx: number, cy: number, w: number, t: DieTones = BONE_DIE): void {
+  const tv = w * 0.5;
+  const h = w * 1.05;
+  g.poly([cx - w, cy, cx, cy + tv, cx, cy + tv + h, cx - w, cy + h], t.left);
+  g.poly([cx, cy + tv, cx + w, cy, cx + w, cy + h, cx, cy + tv + h], t.right);
+  g.poly([cx, cy - tv, cx + w, cy, cx, cy + tv, cx - w, cy], t.top);
+  // yüzler arası ince kenar çizgileri (kemik kenarı belli olsun)
+  const e = t.edge ?? 'm';
+  g.line(cx, cy + tv, cx, cy + tv + h, e, 0.5).line(cx - w, cy, cx, cy + tv, e, 0.5).line(cx, cy + tv, cx + w, cy, e, 0.5);
+  const pr = Math.max(0.9, w * 0.13);
+  // üst: 1 nokta (yassı elips)
+  g.ellipse(cx, cy, pr * 1.5, pr * 0.8, t.pip);
+  // sol: 2 nokta (köşegen)
+  const lcx = cx - w / 2;
+  const lcy = cy + tv / 2 + h / 2;
+  for (const s of [-1, 1]) g.disc(lcx + s * w * 0.2, lcy + s * (h * 0.2 + tv * 0.2), pr, t.pip);
+  // sağ: 3 nokta (köşegen)
+  const rcx = cx + w / 2;
+  const rcy = lcy;
+  for (const s of [-1, 0, 1]) g.disc(rcx + s * w * 0.24, rcy + s * (h * 0.24 - tv * 0.24), pr, t.pip);
+}
+
+/** Önden altın para: kenar, iç halka, kabartma tacı, parıltı. */
+export function goldCoin(g: PxGrid, cx: number, cy: number, r: number): void {
+  g.disc(cx, cy, r, 'Y').disc(cx - r * 0.06, cy - r * 0.06, r - 1, 'y');
+  g.ring(cx, cy, r * 0.68, 'Y', Math.max(0.8, r * 0.1));
+  const k = r * 0.3;
+  g.poly([cx - k, cy + k * 0.7, cx - k, cy - k * 0.6, cx - k * 0.5, cy, cx, cy - k, cx + k * 0.5, cy, cx + k, cy - k * 0.6, cx + k, cy + k * 0.7], 'Y');
+  g.ring(cx, cy, r - 0.5, 'w', 1, 3.5, 4.7);
+}
+
+/** Yan duran para yığını (kenar bantları): `n` para, genişlik `w`, tabanı `by`. */
+export function coinStack(g: PxGrid, cx: number, by: number, w: number, n: number): void {
+  for (let i = 0; i < n; i++) {
+    const y = by - 2.6 * (i + 1);
+    g.rect(cx - w / 2, y, w, 3.4, 'Y').rect(cx - w / 2, y, w, 1.6, i % 2 ? 'y' : 'n');
+    g.ellipse(cx, y, w / 2, 1.5, i % 2 ? 'Y' : 'y');
+  }
+  const top = by - 2.6 * n;
+  g.ellipse(cx, top, w / 2, 1.6, 'y').ellipse(cx - w * 0.12, top - 0.3, w * 0.22, 0.6, 'w');
+}
+
+/** İskambil kartı: döndürülmüş, kenarlı. `face`: 'heart' | 'spade' | 'diamond' | 'back'. */
+export function playingCard(g: PxGrid, cx: number, cy: number, w: number, h: number, ang: number, face: 'heart' | 'spade' | 'diamond' | 'back'): void {
+  const c = Math.cos(ang);
+  const s = Math.sin(ang);
+  const rot = (x: number, y: number): [number, number] => [cx + x * c - y * s, cy + x * s + y * c];
+  const quad = (hw: number, hh: number) => [rot(-hw, -hh), rot(hw, -hh), rot(hw, hh), rot(-hw, hh)].flat();
+  g.poly(quad(w / 2, h / 2), 'd');
+  if (face === 'back') {
+    g.poly(quad(w / 2 - 0.9, h / 2 - 0.9), 'z');
+    g.poly(quad(w / 2 - 1.8, h / 2 - 1.8), 'a');
+    const d = Math.min(w, h) * 0.26;
+    g.poly([rot(0, -d * 1.5), rot(d, 0), rot(0, d * 1.5), rot(-d, 0)].flat(), 'A');
+    const [px, py] = rot(0, 0);
+    g.disc(px, py, 0.9, 'z');
+    return;
+  }
+  g.poly(quad(w / 2 - 0.9, h / 2 - 0.9), 'w');
+  const col = face === 'spade' ? 'o' : 'r';
+  const at = (x: number, y: number, k: number) => {
+    const P = (px: number, py: number) => rot(x + px * k, y + py * k);
+    if (face === 'heart') {
+      const [ax, ay] = P(-1.1, -0.7);
+      const [bx, by] = P(1.1, -0.7);
+      g.disc(ax, ay, 1.35 * k, col).disc(bx, by, 1.35 * k, col).poly([P(-2.4, 0), P(2.4, 0), P(0, 2.9)].flat(), col);
+    } else if (face === 'diamond') {
+      g.poly([P(0, -3), P(2.1, 0), P(0, 3), P(-2.1, 0)].flat(), col);
+    } else {
+      g.poly([P(0, -3), P(2.7, 0.6), P(-2.7, 0.6)].flat(), col);
+      const [ax, ay] = P(-1.3, 0.8);
+      const [bx, by] = P(1.3, 0.8);
+      g.disc(ax, ay, 1.35 * k, col).disc(bx, by, 1.35 * k, col).poly([P(0, 0.6), P(1.1, 3.2), P(-1.1, 3.2)].flat(), col);
+    }
+  };
+  at(0, 0, Math.min(w, h) * 0.2);
+  at(-w * 0.27, -h * 0.34, 0.34);
+  at(w * 0.27, h * 0.34, 0.34);
+}
+
+
+/** Sivri uçlu, ortası şişkin savrulma izi (a -> b); `bulge` yana eğrilik (+ sağa), `w` en geniş yer. */
+export function streak(g: PxGrid, x0: number, y0: number, x1: number, y1: number, w: number, bulge: number, t: string): void {
+  const len = Math.hypot(x1 - x0, y1 - y0) || 1;
+  const nx = -(y1 - y0) / len;
+  const ny = (x1 - x0) / len;
+  const out: number[] = [];
+  const back: number[] = [];
+  const N = 12;
+  for (let i = 0; i <= N; i++) {
+    const u = i / N;
+    const cx = x0 + (x1 - x0) * u + nx * bulge * Math.sin(u * Math.PI);
+    const cy = y0 + (y1 - y0) * u + ny * bulge * Math.sin(u * Math.PI);
+    const half = (w / 2) * Math.sin(u * Math.PI) ** 0.8;
+    out.push(cx + nx * half, cy + ny * half);
+    back.unshift(cx - nx * half, cy - ny * half);
+  }
+  g.poly([...out, ...back], t);
+}
+
+/** Dikenli kalkan/kabuk için tek sivri diken (taban merkezi bx,by; ucu tx,ty; taban genişliği w). */
+export function thorn(g: PxGrid, bx: number, by: number, tx: number, ty: number, w: number, lo = 'k', hi = 'n'): void {
+  const len = Math.hypot(tx - bx, ty - by) || 1;
+  const nx = (-(ty - by) / len) * (w / 2);
+  const ny = ((tx - bx) / len) * (w / 2);
+  g.poly([bx + nx, by + ny, tx, ty, bx - nx, by - ny], lo);
+  g.poly([bx + nx, by + ny, tx, ty, bx, by], hi);
+}
 
 export const PIXEL_ICONS: Record<string, Draw> = {
   // ---------- WARRIOR ----------
@@ -82,14 +240,32 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     sparkle(g, 26, 5, 3);
     sparkle(g, 6, 27, 2.5);
   },
+  // Holy Strike: kutsal bir parlaklığın (halo) içinde savaş çekici; iz/çizgi yok
   judgehammer: (g) => {
-    g.rect(14, 12, 4, 19, 'b').rect(14, 12, 1, 19, 'n').rect(17, 12, 1, 19, 'k');
-    g.line(14, 22, 18, 24, 'k').line(14, 26, 18, 28, 'k');
-    g.rect(3, 3, 26, 11, 'm').rect(3, 3, 26, 3, 'l').rect(3, 12, 26, 2, 'd');
-    g.rect(1, 4, 3, 9, 'd').rect(28, 4, 3, 9, 'd');
-    g.rect(13, 3, 6, 11, 'y').rect(14, 4, 2, 9, 'w');
-    g.disc(16, 8.5, 1.6, 'r');
-    g.disc(16, 30, 1.8, 'y');
+    holyHalo(g, 16, 12.5, 16.5);
+    holyHammer(g, true);
+    sparkle(g, 4.5, 5, 3.2);
+    sparkle(g, 27.5, 7, 2.6);
+    sparkle(g, 5.5, 25, 2.2);
+    sparkle(g, 27, 24, 1.8, 'y');
+    g.rect(9, 1.5, 1, 1, 'w').rect(23, 2, 1, 1, 'w').rect(2, 15, 1, 1, 'y').rect(29.5, 15, 1, 1, 'w').rect(11, 28, 1, 1, 'y');
+  },
+  // Judgment: gökten inen ışık sütunu içinde hüküm terazisi
+  judgebeam: (g) => {
+    g.ellipse(16, 28, 14, 3.4, 'Y').ellipse(16, 27.6, 10.5, 2.4, 'y').ellipse(16, 27.2, 5.5, 1.2, 'w');
+    g.poly([10, 0, 22, 0, 29, 27, 3, 27], 'y');
+    g.poly([11.5, 0, 20.5, 0, 26, 27, 6, 27], 'w');
+    // terazi (koyu siluet, ışığın önünde okunur): direk, kol, zincirler, kefeler
+    g.rect(15, 9, 2, 17, 'b').rect(15, 9, 1, 17, 'n');
+    g.rect(10.5, 24, 11, 2.2, 'b').rect(10.5, 24, 11, 0.8, 'n');
+    g.line(6, 9.5, 26, 9.5, 'k', 1.6).line(6, 9, 26, 9, 'b', 0.8);
+    g.disc(16, 7.4, 2, 'k').disc(15.6, 7, 0.9, 'n');
+    g.line(6.5, 10.5, 3.5, 17.5, 'k', 0.8).line(6.5, 10.5, 9.5, 17.5, 'k', 0.8);
+    g.line(25.5, 10.5, 22.5, 17.5, 'k', 0.8).line(25.5, 10.5, 28.5, 17.5, 'k', 0.8);
+    g.poly([2, 17.5, 11, 17.5, 9.5, 21, 3.5, 21], 'k').poly([2.5, 17.5, 10.5, 17.5, 10, 18.6, 3, 18.6], 'b');
+    g.poly([21, 17.5, 30, 17.5, 28.5, 21, 22.5, 21], 'k').poly([21.5, 17.5, 29.5, 17.5, 29, 18.6, 22, 18.6], 'b');
+    sparkle(g, 5, 4, 3.2);
+    sparkle(g, 27, 6, 2.6);
   },
   radiance: (g) => {
     for (let i = 0; i < 16; i++) {
@@ -219,6 +395,45 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     g.disc(4.5, 27.5, 3, 'w');
   },
 
+  // Bone Slash: geniş kemik pala savruluyor; arkasında yan yana (eş merkezli) üç vuruş izi
+  boneslash: (g) => {
+    const px = 5;
+    const py = 28;
+    const arc = (r: number, d0: number, d1: number, w: number, t: string) => {
+      const pts: Array<[number, number]> = [];
+      const back: Array<[number, number]> = [];
+      for (let i = 0; i <= 14; i++) {
+        const u = i / 14;
+        const a = ((d0 + (d1 - d0) * u) * Math.PI) / 180;
+        const half = (w / 2) * Math.sin(u * Math.PI) ** 0.7;
+        pts.push(polar(px, py, r + half, a));
+        back.unshift(polar(px, py, r - half, a));
+      }
+      g.poly([...pts, ...back].flat(), t);
+    };
+    // üç iz: iç, orta (en geniş), dış
+    arc(13, -100, -52, 3, 'm');
+    arc(19.5, -98, -50, 4.4, 'l');
+    arc(26, -90, -48, 3, 'm');
+    arc(19.5, -92, -56, 1.5, 'w');
+    // kemik pala: sapa doğru daralan geniş, hafif kıvrık bıçak
+    const ang = (-38 * Math.PI) / 180;
+    const tip = polar(px, py, 27, ang);
+    g.poly([...polar(px, py, 8, ang - 0.34), ...polar(px, py, 17, ang - 0.19), ...tip, ...polar(px, py, 21, ang + 0.13), ...polar(px, py, 8, ang + 0.3)], 'n');
+    g.poly([...polar(px, py, 8, ang - 0.34), ...polar(px, py, 17, ang - 0.19), ...tip, ...polar(px, py, 14, ang - 0.02), ...polar(px, py, 8, ang - 0.02)], 'e');
+    g.line(...polar(px, py, 11, ang - 0.12), ...polar(px, py, 22, ang - 0.07), 'w', 1);
+    for (const r of [12, 16, 20]) {
+      const [nx, ny] = polar(px, py, r, ang + 0.17 - r * 0.004);
+      g.rect(nx - 1, ny - 1, 2, 2, 'k');
+    }
+    // kabza: kemik çapraz tutamak + iki yuvarlak topuz
+    g.line(...polar(px, py, 7, ang - 0.55), ...polar(px, py, 7, ang + 0.55), 'n', 2.4);
+    g.line(...polar(px, py, 7, ang - 0.55), ...polar(px, py, 7, ang + 0.55), 'e', 1);
+    g.line(px + 1, py - 1, px - 1, py + 1, 'b', 3);
+    g.disc(2.4, 29.6, 2.9, 'e').disc(5.8, 31, 2.1, 'e').disc(1.6, 28.8, 1, 'w');
+    g.rect(28, 20, 1.5, 1.5, 'w').rect(22, 3, 1.2, 1.2, 'e');
+  },
+
   // ---------- ARCHER ----------
   arrow: (g) => {
     g.line(3, 28, 24, 7, 'b', 2).line(4, 28, 25, 7, 'k', 1);
@@ -294,6 +509,29 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     g.line(26, 27, 28, 16, 'b', 3).line(28, 16, 24, 10, 'b', 3);
     g.disc(9, 6, 2.6, 'g').disc(12, 4, 2, 'g').disc(22, 4, 2.6, 'g').disc(24, 10, 2.2, 'g').disc(6, 2, 2, 'z');
   },
+  // Thorn Shield: yaşayan ahşap kalkan; kenarından sivri dikenler, altından kökler, üstünde yeşil sürgün
+  thornshield: (g) => {
+    // altta kök ayakları
+    g.line(9, 26, 4, 30, 'k', 2.2).line(16, 28, 16, 31.5, 'k', 2.2).line(23, 26, 28, 30, 'k', 2.2);
+    g.line(9, 26, 6, 28, 'b', 1).line(23, 26, 26, 28, 'b', 1);
+    // dikenler (kenarın dışına)
+    for (const [bx, by, tx, ty] of [[8, 5, 4, 0.5], [16, 3, 16, -0.5], [24, 5, 28, 0.5], [3.5, 13, -1, 11], [28.5, 13, 33, 11], [4.5, 21, 0, 23.5], [27.5, 21, 32, 23.5]] as const) thorn(g, bx, by, tx, ty, 4);
+    // kalkan: koyu ahşap kenar, kahve tahta zemin
+    shieldShape(g, 16, 3.5, 25, 25, 'k', 'b');
+    // tahta damarları ve çıtalar
+    g.line(16, 6, 16, 26, 'k', 0.8).line(10, 8, 10, 19, 'k', 0.6).line(22, 8, 22, 19, 'k', 0.6);
+    g.line(8, 13, 24, 13, 'k', 0.8);
+    g.rect(7, 7, 7, 3, 'n').rect(18, 7, 6, 2, 'n');
+    // sürgünler: kalkanı saran yeşil sarmaşık + yaprak
+    g.line(7, 10, 12, 15, 'G', 1.8).line(12, 15, 16, 14, 'G', 1.8).line(16, 14, 22, 18, 'G', 1.8).line(22, 18, 25, 24, 'G', 1.6);
+    g.line(7, 10, 12, 15, 'g', 0.8).line(16, 14, 22, 18, 'g', 0.8);
+    g.disc(10, 17.5, 2.2, 'g').disc(9.4, 16.8, 0.8, 'z').disc(24.5, 14.5, 2, 'g').disc(23.9, 13.9, 0.7, 'z').disc(19, 21.5, 1.8, 'g');
+    // kalkan göbeği: büyük diken
+    g.disc(16, 16, 3.4, 'k').disc(16, 16, 2.4, 'b');
+    thorn(g, 16, 16, 16, 9.5, 4.2, 'k', 'n');
+    thorn(g, 16, 16, 21.5, 20, 3.4, 'k', 'n');
+    thorn(g, 16, 16, 10.5, 20, 3.4, 'k', 'n');
+  },
   leaf: (g) => {
     g.poly([3, 27, 5, 13, 16, 3, 28, 3, 28, 16, 18, 26], 'G');
     g.poly([3, 27, 5, 13, 16, 3, 28, 3, 14, 17], 'g');
@@ -308,12 +546,6 @@ export const PIXEL_ICONS: Record<string, Draw> = {
   },
 
   // ---------- DEFENDER ----------
-  taunt: (g) => {
-    g.poly([1, 12, 17, 10, 29, 2, 29, 28, 17, 21, 1, 19], 'y').poly([1, 12, 17, 10, 17, 21, 1, 19], 'Y');
-    g.rect(0, 12, 4, 8, 'b').rect(27, 2, 4, 27, 'Y').rect(27, 2, 1, 27, 'y');
-    g.line(20, 12, 24, 8, 'w', 2).line(20, 17, 24, 17, 'w', 2);
-    g.line(11, 22, 7, 29, 'b', 3).rect(5, 29, 6, 2, 'k');
-  },
   guard: (g) => {
     shieldShape(g, 12, 2, 22, 26, 'a', 'z');
     g.rect(11, 6, 3, 18, 'a').rect(5, 11, 14, 3, 'a');
@@ -380,6 +612,82 @@ export const PIXEL_ICONS: Record<string, Draw> = {
   },
 
 
+  // ---------- GAMBLER ----------
+  // Class logosu: arkada yarım açık iskambil kartı, önde kemik zar ve altın para
+  gamblerlogo: (g) => {
+    playingCard(g, 22.5, 11.5, 11, 16, 0.42, 'heart');
+    isoDie(g, 11, 12.5, 9);
+    goldCoin(g, 22, 21.5, 8);
+    sparkle(g, 4.5, 5, 2.6, 'y');
+    sparkle(g, 28, 28, 2, 'w');
+  },
+  // Double or Nothing: bir altın para ve yanında yarısı altın, yarısı boş (kararmış) ikinci para
+  doubleornothing: (g) => {
+    const hx = 22.5;
+    const hy = 11.5;
+    g.disc(hx, hy, 8.2, 'Y');
+    g.poly(Array.from({ length: 14 }, (_, i) => polar(hx, hy, 7.6, Math.PI / 2 + (i / 13) * Math.PI)).flat(), 'y');
+    g.poly(Array.from({ length: 14 }, (_, i) => polar(hx, hy, 7.6, -Math.PI / 2 + (i / 13) * Math.PI)).flat(), 'd');
+    g.ring(hx, hy, 7.6, 'Y', 1, Math.PI / 2, Math.PI * 1.5).ring(hx, hy, 7.6, 'm', 1, -Math.PI / 2, Math.PI / 2);
+    g.ring(hx, hy, 4.6, 'Y', 0.8, Math.PI / 2, Math.PI * 1.5);
+    g.line(hx, hy - 7.8, hx, hy + 7.8, 'o', 1);
+    g.line(hx + 2, hy - 2.6, hx + 5.2, hy + 3, 'o', 0.9).line(hx + 5.2, hy - 2.6, hx + 2, hy + 3, 'o', 0.9);
+    goldCoin(g, 10.5, 20, 8.6);
+    sparkle(g, 27.5, 24, 3, 'w');
+    sparkle(g, 4, 6, 2.4, 'y');
+  },
+  // Loaded Dice: kemik zar, kırık köşesinden içindeki altın/kurşun parıltısı görünür
+  loadeddice: (g) => {
+    isoDie(g, 15, 10, 11);
+    g.poly([22, 8, 26, 10, 26, 14, 24, 14.5], 'y');
+    g.poly([23, 9.5, 25.5, 10.8, 25.5, 13, 24, 13.4], 'w');
+    g.line(24, 14.5, 22.2, 17, 'y', 0.9).line(22.2, 17, 24.2, 19.5, 'y', 0.9).line(24.2, 19.5, 22.4, 22, 'y', 0.9);
+    g.line(22.2, 17, 20.5, 16.4, 'w', 0.5);
+    g.rect(4, 26, 2, 2, 'y').rect(26, 27, 2, 2, 'Y').rect(8, 29, 1, 1, 'y');
+    sparkle(g, 26.5, 5, 4, 'w');
+    sparkle(g, 5, 7, 2.6, 'y');
+  },
+  // High Stakes: altın para yığını üstüne düşen kan damlası
+  highstakes: (g) => {
+    coinStack(g, 20, 30, 14, 4);
+    coinStack(g, 7.5, 30, 11, 2);
+    const d = 5;
+    g.poly([14 + d, 1.5, 19.2 + d, 9.5, 19.6 + d, 13, 17.5 + d, 16.5, 14 + d, 17.5, 10.5 + d, 16.5, 8.4 + d, 13, 8.8 + d, 9.5], 'R');
+    g.poly([14 + d, 3.5, 18 + d, 10, 18.2 + d, 13, 16.5 + d, 15.6, 14 + d, 16.2, 11.5 + d, 15.6, 9.8 + d, 13, 10 + d, 10], 'r');
+    g.rect(11 + d, 10, 1.6, 3.6, 'w');
+    g.ellipse(20, 19.3, 6.2, 1.3, 'R').ellipse(20, 19.1, 4.6, 0.8, 'r');
+    g.rect(4, 12, 1.6, 2.4, 'r').rect(5, 16, 1.2, 1.6, 'R');
+  },
+  // Card Trick: yelpaze gibi açılmış üç iskambil kartı
+  cardtrick: (g) => {
+    playingCard(g, 16 - 6.6, 31 - 10.3, 11, 18, -0.55, 'back');
+    playingCard(g, 16 + 6.6, 31 - 10.3, 11, 18, 0.55, 'spade');
+    playingCard(g, 16, 31 - 12, 11, 18, 0, 'heart');
+    g.rect(14, 28.5, 4, 3, 'Y').rect(14, 28.5, 4, 1, 'y');
+    sparkle(g, 26.5, 5, 3.2, 'w');
+    sparkle(g, 5, 6, 2.2, 'y');
+  },
+  // All In: ortadaki altın para yığını ve üstündeki zarlar, arkada ışık huzmeleri
+  allin: (g) => {
+    for (let i = 0; i < 10; i++) {
+      const a = Math.PI * (1 + i / 9);
+      const [tx, ty] = polar(16, 21, 15.5, a);
+      const [b1x, b1y] = polar(16, 21, 7, a + 0.15);
+      const [b2x, b2y] = polar(16, 21, 7, a - 0.15);
+      g.poly([tx, ty, b1x, b1y, b2x, b2y], i % 2 ? 'Y' : 'y');
+    }
+    g.ellipse(16, 27.5, 14.5, 4, 'Y');
+    const pile: Array<[number, number]> = [[6, 26], [11, 27.5], [16, 28], [21, 27.5], [26, 26], [8.5, 23.2], [13.5, 24.5], [18.5, 24.5], [23.5, 23.2], [11, 20.8], [16, 21.5], [21, 20.8], [16, 18.4]];
+    pile.forEach(([x, y], i) => {
+      g.ellipse(x, y, 5, 2.5, i % 2 ? 'Y' : 'y').ellipse(x, y - 0.5, 4, 1.6, i % 2 ? 'y' : 'n');
+    });
+    isoDie(g, 16, 5.8, 6.2, GOLD_DIE);
+    isoDie(g, 6.5, 14, 4.2);
+    isoDie(g, 25.5, 15, 4);
+    sparkle(g, 27, 4, 3, 'w');
+    sparkle(g, 5, 5, 2.4, 'y');
+  },
+
   // ---------- arayüz: debug dock ve ayarlar ----------
   flask: (g) => {
     g.rect(12, 3, 8, 10, 'c').rect(13, 4, 2, 8, 'w');
@@ -428,6 +736,12 @@ export const PIXEL_ICONS: Record<string, Draw> = {
   next: (g) => {
     g.poly([4, 5, 16, 16, 4, 27, 4, 20, 9, 16, 4, 12], 'y').poly([16, 5, 28, 16, 16, 27, 16, 20, 21, 16, 16, 12], 'y');
   },
+  pause: (g) => {
+    g.rect(5, 4, 8, 24, 'y').rect(19, 4, 8, 24, 'y').rect(5, 4, 8, 3, 'w').rect(19, 4, 8, 3, 'w');
+  },
+  ffwd: (g) => {
+    g.poly([3, 5, 15, 16, 3, 27], 'y').poly([15, 5, 27, 16, 15, 27], 'y').rect(27, 5, 3, 22, 'w');
+  },
   freemp: (g) => {
     g.poly([16, 1, 26, 17, 26, 21, 16, 30, 6, 21, 6, 17], 'u').poly([16, 9, 22, 18, 20, 24, 12, 24, 10, 18], 'U');
     g.ring(12.5, 18.5, 3.2, 'w', 1.4).ring(19.5, 18.5, 3.2, 'w', 1.4);
@@ -437,6 +751,13 @@ export const PIXEL_ICONS: Record<string, Draw> = {
   drop: (g) => {
     g.poly([16, 1, 25, 16, 25, 22, 16, 30, 7, 22, 7, 16], 'r').poly([16, 10, 21, 18, 20, 25, 13, 25, 12, 18], 'R');
     g.rect(11, 18, 2, 4, 'w');
+  },
+  // Zehir: YEŞİL damla içinde kafatası + yan kabarcıklar (kanama damlasından, kırmızı 'drop', ayrışsın)
+  poison: (g) => {
+    g.poly([16, 1, 26, 15, 27, 23, 16, 31, 5, 23, 6, 15], 'g').poly([16, 1, 26, 15, 27, 23, 16, 31, 18, 22, 19, 12], 'G');
+    g.disc(16, 17, 5.6, 'w').rect(13, 21, 6, 4, 'w').rect(13, 24, 6, 1, 'l');
+    g.disc(13.8, 17, 1.7, 'o').disc(18.2, 17, 1.7, 'o').rect(15, 20, 2, 2, 'o');
+    g.rect(9, 14, 2, 4, 'z').disc(27, 6, 2.4, 'g').disc(5, 8, 1.8, 'g');
   },
   flame: (g) => {
     flame(g, 16, 31, 30, 12, 'f', 'y', 'w');
@@ -521,7 +842,15 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     g.line(16, 8, 16, 23, 'c', 2).line(10, 12, 16, 17, 'c', 2).line(22, 12, 16, 17, 'c', 2);
   },
   finger: (g) => {
-    g.rect(6, 16, 18, 13, 'n').rect(12, 2, 6, 18, 'n').rect(12, 2, 2, 18, 'Y').rect(6, 12, 5, 8, 'n').rect(20, 12, 5, 8, 'n').rect(2, 18, 5, 7, 'n');
+    // çelik eldiven, orta parmak havada (Taunt)
+    g.poly([8, 29, 8, 26, 24, 26, 24, 29], 'd').poly([7, 31, 9, 26, 23, 26, 25, 31], 'd').rect(8, 27, 16, 1.5, 'Y').rect(10, 29, 12, 1, 'k');
+    g.disc(11, 28.5, 0.9, 'y').disc(21, 28.5, 0.9, 'y');
+    g.poly([6, 19, 8, 15, 24, 15, 26, 19, 25, 26, 7, 26], 'm').poly([6, 19, 8, 15, 13, 15, 11, 26, 7, 26], 'l');
+    g.rect(14.5, 2, 6.2, 15, 'm').rect(14.5, 2, 2, 15, 'l').rect(18.7, 2, 2, 15, 'd');
+    g.disc(17.6, 3.6, 3.1, 'm').disc(16.6, 3, 1.4, 'w').rect(14.5, 6.5, 6.2, 0.9, 'd').rect(14.5, 10.5, 6.2, 0.9, 'd').rect(14.5, 14, 6.2, 0.9, 'd');
+    for (const [x, y] of [[10, 17.5], [23, 17.5]] as const) g.disc(x, y, 2.4, 'l').disc(x + 0.5, y + 0.7, 1.3, 'm');
+    g.poly([5, 23, 8, 19, 10, 26, 7, 28], 'm').poly([5, 23, 8, 19, 8, 23, 6, 25], 'l');
+    g.line(11, 22, 22, 22, 'd', 1).line(11, 24.5, 22, 24.5, 'd', 1);
   },
 };
 

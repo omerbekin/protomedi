@@ -1,9 +1,36 @@
-import type { Attribute, CombatantData, CombatantDef, Formulas, Stats } from './types';
+import type { Attribute, Attributes, CombatantData, CombatantDef, Formulas, Stats } from './types';
 
-/** Temel özelliklerden türev stat'ları hesaplar (can, mana, hız, dodge, kritik). */
+/** Primary bonusu aktif mi: primary stat, dört statın en yükseğine eşit veya üstündeyse (eşitlik dahil). */
+export function isPrimaryActive(attrs: Attributes, primary: Attribute | undefined): boolean {
+  if (!primary) return false;
+  return attrs[primary] >= Math.max(attrs.str, attrs.int, attrs.dex, attrs.luck);
+}
+
+/** Kaçınma (evasion): tam sayı adımlı (her dexPerEvasionStep Dex = +evasionPerStep), evasionMax üst sınırlı. */
+export function evasionOf(dex: number, formulas: Formulas): number {
+  const a = formulas.attributes;
+  const steps = Math.floor(Math.max(0, dex) / a.dexPerEvasionStep);
+  // Tam sayı yüzde adımı: kayan nokta artığı olmasın
+  return Math.min(a.evasionMax, Math.round(steps * a.evasionPerStep * 10000) / 10000);
+}
+
+/** İsabet (accuracy): taban + Luck başına artış; negatife düşmez. */
+export function accuracyOf(luck: number, formulas: Formulas, base?: number): number {
+  const a = formulas.attributes;
+  return Math.max(0, (base ?? a.accuracyBase) + a.accuracyPerLuck * luck);
+}
+
+/** Bir vuruşun isabet şansı (0-1): saldırganın accuracy'si - hedefin evasion'ı, [0, hit.max] arasında (alt sınır yok: %0 olabilir). */
+export function hitChance(attacker: Pick<Stats, 'accuracy'>, defender: Pick<Stats, 'evasion'>, formulas: Formulas): number {
+  return Math.min(formulas.hit.max, Math.max(0, attacker.accuracy - defender.evasion));
+}
+
+/** Temel özelliklerden türev stat'ları hesaplar (can, mana, hız, yenilenmeler, kritik, isabet, kaçınma, primary bonusu). */
 export function deriveStats(data: CombatantData, formulas: Formulas): Stats {
   const a = formulas.attributes;
   const { str, int, dex, luck } = data.attributes;
+  const active = isPrimaryActive(data.attributes, data.primary);
+  const bonus = formulas.primaryBonus;
   const derived: Stats = {
     str,
     int,
@@ -12,12 +39,21 @@ export function deriveStats(data: CombatantData, formulas: Formulas): Stats {
     hp: Math.round(a.hpBase + a.hpPerStr * str),
     mp: Math.round(a.mpBase + a.mpPerInt * int),
     spd: Math.max(1, Math.round(a.spdBase + a.spdPerDex * dex)),
-    mpRegen: data.mpRegen,
+    mpRegen: Math.round(a.mpRegenPerInt * int),
+    hpRegen: a.hpRegenPerStr * str,
     armor: data.armor,
     magicArmor: data.magicArmor,
     critChance: a.critChanceBase + a.critChancePerLuck * luck,
-    critMult: a.critMultBase + a.critMultPerLuck * luck,
-    dodge: a.dodgePerDex * dex,
+    critMult: a.critMult,
+    accuracy: accuracyOf(luck, formulas, data.accuracyBase),
+    evasion: evasionOf(dex, formulas),
+    ...(data.primary ? { primary: data.primary } : {}),
+    primaryActive: active,
+    resilience: active && data.primary === 'str' ? bonus.str.resilienceChance : 0,
+    hunterMark: active && data.primary === 'dex' ? bonus.dex.hunterMarkMult : 0,
+    manaEcho: active && data.primary === 'int' ? bonus.int.manaEchoChance : 0,
+    spellPowerMult: 1,
+    surviveChance: active && data.primary === 'luck' ? bonus.luck.surviveChance : 0,
   };
   return { ...derived, ...(data.overrides ?? {}) };
 }
@@ -34,6 +70,7 @@ export function buildDef(data: CombatantData, formulas: Formulas): CombatantDef 
     frontPriority: data.frontPriority,
     ...(data.role ? { role: data.role } : {}),
     attributes: { ...data.attributes },
+    ...(data.primary ? { primary: data.primary } : {}),
     stats: deriveStats(data, formulas),
     skills: [...data.skills],
     ...(data.tags ? { tags: [...data.tags] } : {}),
@@ -43,7 +80,7 @@ export function buildDef(data: CombatantData, formulas: Formulas): CombatantDef 
 }
 
 /** Bir özelliğin skill gücü: değer x katsayı (hasar, şifa ve kalkan için). */
-export const attributePower = (stats: Stats, scale: Attribute, formulas: Formulas): number => stats[scale] * formulas.scaling[scale];
+export const attributePower = (stats: Stats, scale: Attribute, formulas: Formulas): number => stats[scale] * formulas.scaling[scale] * (stats.spellPowerMult ?? 1);
 
 /** Zırhın hasarı yüzdesel azaltma oranı (0-1): armor / (armor + k). Artan zırhta getiri azalır. */
 export function armorReduction(armor: number, formulas: Formulas): number {

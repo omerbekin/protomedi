@@ -9,6 +9,7 @@ import antimage from '../../data/classes/antimage.json';
 import archer from '../../data/classes/archer.json';
 import defender from '../../data/classes/defender.json';
 import druid from '../../data/classes/druid.json';
+import gambler from '../../data/classes/gambler.json';
 import mage from '../../data/classes/mage.json';
 import paladin from '../../data/classes/paladin.json';
 import undead from '../../data/classes/undead.json';
@@ -45,6 +46,7 @@ const classData: Record<string, CombatantData> = {
   druid,
   defender,
   antimage,
+  gambler,
 } as unknown as Record<string, CombatantData>;
 
 /** Oynanabilir tüm class'lar: iki taraf da aynı havuzdan çeker, görseli sınıfa bağlıdır. */

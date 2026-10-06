@@ -4,7 +4,15 @@ import type { AiConfig } from '../src/engine';
 
 const ai = content.aiConfig;
 const turnsBattle = (seed = 1) => new Battle(content.battleSetup('first-battle', seed, 'turns'));
-const testBattle = (seed = 1) => new Battle(content.battleSetup('first-battle', seed, 'test'));
+/** Stat toplamı 30 olduğundan canlar düşük; AI senaryoları (can oranı, öldürme eşiği) sağlam birimler varsayar: can en az 100. */
+const sturdy = (b: Battle): Battle => {
+  for (const c of b.combatants) {
+    c.maxHp = Math.max(c.maxHp, 100);
+    c.hp = c.maxHp;
+  }
+  return b;
+};
+const testBattle = (seed = 1) => sturdy(new Battle(content.battleSetup('first-battle', seed, 'test')));
 
 const E_WARRIOR = 'enemy-0';
 const E_ARCHER = 'enemy-1';
@@ -55,7 +63,7 @@ describe('yapay zeka: öncelik 1 - öldürebiliyorsa öldür', () => {
     const b = testBattle();
     b.get(UNDEAD)!.hp = 25; // oran düşük ama 20 can bedeli ödeyebilir
     b.get(E_MAGE)!.hp = 30; // Blood Rite 14*2.4-5 ≈ 28.6; Soul Drain 14-5=9. Sadece Blood Rite öldürür
-    b.get(E_MAGE)!.hp = 25;
+    b.get(E_MAGE)!.hp = 20; // Mage kısa canlı: Blood Rite ortalaması 20 canı aşar
     const choice = chooseAction(b, UNDEAD, ai);
     expect(choice).toMatchObject({ skillId: 'blood_rite', targetUid: E_MAGE, reason: 'kill' });
   });
@@ -224,7 +232,7 @@ describe('yapay zeka: genel kurallar', () => {
 describe('yapay zeka: yeni sınıflar ve menzil/taunt kuralları', () => {
   const make = (party: string[], enemies: string[], seed = 1) => {
     const b = new Battle(content.battleSetup('first-battle', seed, 'test', { party, enemies }));
-    return b;
+    return sturdy(b);
   };
   const uid = (b: Battle, side: 'party' | 'enemy', defId: string) => b.combatants.find((c) => c.side === side && c.defId === defId)!.uid;
 
@@ -310,7 +318,7 @@ describe('yapay zeka: yeni sınıflar ve menzil/taunt kuralları', () => {
     if (choice && b.skill(choice.skillId)!.target === 'single_enemy') expect(choice.targetUid).toBe(uid(b, 'enemy', 'defender')); // alan skill'leri taunt'tan etkilenmez
   });
 
-  it('YZ ile oynanan 8 sınıflı rastgele savaşlar hep geçerli hamle yapar ve sonuçlanır', () => {
+  it('YZ ile oynanan tüm sınıflı rastgele savaşlar hep geçerli hamle yapar ve sonuçlanır', () => {
     for (let seed = 1; seed <= 60; seed++) {
       const b = new Battle(content.battleSetup('random-battle', seed, 'turns'));
       for (let i = 0; i < 500 && !b.winner; i++) {
@@ -326,7 +334,7 @@ describe('yapay zeka: yeni sınıflar ve menzil/taunt kuralları', () => {
 describe('yapay zeka: 4. (güçlü) skill ve mana yakma hedefi', () => {
   const make = (party: string[], enemies: string[], seed = 1) => {
     const b = new Battle(content.battleSetup('random-battle', seed, 'turns', { party, enemies }));
-    return b;
+    return sturdy(b);
   };
   const uid = (b: Battle, side: 'party' | 'enemy', defId: string) => b.combatants.find((c) => c.side === side && c.defId === defId)!.uid;
   const actFirst = (b: Battle, defId: string) => {

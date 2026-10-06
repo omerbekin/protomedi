@@ -1,5 +1,5 @@
 {
-  "_not": "Etkiler: damage (damageType physical|magic, element physical|fire|ice|holy|dark|nature|arcane (yalnızca renk/yazı), scale str|int|dex|luck, power; opsiyonel ignoreDefense, lifesteal, bonusVsTag, others (column_enemies'te şeritteki diğerlerine hasarın bu kadarı), bonusPerMissingMana, bonusFromShield {ratio, consume}), heal, hot (tur bazlı şifa: turns), shield (shieldType 'magic' ise yalnızca büyü hasarını emer), summon (lifespan: kendi tur sayısı), manaBurn, taunt (turns, breakRatio: taunt'lı bu oranda can kaybedince biter), guard (turns, share). scale: etkinin hangi temel özelliğe (str/int/dex/luck) bağlı olduğu. motion melee olan skill'ler yalnızca düşmanın en öndeki 2 canlı birimine vurabilir. cooldown: kullanıcının kendi tur sayısıyla bekleme. motion/fx/icon yalnızca görsel. Sayılar GEÇİCİDİR. Çağrı skill'inde oyuncu boş yuvayı seçer. HEDEF BİÇİMLERİ: area_enemies + area {radius 1|2}: oyuncu merkez düşmanı seçer; radius 1 = merkez + önü/arkası/sağı/solu (artı, çapraz yok), radius 2 = öne/arkaya/sağa/sola 2'şer + çaprazlara 1'er. column_enemies: seçilen düşmanın şeridindeki herkes (seçilene tam, diğerlerine others kadar). Dizilim: sıra (derinlik) x şerit; motion melee olanlar yalnızca en öndeki dolu sıraya vurur. Çağrı skill'inde oyuncu boş yuvayı seçer. shield efektinde self: true ise kalkan hedefe değil kullanıcıya gider (Shield Bash). Alan/şerit skill'leri boş hücreye de atılabilir (useSkill'in slot parametresi). summon efektinde onEnemyBoard: true ise birim düşmanın tahtasına çağrılır (sahibi yine çağıranın tarafı). Skill'de ignoreFrontRow: true ise yakın dövüş 'yalnızca ön sıradan' kuralından muaf (dash/charge/sızan çağrılar). BUFF/DEBUFF: {type:'status', status, turns, self?} (data/statuses.json: slow, haste, wound, stun, fortify, blessed...). YER ETKİSİ: {type:'ground', ground, turns, scale, power} (data/grounds.json: poison, burning); skill'in kapsadığı hücrelere bırakılır. {type:'selfDamage', ratio}: kullanıcıya maks canının ratio'su kadar hasar. target 'everyone': herkese gider, her etki 'side' (allies|enemies) ile ya da varsayılanla (hasar/durum düşmana, şifa/kalkan dosta) taraf seçer. Hasar etkisinde falloff: çok hedefli vuruşta her yeni hedef bir öncekinin falloff katı hasar alır. Skill'de ignoreReach: melee olsa da menzil/ön sıra sınırı yok (charge). target 'random_enemies' + count: rastgele (seed'li) farklı count düşmana gider. skyCenter: yukarıdan düşen etki seçilen alanın merkezine tek büyük olarak düşer. skyStagger: hedeflere sırayla (rastgele sıra, ms arayla) başlar. motion 'ground' (yerden çıkan etki: Blood Rite ağzı), 'whip' (kırbaç). taunt etkisinde allyDamageMult: taunt sürerken taunt'lı olmayan dostlar bu çarpanla hasar alır. reach: yakın dövüş menzili bonusu (satır); kullanıcı ön sıranın reach kadar gerisinden vurabilir ve düşmanın meleeRows+reach ön sırasına ulaşır. revive/dead_ally: düşmüş dostu olduğu yerde maks can/mana oranıyla diriltir. sfx: skill'in animasyonunun çaldığı ses adları (data/audio.json). vfx bunlardan yalnızca listede olanları çalar.",
+  "_not": "Etkiler: damage (damageType physical|magic, element physical|fire|ice|holy|dark|nature|arcane (yalnızca renk/yazı), scale str|int|dex|luck, power; opsiyonel ignoreDefense, lifesteal, bonusVsTag, others (column_enemies'te şeritteki diğerlerine hasarın bu kadarı), bonusPerMissingMana, bonusFromShield {ratio, consume}), heal, hot (tur bazlı şifa: turns), shield (shieldType 'magic' ise yalnızca büyü hasarını emer), summon (lifespan: kendi tur sayısı), manaBurn, taunt (turns, breakRatio: taunt'lı bu oranda can kaybedince biter), guard (turns, share). scale: etkinin hangi temel özelliğe (str/int/dex/luck) bağlı olduğu. motion melee olan skill'ler yalnızca düşmanın en öndeki 2 canlı birimine vurabilir. cooldown: kullanıcının kendi tur sayısıyla bekleme. motion/fx/icon yalnızca görsel. Sayılar GEÇİCİDİR. Çağrı skill'inde oyuncu boş yuvayı seçer. HEDEF BİÇİMLERİ: area_enemies + area {radius 1|2}: oyuncu merkez düşmanı seçer; radius 1 = merkez + önü/arkası/sağı/solu (artı, çapraz yok), radius 2 = öne/arkaya/sağa/sola 2'şer + çaprazlara 1'er. column_enemies: seçilen düşmanın şeridindeki herkes (seçilene tam, diğerlerine others kadar). Dizilim: sıra (derinlik) x şerit; motion melee olanlar yalnızca en öndeki dolu sıraya vurur. Çağrı skill'inde oyuncu boş yuvayı seçer. shield efektinde self: true ise kalkan hedefe değil kullanıcıya gider (Shield Bash). Alan/şerit skill'leri boş hücreye de atılabilir (useSkill'in slot parametresi). summon efektinde onEnemyBoard: true ise birim düşmanın tahtasına çağrılır (sahibi yine çağıranın tarafı). Skill'de ignoreFrontRow: true ise yakın dövüş 'yalnızca ön sıradan' kuralından muaf (dash/charge/sızan çağrılar). BUFF/DEBUFF: {type:'status', status, turns, self?} (data/statuses.json: slow, haste, wound, stun, fortify, blessed...). YER ETKİSİ: {type:'ground', ground, turns, scale, power} (data/grounds.json: poison, burning); skill'in kapsadığı hücrelere bırakılır. {type:'selfDamage', ratio}: kullanıcıya maks canının ratio'su kadar hasar. target 'everyone': herkese gider, her etki 'side' (allies|enemies) ile ya da varsayılanla (hasar/durum düşmana, şifa/kalkan dosta) taraf seçer. Hasar etkisinde falloff: çok hedefli vuruşta her yeni hedef bir öncekinin falloff katı hasar alır. Skill'de ignoreReach: melee olsa da menzil/ön sıra sınırı yok (charge). target 'random_enemies' + count: rastgele (seed'li) farklı count düşmana gider. skyCenter: yukarıdan düşen etki seçilen alanın merkezine tek büyük olarak düşer. skyStagger: hedeflere sırayla (rastgele sıra, ms arayla) başlar. motion 'ground' (yerden çıkan etki: Blood Rite ağzı), 'whip' (kırbaç). taunt etkisinde allyDamageMult: taunt sürerken taunt'lı olmayan dostlar bu çarpanla hasar alır. reach: yakın dövüş menzili bonusu (satır); kullanıcı ön sıranın reach kadar gerisinden vurabilir ve düşmanın meleeRows+reach ön sırasına ulaşır. revive/dead_ally: düşmüş dostu olduğu yerde maks can/mana oranıyla diriltir. sfx: skill'in animasyonunun çaldığı ses adları (data/audio.json). vfx bunlardan yalnızca listede olanları çalar. KUMAR (Gambler): hasar etkisinde repeatChance (0-1): her hedefe vuruştan sonra bu ihtimalle aynı vuruş bir kez daha (çifte vuruş). Hasar etkisinde bet {resource hp|mp, ratio, winChance, winMult, loseMult (varsayılan 1, 0 = iska), perStake}: skill başına bir zar; bahis hp ise maks canın ratio'su (canı en fazla 1'e indirir), mp ise bedel düşüldükten sonra KALAN MP'nin ratio'su; kazanırsa hasar winMult + perStake x bahis katı ve bahis geri kalır, kaybederse loseMult katı ve bahis kaybedilir. {type:'randomStatus', options:[{status, turns, weight}]}: vurulan her hedefe ağırlıklı zarla tek bir durum.",
   "melee_attack": {
     "id": "melee_attack",
     "name": "Double Strike",
@@ -62,7 +62,7 @@
   "holy_strike": {
     "id": "holy_strike",
     "name": "Holy Strike",
-    "icon": "holystrike",
+    "icon": "judgehammer",
     "target": "single_enemy",
     "cost": {
       "resource": "mp",
@@ -75,12 +75,16 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.75,
+        "power": 0.9,
         "element": "holy"
       }
     ],
     "skyFx": "light",
-    "vfx": "holysword"
+    "vfx": "hammerfall",
+    "sfx": [
+      "hammerWhoosh",
+      "hammerSlam"
+    ]
   },
   "radiance": {
     "id": "radiance",
@@ -98,23 +102,27 @@
       {
         "type": "heal",
         "scale": "int",
-        "power": 0.95
+        "power": 1.425
       },
       {
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.65,
+        "power": 0.975,
         "element": "holy"
       }
     ],
     "skyFx": "light",
-    "skyStagger": 130
+    "skyStagger": 130,
+    "sfx": [
+      "lightSwell",
+      "choirAh"
+    ]
   },
   "judgment": {
     "id": "judgment",
     "name": "Judgment",
-    "icon": "judgehammer",
+    "icon": "judgebeam",
     "target": "area_enemies",
     "area": {
       "radius": 1
@@ -137,7 +145,12 @@
         "power": 0.85
       }
     ],
-    "vfx": "judgment"
+    "vfx": "judgment",
+    "sfx": [
+      "hammerWhoosh",
+      "hammerSlam",
+      "fireCrackle"
+    ]
   },
   "fire_bolt": {
     "id": "fire_bolt",
@@ -159,7 +172,12 @@
         "element": "fire"
       }
     ],
-    "vfx": "fireball"
+    "vfx": "fireball",
+    "sfx": [
+      "flameIgnite",
+      "flameRoar",
+      "fireBlast"
+    ]
   },
   "blizzard": {
     "id": "blizzard",
@@ -179,14 +197,19 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.0,
+        "power": 1,
         "element": "ice"
       }
     ],
     "area": {
       "radius": 1
     },
-    "vfx": "blizzard"
+    "vfx": "blizzard",
+    "sfx": [
+      "windHowl",
+      "hailPatter",
+      "iceCrack"
+    ]
   },
   "meteor": {
     "id": "meteor",
@@ -206,7 +229,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.0,
+        "power": 1.15,
         "element": "fire"
       },
       {
@@ -214,14 +237,19 @@
         "ground": "burning",
         "turns": 2,
         "scale": "int",
-        "power": 0.3
+        "power": 0.345
       }
     ],
     "area": {
       "radius": 1
     },
     "skyCenter": true,
-    "vfx": "meteor"
+    "vfx": "meteor",
+    "sfx": [
+      "meteorWhistle",
+      "bigBoom",
+      "fireCrackle"
+    ]
   },
   "mana_barrier": {
     "id": "mana_barrier",
@@ -242,7 +270,10 @@
         "power": 1.1
       }
     ],
-    "vfx": "barrier"
+    "vfx": "barrier",
+    "sfx": [
+      "magicHum"
+    ]
   },
   "blood_rite": {
     "id": "blood_rite",
@@ -260,12 +291,18 @@
       {
         "type": "damage",
         "damageType": "magic",
-        "scale": "str",
-        "power": 2.3,
+        "scale": "int",
+        "power": 1.955,
         "element": "dark"
       }
     ],
-    "vfx": "bloodhands"
+    "vfx": "bloodhands",
+    "sfx": [
+      "darkChant",
+      "earthCrack",
+      "clawRake",
+      "bloodSplat"
+    ]
   },
   "wail_of_the_dead": {
     "id": "wail_of_the_dead",
@@ -283,7 +320,7 @@
       {
         "type": "damage",
         "damageType": "magic",
-        "scale": "str",
+        "scale": "int",
         "power": 1.25,
         "element": "dark"
       },
@@ -291,14 +328,17 @@
         "type": "ground",
         "ground": "poison",
         "turns": 2,
-        "scale": "str",
+        "scale": "int",
         "power": 0.4
       }
     ],
     "area": {
       "radius": 1
     },
-    "vfx": "wail"
+    "vfx": "wail",
+    "sfx": [
+      "ghostWail"
+    ]
   },
   "quick_shot": {
     "id": "quick_shot",
@@ -325,7 +365,12 @@
         "self": true
       }
     ],
-    "vfx": "arrowshot"
+    "vfx": "arrowshot",
+    "sfx": [
+      "bowTwang",
+      "arrowWhoosh",
+      "arrowThunk"
+    ]
   },
   "piercing_arrow": {
     "id": "piercing_arrow",
@@ -348,7 +393,12 @@
         "falloff": 0.7
       }
     ],
-    "vfx": "pierce"
+    "vfx": "pierce",
+    "sfx": [
+      "heavyTwang",
+      "arrowWhoosh",
+      "arrowThunk"
+    ]
   },
   "arrow_rain": {
     "id": "arrow_rain",
@@ -374,7 +424,12 @@
     "area": {
       "radius": 2
     },
-    "vfx": "arrowrain"
+    "vfx": "arrowrain",
+    "sfx": [
+      "bowTwang",
+      "arrowShower",
+      "arrowThunk"
+    ]
   },
   "aimed_shot": {
     "id": "aimed_shot",
@@ -397,7 +452,13 @@
         "ignoreDefense": 0.5
       }
     ],
-    "vfx": "aimed"
+    "vfx": "aimed",
+    "sfx": [
+      "bowDraw",
+      "heavyTwang",
+      "arrowWhoosh",
+      "arrowThunk"
+    ]
   },
   "thorn_whip": {
     "id": "thorn_whip",
@@ -505,7 +566,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.0,
+        "power": 1,
         "element": "nature"
       }
     ],
@@ -522,7 +583,7 @@
   "taunt": {
     "id": "taunt",
     "name": "Taunt",
-    "icon": "taunt",
+    "icon": "finger",
     "target": "self",
     "cost": {
       "resource": "mp",
@@ -544,7 +605,10 @@
         "power": 0.3
       }
     ],
-    "vfx": "taunt"
+    "vfx": "taunt",
+    "sfx": [
+      "warShout"
+    ]
   },
   "guard": {
     "id": "guard",
@@ -565,11 +629,14 @@
         "share": 0.5
       }
     ],
-    "vfx": "guardlink"
+    "vfx": "guardlink",
+    "sfx": [
+      "testudo"
+    ]
   },
   "mana_burn": {
     "id": "mana_burn",
-    "name": "Mana Burn",
+    "name": "Mana Steal",
     "icon": "manaburn",
     "target": "single_enemy",
     "cost": {
@@ -592,7 +659,11 @@
         "gainRatio": 0.5
       }
     ],
-    "vfx": "manaburn"
+    "vfx": "manasteal",
+    "sfx": [
+      "manaSizzle",
+      "energySlurp"
+    ]
   },
   "drain_field": {
     "id": "drain_field",
@@ -609,14 +680,19 @@
     "effects": [
       {
         "type": "manaBurn",
-        "amount": 14.0
+        "amount": 14
       }
     ],
     "area": {
       "radius": 2
     },
     "skyFx": "void",
-    "vfx": "drainfield"
+    "vfx": "drainfield",
+    "sfx": [
+      "voidSuction",
+      "voidPulse",
+      "energySlurp"
+    ]
   },
   "void_strike": {
     "id": "void_strike",
@@ -636,11 +712,15 @@
         "damageType": "magic",
         "scale": "int",
         "power": 1.9,
-        "bonusPerMissingMana": 1.0,
+        "bonusPerMissingMana": 1,
         "element": "arcane"
       }
     ],
-    "vfx": "voidstrike"
+    "vfx": "voidstrike",
+    "sfx": [
+      "voidPulse",
+      "implode"
+    ]
   },
   "spell_ward": {
     "id": "spell_ward",
@@ -663,7 +743,10 @@
         "bonusPerMana": 0.35
       }
     ],
-    "vfx": "spellward"
+    "vfx": "spellward",
+    "sfx": [
+      "wardHum"
+    ]
   },
   "root_smash": {
     "id": "root_smash",
@@ -681,11 +764,50 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.0
+        "power": 1.15
       }
     ],
     "reach": 1,
-    "vfx": "woodsmash"
+    "vfx": "woodsmash",
+    "sfx": [
+      "woodCreak",
+      "woodSmash",
+      "rootsRumble",
+      "leafRustle"
+    ]
+  },
+  "thorn_shield": {
+    "id": "thorn_shield",
+    "name": "Thorn Shield",
+    "icon": "thornshield",
+    "target": "self",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "cast",
+    "fx": "#8bd06a",
+    "effects": [
+      {
+        "type": "shield",
+        "scale": "str",
+        "power": 1,
+        "self": true
+      },
+      {
+        "type": "thorns",
+        "turns": 3,
+        "scale": "str",
+        "power": 0.5
+      }
+    ],
+    "cooldown": 4,
+    "vfx": "thornshield",
+    "sfx": [
+      "thornCreak",
+      "thornSprout",
+      "thornStab"
+    ]
   },
   "raise_dead": {
     "id": "raise_dead",
@@ -707,7 +829,13 @@
         "onEnemyBoard": true
       }
     ],
-    "vfx": "raise"
+    "vfx": "raise",
+    "sfx": [
+      "graveMoan",
+      "earthCrack",
+      "boneClatter",
+      "thud"
+    ]
   },
   "skeleton_strike": {
     "id": "skeleton_strike",
@@ -725,10 +853,44 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.0
+        "power": 1.15
       }
     ],
-    "vfx": "bonestrike"
+    "vfx": "bonestrike",
+    "sfx": [
+      "rustySlash"
+    ]
+  },
+  "skeleton_slash": {
+    "id": "skeleton_slash",
+    "name": "Bone Slash",
+    "icon": "boneslash",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "melee",
+    "fx": "#d9d4c0",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 0.9
+      }
+    ],
+    "splash": {
+      "pattern": "perpendicular",
+      "mult": 1
+    },
+    "cooldown": 3,
+    "vfx": "boneslash",
+    "sfx": [
+      "boneSlashWhoosh",
+      "boneSlashHit",
+      "boneSlashCrack"
+    ]
   },
   "charge": {
     "id": "charge",
@@ -749,7 +911,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 2.0
+        "power": 2
       },
       {
         "type": "status",
@@ -759,9 +921,8 @@
     ],
     "vfx": "charge",
     "sfx": [
-      "armorCharge",
-      "armorCrash",
-      "stunChime"
+      "chargeRush",
+      "chargeSlam"
     ]
   },
   "abyssal_cry": {
@@ -779,7 +940,7 @@
     "effects": [
       {
         "type": "selfDamage",
-        "ratio": 0.2
+        "ratio": 0.3
       },
       {
         "type": "status",
@@ -808,7 +969,7 @@
       {
         "type": "damage",
         "damageType": "physical",
-        "scale": "str",
+        "scale": "int",
         "power": 1.1
       },
       {
@@ -817,7 +978,11 @@
         "turns": 2
       }
     ],
-    "vfx": "bonethrow"
+    "vfx": "bonethrow",
+    "sfx": [
+      "boneSpin",
+      "boneImpact"
+    ]
   },
   "tremor_slam": {
     "id": "tremor_slam",
@@ -847,7 +1012,11 @@
         "turns": 2
       }
     ],
-    "vfx": "tremor"
+    "vfx": "tremor",
+    "sfx": [
+      "effortHah",
+      "armorStomp"
+    ]
   },
   "fist_crush": {
     "id": "fist_crush",
@@ -868,10 +1037,14 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.8
+        "power": 2.34
       }
     ],
-    "vfx": "fistcrush"
+    "vfx": "fistcrush",
+    "sfx": [
+      "fistWhoosh",
+      "punchImpact"
+    ]
   },
   "resurrection": {
     "id": "resurrection",
@@ -892,6 +1065,153 @@
         "mpRatio": 0.5
       }
     ],
-    "vfx": "resurrect"
+    "vfx": "resurrect",
+    "sfx": [
+      "heartbeat",
+      "gasp",
+      "choirAh"
+    ]
+  },
+  "loaded_dice": {
+    "id": "loaded_dice",
+    "name": "Loaded Dice",
+    "icon": "loadeddice",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "ranged",
+    "fx": "#e8d9a8",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "luck",
+        "power": 0.91,
+        "repeatChance": 0.25
+      }
+    ],
+    "vfx": "loadeddice",
+    "sfx": [
+      "diceShake",
+      "diceTable"
+    ]
+  },
+  "high_stakes": {
+    "id": "high_stakes",
+    "name": "High Stakes",
+    "icon": "highstakes",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 6
+    },
+    "cooldown": 2,
+    "motion": "cast",
+    "fx": "#c0203a",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "luck",
+        "power": 1.17,
+        "bet": {
+          "resource": "hp",
+          "ratio": 0.15,
+          "winChance": 0.5,
+          "winMult": 2,
+          "loseMult": 0.6
+        }
+      }
+    ],
+    "vfx": "duelbet",
+    "sfx": [
+      "duelDraw",
+      "duelCut"
+    ]
+  },
+  "card_trick": {
+    "id": "card_trick",
+    "name": "Card Trick",
+    "icon": "cardtrick",
+    "target": "random_enemies",
+    "count": 2,
+    "cost": {
+      "resource": "mp",
+      "amount": 8
+    },
+    "cooldown": 2,
+    "motion": "ranged",
+    "fx": "#f2f2f2",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "luck",
+        "power": 1.04
+      },
+      {
+        "type": "randomStatus",
+        "options": [
+          {
+            "status": "slow",
+            "turns": 2,
+            "weight": 2
+          },
+          {
+            "status": "wound",
+            "turns": 2,
+            "weight": 2
+          },
+          {
+            "status": "stun",
+            "turns": 1,
+            "weight": 1
+          }
+        ]
+      }
+    ],
+    "vfx": "cardfan",
+    "sfx": [
+      "cardFlick",
+      "cardSlice"
+    ]
+  },
+  "all_in": {
+    "id": "all_in",
+    "name": "All In",
+    "icon": "allin",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 8
+    },
+    "cooldown": 4,
+    "motion": "cast",
+    "fx": "#ffd166",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "luck",
+        "power": 1.3,
+        "bet": {
+          "resource": "mp",
+          "ratio": 1,
+          "winChance": 0.5,
+          "winMult": 2.6,
+          "loseMult": 0,
+          "perStake": 0.1
+        }
+      }
+    ],
+    "vfx": "allin",
+    "sfx": [
+      "heartbeatRise",
+      "diceRoll",
+      "allInSlam",
+      "coinSpill"
+    ]
   }
 }

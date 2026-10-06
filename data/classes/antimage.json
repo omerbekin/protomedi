@@ -6,14 +6,14 @@
   "logo": "nullsphere",
   "frontPriority": 3.5,
   "attributes": {
-    "str": 10,
-    "int": 24.0,
-    "dex": 9,
+    "str": 4,
+    "int": 15,
+    "dex": 8,
     "luck": 3
   },
+  "primary": "int",
   "armor": 4,
   "magicArmor": 20,
-  "mpRegen": 3,
   "ai": "antimage",
   "skills": [
     "mana_burn",

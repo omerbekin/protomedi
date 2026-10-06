@@ -6,14 +6,14 @@
   "logo": "bow",
   "frontPriority": 8,
   "attributes": {
-    "str": 10,
-    "int": 10,
-    "dex": 16.0,
-    "luck": 8
+    "str": 3,
+    "int": 6,
+    "dex": 15,
+    "luck": 6
   },
+  "primary": "dex",
   "armor": 5,
   "magicArmor": 0,
-  "mpRegen": 3,
   "ai": "sniper",
   "skills": [
     "quick_shot",

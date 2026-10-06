@@ -73,7 +73,17 @@ export interface VoiceLayer extends LayerBase {
   echo: { delay: number; feedback: number; mix: number };
 }
 
-export type Layer = ToneLayer | NoiseLayer | VoiceLayer;
+/** Gerilmiş tel (yay kirişi, lavta teli): Karplus-Strong. Kısa gürültü patlaması geri beslemeli gecikme hattında dolaşır; `fb` ne kadar küçükse tel o kadar çabuk susar. */
+export interface PluckLayer extends LayerBase {
+  type: 'pluck';
+  f: number;
+  fb: number;
+  bright: number;
+  duration: number;
+  gain: number;
+}
+
+export type Layer = ToneLayer | NoiseLayer | VoiceLayer | PluckLayer;
 
 export interface SfxDef {
   gain: number;
@@ -280,6 +290,36 @@ function synthVoice(ctx: BaseAudioContext, dest: AudioNode, p: VoiceLayer, t: nu
   return p.duration;
 }
 
+function synthPluck(ctx: BaseAudioContext, dest: AudioNode, l: PluckLayer, t: number): number {
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer(ctx);
+  const burst = ctx.createGain();
+  burst.gain.setValueAtTime(1, t);
+  burst.gain.setValueAtTime(0, t + 0.012);
+  const delay = ctx.createDelay(0.2);
+  delay.delayTime.value = 1 / l.f;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = l.bright;
+  lp.Q.value = -3; // rezonans yok: geri besleme döngüsü kararlı kalsın
+  const fb = ctx.createGain();
+  fb.gain.value = l.fb;
+  const out = ctx.createGain();
+  out.gain.setValueAtTime(l.gain, t);
+  out.gain.exponentialRampToValueAtTime(0.0001, t + l.duration);
+  src.connect(burst).connect(delay);
+  delay.connect(lp).connect(fb).connect(delay);
+  // çıkışta da alçak geçiren: ilk gürültü patlamasının tiz kısmı kulağı tırmalamasın
+  const outLp = ctx.createBiquadFilter();
+  outLp.type = 'lowpass';
+  outLp.frequency.value = l.bright;
+  outLp.Q.value = -3;
+  delay.connect(outLp).connect(out).connect(dest);
+  src.start(t);
+  src.stop(t + 0.02);
+  return l.duration;
+}
+
 /** Bir sesi verilen bağlamda çalar; sesin süresini (sn) döndürür. */
 export function synthSfx(ctx: BaseAudioContext, dest: AudioNode, def: SfxDef, t0 = ctx.currentTime): number {
   const out = ctx.createGain();
@@ -288,7 +328,7 @@ export function synthSfx(ctx: BaseAudioContext, dest: AudioNode, def: SfxDef, t0
   let longest = 0;
   for (const layer of def.layers) {
     const t = t0 + (layer.at ?? 0);
-    const d = layer.type === 'tone' ? synthTone(ctx, out, layer, t) : layer.type === 'noise' ? synthNoise(ctx, out, layer, t) : synthVoice(ctx, out, layer, t);
+    const d = layer.type === 'tone' ? synthTone(ctx, out, layer, t) : layer.type === 'noise' ? synthNoise(ctx, out, layer, t) : layer.type === 'pluck' ? synthPluck(ctx, out, layer, t) : synthVoice(ctx, out, layer, t);
     longest = Math.max(longest, (layer.at ?? 0) + d);
   }
   return longest;

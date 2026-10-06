@@ -7,9 +7,10 @@ export const VFX_KINDS = [
   'charge',
   'whirlwind',
   'warcry',
-  'holysword',
   'resurrect',
   'judgment',
+  /** Holy Strike: dev savaş çekici düşer (Judgment'ın eski animasyonu). */
+  'hammerfall',
   'fireball',
   'blizzard',
   'barrier',
@@ -19,6 +20,8 @@ export const VFX_KINDS = [
   'wail',
   'raise',
   'bonestrike',
+  /** Skeleton - Bone Slash: hedef ve yanındakileri kesen geniş kemik savrulması. */
+  'boneslash',
   'arrowshot',
   'pierce',
   'arrowrain',
@@ -28,14 +31,28 @@ export const VFX_KINDS = [
   'rejuvenate',
   'summonroots',
   'woodsmash',
+  /** Treant - Thorn Shield: yerden diken ve kök fırlayıp kalkan olur. */
+  'thornshield',
   'taunt',
   'guardlink',
   'tremor',
   'fistcrush',
-  'manaburn',
+  'manasteal',
   'drainfield',
   'spellward',
   'voidstrike',
+  /** Yedek: Void Strike'ın ilk (iğneli) sürümü; kullanılmıyor, `vfx` verisiyle geri dönülebilir. */
+  'voidstrikespikes',
+  /** Yedek: Holy Strike'ın eski (düşen kılıç) animasyonu. */
+  'holysword',
+  /** Gambler: zar fırlatma, düello bahsi, kart fırlatma, All In. */
+  'loadeddice',
+  'duelbet',
+  'cardfan',
+  'allin',
 ] as const;
+
+/** Kullanılmayan ama bilerek saklanan yedek efektler. */
+export const BACKUP_VFX: readonly string[] = ['voidstrikespikes', 'holysword'];
 
 export type VfxKind = (typeof VFX_KINDS)[number];

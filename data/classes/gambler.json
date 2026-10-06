@@ -1,0 +1,34 @@
+{
+  "id": "gambler",
+  "name": "Gambler",
+  "spriteId": "gambler",
+  "color": "#b8892e",
+  "logo": "gamblerlogo",
+  "frontPriority": 4.5,
+  "attributes": {
+    "str": 6,
+    "int": 5,
+    "dex": 8,
+    "luck": 11
+  },
+  "primary": "luck",
+  "armor": 6,
+  "magicArmor": 0,
+  "ai": "gambler",
+  "skills": [
+    "loaded_dice",
+    "high_stakes",
+    "card_trick",
+    "all_in"
+  ],
+  "passive": {
+    "id": "double_or_nothing",
+    "name": "Double or Nothing",
+    "icon": "doubleornothing",
+    "text": "Damaging skills with a cooldown have a 25% chance to be ready again immediately.",
+    "effect": {
+      "type": "spellEcho",
+      "chance": 0.25
+    }
+  }
+}

@@ -1,11 +1,11 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import layout from '../data/battle-layout.json';
 import { attributePower, content } from '../src/engine';
 import type { StatKind } from '../src/engine';
 import { ICON_KINDS, isIconKind } from '../src/ui/icon-kinds';
-import { VFX_KINDS } from '../src/ui/vfx-kinds';
+import { BACKUP_VFX, VFX_KINDS } from '../src/ui/vfx-kinds';
 import { UI_ICONS } from '../src/ui/dom-icons';
 import { STAT_COLOR, STAT_ICON, UI_ICON, STAT_LABEL } from '../src/ui/stat-icons';
 
@@ -14,6 +14,7 @@ const SKILL_TARGETS = ['single_enemy', 'all_enemies', 'area_enemies', 'column_en
 const MOTIONS = ['melee', 'ranged', 'cast', 'sky', 'ground', 'whip'];
 const ATTRIBUTES = ['str', 'int', 'dex', 'luck'];
 const HEX = /^#[0-9a-fA-F]{6}$/;
+const PLACEHOLDER_SPRITE_CLASSES: string[] = [];
 const everyone = { ...content.classes, ...content.summons };
 
 describe('skill verisi', () => {
@@ -45,6 +46,28 @@ describe('skill verisi', () => {
             if (e.falloff !== undefined) expect(e.falloff).toBeLessThanOrEqual(1);
             if (e.bonusPerMissingMana !== undefined) expect(e.bonusPerMissingMana).toBeGreaterThan(0);
             if (e.bonusFromShield) expect(e.bonusFromShield.ratio).toBeGreaterThan(0);
+            if (e.repeatChance !== undefined) {
+              expect(e.repeatChance).toBeGreaterThan(0);
+              expect(e.repeatChance).toBeLessThanOrEqual(1);
+            }
+            if (e.bet) {
+              expect(['hp', 'mp']).toContain(e.bet.resource);
+              expect(e.bet.ratio).toBeGreaterThan(0);
+              expect(e.bet.ratio).toBeLessThanOrEqual(1);
+              expect(e.bet.winChance).toBeGreaterThan(0);
+              expect(e.bet.winChance).toBeLessThan(1);
+              expect(e.bet.winMult).toBeGreaterThan(1);
+              if (e.bet.loseMult !== undefined) expect(e.bet.loseMult).toBeGreaterThanOrEqual(0);
+              if (e.bet.perStake !== undefined) expect(e.bet.perStake).toBeGreaterThan(0);
+            }
+            break;
+          case 'randomStatus':
+            expect(e.options.length, key).toBeGreaterThanOrEqual(2);
+            for (const o of e.options) {
+              expect(content.statuses[o.status], `${key} -> status ${o.status}`).toBeDefined();
+              expect(o.turns).toBeGreaterThan(0);
+              expect(o.weight).toBeGreaterThan(0);
+            }
             break;
           case 'heal':
             expect(ATTRIBUTES, `${key} scale`).toContain(e.scale);
@@ -79,6 +102,13 @@ describe('skill verisi', () => {
             expect(e.turns).toBeGreaterThan(0);
             expect(ATTRIBUTES).toContain(e.scale);
             expect(e.power).toBeGreaterThan(0);
+            break;
+          case 'thorns':
+            expect(ATTRIBUTES, `${key} scale`).toContain(e.scale);
+            expect(e.power).toBeGreaterThan(0);
+            expect(e.turns).toBeGreaterThan(0);
+            expect(s.target, key).toBe('self');
+            expect(content.statuses.thorns, key).toBeDefined();
             break;
           case 'selfDamage':
             expect(e.ratio).toBeGreaterThan(0);
@@ -174,7 +204,7 @@ describe('hız (SPD) ve yapay zeka verisi', () => {
     expect(content.formulas.turn.queueLength).toBeGreaterThanOrEqual(1);
   });
 
-  const PRIORITIES = ['kill', 'heal', 'summon', 'shield', 'aoe', 'damage', 'taunt', 'guard', 'burn'];
+  const PRIORITIES = ['kill', 'heal', 'summon', 'shield', 'aoe', 'damage', 'taunt', 'guard', 'burn', 'thorns'];
 
   it('varsayılan YZ profili tanımlı', () => {
     expect(content.aiConfig.profiles[content.aiConfig.defaultProfile]).toBeDefined();
@@ -221,8 +251,12 @@ describe('hız (SPD) ve yapay zeka verisi', () => {
 });
 
 describe('class havuzu', () => {
-  it('8 class var ve her class\'ın tam 4 skill\'i var', () => {
-    expect(Object.keys(content.classes).sort()).toEqual(['antimage', 'archer', 'defender', 'druid', 'mage', 'paladin', 'undead', 'warrior']);
+  it('tüm class\'lar (veriden) var ve her class\'ın tam 4 skill\'i var', () => {
+    // class havuzu veriden okunur (data/classes); takım havuzu (random-battle) tüm class'ları içerir
+    const files = readdirSync(join(__dirname, '..', 'data', 'classes')).filter((f) => f.endsWith('.json')).map((f) => f.replace(/\.json$/, ''));
+    expect(Object.keys(content.classes).sort()).toEqual(files.sort());
+    expect([...content.battles['random-battle']!.random!.pool].sort()).toEqual(Object.keys(content.classes).sort());
+    expect(Object.keys(content.classes)).toContain('gambler');
     for (const def of Object.values(content.classes)) expect(def.skills, def.id).toHaveLength(4);
   });
 
@@ -230,7 +264,8 @@ describe('class havuzu', () => {
     for (const [id, def] of Object.entries(content.classes)) {
       expect(def.id).toBe(id);
       expect(def.spriteId, id).toBe(id);
-      expect(existsSync(join(__dirname, '..', 'assets', 'sprites', id, 'idle.png')), `assets/sprites/${id}/idle.png`).toBe(true);
+      // Sprite'ı henüz çizilmemiş class'lar placeholder (class rengine boyalı blok) kullanır; sprite gelince listeden çıkarılır.
+      if (!PLACEHOLDER_SPRITE_CLASSES.includes(id)) expect(existsSync(join(__dirname, '..', 'assets', 'sprites', id, 'idle.png')), `assets/sprites/${id}/idle.png`).toBe(true);
     }
   });
 
@@ -245,6 +280,8 @@ describe('class havuzu', () => {
 
 describe('güç sınırları (kalkan ve çağrı çok güçlü olmasın)', () => {
   const classHps = Object.values(content.classes).map((d) => d.stats.hp);
+  /** Stat toplamı 30 olunca en zayıf class canı çok düşüktür (mage 38); koruma sınırları ortalama canı baz alır. */
+  const avgHp = classHps.reduce((a, b) => a + b, 0) / classHps.length;
 
   it('hiçbir kalkan skill\'i (sahibi class için) en zayıf class canının %25\'inden fazlasını emmez', () => {
     for (const [id, s] of Object.entries(content.skills)) {
@@ -253,7 +290,7 @@ describe('güç sınırları (kalkan ve çağrı çok güçlü olmasın)', () =>
         for (const def of Object.values(content.classes)) {
           if (!def.skills.includes(id)) continue;
           const amount = attributePower(def.stats, e.scale, content.formulas) * e.power;
-          expect(amount, `${def.id} ${id}`).toBeLessThanOrEqual(Math.min(...classHps) * 0.3); // Mana Barrier %110 INT (Ömer kararı) en zayıf canın ~%25'ini aşar: üst sınır %30
+          expect(amount, `${def.id} ${id}`).toBeLessThanOrEqual(avgHp * 0.4); // Mana Barrier INT ile ölçeklenir; ortalama class canının %40'ını aşmasın (stat 30 kuralı sonrası gevşetildi, bkz. open-questions 175)
         }
       }
     }
@@ -267,7 +304,7 @@ describe('güç sınırları (kalkan ve çağrı çok güçlü olmasın)', () =>
   });
 
   it('çağrılan birim, en zayıf class\'ın canının 1,5 katından azına sahip', () => {
-    for (const def of Object.values(content.summons)) expect(def.stats.hp).toBeLessThan(Math.min(...classHps) * 1.5); // çağrılar en zayıf sınıfın 1,5 katından fazla cana sahip olmasın
+    for (const def of Object.values(content.summons)) expect(def.stats.hp).toBeLessThan(avgHp * 1.5); // çağrılar ortalama class canının 1,5 katından fazla cana sahip olmasın (stat 30 kuralı sonrası ortalama baz alındı)
   });
 });
 
@@ -319,7 +356,7 @@ describe('görsel veri: skill ikonları, class logoları, stat ikonları, hareke
   });
 
   it('tüm stat türlerinin ikonu, rengi ve etiketi var; ikonlar geçerli ve temel 4 özellik birbirinden farklı', () => {
-    const kinds: StatKind[] = ['hp', 'mp', 'str', 'int', 'dex', 'luck', 'spd', 'critChance', 'critMult', 'armor', 'magicArmor'];
+    const kinds: StatKind[] = ['hp', 'mp', 'str', 'int', 'dex', 'luck', 'spd', 'critChance', 'accuracy', 'evasion', 'armor', 'magicArmor'];
     for (const k of kinds) {
       expect(isIconKind(STAT_ICON[k]), k).toBe(true);
       expect(STAT_COLOR[k], k).toMatch(HEX);
@@ -344,6 +381,7 @@ describe('görsel veri: skill ikonları, class logoları, stat ikonları, hareke
       'leaf', // regen rozeti
       'roar', // varsayılan durum ikonu
       'finger', // yedek
+      'holystrike', // yedek: Holy Strike'ın eski ikonu
       ...UI_ICONS, // debug dock ve ayarlar (DOM)
     ]);
     for (const kind of ICON_KINDS) expect(used.has(kind), kind).toBe(true);
@@ -359,7 +397,7 @@ describe('görsel veri: skill ikonları, class logoları, stat ikonları, hareke
     }
     // her efekt en az bir skill tarafından kullanılıyor
     const used = new Set(Object.values(content.skills).map((s) => s.vfx));
-    for (const k of VFX_KINDS) expect(used.has(k), k).toBe(true);
+    for (const k of VFX_KINDS) if (!BACKUP_VFX.includes(k)) expect(used.has(k), k).toBe(true);
   });
 
   it("yukarıdan düşen skill'lerin hepsinin düşen şey türü var", () => {

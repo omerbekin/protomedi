@@ -6,14 +6,14 @@
   "logo": "helm",
   "frontPriority": 1,
   "attributes": {
-    "str": 18.0,
-    "int": 10,
-    "dex": 10,
-    "luck": 3
+    "str": 16,
+    "int": 5,
+    "dex": 3,
+    "luck": 6
   },
+  "primary": "str",
   "armor": 12,
   "magicArmor": 0,
-  "mpRegen": 2,
   "ai": "aggressive",
   "skills": [
     "melee_attack",

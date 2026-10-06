@@ -1,8 +1,10 @@
 /**
  * Oyun içi debug menüsü (DOM üstünde, gerçek piksel ölçüsünde; dokunma hedefleri >= 44px).
- * Sahneler ve özellikler kendi düğmelerini register() ile ekler. Her yeni ekran/özellik
- * buraya bir giriş koyar ki arayüzden test edilebilsin.
+ * Sekmeli: her sekmede düğme ızgaraları (register) ve özel paneller (registerPanel: galeri, ses listesi, seed...) bulunur.
+ * Altta, sekmeden bağımsız hep görünen ikonlu hızlı düğme dock'u vardır. Her yeni ekran/özellik buraya bir giriş koyar ki arayüzden test edilebilsin.
  */
+import { iconUrl } from './dom-icons';
+
 /** Debug menüsünün altına sabitlenen, yalnızca ikonlu hızlı düğme. */
 export interface DockSpec {
   /** Satır (0 = üstteki) ve satır içi sıra (soldan sağa). */
@@ -16,27 +18,89 @@ export interface DockSpec {
 
 export interface DebugAction {
   id: string;
+  /** Sekme adı (ör. 'Battle', 'Unit'). */
+  tab: string;
+  /** Sekme içindeki bölüm başlığı. */
   section: string;
   dock?: DockSpec;
+  /** true: yalnızca dock'ta görünür (sekmedeki ızgarada tekrar edilmez). */
+  dockOnly?: boolean;
   label: string | (() => string);
   /** Uzun açıklama (düğmenin üstüne gelince görünür); etiket kısa tutulur. */
   hint?: string;
+  /** Açık/kapalı düğmelerde: açıkken vurgulanır. */
+  on?: () => boolean;
   run: () => void;
 }
 
-import { iconUrl } from './dom-icons';
+/** Özel içerikli panel: `render` her yenilemede içeriği baştan kurar; `refresh` menüyü yeniden çizer. */
+export interface DebugPanel {
+  id: string;
+  tab: string;
+  render: (el: HTMLElement, refresh: () => void) => void;
+}
 
 export type DebugInfo = () => Record<string, string>;
 
+export interface ButtonOpts {
+  title?: string;
+  on?: boolean;
+  className?: string;
+  /** Küçük ikon (src/ui/icon-kinds.ts adı). */
+  icon?: string;
+}
+
+/** Paneller için ortak düğme (>= 44px). */
+export function debugButton(label: string, onClick: () => void, opts: ButtonOpts = {}): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.className = `debug-action${opts.on ? ' on' : ''}${opts.className ? ` ${opts.className}` : ''}`;
+  if (opts.icon) {
+    const url = iconUrl(opts.icon);
+    if (url) {
+      const img = document.createElement('img');
+      img.className = 'debug-action-icon';
+      img.src = url;
+      img.alt = '';
+      btn.append(img);
+    }
+  }
+  btn.append(document.createTextNode(label));
+  if (opts.title) btn.title = opts.title;
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+/** Bölüm başlığı + düğme ızgarası. */
+export function debugSection(title: string, ...children: HTMLElement[]): HTMLElement[] {
+  const h = document.createElement('h3');
+  h.textContent = title;
+  const grid = document.createElement('div');
+  grid.className = 'debug-grid';
+  grid.append(...children);
+  return [h, grid];
+}
+
+const SIDE_KEY = 'proto.debug.side';
+
 export class DebugMenu {
   private readonly actions = new Map<string, DebugAction>();
+  private readonly panels = new Map<string, DebugPanel>();
   private readonly infoProviders = new Map<string, DebugInfo>();
   private readonly panel: HTMLDivElement;
   private infoEl: HTMLDListElement | null = null;
   private infoTimer = 0;
   private open = false;
+  private tab: string;
+  private readonly scroll = new Map<string, number>();
+  private body: HTMLDivElement | null = null;
+  private ghost = false;
 
-  constructor(root: HTMLElement) {
+  constructor(
+    root: HTMLElement,
+    /** Sekmelerin sırası; sonuncusu 'Info' (bilgi paneli) olmalı. */
+    private readonly tabOrder: string[] = ['Battle', 'Info'],
+  ) {
+    this.tab = tabOrder[0] ?? 'Battle';
     const toggle = document.createElement('button');
     toggle.className = 'debug-toggle';
     toggle.textContent = 'DEBUG';
@@ -46,16 +110,28 @@ export class DebugMenu {
     this.panel = document.createElement('div');
     this.panel.className = 'debug-panel';
     this.panel.hidden = true;
+    try {
+      if (window.localStorage.getItem(SIDE_KEY) === 'left') this.panel.classList.add('left');
+    } catch {
+      /* storage unavailable: default side */
+    }
 
     root.append(toggle, this.panel);
 
     window.addEventListener('keydown', (e) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
       if (e.key === '`' || e.key === 'F2') this.setOpen(!this.open);
     });
   }
 
   register(action: DebugAction): void {
     this.actions.set(action.id, action);
+    this.render();
+  }
+
+  registerPanel(panel: DebugPanel): void {
+    this.panels.set(panel.id, panel);
     this.render();
   }
 
@@ -72,57 +148,112 @@ export class DebugMenu {
     this.render();
   }
 
-  render(): void {
+  /** Menüyü şimdi yeniden çizer (kaydırma ve sekme korunur). */
+  refresh(): void {
+    this.render();
+  }
+
+  private tabs(): string[] {
+    const used = new Set<string>(['Info']);
+    for (const a of this.actions.values()) if (!a.dockOnly) used.add(a.tab);
+    for (const p of this.panels.values()) used.add(p.tab);
+    const ordered = this.tabOrder.filter((t) => used.has(t));
+    return [...ordered, ...[...used].filter((t) => !ordered.includes(t))];
+  }
+
+  private render(): void {
     if (!this.open) return;
+    if (this.body) this.scroll.set(this.tab, this.body.scrollTop);
     this.panel.replaceChildren();
+    this.panel.classList.toggle('ghost', this.ghost);
 
     const header = document.createElement('div');
     header.className = 'debug-header';
     const title = document.createElement('span');
     title.textContent = 'Debug menu';
-    const close = document.createElement('button');
-    close.className = 'debug-close';
-    close.textContent = 'Close';
-    close.addEventListener('click', () => this.setOpen(false));
-    header.append(title, close);
+    const tools = document.createElement('div');
+    tools.className = 'debug-header-tools';
+    const ghost = debugButton(this.ghost ? 'Solid' : 'See-through', () => {
+      this.ghost = !this.ghost;
+      this.render();
+    }, { title: 'Make the menu transparent so you can watch the battle behind it (click this button again to restore)', className: 'debug-header-btn' });
+    const side = debugButton('Side', () => {
+      const left = this.panel.classList.toggle('left');
+      try {
+        window.localStorage.setItem(SIDE_KEY, left ? 'left' : 'right');
+      } catch {
+        /* ignore */
+      }
+    }, { title: 'Move the menu to the other side of the screen', className: 'debug-header-btn' });
+    const close = debugButton('Close', () => this.setOpen(false), { className: 'debug-header-btn' });
+    tools.append(ghost, side, close);
+    header.append(title, tools);
     this.panel.append(header);
 
+    const tabs = this.tabs();
+    if (!tabs.includes(this.tab)) this.tab = tabs[0] ?? 'Info';
+    const bar = document.createElement('div');
+    bar.className = 'debug-tabs';
+    for (const t of tabs) {
+      const b = document.createElement('button');
+      b.className = `debug-tab${t === this.tab ? ' on' : ''}`;
+      b.textContent = t;
+      b.addEventListener('click', () => {
+        this.tab = t;
+        this.render();
+      });
+      bar.append(b);
+    }
+    this.panel.append(bar);
+
+    const body = document.createElement('div');
+    body.className = 'debug-body';
+    this.body = body;
+    this.infoEl = null;
+    this.fillBody(body);
+    this.panel.append(body);
+    this.renderDock();
+    body.scrollTop = this.scroll.get(this.tab) ?? 0;
+  }
+
+  private fillBody(body: HTMLElement): void {
+    const refresh = (): void => this.render();
     const sections = new Map<string, DebugAction[]>();
     for (const action of this.actions.values()) {
-      if (action.dock) continue;
+      if (action.dockOnly || action.tab !== this.tab) continue;
       const list = sections.get(action.section) ?? [];
       list.push(action);
       sections.set(action.section, list);
     }
     for (const [name, list] of sections) {
-      const h = document.createElement('h3');
-      h.textContent = name;
-      this.panel.append(h);
-      const grid = document.createElement('div');
-      grid.className = 'debug-grid';
-      this.panel.append(grid);
-      for (const action of list) {
-        const btn = document.createElement('button');
-        btn.className = 'debug-action';
-        btn.textContent = typeof action.label === 'function' ? action.label() : action.label;
-        if (action.hint) btn.title = action.hint;
-        btn.addEventListener('click', () => {
-          action.run();
-          // After a scene restart the new values are ready on the next frame
-          requestAnimationFrame(() => this.render());
-        });
-        grid.append(btn);
-      }
+      const buttons = list.map((action) => {
+        const label = typeof action.label === 'function' ? action.label() : action.label;
+        return debugButton(
+          label,
+          () => {
+            action.run();
+            // After a scene restart the new values are ready on the next frame
+            requestAnimationFrame(() => this.render());
+          },
+          { ...(action.hint ? { title: action.hint } : {}), on: action.on?.() ?? false },
+        );
+      });
+      body.append(...debugSection(name, ...buttons));
     }
-
-    const infoTitle = document.createElement('h3');
-    infoTitle.textContent = 'Info';
-    const info = document.createElement('dl');
-    info.className = 'debug-info';
-    this.infoEl = info;
-    this.fillInfo();
-    this.panel.append(infoTitle, info);
-    this.renderDock();
+    for (const p of this.panels.values()) {
+      if (p.tab !== this.tab) continue;
+      const wrap = document.createElement('div');
+      wrap.className = 'debug-block';
+      p.render(wrap, refresh);
+      body.append(wrap);
+    }
+    if (this.tab === 'Info') {
+      const info = document.createElement('dl');
+      info.className = 'debug-info';
+      this.infoEl = info;
+      this.fillInfo();
+      body.append(info);
+    }
   }
 
   /** Sık kullanılan düğmeler: menünün altına sabit, yalnızca ikon (açıklama üstüne gelince çıkar). */

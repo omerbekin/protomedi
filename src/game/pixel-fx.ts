@@ -1,4 +1,5 @@
-import { crystal, sparkle, type Draw, type PxGrid } from './pixel-art';
+import { blade, crystal, sparkle, type Draw, type PxGrid } from './pixel-art';
+import { goldCoin, holyHammer, isoDie, playingCard, thorn } from './pixel-icons';
 
 /** Efekt (VFX) sprite'ları (32x32): ikon olmayan, animasyonlarda kullanılan çizimler. Aynı jetonlar, aynı araçlar. */
 export const PIXEL_FX: Record<string, Draw> = {
@@ -37,6 +38,10 @@ export const PIXEL_FX: Record<string, Draw> = {
   spark: (g) => {
     sparkle(g, 16, 16, 15, 'y');
     sparkle(g, 16, 16, 9, 'w');
+  },
+  // Holy Strike animasyonu: halosuz çekiç (halo ayrı yumuşak doku olarak çekicin arkasında nabız atar)
+  hammerbit: (g) => {
+    holyHammer(g);
   },
   wisp: (g) => {
     g.poly([16, 0, 23, 12, 23, 20, 16, 31, 9, 20, 9, 12], 'p').poly([16, 8, 19, 16, 16, 24, 13, 16], 'c');
@@ -78,6 +83,76 @@ export const PIXEL_FX: Record<string, Draw> = {
     g.poly([17, 3, 29, 5, 30, 17, 17, 16], 'm').poly([17, 3, 29, 5, 24, 9, 17, 9], 'l').poly([17, 14, 30, 17, 24, 13, 17, 12], 'd');
     g.line(27, 6, 28, 16, 'w', 1);
     g.disc(16, 30, 1.6, 'y');
+  },
+  voidspike: (g) => {
+    // uzun, sivri boşluk iğnesi (ucu yukarı); parlayan çekirdek
+    g.poly([16, 0, 21, 8, 19, 27, 16, 31, 13, 27, 11, 8], 'P').poly([16, 0, 13, 8, 13, 27, 16, 31], 'p').poly([16, 3, 18, 9, 17, 24, 16, 27, 15, 24, 14, 9], 'o');
+    g.line(16, 4, 16, 26, 'c', 1).line(15, 12, 15, 22, 'w', 1);
+  },
+  manadrop: (g) => {
+    // gerçekçi mana damlası: sivri uç yukarıda, yuvarlak gövde aşağıda; mor tonlar (skill rengi: a/A/z), parlak çekirdek, ışık yansıması
+    g.poly([16, 1, 21, 11, 25, 19, 23, 26, 16, 30, 9, 26, 7, 19, 11, 11], 'A');
+    g.poly([16, 3, 20, 12, 23, 19, 21, 25, 16, 28, 11, 25, 9, 19, 12, 12], 'a');
+    g.poly([16, 8, 19, 15, 21, 20, 19, 24, 16, 26, 13, 24, 11, 20, 13, 15], 'z');
+    g.poly([16, 14, 18, 19, 16, 23, 14, 19], 'p');
+    g.disc(13, 17, 1.6, 'w').rect(12, 21, 1.2, 1.2, 'z');
+  },
+  // ---------- Gambler efektleri ----------
+  // Kemik zar (eş eksenli), uçarken dönen mermi
+  die: (g) => {
+    isoDie(g, 16, 8.5, 11);
+  },
+  // Altın zar (All In): büyük, beyaz noktalı
+  diegold: (g) => {
+    isoDie(g, 16, 8.5, 11, { top: 'y', left: 'Y', right: 'b', pip: 'w' });
+    g.rect(3, 12, 1.4, 1.4, 'w').rect(25, 8, 1.4, 1.4, 'w');
+  },
+  // Önden altın para (yağmur, parıltı)
+  coin: (g) => {
+    goldCoin(g, 16, 16, 13);
+  },
+  // Tek iskambil kartı (bıçak gibi fırlatılır; ucu yukarı)
+  card: (g) => {
+    playingCard(g, 16, 16, 15, 24, 0, 'spade');
+  },
+  // Kan damlası (High Stakes bahsi): sivri ucu yukarıda, ışık yansımalı
+  blooddrop: (g) => {
+    g.poly([16, 4, 22.4, 16, 23, 21, 20.4, 26, 16, 27.5, 11.6, 26, 9, 21, 9.6, 16], 'R');
+    g.poly([16, 7, 21, 16.5, 21.3, 21, 19.2, 24.8, 16, 25.8, 12.8, 24.8, 10.7, 21, 11, 16.5], 'r');
+    g.rect(12.4, 17, 1.8, 4.4, 'w');
+  },
+  // Düello kılıcı: ince, düz uçlu; NE'ye bakar (sağ-yukarı)
+  duelsword: (g) => {
+    blade(g, 9, 23, 29, 3, 3.6, 'l', 'm');
+    g.line(5, 19, 15, 29, 'a', 2.2).line(5, 18.5, 15, 28.5, 'z', 1);
+    g.line(8, 25, 4, 29, 'b', 2.4).line(7.4, 25.6, 4.6, 28.4, 'k', 0.8);
+    g.disc(2.8, 29.8, 2, 'y');
+    g.line(12, 20, 27, 5, 'w', 0.8);
+  },
+  // ---------- Bone Slash / Thorn Shield efektleri ----------
+  // Kemik kıymığı: uzun, sivri, bir ucu kırık; uçarken döner
+  bonesliver: (g) => {
+    g.poly([3, 27, 8, 19, 25, 3, 29, 4, 24, 14, 14, 24], 'e');
+    g.poly([3, 27, 8, 19, 25, 3, 16, 17, 10, 25], 'w');
+    g.poly([24, 14, 29, 4, 27, 12], 'n');
+    g.line(14, 20, 20, 14, 'n', 1).rect(12, 22, 2, 2, 'k').rect(20, 9, 1.5, 1.5, 'k');
+  },
+  // Ahşap diken: yerden fırlar (ucu yukarıda); kahverengi gövde, açık kenar, çevresinde yeşil sarmaşık
+  thornspike: (g) => {
+    g.poly([10, 31, 12, 20, 14, 9, 16, 0, 18.5, 9, 20, 20, 22, 31], 'k');
+    g.poly([10, 31, 12, 20, 14, 9, 16, 0, 16, 31], 'b');
+    g.poly([12.5, 28, 13.5, 18, 15, 6, 15.4, 28], 'n');
+    g.line(10.5, 26, 21.5, 22, 'G', 1.8).line(11.5, 25.6, 20.5, 22.2, 'g', 0.7);
+    g.line(12, 18, 20, 15.6, 'G', 1.4).line(12.8, 17.6, 19.6, 15.8, 'g', 0.5);
+    g.rect(6, 29, 4, 2, 'k').rect(22, 29, 4, 2, 'k');
+  },
+  // Dikenli sarmaşık/kök: kıvrılarak yükselir, yanlarında küçük dikenler
+  thornvine: (g) => {
+    const path: Array<[number, number]> = [[15, 31], [10, 24], [19, 17], [11, 10], [18, 2]];
+    for (let i = 0; i < path.length - 1; i++) g.line(path[i]![0], path[i]![1], path[i + 1]![0], path[i + 1]![1], 'k', 4);
+    for (let i = 0; i < path.length - 1; i++) g.line(path[i]![0], path[i]![1], path[i + 1]![0], path[i + 1]![1], 'G', 2.6);
+    for (let i = 0; i < path.length - 1; i++) g.line(path[i]![0] - 0.6, path[i]![1], path[i + 1]![0] - 0.6, path[i + 1]![1], 'g', 1);
+    for (const [bx, by, tx, ty] of [[10, 24, 3, 22], [19, 17, 27, 14.5], [11, 10, 4, 7.5], [17, 25, 24, 27]] as const) thorn(g, bx, by, tx, ty, 3.4);
   },
   smoke: (g) => {
     g.disc(16, 16, 11, 'd').disc(13, 13, 7, 'm');

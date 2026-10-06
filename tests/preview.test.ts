@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, content, describeClass, describeSkill, describeStat, previewSkill } from '../src/engine';
+import { Battle, attributePower, content, describeClass, describeSkill, describeStat, previewSkill } from '../src/engine';
 import type { BattleEvent, StatKind } from '../src/engine';
 import { installLegacySkills } from './legacy-skills';
 
@@ -8,7 +8,7 @@ installLegacySkills();
 /** Test modu, kritik ve dodge kapalı: önizleme aralığı kritiksiz hasarı gösterir. */
 function testBattle(seed = 1, teams?: { party: string[]; enemies: string[] }): Battle {
   const b = new Battle(content.battleSetup('first-battle', seed, 'test', teams));
-  for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+  for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0 });
   return b;
 }
 // first-battle (sabit): party warrior, paladin, mage, undead; enemy warrior, archer, mage, druid
@@ -86,11 +86,12 @@ describe('önizleme: hasar', () => {
   it('kalkan hasarı önce emer: cana ulaşan hasar azalır; büyü kalkanı yalnızca büyüyü emer', () => {
     const b = testBattle();
     const bare = previewSkill(b, WARRIOR, 'power_strike', E_WARRIOR)[0]!.damage!;
-    b.get(E_WARRIOR)!.shield = 20;
+    const soak = Math.max(1, Math.floor(bare.avg / 2));
+    b.get(E_WARRIOR)!.shield = soak;
     const shielded = previewSkill(b, WARRIOR, 'power_strike', E_WARRIOR)[0]!.damage!;
     expect(shielded.avg).toBe(bare.avg);
-    expect(shielded.absorbed).toBe(20);
-    expect(shielded.hpLoss).toBe(bare.hpLoss - 20);
+    expect(shielded.absorbed).toBe(soak);
+    expect(shielded.hpLoss).toBe(bare.hpLoss - soak);
     b.get(E_WARRIOR)!.shield = 1000;
     const wall = previewSkill(b, WARRIOR, 'power_strike', E_WARRIOR)[0]!.damage!;
     expect(wall.hpLoss).toBe(0);
@@ -222,7 +223,7 @@ describe('önizleme: şifa, kalkan, tur bazlı şifa, mana yakma, durumlar', () 
     expect(p.hot).toBeDefined();
     expect(p.heal?.avg).toBe(5); // başlangıç şifası da var (eksik canla sınırlı)
     expect(p.hot!.turns).toBe(3);
-    expect(p.hot!.perTurn).toBe(Math.round(druid.stats.int * content.formulas.scaling.int * (content.skills.rejuvenate!.effects.find((e) => e.type === 'hot') as { power: number }).power));
+    expect(p.hot!.perTurn).toBe(Math.round(attributePower(druid.stats, 'int', content.formulas) * (content.skills.rejuvenate!.effects.find((e) => e.type === 'hot') as { power: number }).power));
     expect(p.hot!.total).toBe(5); // eksik can 5 ile sınırlı
   });
 
@@ -279,7 +280,7 @@ describe('skill açıklaması (tooltip)', () => {
     expect(text('fire_bolt')).not.toContain('Magic'); // damage tipi yazılmaz, renk verir
     expect(text('fire_bolt')).toContain('% INT');
     expect(text('quick_shot')).toContain('% DEX');
-    expect(text('blood_rite')).toContain('% STR'); // Dark Mage'in karanlık skill'i STR'ye bağlı
+    expect(text('blood_rite')).toContain('% INT'); // Dark Mage'in karanlık skill'i INT'e bağlı
   });
 
   it('özel kurallar: zırh yok sayma, arkaya sıçrama, can emme, undead bonusu, eksik mana, tüketilen kalkan', () => {
@@ -300,7 +301,7 @@ describe('skill açıklaması (tooltip)', () => {
     expect(text('summon_treant')).toContain('Summons take x2 damage');
     expect(text('taunt')).toContain('must target you');
     expect(text('guard')).toContain('take 50% of the damage');
-    expect(text('mana_burn')).toContain('Burns 10 MP');
+    expect(text('mana_burn')).toContain('Steals 10 MP'); // Mana Steal: kısmen kendine geçer
   });
 
   it('yakın dövüş skill\'leri menzil kuralını söyler; menzilli olanlar söylemez', () => {
@@ -310,12 +311,11 @@ describe('skill açıklaması (tooltip)', () => {
     expect(text('shield_wall')).not.toContain('Melee:'); // kendine skill
   });
 
-  it('kritik bilgisi hasar ve şifada yazılır, kalkan skill\'inde yazılmaz', () => {
-    expect(text('melee_attack')).toContain('Crit ');
-    expect(text('lay_on_hands')).toContain('Crit ');
-    expect(text('rejuvenate')).toContain('Crit ');
-    expect(text('shield_wall')).not.toContain('Crit ');
-    expect(text('spell_ward')).not.toContain('Crit ');
+  it('skill tooltip\'inde kritik ve accuracy bilgisi yazılmaz (stat tooltip\'inde kalır)', () => {
+    for (const id of ['melee_attack', 'lay_on_hands', 'rejuvenate', 'shield_wall', 'spell_ward']) {
+      expect(text(id)).not.toContain('Crit ');
+      expect(text(id)).not.toContain('Accuracy');
+    }
   });
 
   it('her skill için en az bir açıklama satırı var', () => {
@@ -334,7 +334,7 @@ describe('stat açıklaması (tooltip)', () => {
   };
 
   it('her stat türü bir başlık ve en az bir açıklama satırı verir', () => {
-    const kinds: StatKind[] = ['hp', 'mp', 'str', 'int', 'dex', 'luck', 'spd', 'critChance', 'critMult', 'armor', 'magicArmor'];
+    const kinds: StatKind[] = ['hp', 'mp', 'str', 'int', 'dex', 'luck', 'spd', 'critChance', 'accuracy', 'evasion', 'armor', 'magicArmor'];
     for (const k of kinds) {
       const i = describeStat(k, w, f);
       expect(i.title.length, k).toBeGreaterThan(0);
@@ -353,15 +353,18 @@ describe('stat açıklaması (tooltip)', () => {
     expect(text('int')).toContain('Intelligence skills');
   });
 
-  it('Dexterity: hız, minik dodge ve DEX skill hasarı', () => {
+  it('Dexterity: hız, kaçınma (evasion) ve DEX skill hasarı', () => {
     expect(text('dex')).toContain('Speed');
-    expect(text('dex')).toContain('Physical dodge');
+    expect(text('dex')).toContain('Evasion');
+    expect(text('dex')).toContain(`max ${Math.round(f.attributes.evasionMax * 100)}%`);
     expect(text('dex')).toContain('Dexterity skills');
   });
 
-  it('Luck: kritik şansı ve hasarı; kritik hasar/şifada, kalkanda değil', () => {
+  it('Luck: kritik şansı ve accuracy; kritik hasar SABİT (luck artırmaz); kritik hasar/şifada, kalkanda değil', () => {
     expect(text('luck')).toContain('Crit chance');
-    expect(text('luck')).toContain('Crit damage');
+    expect(text('luck')).toContain('Accuracy');
+    expect(text('luck')).toContain(`fixed at x${f.attributes.critMult}`);
+    expect(text('luck')).not.toMatch(/Crit damage: +/);
     expect(text('luck')).toContain('never of shields');
   });
 
@@ -380,6 +383,49 @@ describe('stat açıklaması (tooltip)', () => {
     expect(t).toContain(`STR ${content.classes.defender!.attributes.str}`);
     expect(t).toContain('Skills: Tremor Slam, Taunt, Guard, Fist Crush');
     expect(t).toContain(`Armor ${content.classes.defender!.stats.armor}`);
-    expect(describeClass(content.classes.antimage!, content.skills, f).lines.join('\n')).toContain('Magic armor 20');
+    expect(describeClass(content.classes.antimage!, content.skills, f).lines.join('\n')).toContain(`Magic armor ${content.classes.antimage!.stats.magicArmor}`);
+  });
+});
+
+describe('skill rozeti ve primary bonus adı (UI)', () => {
+  const f = content.formulas;
+  const st = content.classes.warrior!.stats;
+
+  it('AoE rozeti yarıçapı, Random rozeti sayıyı taşır; açıklama satırlarında tekrarlanmaz', () => {
+    const area = Object.values(content.skills).find((s) => s.target === 'area_enemies')!;
+    const info = describeSkill(area, st, f);
+    expect(info.targetBadge).toBe(`AoE · r${area.area?.radius ?? 1}`);
+    expect(info.lines.join('\n')).not.toMatch(/radius/i);
+    const rnd = Object.values(content.skills).find((s) => s.target === 'random_enemies')!;
+    const info2 = describeSkill(rnd, st, f);
+    expect(info2.targetBadge).toBe(`Random · ${rnd.count ?? 3}`);
+    expect(info2.lines.join('\n')).not.toMatch(/random enemies/i);
+    const single = Object.values(content.skills).find((s) => s.target === 'single_enemy')!;
+    expect(describeSkill(single, st, f).targetBadge).toBe('Single Target');
+  });
+
+  it("primary stat bonus adı: str Resilience, dex Hunter's Mark, int Mana Echo, luck Lucky Escape; pasifse soluk (active=false)", () => {
+    const names = { str: 'Resilience', dex: "Hunter's Mark", int: 'Mana Echo', luck: 'Lucky Escape' } as const;
+    for (const k of ['str', 'dex', 'int', 'luck'] as const) {
+      const on = describeStat(k, { ...st, primary: k, primaryActive: true }, f);
+      expect(on.bonus?.name).toBe(names[k]);
+      expect(on.bonus?.active).toBe(true);
+      const off = describeStat(k, { ...st, primary: k, primaryActive: false }, f);
+      expect(off.bonus?.active).toBe(false);
+      expect(off.lines.join('\n')).toContain('Inactive');
+      const other = describeStat(k, { ...st, primary: undefined, primaryActive: false }, f);
+      expect(other.bonus).toBeUndefined();
+    }
+  });
+
+  it('stat tooltip\'leri statın vermediği şeyi söylemez (dex: dodge yok notu kalktı)', () => {
+    for (const k of ['str', 'dex', 'int', 'luck', 'hp', 'mp', 'spd', 'armor', 'magicArmor'] as const) {
+      const t = describeStat(k, { ...st, primary: undefined }, f).lines.join('\n');
+      expect(t, k).not.toMatch(/gives no|rare, few/i);
+    }
+    // Str/Int regen satırları veriden gelir; Luck evasion/dodge vermez
+    expect(describeStat('luck', { ...st, primary: undefined }, f).lines.join('\n')).not.toMatch(/evasion|dodge/i);
+    expect(describeStat('str', { ...st, primary: undefined }, f).lines.join('\n')).toContain(`+${f.attributes.hpRegenPerStr} per point`);
+    expect(describeStat('int', { ...st, primary: undefined }, f).lines.join('\n')).toContain(`+${f.attributes.mpRegenPerInt} per point`);
   });
 });

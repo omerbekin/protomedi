@@ -1,4 +1,4 @@
-/** 4 temel özellik: Strength (can, str skill hasarı), Intelligence (mana, int skill hasarı), Dexterity (hız, dex skill hasarı, dodge), Luck (kritik). */
+/** 4 temel özellik: Strength (can, str skill hasarı), Intelligence (mana, int skill hasarı), Dexterity (hız, dex skill hasarı), Luck (kritik). */
 export type Attribute = 'str' | 'int' | 'dex' | 'luck';
 
 export interface Attributes {
@@ -15,17 +15,36 @@ export interface Stats extends Attributes {
   /** En yüksek mana. */
   mp: number;
   spd: number;
-  /** Her turun başında yenilenen MP (turns modunda). */
+  /** Her turun başında yenilenen MP (turns modunda): Int x mpRegenPerInt (0 Int = 0). */
   mpRegen: number;
+  /** Her turun başında yenilenen düz can (turns modunda): Str x hpRegenPerStr (yuvarlanarak uygulanır). */
+  hpRegen: number;
   /** Fiziksel zırh: hasarı yüzdesel azaltır (azalan getirili). */
   armor: number;
   /** Büyü zırhı: büyü hasarını yüzdesel azaltır. */
   magicArmor: number;
+  /** Kritik şansı: critChanceBase + critChancePerLuck x Luck. */
   critChance: number;
-  /** Kritik vuruşta hasar/şifanın SON çarpanı (1,5 = %150). */
+  /** Kritik vuruşta hasar/şifanın SON çarpanı: SABİT (formulas.json > attributes.critMult), hiçbir statla artmaz. */
   critMult: number;
-  /** Fiziksel saldırıdan kaçınma şansı. */
-  dodge: number;
+  /** İsabet (accuracy): accuracyBase + accuracyPerLuck x Luck. Hit şansı = accuracy - hedefin evasion'ı (sınırlı). */
+  accuracy: number;
+  /** Kaçınma (evasion): floor(Dex / dexPerEvasionStep) x evasionPerStep (tam sayı adımlı), evasionMax'ı geçmez. */
+  evasion: number;
+  /** Class'ın primary statı (yoksa: çağrılan birim). */
+  primary?: Attribute;
+  /** Primary bonusu aktif mi: primary stat class'ın en yüksek statıysa (eşitlik dahil). */
+  primaryActive: boolean;
+  /** Str-primary bonusu (Resilience): karaktere uygulanan her debuff bu ihtimalle 1 tur kısalır (en az 1 kalır; 0 = yok). */
+  resilience: number;
+  /** Dex-primary bonusu (Hunter's Mark): hedefinden daha hızlıysa hasar veren vuruşlar bu oranda fazla vurur (0 = yok). */
+  hunterMark: number;
+  /** Int-primary bonusu (Mana Echo): her skill kullanımından sonra bu ihtimalle MP bedelinin yarısı geri gelir (0 = yok). */
+  manaEcho: number;
+  /** Int ile ölçeklenen hasar/şifa/kalkan çarpanı (1 = bonus yok; şu an hiçbir bonus değiştirmez). */
+  spellPowerMult: number;
+  /** Luck-primary bonusu: ölümcül vuruşta bu ihtimalle 1 canla kurtulur (savaş başına bir kez; 0 = yok). */
+  surviveChance: number;
 }
 
 /** Pasif skill etkileri (her sınıfın 1 pasifi var; düz stat vermez, bir koşulda tetiklenir). */
@@ -44,8 +63,8 @@ export type PassiveEffect =
   | { type: 'soulDrain'; ratio: number }
   /** Büyü zırhının engellediği büyü hasarı `threshold` birikince tüm takıma `mana` MP verilir. */
   | { type: 'manaOverflow'; threshold: number; mana: number }
-  /** Kullanıcının ve 1 yarıçaplı (artı şekli) komşu dostların zırhı `armor` artar. */
-  | { type: 'armorAura'; armor: number };
+  /** Kullanıcının KENDİ zırhının `pct` kadarı, kendine ve 1 yarıçaplı (artı şekli) komşu dostlara bonus zırh olur; bir birim en fazla `maxStacks` kaynaktan alır. */
+  | { type: 'armorAura'; pct: number; maxStacks: number };
 
 export interface PassiveDef {
   id: string;
@@ -72,9 +91,12 @@ export interface CombatantData {
   /** Seçim ekranında gösterilen klasman (yoksa ilk skill'in türüne göre Melee/Ranged/Caster). */
   role?: string;
   attributes: Attributes;
+  /** Class'ın primary statı (toplam stat 30 kuralı ve primary bonusu yalnızca class'larda). */
+  primary?: Attribute;
   armor: number;
   magicArmor: number;
-  mpRegen: number;
+  /** Sınıfa özel taban isabet (yoksa formulas.json > attributes.accuracyBase; şu an hiçbir class'ta tanımlı değil). */
+  accuracyBase?: number;
   /** Türev stat'ları doğrudan ezmek için (ör. çağrılan birimin canı). */
   overrides?: Partial<Stats>;
   tags?: string[];
@@ -96,6 +118,7 @@ export interface CombatantDef {
   frontPriority: number;
   role?: string;
   attributes: Attributes;
+  primary?: Attribute;
   stats: Stats;
   skills: string[];
   tags?: string[];
@@ -106,6 +129,28 @@ export interface CombatantDef {
 export type Element = 'physical' | 'fire' | 'ice' | 'holy' | 'dark' | 'nature' | 'arcane';
 
 export type SkillTarget = 'single_enemy' | 'all_enemies' | 'area_enemies' | 'column_enemies' | 'everyone' | 'random_enemies' | 'single_ally' | 'dead_ally' | 'all_allies' | 'self';
+
+/**
+ * Bahis (gamble): hasar etkisi atılmadan önce kullanıcı kaynağından (can ya da MP) bir miktarı BAHSE koyar ve bir zar atılır (seed'li RNG, skill başına bir kez).
+ * Kazanırsa hasar `winMult + perStake x bahis` katı, kaybederse `loseMult` katı (varsayılan 1; 0 = iska) olur ve bahis kaybedilir (kazanırsa bahis geri kalır).
+ * Bahis: `hp` ise maks canın `ratio` kadarı (en fazla canı 1 bırakır), `mp` ise kullanılan skill'in bedeli düşüldükten sonra KALAN MP'nin `ratio` kadarı.
+ */
+export interface BetSpec {
+  resource: 'hp' | 'mp';
+  ratio: number;
+  winChance: number;
+  winMult: number;
+  loseMult?: number;
+  /** Bahse konan her can/MP birimi için kazanç çarpanına eklenen miktar. */
+  perStake?: number;
+}
+
+/** randomStatus seçeneği: `weight` ağırlıklı zarla seçilen durum. */
+export interface RandomStatusOption {
+  status: StatusKind;
+  turns: number;
+  weight: number;
+}
 
 export type SkillEffectKind =
   | {
@@ -127,6 +172,10 @@ export type SkillEffectKind =
       bonusPerMissingMana?: number;
       /** Kullanıcının kalkanından eklenen hasar (ratio) ve kalkanın tüketilip tüketilmeyeceği. */
       bonusFromShield?: { ratio: number; consume: boolean };
+      /** 0-1: her hedefe vuruştan sonra bu ihtimalle AYNI vuruş bir kez daha tekrarlanır (çifte vuruş; seed'li RNG). */
+      repeatChance?: number;
+      /** Bahis: kaynak harcayarak daha fazla hasar (yukarıda BetSpec). */
+      bet?: BetSpec;
     }
   | { type: 'heal'; scale: Attribute; power: number }
   /** Düşmüş bir dostu bulunduğu yerde diriltir: maks canının/manasının bu oranlarıyla (hedef 'dead_ally'). */
@@ -142,10 +191,17 @@ export type SkillEffectKind =
   | { type: 'guard'; turns: number; share: number }
   /** Hasar alan (hedefler arasında vurulan) birimlere ya da `self` ise kullanıcıya süreli durum (buff/debuff) verir. */
   | { type: 'status'; status: StatusKind; turns: number; self?: boolean }
+  /** Vurulan (hasar yoksa tüm) hedeflerin HER BİRİNE ağırlıklı zarla seçilen tek bir durum verir (seed'li RNG). */
+  | { type: 'randomStatus'; options: RandomStatusOption[] }
   /** Skill'in kapsadığı hücrelere `turns` turluk yer etkisi (zehir, yanan zemin...) bırakır. */
   | { type: 'ground'; ground: string; turns: number; scale: Attribute; power: number }
   /** Kullanıcı kendine maks canının `ratio` kadarını hasar verir (canı en az 1 kalır). */
-  | { type: 'selfDamage'; ratio: number };
+  | { type: 'selfDamage'; ratio: number }
+  /**
+   * Kullanıcıya `turns` turluk dikenli durum (thorns): kullanıcıya YAKIN DÖVÜŞ (motion 'melee') vuruşu isabet edince saldırgan,
+   * scale statı x power kadar sabit fiziksel hasar alır (zırh etkiler; isabet/kritik/sapma yok). Yansıma yansımayı tetiklemez.
+   */
+  | { type: 'thorns'; turns: number; scale: Attribute; power: number };
 
 /**
  * `side`: 'everyone' hedefli skill'lerde etkinin hangi tarafa gideceği (varsayılan: hasar/mana yakma/durum düşmana, şifa/kalkan/koruma dosta).
@@ -194,6 +250,11 @@ export interface SkillDef {
   skyCenter?: boolean;
   /** Yukarıdan düşen etki hedeflere sırayla, rastgele sırada ve bu kadar ms arayla başlar (öncekinin bitmesi beklenmez). */
   skyStagger?: number;
+  /**
+   * target 'single_enemy': seçilen hedefe ek olarak onun yanındaki hücrelere de (`mult` x hasar, varsayılan 1) vurur.
+   * pattern 'perpendicular': hedefin aynı sıradaki sol ve sağ şerit komşuları (saldırı ön-arka ekseninde geldiği için yan hücreler).
+   */
+  splash?: { pattern: 'perpendicular'; mult?: number };
   /** target 'area_enemies': oyuncu merkez birimi seçer. radius 1: merkez + önü/arkası/sağı/solu (artı şekli); radius 2: öne/arkaya/sağa/sola 2'şer + çaprazlara 1'er. */
   area?: { radius: 1 | 2 };
 }
@@ -206,11 +267,30 @@ export interface Formulas {
     mpPerInt: number;
     spdBase: number;
     spdPerDex: number;
-    dodgePerDex: number;
     critChanceBase: number;
     critChancePerLuck: number;
-    critMultBase: number;
-    critMultPerLuck: number;
+    /** Kritik çarpanı: SABİT (luck artırmaz). */
+    critMult: number;
+    /** Her Str için tur başı düz can yenilenmesi (turns modu). */
+    hpRegenPerStr: number;
+    /** Her Int için tur başı MP yenilenmesi (turns modu); 0 Int = 0. */
+    mpRegenPerInt: number;
+    /** İsabet = accuracyBase + accuracyPerLuck x Luck. */
+    accuracyBase: number;
+    accuracyPerLuck: number;
+    /** Kaçınma = min(evasionMax, floor(Dex / dexPerEvasionStep) x evasionPerStep): tam sayı adımlı, azalan getiri yok. */
+    dexPerEvasionStep: number;
+    evasionPerStep: number;
+    evasionMax: number;
+  };
+  /** İsabet kontrolü: hit şansı = accuracy - evasion, [0, max] arasına sıkıştırılır (%0 olabilir). aiKillMin: yapay zekanın "öldürür" sayması için gereken en az hit şansı. */
+  hit: { max: number; aiKillMin: number };
+  /** Primary stat pasif bonusları (yalnızca class'ın en yüksek statı primary ise aktif). */
+  primaryBonus: {
+    str: { resilienceChance: number };
+    dex: { hunterMarkMult: number };
+    int: { manaEchoChance: number };
+    luck: { surviveChance: number };
   };
   /** Özellik başına skill gücü katsayısı (hasar, şifa, kalkan). */
   scaling: Record<Attribute, number>;
@@ -222,7 +302,13 @@ export interface Formulas {
   /** Tür etiketine (tags) göre element hassasiyeti: weaknesses[etiket][element] = alınan hasar çarpanı. */
   weaknesses: Record<string, Partial<Record<Element, number>>>;
   /** Dizilim: `rows` sıra (derinlik, 0 = en önde) x `lanes` şerit; yuva = sıra * lanes + şerit. Yakın dövüş en öndeki `meleeRows` dolu sıraya vurabilir. */
-  formation: { rows: number; lanes: number; meleeRows: number };
+  formation: {
+    rows: number;
+    lanes: number;
+    meleeRows: number;
+    /** Yan vuruş komşuluğu (ekran geometrisinden, bkz. formation.ts): tahta başına her hücrenin üst/alt komşu adayları. Yoksa eski kural (aynı sıra, şerit farkı 1). */
+    sideNeighbors?: { maxDx: number; party: { up: number[]; down: number[] }[]; enemy: { up: number[]; down: number[] }[] };
+  };
   turn: { threshold: number; queueLength: number };
 }
 
@@ -231,7 +317,7 @@ export type BattleMode = 'turns' | 'test';
 
 export type Side = 'party' | 'enemy';
 
-export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed';
+export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns';
 
 /** data/statuses.json girişi: veriyle tanımlı buff/debuff. */
 export interface StatusDef {
@@ -266,8 +352,12 @@ export interface GroundEffect {
   source: string;
   /** Etkiyi bırakanın tarafı (kendi tarafındaki birimler zarar görmez). */
   sourceSide: Side;
-  /** Tik başına büyü hasarı (bırakıldığı andaki güçten sabitlenir). */
+  /** Tik başına ham büyü hasarı (bırakıldığı andaki kaynak statından sabitlenir; kaynak ölse de bu kullanılır). Hedefin büyü zırhı tik anında uygulanır. */
   amount: number;
+  /** Skill'in ölçek statı ve bırakıldığı andaki o statın değeri (bilgi amaçlı snapshot). */
+  scale?: Attribute;
+  sourceStat?: number;
+  power?: number;
 }
 
 /** Karakter üzerindeki süreli durum. `turns`, taşıyıcının kendi turunun başında azalır. */
@@ -276,7 +366,7 @@ export interface Status {
   turns: number;
   /** Durumu uygulayan birimin uid'si. */
   source: string;
-  /** regen: tur başına iyileştirme miktarı. */
+  /** regen: tur başına iyileştirme miktarı; thorns: yansıyan sabit hasar (zırhtan önce). */
   amount?: number;
   /** taunt: taunt'lı olmayan dostların aldığı hasarın çarpanı (taunt sürerken). */
   allyMult?: number;

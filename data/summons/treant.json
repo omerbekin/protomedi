@@ -13,15 +13,15 @@
   },
   "armor": 5,
   "magicArmor": 0,
-  "mpRegen": 0,
   "overrides": {
     "hp": 105,
     "mp": 0,
     "spd": 5
   },
-  "ai": "aggressive",
+  "ai": "thorny",
   "skills": [
-    "root_smash"
+    "root_smash",
+    "thorn_shield"
   ],
   "tags": [
     "nature"

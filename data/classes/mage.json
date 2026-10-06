@@ -6,14 +6,14 @@
   "logo": "wizhat",
   "frontPriority": 7,
   "attributes": {
-    "str": 10,
-    "int": 26.0,
-    "dex": 8,
+    "str": 3,
+    "int": 20,
+    "dex": 3,
     "luck": 4
   },
+  "primary": "int",
   "armor": 4,
   "magicArmor": 0,
-  "mpRegen": 4,
   "ai": "caster",
   "skills": [
     "fire_bolt",

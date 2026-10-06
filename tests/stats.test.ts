@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Rng, armorReduction, attributePower, content, damageRange, deriveStats, rollCrit, rollDodge } from '../src/engine';
+import { Rng, armorReduction, attributePower, content, damageRange, deriveStats, hitChance, rollCrit, rollHit } from '../src/engine';
 import type { CombatantData, DamageSpec, Stats } from '../src/engine';
 
 const f = content.formulas;
@@ -13,7 +13,6 @@ const base: CombatantData = {
   attributes: { str: 10, int: 10, dex: 10, luck: 0 },
   armor: 0,
   magicArmor: 0,
-  mpRegen: 0,
   skills: [],
 };
 const stats = (over: Partial<CombatantData['attributes']> = {}, extra: Partial<CombatantData> = {}) =>
@@ -30,29 +29,47 @@ describe('4 temel özellik ve türev stat\'lar', () => {
   it('her özellik yalnızca kendi türevini değiştirir', () => {
     const a = stats();
     const str = stats({ str: 20 });
-    expect([str.mp, str.spd, str.dodge, str.critChance]).toEqual([a.mp, a.spd, a.dodge, a.critChance]);
+    expect([str.mp, str.spd, str.evasion, str.accuracy, str.critChance, str.mpRegen]).toEqual([a.mp, a.spd, a.evasion, a.accuracy, a.critChance, a.mpRegen]);
     const int = stats({ int: 20 });
-    expect([int.hp, int.spd, int.dodge, int.critChance]).toEqual([a.hp, a.spd, a.dodge, a.critChance]);
+    expect([int.hp, int.spd, int.evasion, int.accuracy, int.critChance, int.hpRegen]).toEqual([a.hp, a.spd, a.evasion, a.accuracy, a.critChance, a.hpRegen]);
     const dex = stats({ dex: 20 });
-    expect([dex.hp, dex.mp, dex.critChance]).toEqual([a.hp, a.mp, a.critChance]);
+    expect([dex.hp, dex.mp, dex.critChance, dex.accuracy]).toEqual([a.hp, a.mp, a.critChance, a.accuracy]);
     const luck = stats({ luck: 20 });
-    expect([luck.hp, luck.mp, luck.spd, luck.dodge]).toEqual([a.hp, a.mp, a.spd, a.dodge]);
+    expect([luck.hp, luck.mp, luck.spd, luck.evasion]).toEqual([a.hp, a.mp, a.spd, a.evasion]);
   });
 
-  it('Dexterity küçük bir fiziksel dodge şansı verir', () => {
-    expect(stats({ dex: 0 }).dodge).toBe(0);
-    const d = stats({ dex: 15 }).dodge;
-    expect(d).toBeGreaterThan(0);
-    expect(d).toBeLessThan(0.1); // "minik": %10'un altında
+  it('Dexterity evasion (kaçınma) verir: tam sayı adımlı (her dexPerEvasionStep dex = +evasionPerStep), evasionMax üst sınırlı', () => {
+    const { dexPerEvasionStep: step, evasionPerStep: per, evasionMax: max } = f.attributes;
+    expect(stats({ dex: 0 }).evasion).toBe(0);
+    expect(stats({ dex: step - 1 }).evasion).toBe(0); // adım dolmadan kaçınma yok
+    expect(stats({ dex: step }).evasion).toBeCloseTo(per, 10);
+    expect(stats({ dex: step * 2 }).evasion).toBeCloseTo(per * 2, 10);
+    expect(stats({ dex: step * 2 + step - 1 }).evasion).toBeCloseTo(per * 2, 10); // yarım adım sayılmaz
+    // tam sayı yüzde: evasion x 100 her zaman tam sayı (adım yüzdesi tam sayı olduğu sürece)
+    for (let d = 0; d <= 60; d++) expect(Number.isInteger(Math.round(stats({ dex: d }).evasion * 10000) / 100)).toBe(true);
+    // azalan getiri yok: eşit dex artışı eşit evasion artışı verir (üst sınıra kadar)
+    expect(stats({ dex: step * 5 }).evasion - stats({ dex: step * 4 }).evasion).toBeCloseTo(stats({ dex: step }).evasion - stats({ dex: 0 }).evasion, 10);
+    expect(stats({ dex: 13 }).evasion).toBeCloseTo(Math.floor(13 / step) * per, 10);
+    expect(stats({ dex: 100000 }).evasion).toBe(max);
   });
 
-  it('Luck: varsayılan %5 kritik şansı ve %150 (x1,5) kritik çarpanı; Luck ikisini artırır', () => {
+  it('Luck: %5 kritik şansı + accuracy; kritik çarpanı SABİT (Luck artırmaz)', () => {
     const none = stats({ luck: 0 });
-    expect(none.critChance).toBeCloseTo(0.05, 10);
-    expect(none.critMult).toBeCloseTo(1.5, 10);
+    expect(none.critChance).toBeCloseTo(f.attributes.critChanceBase, 10);
+    expect(none.critMult).toBe(f.attributes.critMult);
+    expect(none.accuracy).toBeCloseTo(f.attributes.accuracyBase, 10);
     const lucky = stats({ luck: 10 });
     expect(lucky.critChance).toBeGreaterThan(none.critChance);
-    expect(lucky.critMult).toBeGreaterThan(none.critMult);
+    expect(lucky.accuracy).toBeGreaterThan(none.accuracy);
+    expect(lucky.critMult).toBe(none.critMult);
+  });
+
+  it('Str düz can yenilenmesi, Int MP yenilenmesi verir (0 Int = 0)', () => {
+    expect(stats({ str: 20 }).hpRegen).toBeCloseTo(20 * f.attributes.hpRegenPerStr, 10);
+    expect(stats({ str: 0 }).hpRegen).toBe(0);
+    expect(stats({ int: 0 }).mpRegen).toBe(0);
+    expect(stats({ int: 20 }).mpRegen).toBe(Math.round(20 * f.attributes.mpRegenPerInt));
+    expect(stats({ int: 20 }).mpRegen).toBeGreaterThan(stats({ int: 8 }).mpRegen);
   });
 
   it('overrides türev stat\'ı ezer (çağrılan birimin canı gibi)', () => {
@@ -147,15 +164,28 @@ describe('zarlar: kritik ve dodge', () => {
     expect(rollCrit({ critChance: 1, critMult: 2 }, new Rng(1))).toEqual({ crit: true, mult: 2 });
   });
 
-  it('dodge sıklığı şansa uyar; her çağrı tam bir sayı tüketir', () => {
+  it('isabet şansı = accuracy - evasion, [0, hit.max] arasında (alt sınır yok)', () => {
+    const { max } = f.hit;
+    expect(hitChance({ accuracy: 0.9 }, { evasion: 0.2 }, f)).toBeCloseTo(0.7, 10);
+    expect(hitChance({ accuracy: 0.9 }, { evasion: 0 }, f)).toBeCloseTo(0.9, 10);
+    expect(hitChance({ accuracy: 5 }, { evasion: 0 }, f)).toBe(max);
+    expect(hitChance({ accuracy: 0.1 }, { evasion: 0.65 }, f)).toBe(0); // alt sınır yok: %0 olabilir, negatife düşmez
+    // saldırgan Luck'ı arttıkça, hedef Dex'i arttıkça: monoton
+    expect(hitChance(stats({ luck: 10 }), stats({ dex: 5 }), f)).toBeGreaterThan(hitChance(stats({ luck: 2 }), stats({ dex: 5 }), f));
+    expect(hitChance(stats({ luck: 5 }), stats({ dex: 20 }), f)).toBeLessThan(hitChance(stats({ luck: 5 }), stats({ dex: 2 }), f));
+  });
+
+  it('rollHit sıklığı hit şansına uyar; her çağrı tam bir sayı tüketir', () => {
     const rng = new Rng(3);
-    let dodged = 0;
-    for (let i = 0; i < 20000; i++) if (rollDodge({ dodge: 0.1 }, rng)) dodged++;
-    expect(dodged / 20000).toBeGreaterThan(0.09);
-    expect(dodged / 20000).toBeLessThan(0.11);
+    let hits = 0;
+    const att = { accuracy: 0.9 };
+    const def = { evasion: 0.2 };
+    for (let i = 0; i < 20000; i++) if (rollHit(att, def, f, rng)) hits++;
+    expect(hits / 20000).toBeGreaterThan(0.68);
+    expect(hits / 20000).toBeLessThan(0.72);
     const a = new Rng(5);
     const b = new Rng(5);
-    rollDodge({ dodge: 0.5 }, a);
+    rollHit(att, def, f, a);
     b.next();
     expect(a.next()).toBe(b.next());
   });

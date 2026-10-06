@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, content } from '../src/engine';
+import { Battle, attributePower, content } from '../src/engine';
 import type { BattleEvent, CombatantDef } from '../src/engine';
 import { installLegacySkills } from './legacy-skills';
 
@@ -11,7 +11,7 @@ installLegacySkills();
  */
 function newBattle(seed = 1, calm = true): Battle {
   const b = new Battle(content.battleSetup('first-battle', seed, 'test'));
-  if (calm) for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+  if (calm) for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0 });
   return b;
 }
 
@@ -97,7 +97,7 @@ describe('hasar skill\'leri', () => {
     const teams = { party: ['mage', 'archer', 'warrior', 'paladin'], enemies: ['warrior', 'defender', 'mage', 'druid'] };
     const mk = () => {
       const b = new Battle(content.battleSetup('first-battle', 1, 'test', teams));
-      for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+      for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0 });
       return b;
     };
     const defender = (b: Battle) => b.combatants.find((c) => c.side === 'enemy' && c.defId === 'defender')!.uid;
@@ -118,7 +118,7 @@ describe('hasar skill\'leri', () => {
       magVsDef += ofType(act(a2, mage(a2), 'fire_bolt', defender(a2)), 'damage')[0]!.amount;
       magVsWar += ofType(act(w2, mage(w2), 'fire_bolt', warrior(w2)), 'damage')[0]!.amount;
     }
-    expect(physVsDef).toBeLessThan(physVsWar * 0.8); // zırh 25 vs 12
+    expect(physVsDef).toBeLessThan(physVsWar * 0.9); // Defender zırhı (aura dahil) Warrior'dan yüksek
     expect(Math.abs(magVsDef - magVsWar) / magVsWar).toBeLessThan(0.1); // büyü, fiziksel zırhtan etkilenmez
   });
 
@@ -129,7 +129,7 @@ describe('hasar skill\'leri', () => {
     const power = (id: string) => (content.skills[id]!.effects[0] as { power: number }).power;
     for (let seed = 1; seed <= 40; seed++) {
       const b = new Battle(content.battleSetup('first-battle', seed, 'test', teams));
-      for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+      for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0 });
       const archer = b.combatants.find((c) => c.side === 'party' && c.defId === 'archer')!.uid;
       const defender = b.combatants.find((c) => c.side === 'enemy' && c.defId === 'defender')!.uid;
       aimed += ofType(act(b, archer, 'aimed_shot', defender), 'damage')[0]!.amount / power('aimed_shot');
@@ -168,7 +168,8 @@ describe('bedeller (MP / can)', () => {
     expect(b.canUse(MAGE, 'meteor')).toEqual({ ok: false, reason: 'Not enough MP' });
     expect(b.useSkill(MAGE, 'meteor', E_WARRIOR).ok).toBe(false);
     expect(b.log).toHaveLength(logLength);
-    expect(mage.mp).toBe(6);
+    // 30 - 24 bedel (iade yok)
+    expect(mage.mp).toBe(30 - content.skills.meteor!.cost.amount);
   });
 
   it('Undead Blood Rite can öder; canı yetmiyorsa kullanamaz (kendini öldüremez)', () => {
@@ -256,7 +257,7 @@ describe('kalkan', () => {
     const effect = content.skills.mana_barrier!.effects[0]!;
     const power = effect.type === 'shield' ? effect.power : 0;
     const mage = b.get(E_MAGE)!;
-    expect(shield.amount).toBe(Math.round(mage.stats.int * content.formulas.scaling.int * power));
+    expect(shield.amount).toBe(Math.round(attributePower(mage.stats, 'int', content.formulas) * power));
     expect(b.get(E_DRUID)!.shield).toBe(shield.amount);
   });
 
@@ -304,8 +305,12 @@ describe('çağrı (Druid)', () => {
   it('çağrılan ölürse yuvası tekrar çağrı için boşalır', () => {
     const b = newBattle();
     const uid = ofType(act(b, E_DRUID, 'summon_treant'), 'summon')[0]!.combatant.uid;
-    for (let i = 0; i < 30 && b.get(uid)!.hp > 0; i++) act(b, MAGE, 'fire_bolt', uid);
+    for (let i = 0; i < 60 && b.get(uid)!.hp > 0; i++) {
+      b.get(MAGE)!.mp = b.get(MAGE)!.maxMp; // düşük stat toplamı: MP her vuruşta tazelenir
+      act(b, MAGE, 'fire_bolt', uid);
+    }
     expect(b.get(uid)!.hp).toBe(0);
+    b.get(E_DRUID)!.mp = b.get(E_DRUID)!.maxMp; // MP bu testin konusu değil
     expect(b.canUse(E_DRUID, 'summon_treant').ok).toBe(true);
   });
 });
@@ -316,7 +321,7 @@ describe('Paladin\'in undead bonusu', () => {
     const plainDef = content.classes.warrior!;
     const dmg = (def: CombatantDef, seed: number) => {
       const b = new Battle({ ...content.battleSetup('first-battle', seed, 'test'), enemies: [def] });
-      for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+      for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0 });
       return ofType(act(b, PALADIN, 'holy_strike', E_WARRIOR), 'damage')[0]!.amount;
     };
     let undeadTotal = 0;

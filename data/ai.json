@@ -1,7 +1,24 @@
 {
-  "_not": "Yapay zeka profilleri. priorities soldan sağa denenir; ilk uygun olan seçilir. kill: öldürebileceği biri varsa. heal: dostlardan biri healBelowRatio altındaysa. summon: yeterince çağrılmış birim yoksa. shield: kalkansız ve canı shieldBelowRatio altındaki dosta/kendine. aoe: en az aoeMinTargets düşman varsa herkese vuran skill. damage: odak hedefe en verimli hasar. focus: lowest_hp (en az canlıya) veya lowest_ratio (can oranı en düşüğe). mpCostWeight/hpCostWeight: bedelin skora etkisi. minHpRatioForHpCost: can ödeyen skill'ler için kullanıcının en az can oranı (öldürücü vuruş hariç). taunt: kendinde taunt yoksa ve kullanılabiliyorsa taunt çek. guard: canı guardBelowRatio altındaki, korumasız dostu koru. burn: en az burnMinTargets düşmanın yakılabilir manası varsa mana yak.",
+  "_not": "Yapay zeka profilleri. priorities soldan sağa denenir; ilk uygun olan seçilir. kill: öldürebileceği biri varsa. heal: dostlardan biri healBelowRatio altındaysa. summon: yeterince çağrılmış birim yoksa. shield: kalkansız ve canı shieldBelowRatio altındaki dosta/kendine. aoe: en az aoeMinTargets düşman varsa herkese vuran skill. damage: odak hedefe en verimli hasar. focus: lowest_hp (en az canlıya) veya lowest_ratio (can oranı en düşüğe). mpCostWeight/hpCostWeight: bedelin skora etkisi. minHpRatioForHpCost: can ödeyen skill'ler için kullanıcının en az can oranı (öldürücü vuruş hariç). taunt: kendinde taunt yoksa ve kullanılabiliyorsa taunt çek. guard: canı guardBelowRatio altındaki, korumasız dostu koru. thorns: kendinde thorns yoksa ve en az thornsMinMelee yakın dövüşçü düşman varsa dikenli kalkan aç. burn: en az burnMinTargets düşmanın yakılabilir manası varsa mana yak.",
   "defaultProfile": "aggressive",
   "profiles": {
+    "thorny": {
+      "priorities": [
+        "kill",
+        "thorns",
+        "aoe",
+        "damage"
+      ],
+      "focus": "lowest_ratio",
+      "aoeMinTargets": 3,
+      "healBelowRatio": 0,
+      "shieldBelowRatio": 0,
+      "maxSummons": 0,
+      "mpCostWeight": 0.5,
+      "hpCostWeight": 1,
+      "minHpRatioForHpCost": 0.5,
+      "thornsMinMelee": 1
+    },
     "aggressive": {
       "priorities": [
         "kill",
@@ -142,6 +159,20 @@
       "shieldBelowRatio": 0,
       "maxSummons": 1,
       "mpCostWeight": 0.5,
+      "hpCostWeight": 1,
+      "minHpRatioForHpCost": 0.5
+    },
+    "gambler": {
+      "priorities": [
+        "kill",
+        "damage"
+      ],
+      "focus": "lowest_ratio",
+      "aoeMinTargets": 3,
+      "healBelowRatio": 0,
+      "shieldBelowRatio": 0,
+      "maxSummons": 0,
+      "mpCostWeight": 0.4,
       "hpCostWeight": 1,
       "minHpRatioForHpCost": 0.5
     }

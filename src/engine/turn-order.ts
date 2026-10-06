@@ -59,3 +59,9 @@ export function predictQueue(
   }
   return queue;
 }
+
+/** Sıra sayacının eşiğe oranı, 0-1 arası (arayüzdeki SPEED çubuğu için; salt okunur, yalnızca hesap). */
+export function turnProgress(counter: number, threshold: number): number {
+  if (threshold <= 0) return 1;
+  return Math.min(1, Math.max(0, counter / threshold));
+}

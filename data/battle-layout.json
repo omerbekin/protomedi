@@ -7,8 +7,8 @@
     "height": 200
   },
   "spriteBox": {
-    "width": 114,
-    "height": 180
+    "width": 140,
+    "height": 190
   },
   "partySlots": [
     {
@@ -112,7 +112,8 @@
   ],
   "turnBar": {
     "y": 24,
-    "cells": 8,
+    "cells": 5,
+    "pastCells": 4,
     "cellSize": 90,
     "gap": 16
   },
@@ -120,7 +121,8 @@
     "width": 104,
     "height": 16,
     "offsetY": 24,
-    "mpHeight": 8
+    "mpHeight": 8,
+    "speedHeight": 5
   },
   "commandPanel": {
     "y": 920,
@@ -129,6 +131,7 @@
     "buttonHeight": 136,
     "gap": 10,
     "iconSize": 46,
+    "avatarInfoStyle": "overlayCompact",
     "statsWidth": 470,
     "tipWidth": 560
   },
@@ -144,6 +147,7 @@
     "announceMs": 1100,
     "skillSlowdown": 1.2,
     "hitMaxRatio": 0.35,
+    "damageNumberMaxRatio": 0.25,
     "cameraShakeRatio": 0.25,
     "hpGhostDelayMs": 350,
     "hpGhostBaseMs": 350,
@@ -165,6 +169,8 @@
     "hpFill": "#5cc46b",
     "hpFillEnemy": "#e0574a",
     "mpFill": "#4f8cff",
+    "speedFill": "#e8a317",
+    "speedFull": "#fff0a0",
     "shield": "#8fe3ff",
     "heal": "#7dff9b",
     "damage": "#ffe066",

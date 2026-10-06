@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { Battle, chooseAction, content, describePassive, describeSkill, previewSkill } from '../src/engine';
+import { Battle, armorReduction, attributePower, chooseAction, content, describePassive, describeSkill, previewSkill } from '../src/engine';
 import type { BattleEvent, BattleMode, Combatant } from '../src/engine';
 import { installLegacySkills } from './legacy-skills';
 
@@ -10,7 +11,7 @@ type Teams = { party: string[]; enemies: string[] };
 /** Verilen takımlarla savaş. `calm`: kritik ve dodge kapalı (sayılar zara bağlı olmasın). */
 function make(teams: Teams, opts: { seed?: number; mode?: BattleMode; calm?: boolean } = {}): Battle {
   const b = new Battle(content.battleSetup('first-battle', opts.seed ?? 1, opts.mode ?? 'test', teams));
-  if (opts.calm ?? true) for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+  if (opts.calm ?? true) for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0 });
   return b;
 }
 
@@ -76,7 +77,7 @@ describe('kritik vuruş', () => {
     const mage = unit(b, 'party', 'mage');
     Object.assign(mage.stats, { critChance: 1, critMult: 3 });
     const sh = ofType(act(b, mage.uid, 'mana_barrier', unit(b, 'party', 'warrior').uid), 'shield')[0]!;
-    expect(sh.amount).toBe(Math.round(mage.stats.int * content.formulas.scaling.int * (content.skills.mana_barrier!.effects[0] as { power: number }).power));
+    expect(sh.amount).toBe(Math.round(attributePower(mage.stats, 'int', content.formulas) * (content.skills.mana_barrier!.effects[0] as { power: number }).power));
   });
 
   it('kritik damage olayında işaretlenir; kritik yokken false', () => {
@@ -86,11 +87,11 @@ describe('kritik vuruş', () => {
   });
 });
 
-describe('fiziksel dodge', () => {
-  it('dodge eden hedef fiziksel hasar almaz: dodge olayı gelir, damage olayı gelmez', () => {
+describe('isabet kontrolü: dodge/iska (fiziksel ve büyülü)', () => {
+  it('iska eden vuruş hasar vermez: dodge olayı gelir, damage olayı gelmez', () => {
     const b = make(T1);
     const target = unit(b, 'enemy', 'defender');
-    target.stats.dodge = 1;
+    b.debug.dodge = 'always';
     const hp = target.hp;
     const events = act(b, unit(b, 'party', 'warrior').uid, 'melee_attack', target.uid);
     expect(ofType(events, 'dodge')).toHaveLength(2); // Double Strike: iki vuruş da kaçırılır
@@ -98,17 +99,17 @@ describe('fiziksel dodge', () => {
     expect(target.hp).toBe(hp);
   });
 
-  it('büyü hasarı dodge edilemez', () => {
+  it('büyü hasarı da isabet kontrolüne girer (iska = dodge olayı)', () => {
     const b = make(T1);
     const target = unit(b, 'enemy', 'defender');
-    target.stats.dodge = 1;
+    b.debug.dodge = 'always';
     const events = act(b, unit(b, 'party', 'mage').uid, 'fire_bolt', target.uid);
-    expect(ofType(events, 'dodge')).toHaveLength(0);
-    expect(ofType(events, 'damage')).toHaveLength(1);
+    expect(ofType(events, 'dodge')).toHaveLength(1);
+    expect(ofType(events, 'damage')).toHaveLength(0);
   });
 
-  it('dodge yüksek Dexterity ile artar: düşük dex\'li sınıflar neredeyse hiç dodge etmez', () => {
-    expect(content.classes.archer!.stats.dodge).toBeGreaterThan(content.classes.defender!.stats.dodge);
+  it('kaçınma (evasion) Dexterity ile artar: yüksek dex sınıfı daha çok kaçınır', () => {
+    expect(content.classes.archer!.stats.evasion).toBeGreaterThan(content.classes.defender!.stats.evasion);
   });
 });
 
@@ -143,9 +144,9 @@ describe('skill hasarı hangi özelliğe bağlıysa onunla ölçeklenir', () => 
     expect(damageWith('warrior', 'melee_attack', 'dex', 99)).toBe(base);
   });
 
-  it('Undead\'in karanlık skill\'leri STR\'ye bağlı', () => {
-    expect(damageWith('undead', 'blood_rite', 'str', 99)).toBeGreaterThan(damageWith('undead', 'blood_rite', 'str', content.classes.undead!.attributes.str));
-    expect(damageWith('undead', 'blood_rite', 'int', 99)).toBe(damageWith('undead', 'blood_rite', 'int', content.classes.undead!.attributes.int));
+  it("Undead karanlık skill'leri INT'e bağlı (Dark Mage, Int primary)", () => {
+    expect(damageWith('undead', 'blood_rite', 'int', 99)).toBeGreaterThan(damageWith('undead', 'blood_rite', 'int', content.classes.undead!.attributes.int));
+    expect(damageWith('undead', 'blood_rite', 'str', 99)).toBe(damageWith('undead', 'blood_rite', 'str', content.classes.undead!.attributes.str));
   });
 
   it('şifa ve kalkan da kendi özelliğine bağlı: Lay on Hands INT, Shield Wall STR', () => {
@@ -165,8 +166,12 @@ describe('skill hasarı hangi özelliğe bağlıysa onunla ölçeklenir', () => 
 });
 
 /** Izgara testleri için: 12 hücrelik listeden (index = yuva) kurulan savaş. */
-const grid = (party: string[], enemies: string[], seed = 1) =>
-  new Battle(content.battleSetup('random-battle', seed, 'test', { party, enemies }, false));
+/** Isabet kontrolü kapalı (accuracy yüksek, evasion 0): dizilim/hedef testleri iskadan etkilenmesin. */
+const grid = (party: string[], enemies: string[], seed = 1) => {
+  const b = new Battle(content.battleSetup('random-battle', seed, 'test', { party, enemies }, false));
+  for (const c of b.combatants) Object.assign(c.stats, { accuracy: 10, evasion: 0 });
+  return b;
+};
 const cells = (map: Record<number, string>) => Array.from({ length: 12 }, (_, i) => map[i] ?? '');
 const full = (id = 'warrior') => Array.from({ length: 12 }, () => id);
 const eAt = (b: Battle, slot: number) => b.combatants.find((c) => c.side === 'enemy' && c.slot === slot)!;
@@ -254,7 +259,7 @@ describe('dizilim ve menzil', () => {
     const seeds = 40;
     for (let seed = 1; seed <= seeds; seed++) {
       const b = grid(cells({ 0: 'archer' }), cells({ 0: 'warrior', 3: 'warrior', 6: 'warrior', 2: 'druid' }), seed);
-      for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+      for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0 });
       delete b.get('party-0')!.passive; // mesafe pasifi ölçümü bozmasın
       const events = act(b, 'party-0', 'piercing_arrow', 'enemy-0');
       // şerit 0: slot 0, 3, 6 (druid şerit 2'de, vurulmaz); öndekinden arkadakine
@@ -274,12 +279,19 @@ describe('dizilim ve menzil', () => {
   });
 
   it('Piercing Arrow: ana hedef kaçsa bile şeritteki diğerleri vurulur; şeritte kimse yoksa yalnızca hedef', () => {
-    const d = grid(cells({ 0: 'archer' }), cells({ 0: 'warrior', 3: 'warrior', 2: 'druid' }));
-    for (const c of d.combatants) c.stats.dodge = 0;
+    let missed = false;
+    for (let seed = 1; seed <= 60 && !missed; seed++) {
+    const d = grid(cells({ 0: 'archer' }), cells({ 0: 'warrior', 3: 'warrior', 2: 'druid' }), seed);
+    for (const c of d.combatants) Object.assign(c.stats, { accuracy: 1, evasion: 0 });
     const front = eAt(d, 0);
-    front.stats.dodge = 1;
+    front.stats.evasion = 0.8; // ön hedefe isabet şansı çok düşük: bazı tohumlarda iska eder
     const events = act(d, 'party-0', 'piercing_arrow', front.uid);
-    expect(ofType(events, 'damage').map((e) => e.target)).toEqual([eAt(d, 3).uid]);
+    if (ofType(events, 'dodge').some((e) => e.target === front.uid)) {
+      missed = true;
+      expect(ofType(events, 'damage').map((e) => e.target)).toEqual([eAt(d, 3).uid]);
+    }
+    }
+    expect(missed).toBe(true);
     const alone = grid(cells({ 0: 'archer' }), cells({ 0: 'warrior', 2: 'druid' }));
     expect(ofType(act(alone, 'party-0', 'piercing_arrow', 'enemy-0'), 'damage')).toHaveLength(1);
   });
@@ -395,7 +407,7 @@ describe('Defender: Taunt, Guard, Fist Crush', () => {
 
   it('Fist Crush 3\'ten az düşman varsa hepsine vurur', () => {
     const b = grid(cells({ 0: 'defender' }), cells({ 0: 'warrior', 3: 'mage' }));
-    for (const c of b.combatants) c.stats.dodge = 0;
+    for (const c of b.combatants) Object.assign(c.stats, { accuracy: 10, evasion: 0 });
     expect(ofType(act(b, 'party-0', 'fist_crush'), 'damage')).toHaveLength(2);
   });
 });
@@ -408,14 +420,15 @@ describe('Druid: tur bazlı şifa ve çağrı süresi', () => {
     const druid = unit(b, 'party', 'druid');
     const target = unit(b, 'party', 'warrior');
     skipUntil(b, druid.uid);
+    target.stats.hpRegen = 0; // Str can yenilenmesi bu ölçümü bozmasın
     target.hp = 20;
     const events = act(b, druid.uid, 'rejuvenate', target.uid);
     // hemen bir başlangıç şifası (tur başına x tik sayısı) verir; asıl tur bazlı şifa sonraki turlarda gelir
     const initial = ofType(events, 'heal');
     expect(initial).toHaveLength(1);
-    expect(initial[0]!.amount).toBeGreaterThan(Math.round(druid.stats.int * content.formulas.scaling.int * (content.skills.rejuvenate!.effects.find((e) => e.type === 'hot') as { power: number }).power) * 2);
+    expect(initial[0]!.amount).toBeGreaterThan(Math.round(attributePower(druid.stats, 'int', content.formulas) * (content.skills.rejuvenate!.effects.find((e) => e.type === 'hot') as { power: number }).power) * 2);
     expect(ofType(events, 'status')[0]).toMatchObject({ target: target.uid, status: 'regen', turns: 3 });
-    const perTurn = Math.round(druid.stats.int * content.formulas.scaling.int * (content.skills.rejuvenate!.effects.find((e) => e.type === 'hot') as { power: number }).power);
+    const perTurn = Math.round(attributePower(druid.stats, 'int', content.formulas) * (content.skills.rejuvenate!.effects.find((e) => e.type === 'hot') as { power: number }).power);
 
     const ticks: number[] = [];
     let ended = false;
@@ -439,15 +452,16 @@ describe('Druid: tur bazlı şifa ve çağrı süresi', () => {
     Object.assign(druid.stats, { critChance: 1, critMult: 2 });
     const target = unit(b, 'party', 'warrior');
     skipUntil(b, druid.uid);
+    target.stats.hpRegen = 0;
     target.maxHp = 1000; // tavan şifayı kırpmasın
     target.hp = 1;
     const heals: number[] = [];
     for (const e of act(b, druid.uid, 'rejuvenate', target.uid)) if (e.type === 'heal') heals.push(e.amount);
     for (let i = 0; i < 400 && heals.length < 4; i++) {
       const r = b.skipTurn();
-      if (r.ok) for (const e of r.events) if (e.type === 'heal' && e.target === target.uid) heals.push(e.amount);
+      if (r.ok) for (const e of r.events) if (e.type === 'heal' && e.target === target.uid && e.source === druid.uid) heals.push(e.amount);
     }
-    const perTurn = Math.round(druid.stats.int * content.formulas.scaling.int * (content.skills.rejuvenate!.effects.find((e) => e.type === 'hot') as { power: number }).power);
+    const perTurn = Math.round(attributePower(druid.stats, 'int', content.formulas) * (content.skills.rejuvenate!.effects.find((e) => e.type === 'hot') as { power: number }).power);
     expect(heals.slice(1)).toEqual([perTurn * 2, perTurn * 2, perTurn * 2]); // ilk eleman başlangıç şifası, sonrası tikler
   });
 
@@ -568,9 +582,12 @@ describe('Anti-Mage: mana yakma, eksik manaya göre hasar, büyü kalkanı', () 
     const empty = run(0);
     expect(half).toBeGreaterThan(full);
     expect(empty).toBeGreaterThan(half);
-    const maxMp = unit(make(TA), 'enemy', 'mage').maxMp;
-    expect(empty - full).toBeGreaterThan(maxMp * 0.8);
-    expect(empty - full).toBeLessThan(maxMp * 1.2);
+    const ref = unit(make(TA), 'enemy', 'mage');
+    const perMana = (content.skills.void_strike!.effects.find((e) => e.type === 'damage') as { bonusPerMissingMana: number }).bonusPerMissingMana;
+    // eksik mana başına ek hasar, hedefin büyü zırhıyla yüzdesel azalır
+    const expected = ref.maxMp * perMana * (1 - armorReduction(ref.stats.magicArmor, content.formulas));
+    expect(empty - full).toBeGreaterThan(expected * 0.8);
+    expect(empty - full).toBeLessThan(expected * 1.2);
   });
 
   it('Spell Ward kendine büyü kalkanı basar: yalnızca büyü hasarını emer, fizikseli emmez', () => {
@@ -592,6 +609,9 @@ describe('Anti-Mage: mana yakma, eksik manaya göre hasar, büyü kalkanı', () 
 
   it('büyü zırhı yalnızca Anti-Mage\'de; diğer class\'larda 0', () => {
     for (const def of Object.values(content.classes)) {
+      // Büyü zırhı yalnızca class verisinden gelir (primary bonusu büyü zırhı vermez)
+      const raw = JSON.parse(readFileSync(`data/classes/${def.id}.json`, 'utf8')) as { magicArmor: number };
+      expect(def.stats.magicArmor, def.id).toBe(raw.magicArmor);
       if (def.id === 'antimage') expect(def.stats.magicArmor, def.id).toBeGreaterThan(0);
       else expect(def.stats.magicArmor, def.id).toBe(0);
     }
@@ -726,6 +746,7 @@ describe('Çağrı yeri seçimi ve hücre listesi', () => {
     const ev = ofType(act(b, druid.uid, 'summon_treant', undefined, 7), 'summon')[0]!;
     expect(ev.combatant.slot).toBe(7);
     const d2 = unit(b, 'party', 'druid');
+    d2.mp = d2.maxMp; // ikinci çağrı için MP tazelenir
     expect(ofType(act(b, d2.uid, 'summon_treant'), 'summon')[0]!.combatant.slot).toBe(1);
   });
 
@@ -746,7 +767,8 @@ describe('Boş hücreye alan atışı ve Shield Bash', () => {
     const empty = grid(cells({ 0: 'mage' }), cells({ 6: 'warrior' }));
     const mp = empty.get('party-0')!.mp;
     expect(ofType(act(empty, 'party-0', 'blizzard', undefined, 11), 'damage')).toHaveLength(0);
-    expect(empty.get('party-0')!.mp).toBe(mp - content.skills.blizzard!.cost.amount);
+    const bc = content.skills.blizzard!.cost.amount;
+    expect(empty.get('party-0')!.mp).toBe(mp - bc); // iade yok: yalnızca bedel düşer
   });
 
   it('geçersiz hücre ya da hedefsiz alan atışı reddedilir', () => {
@@ -764,7 +786,7 @@ describe('Boş hücreye alan atışı ve Shield Bash', () => {
 
   it('Piercing Arrow boş şeride atılırsa şeridin en öndeki birimi ana hedef (tam hasar), diğerleri %50', () => {
     const b = grid(cells({ 0: 'archer' }), cells({ 1: 'warrior', 4: 'warrior' }));
-    for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+    for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0 });
     const events = act(b, 'party-0', 'piercing_arrow', undefined, 10); // şerit 1'in boş sıra-3 hücresi
     const first = total(events, 'enemy-0');
     const second = total(events, 'enemy-1');
@@ -900,7 +922,7 @@ describe('Yakın dövüş yalnızca ön sıradan yapılır', () => {
 
 describe('Pasif skill\'ler', () => {
   const calm = (b: Battle) => {
-    for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+    for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0 });
     return b;
   };
   const passiveLog = (b: Battle) => b.log.filter((e) => e.type === 'passive');
@@ -947,6 +969,7 @@ describe('Pasif skill\'ler', () => {
     expect(ofType(events, 'heal')[0]!.amount).toBe(Math.max(1, Math.round(dmg * 0.2)));
     // iskeletin vurduğu hasardan da sahibi iyileşir
     const sk = ofType(act(b, 'party-0', 'raise_dead', undefined, 1), 'summon')[0]!.combatant.uid;
+    Object.assign(b.get(sk)!.stats, { accuracy: 10, evasion: 0 });
     const before = u.hp;
     const ev2 = act(b, sk, 'skeleton_strike', 'enemy-0');
     const dmg2 = ofType(ev2, 'damage')[0]!.amount;
@@ -954,16 +977,50 @@ describe('Pasif skill\'ler', () => {
     expect(ofType(ev2, 'heal')[0]!.target).toBe('party-0');
   });
 
-  it('Defender - Bulwark Aura: kendine ve 1 yarıçaptaki (artı) dostlara zırh; çaprazdakine ve uzaktakine değil', () => {
+  it('Defender - Bulwark Aura: kendi zırhının yüzdesi, kendine ve 1 yarıçaptaki (artı) dostlara bonus zırh; çaprazdakine ve uzaktakine değil', () => {
     const b = grid(cells({ 4: 'defender', 3: 'warrior', 7: 'paladin', 0: 'archer', 9: 'mage' }), cells({ 0: 'mage' }));
     const base = (uid: string) => b.get(uid)!.stats.armor;
     const eff = (uid: string) => b.effectiveStats(b.get(uid)!).armor;
+    const e = content.classes.defender!.passive!.effect;
+    if (e.type !== 'armorAura') throw new Error('Defender pasifi armorAura değil');
+    const bonus = base('party-2') * e.pct; // Defender'ın KENDİ zırhının yüzdesi
+    expect(bonus).toBeGreaterThan(0);
     // slot sırasıyla uid'ler: 0 archer = party-0, 3 warrior = party-1, 4 defender = party-2, 7 paladin = party-3, 9 mage = party-4
-    expect(eff('party-2')).toBe(base('party-2') + 8);
-    expect(eff('party-1')).toBe(base('party-1') + 8);
-    expect(eff('party-3')).toBe(base('party-3') + 8);
+    expect(eff('party-2')).toBeCloseTo(base('party-2') + bonus, 10);
+    expect(eff('party-1')).toBeCloseTo(base('party-1') + bonus, 10);
+    expect(eff('party-3')).toBeCloseTo(base('party-3') + bonus, 10);
     expect(eff('party-0')).toBe(base('party-0'));
     expect(eff('party-4')).toBe(base('party-4'));
+  });
+
+  it('Bulwark Aura yüzdesi Defender zırhıyla ölçeklenir ve stacking sınırı vardır (maxStacks)', () => {
+    const e = content.classes.defender!.passive!.effect;
+    if (e.type !== 'armorAura') throw new Error('armorAura değil');
+    const mkAura = () => grid(cells({ 4: 'defender', 3: 'defender', 5: 'defender', 1: 'defender', 7: 'warrior' }), cells({ 0: 'mage' }));
+    const b = mkAura();
+    const center = b.get('party-2')!; // slot 4 (orta Defender): 3, 5, 1, 7 komşu
+    // zırhı farklılaştır: komşu Defender'ların zırhı 10, 20, 40, orta 20
+    b.get('party-1')!.stats.armor = 10; // slot 3
+    b.get('party-3')!.stats.armor = 40; // slot 5
+    b.get('party-0')!.stats.armor = 20; // slot 1... (sıra: slot sırasıyla uid)
+    center.stats.armor = 20;
+    const gains = [b.get('party-1')!, b.get('party-3')!, b.get('party-0')!, center].map((c) => c.stats.armor * e.pct).sort((x, y) => y - x);
+    const cap = gains.slice(0, e.maxStacks).reduce((t, g) => t + g, 0);
+    expect(e.maxStacks).toBeGreaterThanOrEqual(1);
+    expect(b.auraArmor(center)).toBeCloseTo(cap, 10); // yalnızca en büyük maxStacks kaynak sayılır
+    // Defender yoksa (öldüyse) aura gider
+    for (const id of ['party-0', 'party-1', 'party-2', 'party-3']) b.get(id)!.hp = 0;
+    expect(b.auraArmor(b.get('party-4')!)).toBe(0);
+  });
+
+  it('Bulwark Aura açıklaması yüzdeyi ve bonusu yazar (pasif tooltip)', () => {
+    const d = content.classes.defender!;
+    const e = d.passive!.effect;
+    if (e.type !== 'armorAura') throw new Error('armorAura değil');
+    const text = describePassive(d.passive!, d.stats, content.formulas);
+    expect(text).toContain(`${Math.round(e.pct * 100)}%`);
+    expect(text).toContain(`+${Math.round(d.stats.armor * e.pct)}`);
+    expect(d.passive!.text).toContain(`${Math.round(e.pct * 100)}%`);
   });
 
   it('Bulwark Aura hasarı gerçekten azaltır', () => {

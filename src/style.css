@@ -72,8 +72,8 @@ body.force-portrait .rotate-warning {
   right: 8px;
   bottom: 60px;
   top: 64px;
-  width: min(380px, calc(100vw - 16px));
-  overflow-y: auto;
+  width: min(440px, calc(100vw - 16px));
+  overflow: hidden;
   padding: 12px;
   background: rgba(15, 15, 25, 0.95);
   border: 1px solid #8d99ae;
@@ -164,9 +164,7 @@ body.force-portrait .rotate-warning {
 }
 
 .debug-dock {
-  position: sticky;
-  bottom: -12px;
-  margin: auto -12px -12px;
+  margin: 0 -12px -12px;
   padding: 10px 12px 12px;
   background: rgba(15, 15, 25, 0.98);
   border-top: 1px solid #4a4e69;
@@ -287,4 +285,203 @@ body.force-portrait .rotate-warning {
   min-width: 22px;
   text-align: right;
   font: bold 16px monospace;
+}
+
+/* --- Debug menüsü: sekmeler, paneller, galeri (üstteki kurallara ek) --- */
+.debug-panel.left {
+  right: auto;
+  left: 8px;
+}
+
+.debug-panel.ghost {
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.debug-panel.ghost .debug-header {
+  pointer-events: auto;
+}
+
+.debug-header {
+  gap: 8px;
+}
+
+.debug-header-tools {
+  display: flex;
+  gap: 6px;
+}
+
+.debug-action.debug-header-btn {
+  width: auto;
+  min-width: 44px;
+  padding: 6px 10px;
+}
+
+.debug-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 10px 0 4px;
+}
+
+.debug-tab {
+  flex: 1 1 0;
+  min-width: 56px;
+  min-height: 44px;
+  padding: 4px 6px;
+  font: bold 13px system-ui, sans-serif;
+  color: #8d99ae;
+  background: #1c1d2e;
+  border: 1px solid #4a4e69;
+  border-radius: 6px;
+}
+
+.debug-tab.on {
+  color: #edf2f4;
+  background: #3a3d5c;
+  border-color: #ffd23f;
+}
+
+.debug-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  touch-action: pan-y;
+}
+
+.debug-block + .debug-block {
+  margin-top: 6px;
+  border-top: 1px solid #2b2d42;
+}
+
+.debug-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.debug-action.on {
+  color: #ffffff;
+  background: #25402e;
+  border-color: #7dff9b;
+}
+
+.debug-action.bad {
+  border-color: #8a3a4a;
+}
+
+.debug-action.good {
+  border-color: #3a8a5a;
+}
+
+.debug-action.chip {
+  min-height: 44px;
+  font-size: 12px;
+}
+
+.debug-action.chip.party {
+  border-left: 5px solid #6ec1ff;
+}
+
+.debug-action.chip.enemy {
+  border-left: 5px solid #ff6b6b;
+}
+
+.debug-action.chip.dead {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.debug-action.skill {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.debug-action-icon {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  image-rendering: pixelated;
+}
+
+.debug-cells {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.debug-cells .debug-action {
+  padding: 2px;
+  font-size: 11px;
+}
+
+.debug-cells .debug-action.empty {
+  color: #8d99ae;
+  background: #1c1d2e;
+}
+
+.debug-note {
+  margin: 6px 0;
+  font: 12px system-ui, sans-serif;
+  color: #ffd23f;
+}
+
+.debug-note.dim {
+  color: #8d99ae;
+}
+
+.debug-inline {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.debug-inline .debug-action {
+  width: auto;
+  min-width: 72px;
+}
+
+.debug-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 8px;
+  font: 14px monospace;
+  color: #edf2f4;
+  background: #14151f;
+  border: 1px solid #4a4e69;
+  border-radius: 6px;
+}
+
+/* Kısa ekranlarda dock küçülür, sekme içeriğine yer kalır */
+@media (max-height: 720px) {
+  .debug-dock-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .debug-dock-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .debug-dock-overlay {
+    width: 16px;
+    height: 16px;
+  }
+
+  .debug-dock-row {
+    margin-top: 4px;
+  }
+
+  .debug-dock {
+    padding: 6px 12px 8px;
+  }
+
+  .debug-tabs {
+    margin: 6px 0 2px;
+  }
 }

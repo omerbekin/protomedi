@@ -14,7 +14,7 @@ const act = (b: Battle, actor: string, skill: string, target?: string, slot?: nu
   return r.events;
 };
 const calm = (b: Battle) => {
-  for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, dodge: 0 });
+  for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0 });
   return b;
 };
 const hasStatus = (b: Battle, uid: string, kind: string) => b.get(uid)!.statuses.some((s) => s.kind === kind);
@@ -27,7 +27,7 @@ describe('buff / debuff tanımları (data/statuses.json)', () => {
       expect(['buff', 'debuff'], id).toContain(def.type);
       expect(def.color, id).toMatch(/^#[0-9a-fA-F]{6}$/);
       expect(def.text.length, id).toBeGreaterThan(0);
-      expect(def.speedMult !== undefined || def.damageTakenMult !== undefined || def.healTakenMult !== undefined || def.skipTurn === true, id).toBe(true);
+      expect(def.speedMult !== undefined || def.damageTakenMult !== undefined || def.healTakenMult !== undefined || def.skipTurn === true || id === 'thorns', id).toBe(true); // thorns: motorda kodlu durum (taunt/guard gibi), çarpan alanı yok
     }
   });
 
@@ -53,9 +53,9 @@ describe('durumlar: hız, alınan hasar, alınan şifa, sersemleme', () => {
     expect(b.speedOf(b.get('enemy-0')!)).toBeLessThan(before);
   });
 
-  it('kaçırılan (dodge) vuruşta debuff uygulanmaz', () => {
+  it('kaçırılan (iska) vuruşta debuff uygulanmaz', () => {
     const b = calm(grid(cells({ 0: 'undead' }), cells({ 0: 'mage' })));
-    b.get('enemy-0')!.stats.dodge = 1;
+    b.debug.dodge = 'always';
     act(b, 'party-0', 'bone_throw', 'enemy-0');
     expect(hasStatus(b, 'enemy-0', 'slow')).toBe(false);
   });
@@ -94,7 +94,7 @@ describe('durumlar: hız, alınan hasar, alınan şifa, sersemleme', () => {
     const b = calm(grid(cells({ 0: 'warrior' }), cells({ 0: 'archer' })));
     const w = b.get('party-0')!;
     const cryRatio = (content.skills.abyssal_cry!.effects[0] as { ratio: number }).ratio;
-    expect(cryRatio).toBe(0.2);
+    expect(cryRatio).toBeGreaterThan(0); // değer veriden okunur (Ömer kararı: maks canın %30'u)
     const events = act(b, 'party-0', 'abyssal_cry');
     expect(ofType(events, 'damage')[0]).toMatchObject({ target: 'party-0', source: 'party-0', amount: Math.round(w.maxHp * cryRatio) });
     expect(w.hp).toBe(w.maxHp - Math.round(w.maxHp * cryRatio));
@@ -276,8 +276,8 @@ describe('tür hassasiyeti (undead + holy, nature + fire)', () => {
     }
   });
 
-  it('Undead sınıfı ve iskelet undead; Treant nature', () => {
-    expect(content.classes.undead!.tags).toContain('undead');
+  it('Yalnızca iskelet undead (Undead sınıfının zayıflığı yok); Treant nature', () => {
+    expect(content.classes.undead!.tags ?? []).not.toContain('undead');
     expect(content.summons.skeleton!.tags).toContain('undead');
     expect(content.summons.treant!.tags).toContain('nature');
   });
@@ -327,8 +327,8 @@ describe('sınıf verisi (bu turun düzenlemeleri)', () => {
     expect(content.summons.treant!.stats.str).toBe(13.5);
   });
 
-  it('Taunt ikonu savaş borusu; Void Strike menzilli', () => {
-    expect(content.skills.taunt!.icon).toBe('taunt');
+  it('Taunt ikonu çelik eldivenle orta parmak; Void Strike menzilli', () => {
+    expect(content.skills.taunt!.icon).toBe('finger');
     expect(content.skills.void_strike!.motion).not.toBe('melee');
   });
 

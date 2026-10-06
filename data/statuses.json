@@ -47,5 +47,12 @@
     "color": "#fff0a0",
     "damageTakenMult": 0.7,
     "text": "Damage taken -30%"
+  },
+  "thorns": {
+    "name": "Thorns",
+    "type": "buff",
+    "icon": "thornshield",
+    "color": "#8bd06a",
+    "text": "Melee attackers take damage back (STR based)"
   }
 }

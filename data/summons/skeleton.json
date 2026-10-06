@@ -16,7 +16,6 @@
   },
   "armor": 3,
   "magicArmor": 0,
-  "mpRegen": 0,
   "overrides": {
     "hp": 105,
     "mp": 0,
@@ -24,6 +23,7 @@
   },
   "ai": "aggressive",
   "skills": [
-    "skeleton_strike"
+    "skeleton_strike",
+    "skeleton_slash"
   ]
 }

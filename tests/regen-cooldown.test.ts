@@ -56,10 +56,15 @@ describe('MP yenilenmesi', () => {
     expect(b.hasUsableSkill(mage.uid)).toBe(false);
     skipUntil(b, mage.uid);
     expect(mage.mp).toBe(mage.stats.mpRegen);
-    expect(b.canUse(mage.uid, 'fire_bolt').ok).toBe(false); // 4 MP < 5 MP
-    b.skipTurn();
-    skipUntil(b, mage.uid);
-    expect(mage.mp).toBe(mage.stats.mpRegen * 2);
+    const cost = content.skills.fire_bolt!.cost.amount;
+    expect(b.canUse(mage.uid, 'fire_bolt').ok).toBe(mage.stats.mpRegen >= cost);
+    // her kendi turunda mpRegen kadar daha: yeterli MP birikince skill yeniden kullanılabilir
+    const turnsNeeded = Math.ceil(cost / mage.stats.mpRegen);
+    for (let i = 1; i < turnsNeeded; i++) {
+      b.skipTurn();
+      skipUntil(b, mage.uid);
+    }
+    expect(mage.mp).toBe(Math.min(mage.maxMp, mage.stats.mpRegen * turnsNeeded));
     expect(b.canUse(mage.uid, 'fire_bolt').ok).toBe(true);
   });
 

@@ -22,7 +22,7 @@ describe('seed\'e göre takım seçimi', () => {
   it('farklı seed\'ler farklı kompozisyonlar üretir (hem oyuncu hem düşman tarafı)', () => {
     const party = new Set(SEEDS.map((s) => [...content.rollTeams(BATTLE, s).party].sort().join()));
     const enemy = new Set(SEEDS.map((s) => [...content.rollTeams(BATTLE, s).enemies].sort().join()));
-    expect(party.size).toBeGreaterThanOrEqual(40); // 8 class'tan 4 seçim: 70 farklı küme
+    expect(party.size).toBeGreaterThanOrEqual(40); // havuzdan (9 class) 5 seçim: 126 farklı küme
     expect(enemy.size).toBeGreaterThanOrEqual(40);
   });
 

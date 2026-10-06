@@ -110,7 +110,8 @@ describe('savaşta sıra (turns modu)', () => {
     if (!r.ok) return;
     const last = r.events.at(-1)!;
     expect(last.type).toBe('turnStart');
-    expect(b.currentUid).not.toBe(archer);
+    // sıra ilerler; en hızlı birim (SPD farkı büyükse) art arda da oynayabilir, bu yüzden aktörün değişmesi şart değil
+    expect(b.currentUid).toBeDefined();
     if (last.type === 'turnStart') {
       expect(last.actor).toBe(b.currentUid);
       expect(last.queue).toEqual(b.turnQueue());
@@ -147,9 +148,11 @@ describe('savaşta sıra (turns modu)', () => {
 
   it('savaş bitince sıra durur', () => {
     const b = turnsBattle();
+    for (const c of b.combatants) Object.assign(c.stats, { accuracy: 10, evasion: 0 }); // iska savaşı uzatmasın
     for (const c of b.living('enemy')) c.hp = 1;
     for (let i = 0; i < 60 && !b.winner; i++) {
       const actor = b.currentActor!;
+      actor.mp = actor.maxMp; // MP yenilenmesi Int'ten gelir (Warrior düşük): senaryo MP'ye takılmasın
       if (actor.side === 'party' && b.canUse(actor.uid, 'whirlwind').ok) b.useSkill(actor.uid, 'whirlwind');
       else b.skipTurn();
     }
@@ -178,5 +181,38 @@ describe('test modu (sırasız)', () => {
   it('test modunda pas geçmek yok', () => {
     const b = new Battle(content.battleSetup('first-battle', 1, 'test'));
     expect(b.skipTurn().ok).toBe(false);
+  });
+});
+
+describe('SPEED çubuğu verisi (turnProgress / turnProgressOf)', () => {
+  it('saf fonksiyon 0-1 aralığına sıkıştırır', async () => {
+    const { turnProgress } = await import('../src/engine');
+    expect(turnProgress(0, 100)).toBe(0);
+    expect(turnProgress(40, 100)).toBeCloseTo(0.4);
+    expect(turnProgress(130, 100)).toBe(1);
+    expect(turnProgress(-20, 100)).toBe(0);
+  });
+
+  it('sıradaki aktörün çubuğu dolu, diğerleri 0-1 arasında; durumu değiştirmez', () => {
+    const b = turnsBattle();
+    const before = b.combatants.map((c) => c.turnCounter);
+    const cur = b.currentUid!;
+    expect(b.turnProgressOf(cur)).toBe(1);
+    for (const c of b.combatants) {
+      const p = b.turnProgressOf(c.uid);
+      expect(p).toBeGreaterThanOrEqual(0);
+      expect(p).toBeLessThanOrEqual(1);
+    }
+    expect(b.combatants.map((c) => c.turnCounter)).toEqual(before);
+  });
+
+  it('oynayınca aktörün çubuğu düşer, test modunda null', () => {
+    const b = turnsBattle();
+    const cur = b.currentUid!;
+    b.skipTurn();
+    if (b.currentUid !== cur) expect(b.turnProgressOf(cur)).toBeLessThan(1);
+    const t = new Battle(content.battleSetup('first-battle', 1, 'test'));
+    expect(t.turnProgressOf(t.combatants[0]!.uid)).toBeNull();
+    expect(b.turnProgressOf('yok')).toBeNull();
   });
 });

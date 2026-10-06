@@ -6,14 +6,14 @@
   "logo": "skull",
   "frontPriority": 4,
   "attributes": {
-    "str": 19.0,
-    "int": 10,
-    "dex": 6,
+    "str": 11,
+    "int": 14,
+    "dex": 3,
     "luck": 2
   },
+  "primary": "int",
   "armor": 7,
   "magicArmor": 0,
-  "mpRegen": 3,
   "ai": "darkmage",
   "skills": [
     "bone_throw",
@@ -31,8 +31,5 @@
       "ratio": 0.2
     }
   },
-  "tags": [
-    "undead"
-  ],
   "role": "Dark Mage"
 }

@@ -10,11 +10,15 @@ describe('ses efektleri (data/audio.json)', () => {
       expect(SFX_IDS, `${id} -> ${k}`).toContain(k);
       used.add(k);
     }
-    for (const k of SFX_IDS) expect(used.has(k), `kullanılmayan ses: ${k}`).toBe(true);
+    // yedek: Holy Strike'ın eski (düşen kılıç) animasyonunun sesleri ve Charge'ın eski sesleri, silinmedi
+    const backup = ['swordWhoosh', 'swordStab', 'armorCharge', 'armorCrash', 'stunChime'];
+    for (const k of SFX_IDS) if (!backup.includes(k)) expect(used.has(k), `kullanılmayan ses: ${k}`).toBe(true);
   });
 
-  it('Warrior ve Druid\'in tüm skill\'leri seslendirilmiş (summon skill\'leri dahil)', () => {
-    for (const cls of ['warrior', 'druid']) for (const id of content.classes[cls]!.skills.slice(0, 4)) expect(content.skills[id]!.sfx?.length, `${cls} ${id}`).toBeGreaterThan(0);
+  it('tüm sınıfların ve çağrıların skilleri seslendirilmiş', () => {
+    for (const def of [...Object.values(content.classes), ...Object.values(content.summons)]) {
+      for (const id of def.skills.slice(0, 4)) expect(content.skills[id]!.sfx?.length, `${def.id} ${id}`).toBeGreaterThan(0);
+    }
   });
 
   it('her ses katmanı geçerli (tür, süre, frekans, kazanç)', () => {
@@ -24,12 +28,18 @@ describe('ses efektleri (data/audio.json)', () => {
       expect(def.gain, id).toBeGreaterThan(0);
       expect(def.layers.length, id).toBeGreaterThan(0);
       for (const l of def.layers) {
-        expect(['tone', 'noise', 'voice'], id).toContain(l.type);
+        expect(['tone', 'noise', 'voice', 'pluck'], id).toContain(l.type);
         if (l.type === 'voice') {
-          expect(l.duration).toBeGreaterThan(0.5);
+          expect(l.duration).toBeGreaterThan(0.2); // kısa bağırışlar (Taunt, Tremor Slam) dahil
           expect(l.duration).toBeLessThan(3);
           expect(l.volume).toBeLessThanOrEqual(1);
           expect(l.formants).toHaveLength(3);
+        } else if (l.type === 'pluck') {
+          expect(l.f, id).toBeGreaterThan(20);
+          expect(l.fb, id).toBeGreaterThan(0);
+          expect(l.fb, id).toBeLessThan(1);
+          expect(l.duration, id).toBeGreaterThan(0);
+          expect(l.gain, id).toBeGreaterThan(0);
         } else {
           expect(l.f0, id).toBeGreaterThan(20);
           expect(l.f1, id).toBeGreaterThan(20);

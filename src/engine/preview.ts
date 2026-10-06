@@ -1,7 +1,8 @@
 import type { Battle } from './battle';
 import { damageRange, healRange } from './formulas';
+import { betMultipliers, betStake } from './gamble';
 import { damageSpecFor, type DamageEffect } from './spec';
-import { attributePower } from './stats';
+import { attributePower, hitChance } from './stats';
 import type { Combatant } from './types';
 
 /**
@@ -25,6 +26,10 @@ export interface TargetPreview {
     lethal: 'sure' | 'maybe' | null;
     critChance: number;
     critMax: number;
+    /** İsabet şansı (0-1): saldırganın accuracy'si - hedefin evasion'ı. min/max/avg ve hpLoss değerleri İSABET ETTİĞİNDE geçerlidir; beklenen hasar = avg x hitChance. */
+    hitChance: number;
+    /** Beklenen hasar: avg x hitChance (kalkan/can ayrımı yapmaz; birden çok etkide toplanır). */
+    expected: number;
     /** Arkadaki birime sıçrayan kısmî hasar (ana hedef değil). */
     splash: boolean;
   };
@@ -32,6 +37,10 @@ export interface TargetPreview {
   /** Tur bazlı şifa: tur başına miktar, tur sayısı, toplam (eksik canla sınırlı). */
   hot?: { perTurn: number; turns: number; total: number };
   shield?: { amount: number; magic: boolean };
+  /** Dikenli durum: yansıyan sabit hasar (zırhtan önce) ve tur sayısı (kullanıcının girdisinde). */
+  thorns?: { amount: number; turns: number };
+  /** Yer etkisi: tik başına büyü hasarı (hedefin büyü zırhı ve element zayıflığı dahil), tur sayısı, toplam. */
+  ground?: { perTick: number; turns: number; total: number };
   /** Yakılacak mana. */
   burn?: number;
   /** Uygulanacak durumlar, okunur metin (ör. "Taunt 2 turns"). */
@@ -48,7 +57,11 @@ export function previewSkill(battle: Battle, actorUid: string, skillId: string, 
     const unit = targetUid ? targets.find((t) => t.uid === targetUid) : undefined;
     const center = unit ? unit.slot : slot;
     targets = center === undefined ? [] : battle.areaWindowAt(actorUid, skillId, center);
-  } else if (battle.needsTargetChoice(skillId)) targets = targets.filter((t) => t.uid === targetUid);
+  } else if (battle.needsTargetChoice(skillId)) {
+    targets = targets.filter((t) => t.uid === targetUid);
+    // Yan vuruşlu skill: seçilen hedefin yanındaki hücreler de vurulur (ilk giriş seçilen hedef)
+    if (targets[0]) targets = [targets[0], ...battle.splashTargets(skillId, targets[0])];
+  }
   return previewForTargets(battle, actor, skillId, targets);
 }
 
@@ -73,7 +86,22 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
   };
 
   const addDamage = (target: Combatant, effect: DamageEffect, powerMult: number, splash: boolean) => {
-    const r = damageRange(actor.stats, battle.effectiveStats(target), damageSpecFor(actor, target, effect, f, powerMult, !splash, battle.damageTakenMult(target)), f);
+    const stats = battle.effectiveStats(target);
+    const range = (mult: number) => damageRange(actor.stats, stats, damageSpecFor(actor, target, effect, f, powerMult * mult, !splash, battle.damageTakenMult(target), battle.hunterMarkMult(actor, target)), f);
+    // Bahis: en az (kayıp), en çok (kazanç) ve beklenen çarpan (güce uygulanır, gerçek vuruşla aynı yuvarlama); çifte vuruş: en çok 2 vuruş, beklenen 1 + ihtimal
+    let lo = 1;
+    let hi = 1;
+    let ex = 1;
+    if (effect.bet) {
+      const mpLeft = skill.cost.resource === 'mp' && !battle.freeMp ? actor.mp - skill.cost.amount : actor.mp;
+      const m = betMultipliers(effect.bet, betStake(effect.bet, actor.maxHp, actor.hp, mpLeft));
+      lo = m.lose;
+      hi = Math.max(m.win, m.lose);
+      ex = m.expected;
+    }
+    const again = effect.repeatChance ?? 0;
+    const r = { min: lo <= 0 ? 0 : range(lo).min, max: range(hi).max * (again > 0 ? 2 : 1), avg: Math.round(range(ex).avg * (1 + again)) };
+    const hit = hitChance(actor.stats, target.stats, f);
     const p = pool(target);
     // Bu hasarı emebilecek havuz: büyü hasarını iki kalkan da, fizikseli yalnızca genel kalkan emer
     const soak = effect.damageType === 'magic' ? p.magicShield + p.shield : p.shield;
@@ -93,6 +121,8 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
       lethal: null,
       critChance: actor.stats.critChance,
       critMax: (prev?.critMax ?? 0) + Math.round(r.max * actor.stats.critMult),
+      hitChance: hit,
+      expected: (prev?.expected ?? 0) + r.avg * hit,
       splash: prev ? prev.splash && splash : splash,
     };
     // Sonraki etkiler için havuzları güncelle (magic: önce büyü kalkanı)
@@ -119,8 +149,12 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         e.statuses = [...(e.statuses ?? []), `${def?.name ?? effect.status} ${effect.turns} turns`];
       } else if (effect.type === 'damage') {
         // Çok hedefli (şerit) vuruşta her yeni hedef bir öncekinin falloff katı hasar alır
-        const idx = effect.falloff ? targets.indexOf(target) : 0;
-        addDamage(target, effect, effect.falloff ? Math.pow(effect.falloff, idx) : 1, idx > 0);
+        const idx = effect.falloff || skill.splash ? targets.indexOf(target) : 0;
+        const side = !!skill.splash && idx > 0; // yan vuruş: ana hedefin yanındaki hücre
+        addDamage(target, effect, (effect.falloff ? Math.pow(effect.falloff, idx) : 1) * (side ? skill.splash!.mult ?? 1 : 1), idx > 0);
+      } else if (effect.type === 'randomStatus') {
+        const e = entry(target.uid);
+        e.statuses = [...(e.statuses ?? []), `Random: ${effect.options.map((o) => battle.statusDef(o.status)?.name ?? o.status).join(' / ')}`];
       } else if (effect.type === 'heal') {
         const r = healRange(actor.stats, effect.scale, effect.power, f);
         const missing = target.maxHp - target.hp;
@@ -150,6 +184,12 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         const mpLeft = skill.cost.resource === 'mp' ? actor.mp - skill.cost.amount : actor.mp;
         const amount = Math.round(attributePower(actor.stats, effect.scale, f) * effect.power) + Math.round((effect.bonusPerMana ?? 0) * mpLeft);
         entry(recipient.uid).shield = { amount, magic: effect.shieldType === 'magic' };
+      } else if (effect.type === 'thorns') {
+        entry(actor.uid).thorns = { amount: Math.round(attributePower(actor.stats, effect.scale, f) * effect.power), turns: effect.turns };
+      } else if (effect.type === 'ground') {
+        const perTick = battle.groundTickDamage(effect.ground, Math.round(attributePower(actor.stats, effect.scale, f) * effect.power), target);
+        const e = entry(target.uid);
+        e.ground = { perTick: (e.ground?.perTick ?? 0) + perTick, turns: effect.turns, total: (e.ground?.total ?? 0) + perTick * effect.turns };
       } else if (effect.type === 'manaBurn') {
         const e = entry(target.uid);
         e.burn = (e.burn ?? 0) + Math.min(target.mp, effect.amount);

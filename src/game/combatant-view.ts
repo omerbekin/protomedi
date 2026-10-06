@@ -2,7 +2,10 @@ import Phaser from 'phaser';
 import layout from '../../data/battle-layout.json';
 import type { Combatant, TargetPreview } from '../engine';
 import { animKey, characterTexture, type AnimName } from './assets';
+import { debugState } from './debug-state';
+import { formatHit, hitColor } from './hit-format';
 import { ensureIcon } from './icons';
+import { SERIF } from './ui-frame';
 
 export const color = (hex: string) => Phaser.Display.Color.HexStringToColor(hex).color;
 const { spriteBox: box, hpBar, animation: timing, colors } = layout;
@@ -13,6 +16,8 @@ export const slow = (ms: number) => ms * SLOW;
 
 /** Hasar / maks can oranından 0-1 arası vuruş şiddeti: ne kadar büyük vuruşsa efektler o kadar belirgin. */
 export const hitLevel = (ratio: number) => Math.min(1, Math.max(0, ratio / timing.hitMaxRatio));
+/** Hasar RAKAMI boyutu/rengi için seviye: kendi (daha düşük) barem değeri, can oranına göre. */
+export const damageNumberLevel = (ratio: number) => Math.min(1, Math.max(0, ratio / timing.damageNumberMaxRatio));
 
 export const textStyle = (px: number, fill: string = colors.text): Phaser.Types.GameObjects.Text.TextStyle => ({
   fontFamily: layout.fontFamily,
@@ -44,6 +49,11 @@ export class CombatantView {
   private readonly hpFill: Phaser.GameObjects.Rectangle;
   private readonly hpGhost: Phaser.GameObjects.Rectangle;
   private readonly mpFill: Phaser.GameObjects.Rectangle;
+  /** SPEED (sıra sayacı) çubuğu: mana çubuğunun altında, yalnızca turns modunda görünür. */
+  private readonly speedBox: Phaser.GameObjects.Container;
+  private readonly speedFill: Phaser.GameObjects.Rectangle;
+  private readonly speedGlow: Phaser.GameObjects.Rectangle;
+  private speedFull = false;
   private readonly shieldFill: Phaser.GameObjects.Rectangle;
   private readonly magicShieldFill: Phaser.GameObjects.Rectangle;
   private readonly statusBox: Phaser.GameObjects.Container;
@@ -102,10 +112,16 @@ export class CombatantView {
       .rectangle(-hpBar.width / 2, mpY, hpBar.width, hpBar.mpHeight, color(colors.mpFill))
       .setOrigin(0, 0.5)
       .setVisible(combatant.maxMp > 0);
+    // SPEED çubuğu: mana çubuğunun altında ince bir şerit; sayaç dolunca (sıra bu karakterde) parlar
+    const spdY = mpY + hpBar.mpHeight / 2 + hpBar.speedHeight / 2 + 3;
+    const speedBack = scene.add.rectangle(0, spdY, hpBar.width, hpBar.speedHeight, color(colors.hpBack)).setStrokeStyle(2, 0x000000);
+    this.speedFill = scene.add.rectangle(-hpBar.width / 2, spdY, 0, hpBar.speedHeight, color(colors.speedFill)).setOrigin(0, 0.5);
+    this.speedGlow = scene.add.rectangle(0, spdY, hpBar.width + 6, hpBar.speedHeight + 6, 0xffffff, 0).setStrokeStyle(2, color(colors.speedFull)).setVisible(false);
+    this.speedBox = scene.add.container(0, 0, [speedBack, this.speedFill, this.speedGlow]).setVisible(false);
     // Kalkan çubukları: can çubuğunun hemen üstünde ince çizgiler (genel: açık mavi, büyü: mor)
     this.shieldFill = scene.add.rectangle(-hpBar.width / 2, this.shieldY, 0, 6, color(colors.shield)).setOrigin(0, 0.5);
     this.magicShieldFill = scene.add.rectangle(-hpBar.width / 2, this.shieldY - 7, 0, 6, color(colors.magicShield)).setOrigin(0, 0.5);
-    const name = scene.add.text(0, this.hpY - hpBar.height - 4, combatant.name, textStyle(30)).setOrigin(0.5, 1);
+    const name = scene.add.text(0, this.hpY - hpBar.height - 4, combatant.name, { ...textStyle(30), fontFamily: SERIF }).setOrigin(0.5, 1);
     this.marker = scene.add
       .triangle(0, this.hpY - hpBar.height - 62, 0, 0, 40, 0, 20, 28, color(colors.targetHighlight))
       .setStrokeStyle(3, 0x000000)
@@ -120,6 +136,7 @@ export class CombatantView {
       this.hpBox,
       mpBack,
       this.mpFill,
+      this.speedBox,
       this.shieldFill,
       this.magicShieldFill,
       this.statusBox,
@@ -217,6 +234,30 @@ export class CombatantView {
     this.tweenWidth(this.mpFill, hpBar.width * Math.max(0, mp / this.combatant.maxMp), animate);
   }
 
+  /**
+   * SPEED çubuğu: `ratio` sıra sayacının eşiğe oranı (0-1); null = gizli (test modu, ölü birim).
+   * Dolunca (1) çubuk açık sarıya döner ve parlayarak nabız atar: sıra bu karakterdedir.
+   */
+  setSpeed(ratio: number | null): void {
+    if (ratio === null || !this.alive) {
+      this.speedBox.setVisible(false);
+      this.setSpeedFull(false);
+      return;
+    }
+    this.speedBox.setVisible(true);
+    this.speedFill.width = hpBar.width * Math.max(0, Math.min(1, ratio));
+    this.setSpeedFull(ratio >= 1);
+  }
+
+  private setSpeedFull(full: boolean): void {
+    if (full === this.speedFull) return;
+    this.speedFull = full;
+    this.scene.tweens.killTweensOf(this.speedGlow);
+    this.speedGlow.setVisible(full).setAlpha(1);
+    this.speedFill.setFillStyle(color(full ? colors.speedFull : colors.speedFill));
+    if (full) this.scene.tweens.add({ targets: this.speedGlow, alpha: 0.25, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
+
   setShield(shield: number, magicShield: number, animate = true): void {
     this.tweenWidth(this.shieldFill, hpBar.width * Math.min(1, shield / this.combatant.maxHp), animate);
     this.tweenWidth(this.magicShieldFill, hpBar.width * Math.min(1, magicShield / this.combatant.maxHp), animate);
@@ -244,6 +285,46 @@ export class CombatantView {
           if (bd.turns) this.statusBox.add(this.scene.add.image(label.x - label.width - 8, label.y, hourglass).setDisplaySize(15, 15));
         });
     }
+  }
+
+  /** `thorns` durumunun kalıcı görünümü: sprite'ın kenarlarında küçük sivri ahşap dikenler (bir kısmı arkadan taşar, bir kısmı gövdeye batık). */
+  private thornShell: Phaser.GameObjects.Image[] = [];
+
+  setThornShell(on: boolean): void {
+    if (on === this.thornShell.length > 0) return;
+    const old = this.thornShell;
+    this.thornShell = [];
+    if (!on) {
+      for (const sp of old) {
+        this.scene.tweens.killTweensOf(sp);
+        this.scene.tweens.add({ targets: sp, alpha: 0, scaleY: sp.scaleY * 0.3, duration: slow(260), onComplete: () => sp.destroy() });
+      }
+      return;
+    }
+    const tex = ensureIcon(this.scene, 'thornspike', '#8bd06a', false);
+    const { w, h } = this;
+    // [x, y, derece (0 = yukarı, + saat yönü), boyut, arkada mı]
+    const spec: Array<[number, number, number, number, boolean]> = [];
+    for (const s of [-1, 1]) {
+      for (const k of [0.28, 0.5, 0.72]) spec.push([s * w * 0.42, -h * k, s * 66, 44, true]);
+      spec.push([s * w * 0.3, -h * 0.9, s * 28, 42, true]);
+      for (const k of [0.2, 0.42, 0.62]) spec.push([s * w * 0.3, -h * k, s * 52, 32, false]);
+      spec.push([s * w * 0.17, -4, s * 22, 30, false]);
+    }
+    spec.push([0, -4, 0, 26, false]);
+    const at = this.container.getIndex(this.sprite);
+    let nBack = 0;
+    spec.forEach(([x, y, deg, size, back], i) => {
+      const sp = this.scene.add.image(x, y, tex).setOrigin(0.5, 1).setDisplaySize(size * 0.6, size).setAngle(deg);
+      this.container.addAt(sp, back ? at + nBack++ : at + nBack + 1 + this.thornShell.filter((q) => q.getData('front')).length);
+      sp.setData('front', !back);
+      const sy = sp.scaleY;
+      sp.setScale(sp.scaleX, 0.05 * sy);
+      this.scene.tweens.add({ targets: sp, scaleY: sy, duration: slow(240), delay: slow(i * 22), ease: 'Back.easeOut' });
+      // hafif nefes: dikenler çok az uzayıp kısalır
+      this.scene.tweens.add({ targets: sp, scaleY: sy * 1.07, duration: 1300 + (i % 4) * 140, delay: slow(600) + i * 70, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.thornShell.push(sp);
+    });
   }
 
   private tweenWidth(bar: Phaser.GameObjects.Rectangle, width: number, animate: boolean): void {
@@ -453,7 +534,7 @@ export class CombatantView {
    * Üst üste binmez.
    */
   damageText(amount: number, ratio: number, crit = false): void {
-    const level = hitLevel(ratio);
+    const level = damageNumberLevel(ratio);
     const px = Math.round(52 + 64 * level) + (crit ? 14 : 0);
     this.floatText(String(amount), crit ? colors.crit : damageColor(level), px, true);
     if (crit) this.floatText('CRIT', colors.crit, 34);
@@ -461,6 +542,7 @@ export class CombatantView {
 
   /** Karakterin üstünde yukarı süzülüp kaybolan sayı/yazı. Aynı anda birden fazlası alt alta dizilir. */
   floatText(text: string, hex: string, px = 64, pop = false): void {
+    if (debugState.hideNumbers) return; // debug: numbers and texts above units hidden
     const slot = this.floating++;
     const startY = this.container.y - this.h - 60 - slot * (px * 0.95);
     const t = this.scene.add.text(this.container.x, startY, text, textStyle(px, hex)).setOrigin(0.5).setDepth(5000 + slot);
@@ -511,7 +593,8 @@ export class CombatantView {
         this.previewItems.push(skull);
         this.scene.tweens.add({ targets: skull, scale: skull.scale * 1.12, duration: 420, yoyo: true, repeat: -1 });
       }
-      lines.push([d.hpLoss === 0 ? 'Blocked' : `-${d.avg}`, damageColor(hitLevel(d.hpLoss / this.combatant.maxHp)), 46]);
+      lines.push([d.hpLoss === 0 ? 'Blocked' : `-${d.avg}`, damageColor(damageNumberLevel(d.hpLoss / this.combatant.maxHp)), 46]);
+      lines.push([formatHit(d.hitChance), hitColor(d.hitChance), 26]); // hasar satırının hemen altında
       if (blocked) lines.push([blocked.trim(), colors.muted, 24]);
       if (d.splash) lines.push(['splash', colors.muted, 22]);
     }
@@ -527,6 +610,7 @@ export class CombatantView {
       if (p.hot.total > 0) segment(this.hpBox, -W / 2 + curFrac * W, this.hpY, (newFrac - curFrac) * W, hpBar.height - 4, colors.previewHeal);
       lines.push([`+${p.hot.perTurn} x${p.hot.turns} turns`, colors.heal, 34]);
     }
+    if (p.ground) lines.push([`-${p.ground.perTick} x${p.ground.turns} turns`, colors.burn, 34]);
     if (p.shield) {
       const bar = p.shield.magic ? this.magicShieldFill : this.shieldFill;
       const extra = Math.min(W - bar.width, (W * p.shield.amount) / this.combatant.maxHp);
@@ -572,6 +656,7 @@ export class CombatantView {
   }
 
   die(): Promise<void> {
+    this.setThornShell(false);
     this.play('death');
     this.setGlow(null);
     this.setActive(false);

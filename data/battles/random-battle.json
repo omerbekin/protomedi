@@ -2,5 +2,5 @@
   "id": "random-battle",
   "background": "castle-hall",
   "slots": { "party": 12, "enemy": 12 },
-  "random": { "pool": ["warrior", "paladin", "mage", "undead", "archer", "druid", "defender", "antimage"], "size": 5 }
+  "random": { "pool": ["warrior", "paladin", "mage", "undead", "archer", "druid", "defender", "antimage", "gambler"], "size": 5 }
 }

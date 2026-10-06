@@ -6,14 +6,14 @@
   "logo": "leaf",
   "frontPriority": 5,
   "attributes": {
-    "str": 16,
-    "int": 25,
-    "dex": 6,
+    "str": 8,
+    "int": 16,
+    "dex": 3,
     "luck": 3
   },
+  "primary": "int",
   "armor": 6,
   "magicArmor": 0,
-  "mpRegen": 4,
   "ai": "support",
   "skills": [
     "thorn_whip",

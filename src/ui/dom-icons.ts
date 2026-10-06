@@ -28,4 +28,4 @@ export function iconUrl(name: string, accent = '#ffffff'): string {
 }
 
 /** Arayüzde kullanılan ikonlar (debug dock, ayarlar): her biri kullanılıyor olmalı (test). */
-export const UI_ICONS = ['flask', 'team', 'dice', 'robot', 'gear', 'speaker', 'next', 'freemp'] as const;
+export const UI_ICONS = ['flask', 'team', 'dice', 'robot', 'gear', 'speaker', 'next', 'freemp', 'pause', 'ffwd'] as const;

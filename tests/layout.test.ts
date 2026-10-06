@@ -62,9 +62,11 @@ describe('savaş yerleşimi verisi', () => {
     }
   });
 
-  it('sıra çubuğu ~8 aktör gösterir ve ekrana sığar', () => {
-    const { cells, cellSize, gap } = layout.turnBar;
-    expect(cells).toBe(8);
+  it('sıra çubuğu: ortada şu anki, solda geçmiş, sağda sıradakiler; ekrana sığar', () => {
+    const { cellSize, gap, pastCells } = layout.turnBar;
+    const cells = pastCells + layout.turnBar.cells; // geçmiş + şu anki + sıradakiler
+    expect(layout.turnBar.cells).toBe(5);
+    expect(pastCells).toBe(4);
     expect(cells * cellSize + (cells - 1) * gap).toBeLessThanOrEqual(layout.width);
   });
 

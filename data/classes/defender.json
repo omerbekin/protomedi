@@ -6,14 +6,14 @@
   "logo": "bulwark",
   "frontPriority": 0,
   "attributes": {
-    "str": 20,
-    "int": 8,
-    "dex": 4,
-    "luck": 2
+    "str": 16,
+    "int": 10,
+    "dex": 3,
+    "luck": 1
   },
+  "primary": "str",
   "armor": 20,
   "magicArmor": 0,
-  "mpRegen": 2,
   "ai": "tank",
   "skills": [
     "tremor_slam",
@@ -25,10 +25,11 @@
     "id": "bulwark_aura",
     "name": "Bulwark Aura",
     "icon": "aura",
-    "text": "You and the allies right next to you (front, back, left, right) gain +8 armor.",
+    "text": "You and the allies right next to you (front, back, left, right) gain bonus armor equal to 40% of your own armor.",
     "effect": {
       "type": "armorAura",
-      "armor": 8
+      "pct": 0.4,
+      "maxStacks": 2
     }
   },
   "overrides": {
