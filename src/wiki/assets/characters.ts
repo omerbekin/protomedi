@@ -1,4 +1,5 @@
 import { iconUrl } from '../../ui/dom-icons';
+import { variantLabel } from '../../game/sprite-variants';
 import { STAT_COLOR, STAT_ICON, STAT_LABEL } from '../../ui/stat-icons';
 import type { Catalog, CharacterEntry } from '../../gallery/catalog';
 import { applyFilter, chipBar, h, openLightbox, searchable, type SectionApi } from '../../gallery/dom';
@@ -47,7 +48,7 @@ export function mountCharacters(cat: Catalog): SectionApi {
       h(
         'article',
         { class: 'card char' },
-        h('div', { class: 'char-art' }, img(c.idleUrl, `${c.name} sprite (assets/sprites/${c.spriteId}/idle.png)`, 'sprite'), h('div', { class: 'avatar-col' }, img(c.avatarUrl, `${c.name} avatar (assets/avatars/${c.spriteId}.png)`, 'avatar'), h('div', { class: 'muted small', text: 'avatar' }), h('img', { class: 'icon48 pixelated', attrs: { src: iconUrl(c.logo, c.color), alt: c.logo }, title: `logo: ${c.logo}` }), h('div', { class: 'muted small', text: 'logo' }))),
+        h('div', { class: 'char-art' }, img(c.idleUrl, `${c.name} sprite (assets/sprites/${c.spriteId}/idle.png)`, 'sprite'), h('div', { class: 'avatar-col' }, img(c.avatarUrl, `${c.name} avatar (assets/avatars/${c.spriteId}.png)`, 'avatar'), h('div', { class: 'muted small', text: 'avatar' }), h('img', { class: 'icon48 pixelated', attrs: { src: iconUrl(c.logo, c.color), alt: c.logo }, title: `logo: ${c.logo}` }), h('div', { class: 'muted small', text: 'logo' }), ...c.variants.flatMap((v) => [img(v.avatarUrl ?? v.idleUrl, `${c.name} alternative look "${variantLabel(c.spriteId, v.variant)}" (assets/sprites/${c.spriteId}/idle-${v.variant}.png)`, 'avatar'), h('div', { class: 'muted small', text: variantLabel(c.spriteId, v.variant), title: 'Alternative look: pick it in Debug > Characters' })]))),
         h('div', { class: 'char-info' },
           h('div', { class: 'row' },
             h('h3', { class: 'char-name', text: c.name, style: { color: c.color } }),

@@ -1,5 +1,6 @@
 import { tileUid, type Battle } from './battle';
 import { shapeLabel } from './area-shape';
+import { skillCostAmount } from './cost';
 import { betStake } from './gamble';
 import { previewForTargets } from './preview';
 import { armorReduction, attributePower, hitChance } from './stats';
@@ -33,6 +34,23 @@ export interface AiProfile {
    * Ceset varsa (beslenmiş) eski kural: en ucuz çağrı. Varsayılan 0,5.
    */
   summonValueShare?: number;
+  /**
+   * Debuff silen (dispel) skill seçeneğinin değeri (madde 240, Mana Barrier): silinecek her debuff için kalan tur x cleanseValuePerTurn
+   * (sıra kaybettiren durumda, ör. Stun, x cleanseSkipTurnMult). Değer cleanseMinValue ve üstündeyse kalkan önceliği yaralı olmayan dosta da bakar.
+   * Yoksa 0 (değer yok).
+   */
+  cleanseValuePerTurn?: number;
+  cleanseSkipTurnMult?: number;
+  cleanseMinValue?: number;
+  /**
+   * Hexer: yığını 3'e TAMAMLAMAYAN her eklenen Omen'in ertelenmiş değeri = ölçek statı (Luck) x powerPerStack x omenValueShare (madde Ö2 sonrası 0,85:
+   * Omen süre dolunca da patlar; iskonto 1-3 tur gecikme ve fazla hasar riskini temsil eder). Wither (DoT) beklenen toplamı da bu payla sayılır. Varsayılan 0,85.
+   */
+  omenValueShare?: number;
+  /** Dark Bond değerinin üst sınırı: bağlı dostun eksik canı, en az maks canının bu payı (dost tam canlıyken de bağ boyunca hasar yiyecek). Varsayılan 0. */
+  bondHpFloor?: number;
+  /** Dark Bond: kopya kullanıcının gerçek iyileşmesi kadar olduğundan değer, kullanıcının eksik canı + maks canının bu payıyla sınırlı (madde 241). Varsayılan 0. */
+  bondSelfFloor?: number;
 }
 
 /**
@@ -180,7 +198,21 @@ export interface Option {
   taunt: boolean;
   guard: boolean;
   cost: number;
+  /** Düşük can kuralına (minHpRatioForHpCost) tabi: sabit can bedeli ya da can bahsi. Oranlı can bedeli (Wail) false. */
   hpCost: boolean;
+  /** Dost üstündeki debuff'ları silmenin değeri (can-eşdeğer; profil cleanseValuePerTurn). */
+  cleanse: number;
+  /** Dark Bond: bağ süresince bağlı dosta gidecek beklenen lifesteal kopyası (can-eşdeğer). */
+  bond: number;
+  /** Yarım turn (turnCost < 1) skill'in tempo değeri: (1 - turnCost) x bu turun en iyi tam turn hamlesinin net değeri (sıra daha erken geri gelir). */
+  tempo: number;
+  /**
+   * Hexer laneti ertelenmiş değeri (can-eşdeğer): yığını tamamlamayan Omen'ler (Luck x powerPerStack x omenValueShare) + Wither tiklerinin beklenen toplamı
+   * (x omenValueShare), isabet ve kritik (critStacks) ihtimaliyle. Anında tetiklenen Doom'un beklenen hasarı `damage`'a (ve öldürüyorsa `kills`'e) girer.
+   */
+  curse: number;
+  /** Maç kaydı notları (Omen/Doom/Jinx): 'omens 1->2 omenValue 5.0', 'omens 2->3 DOOM 25.2@crit 0.12', 'detonate 3 omen x1.5 = 37.8', 'omen timer 2'... */
+  notes: string[];
 }
 
 const ratio = (c: Combatant) => c.hp / c.maxHp;
@@ -259,7 +291,7 @@ function toChoice(option: Option, reason: AiChoice['reason']): AiChoice {
   };
 }
 
-const value = (o: Option) => o.damage + o.heal + o.selfHeal + o.shield * 0.5 + o.burn * BURN_WEIGHT + Math.max(0, o.buff) + o.mitigation;
+const value = (o: Option) => o.damage + o.heal + o.selfHeal + o.shield * 0.5 + o.burn * BURN_WEIGHT + Math.max(0, o.buff) + o.mitigation + o.cleanse + o.bond + o.tempo + o.curse;
 
 function buildOptions(battle: Battle, actor: Combatant, profile: AiProfile, trace?: AiTrace): Option[] {
   const options: Option[] = [];
@@ -276,6 +308,18 @@ function buildOptions(battle: Battle, actor: Combatant, profile: AiProfile, trac
     const free = attacks.filter((x) => x.skill.cost.amount === 0).map((x) => x.damage);
     const basic = free.length > 0 ? Math.max(...free) : Math.max(0, ...attacks.map((x) => x.damage));
     o.buff = buffValue(battle, actor, o, alt, basic, profile);
+  }
+  // Dark Bond (madde 240): bağın değeri, kullanıcının bu turdaki en iyi saldırısının beklenen hasarından (lifesteal kopyası)
+  const bestHit = Math.max(0, ...options.filter((x) => x.damage > 0).map((x) => x.damage));
+  for (const o of options) if (o.skill.effects.some((e) => e.type === 'bond')) o.bond = bondValue(battle, actor, o, bestHit, profile);
+  // Yarım turn (turnCost < 1): sıra (1 - turnCost) kadar erken geri gelir; o kadar "bedava" tam turn hamlesi değeri eklenir (skill kendi değer üretiyorsa)
+  if (battle.mode === 'turns') {
+    const full = options.filter((x) => battle.turnCostOf(x.skill.id) >= 1);
+    const fullBest = Math.max(0, ...full.map((x) => (x.pureBuff ? x.buff : value(x)) - x.cost));
+    for (const o of options) {
+      const tc = battle.turnCostOf(o.skill.id);
+      if (tc < 1 && (o.pureBuff ? o.buff : value(o)) > 0) o.tempo = (1 - tc) * fullBest;
+    }
   }
   const reserve = reservedMp(battle, actor, profile);
   if (trace) trace.reserves = reserve;
@@ -360,7 +404,7 @@ function isPureBuff(skill: SkillDef): boolean {
 
 /** Skill'in kullanıcıya vereceği can kaybı (can bedeli + kendine hasar); canı en az 1 bırakır. */
 function selfHpCost(actor: Combatant, skill: SkillDef): number {
-  const hpCost = skill.cost.resource === 'hp' ? skill.cost.amount : 0;
+  const hpCost = skill.cost.resource === 'hp' ? skillCostAmount(skill.cost, actor) : 0; // oranlı bedel: mevcut canın oranı
   const self = sum(skill.effects.map((e) => (e.type === 'selfDamage' ? e.ratio * actor.maxHp : 0)));
   return Math.max(0, Math.min(actor.hp - 1, hpCost + self));
 }
@@ -407,6 +451,44 @@ function buffValue(battle: Battle, actor: Combatant, o: Option, alt: number, bas
   return defend + offense - lost * profile.hpCostWeight - alt * (hint?.opportunityShare ?? 0.5);
 }
 
+/** Birimin lifesteal oranı: soulDrain pasifi + skill'lerindeki en yüksek damage.lifesteal (Dark Bond değeri için kaba ölçü). */
+function lifestealRatio(battle: Battle, actor: Combatant): number {
+  const pe = actor.passive?.effect;
+  const passive = pe?.type === 'soulDrain' ? pe.ratio : 0;
+  let skill = 0;
+  for (const id of actor.skills) for (const e of battle.skill(id)?.effects ?? []) if (e.type === 'damage') skill = Math.max(skill, e.lifesteal ?? 0);
+  return passive + skill;
+}
+
+/**
+ * Dark Bond seçeneğinin değeri (can-eşdeğer): bağ süresince kullanıcının beklenen lifesteal kazancı (bu turun en iyi saldırısının beklenen hasarı x
+ * lifesteal oranı x bağ oranı x tur) bağlı dosta gider; dostun eksik canıyla (en az maks canın profile.bondHpFloor payı) sınırlı. Kullanıcının
+ * 1 turdan fazla sürecek geçerli bir bağı varsa 0 (bağ bitmek üzereyken yenilenir).
+ */
+function bondValue(battle: Battle, actor: Combatant, o: Option, bestHit: number, profile: AiProfile): number {
+  const e = o.skill.effects.find((x) => x.type === 'bond');
+  const target = o.targets[0];
+  if (!e || e.type !== 'bond' || !target || target.uid === actor.uid || target.hp <= 0) return 0;
+  const own = actor.statuses.find((s) => s.kind === 'dark_bond' && s.source === actor.uid);
+  if (own && battle.bondPartnerOf(actor.uid) && own.turns > 1) return 0;
+  // Madde 241: canı doluyken can çalınmaz, kopya yalnızca kullanıcının GERÇEKTEN iyileştiği kadar: kullanıcının eksik canı (+ bağ boyunca yiyeceği
+  // hasar için maks canının bondSelfFloor payı) üst sınırdır; Undead tam canlıyken değer düşük
+  const steal = bestHit * lifestealRatio(battle, actor) * e.turns;
+  const selfCap = actor.maxHp - actor.hp + actor.maxHp * (profile.bondSelfFloor ?? 0);
+  const cap = Math.max(target.maxHp - target.hp, target.maxHp * (profile.bondHpFloor ?? 0));
+  return Math.max(0, Math.min(Math.min(steal, selfCap) * e.ratio, cap));
+}
+
+/** Birimin büyü hasarı veren bir skill'i var mı (Spell Ward'ın emebileceği saldırgan)? */
+function hasMagicAttack(battle: Battle, c: Combatant): boolean {
+  return c.skills.some((id) => battle.skill(id)?.effects.some((e) => e.type === 'damage' && e.damageType === 'magic'));
+}
+
+/** Birimin herhangi bir hasar skill'i var mı? */
+function hasAttack(battle: Battle, c: Combatant): boolean {
+  return c.skills.some((id) => battle.skill(id)?.effects.some((e) => e.type === 'damage'));
+}
+
 /**
  * Bağlam koşulu (SkillAiCond) bu seçenek için sağlanıyor mu? Tanımlı tüm alanlar birlikte sağlanmalı.
  * condFailure: sağlanmayan İLK koşulun adı (sağlanıyorsa null). detail=true ise değerleri de yazar (yalnızca açıklama için; seçimi etkilemez).
@@ -438,6 +520,20 @@ function condFailure(cond: SkillAiCond, battle: Battle, actor: Combatant, o: Opt
   const share = primary && primary.maxHp > 0 ? (o.primaryAvg * o.primaryHit) / primary.maxHp : 0;
   if (cond.minTargetMaxHpShare !== undefined && share < cond.minTargetMaxHpShare) return detail ? `minTargetMaxHpShare ${cond.minTargetMaxHpShare} (expected ${r2(share)} of max HP)` : '';
   if (cond.targetBehindFront && (!primary || battle.rowRank(primary.uid) < battle.formulas.formation.meleeRows)) return detail ? `targetBehindFront (target ${primary ? `row rank ${battle.rowRank(primary.uid)}` : 'none'} is within normal melee reach)` : '';
+  // Dost hedefli skill (Spell Ward): hedef dostun can oranı, düşmanda büyü saldırganı / buff
+  const ally = o.primary && o.primary.side === actor.side ? o.primary : undefined;
+  if (cond.maxTargetHpRatio !== undefined && (!ally || ratio(ally) > cond.maxTargetHpRatio)) return detail ? `maxTargetHpRatio ${cond.maxTargetHpRatio} (target ${ally ? r2(ratio(ally)) : 'none'})` : '';
+  if (cond.minFoeMagicMp !== undefined && !foes.some((f) => f.mp >= cond.minFoeMagicMp! && hasMagicAttack(battle, f))) return detail ? `minFoeMagicMp ${cond.minFoeMagicMp} (no magic attacker with that much MP)` : '';
+  if (cond.minFoeBuffs !== undefined) {
+    const buffed = foes.filter((f) => battle.dispelCandidates(f, 'buff').length > 0).length;
+    if (buffed < cond.minFoeBuffs) return detail ? `minFoeBuffs ${cond.minFoeBuffs} (buffed foes ${buffed})` : '';
+  }
+  if (cond.minTargetStacks) {
+    const { status, count } = cond.minTargetStacks;
+    const has = primary ? (primary.statuses.find((s) => s.kind === status)?.stacks ?? 0) : 0;
+    if (has < count) return detail ? `minTargetStacks ${status} ${count} (has ${has})` : '';
+  }
+  if (cond.minStatusMitigation !== undefined && o.mitigation < cond.minStatusMitigation) return detail ? `minStatusMitigation ${cond.minStatusMitigation} (got ${r2(o.mitigation)})` : '';
   return null;
 }
 
@@ -476,9 +572,17 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
     taunt: skill.effects.some((e) => e.type === 'taunt'),
     guard: skill.effects.some((e) => e.type === 'guard'),
     summonValue: 0,
-    // Rage bedeli skora yansımaz (Rage yalnızca harcanmak için birikir; bedel koşulu canUse + skill'in ai bağlamıyla sağlanır)
-    cost: skill.cost.amount * (skill.cost.resource === 'mp' ? profile.mpCostWeight : skill.cost.resource === 'hp' ? profile.hpCostWeight : 0),
-    hpCost: (skill.cost.resource === 'hp' && skill.cost.amount > 0) || skill.effects.some((e) => e.type === 'damage' && e.bet?.resource === 'hp'),
+    cleanse: 0,
+    bond: 0,
+    tempo: 0,
+    curse: 0,
+    notes: [],
+    // Rage bedeli skora yansımaz (Rage yalnızca harcanmak için birikir; bedel koşulu canUse + skill'in ai bağlamıyla sağlanır).
+    // Oranlı bedel (Wail: mevcut canın %20'si) şu anki kaynaktan hesaplanır (skillCostAmount).
+    cost: skillCostAmount(skill.cost, actor) * (skill.cost.resource === 'mp' ? profile.mpCostWeight : skill.cost.resource === 'hp' ? profile.hpCostWeight : 0),
+    // Düşük can kuralı (minHpRatioForHpCost) yalnızca SABİT can bedeline ve can bahsine uygulanır. Oranlı can bedeli
+    // (cost.ofCurrent; Wail of the Dead: mevcut canın %20'si) muaf: bedel can azaldıkça kendiliğinden küçülür (Ömer kararı, madde 247).
+    hpCost: (skill.cost.resource === 'hp' && !(skill.cost.ofCurrent ?? 0) && skillCostAmount(skill.cost, actor) > 0) || skill.effects.some((e) => e.type === 'damage' && e.bet?.resource === 'hp'),
   };
   // Bahis: kaybedilirse gidecek MP, bedele beklenen olarak eklenir (MP bahsi); can bahsi hpCost kuralıyla (düşük canda oynanmaz) sınırlanır
   for (const e of skill.effects) {
@@ -540,6 +644,24 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
       o.damage += amount * e.turns * standing * 0.7;
     }
   }
+  // Debuff silme (Mana Barrier, madde 240): silinecek her debuff'ın kalan turu x profil değeri (sıra kaybettiren durum x cleanseSkipTurnMult)
+  const perTurn = profile.cleanseValuePerTurn ?? 0;
+  if (perTurn > 0) {
+    for (const e of skill.effects) {
+      if (e.type !== 'dispel' || e.status !== 'debuff') continue;
+      for (const t of targets) {
+        if (t.hp <= 0 || t.side !== actor.side) continue;
+        for (const s of battle.dispelCandidates(t, 'debuff').slice(0, e.count ?? Infinity)) o.cleanse += s.turns * perTurn * (battle.statusDef(s.kind)?.skipTurn ? (profile.cleanseSkipTurnMult ?? 1) : 1);
+      }
+    }
+  }
+  // Kalkan kancası (Spell Ward onAbsorb.burnMana): kalkanın emebileceği saldırganlardan (büyü kalkanı: büyü hasarlı düşmanlar) en çok yakılabilecek MP
+  for (const e of skill.effects) {
+    if (e.type !== 'shield' || !e.onAbsorb?.burnMana) continue;
+    const burn = Math.max(0, ...battle.living(foeSide(actor)).filter((f) => (e.shieldType === 'magic' ? hasMagicAttack(battle, f) : hasAttack(battle, f))).map((f) => Math.min(f.mp, e.onAbsorb!.burnMana!)));
+    o.burn += burn;
+  }
+  curseValue(battle, actor, skill, previews, o, profile);
   // Rastgele hedefli skill: hedefler önceden bilinmez; beklenen hasar hedef sayısına oranlanır, öldürme garanti değildir
   if (skill.target === 'random_enemies' && targets.length > 0) {
     o.damage *= Math.min(skill.count ?? 3, targets.length) / targets.length;
@@ -547,6 +669,56 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
   }
   o.selfHeal = Math.min(Math.round(o.selfHeal), actor.maxHp - actor.hp);
   return o;
+}
+
+/**
+ * Hexer laneti (Omen / Doom / Wither) değeri, yapay ağırlık YOK (docs/design/classes/hexer.md 6). Hedef başına, isabet şansı (h) ve kritik lanet
+ * ihtimaliyle (c: kullanıcının geçerli kritik şansı; kritikte critStacks):
+ * - Hamle yığını doldurursa (ya da detonate) Doom'un beklenen can kaybı (kritik beklentisiyle, kalan canla sınırlı) ANINDA `damage`'a eklenir; kritiksiz
+ *   dalda bile vuruş + Doom hedefin canını bitiriyorsa (h >= aiKillMin) `kills`'e girer.
+ * - Doldurmazsa eklenen her Omen = ölçek statı x powerPerStack x omenValueShare ertelenmiş değer (`curse`).
+ * - Wither: tik x tur toplamı (vuruştan sonra kalan canla sınırlı) x omenValueShare, isabet şansıyla (`curse`).
+ */
+function curseValue(battle: Battle, actor: Combatant, skill: SkillDef, previews: ReturnType<typeof previewForTargets>, o: Option, profile: AiProfile): void {
+  const share = profile.omenValueShare ?? 0.85;
+  const crit = battle.effectiveStats(actor).critChance;
+  const cm = actor.stats.critMult;
+  const killMin = battle.formulas.hit.aiKillMin;
+  for (const p of previews) {
+    const target = battle.get(p.uid);
+    if (!target || target.side === actor.side) continue;
+    const h = p.damage ? p.damage.hitChance : 1;
+    const left = Math.max(0, target.hp - (p.damage?.hpLoss ?? 0));
+    const label = unitLabel(target);
+    if (p.omen) {
+      const om = p.omen;
+      const def = battle.statusDef(om.status);
+      const per = def?.doom ? attributePower(actor.stats, def.doom.scale, battle.formulas) * def.doom.powerPerStack * share : 0;
+      const doomExp = (d: NonNullable<typeof om.doom>) => Math.min(left, d.hpLoss * (1 + d.critChance * (cm - 1)));
+      const branch = (after: number, d: typeof om.doom) => (d ? { now: doomExp(d), later: 0 } : { now: 0, later: Math.max(0, after - om.before) * per });
+      const nc = branch(om.after, om.doom);
+      const cr = om.afterCrit !== om.after ? branch(om.afterCrit, om.doomOnCrit) : nc;
+      o.damage += h * ((1 - crit) * nc.now + crit * cr.now);
+      o.curse += h * ((1 - crit) * nc.later + crit * cr.later);
+      if (om.doom && p.damage && (p.damage.hpLoss + om.doom.hpLoss >= target.hp) && h >= killMin && !o.kills.includes(target)) o.kills.push(target);
+      if (o.notes.length < 6) {
+        if (om.doom && om.doom.cause === 'detonate') o.notes.push(`${label}: omens ${om.before}->${om.after} detonate ${om.doom.omens} omen x${om.doom.mult} = ${r1(om.doom.avg)}@crit ${r2(om.doom.critChance)}`);
+        else if (om.doom) o.notes.push(`${label}: omens ${om.before}->${om.after} DOOM ${r1(om.doom.avg)}@crit ${r2(om.doom.critChance)}`);
+        else o.notes.push(`${label}: omens ${om.before}->${om.after} omenValue ${r1(nc.later)}${om.doomOnCrit ? ` (crit -> ${om.afterCrit}: DOOM ${r1(om.doomOnCrit.avg)})` : ''} omen timer ${om.turnsLeft}`);
+      }
+    }
+    if (p.dot) {
+      const v = Math.min(left, p.dot.total) * share * h;
+      o.curse += v;
+      if (o.notes.length < 6 && v > 0) o.notes.push(`${label}: wither ${p.dot.perTick}x${p.dot.turns} value ${r1(v)}`);
+    }
+  }
+  // Jinx gibi kritik cezası veren durum: koruma değeri notu (statusMitigation hesapladı)
+  for (const e of skill.effects) {
+    if (e.type !== 'status' || e.self) continue;
+    const def = battle.statusDef(e.status);
+    if (def?.critDelta && o.mitigation > 0) o.notes.push(`mitigation ${r1(o.mitigation)} (${e.status}: acc ${def.accuracyDelta ? `${Math.round(def.accuracyDelta * 100)}%` : '0'}, crit ${def.critDelta <= -1 ? '0' : `${Math.round(def.critDelta * 100)}%`}${def.endsOnOwnAttack ? ', next attack only' : ''})`);
+  }
 }
 
 const ATTACK_TARGETS = ['single_enemy', 'area_enemies', 'all_enemies', 'random_enemies', 'everyone'];
@@ -582,6 +754,38 @@ function hitLossRaw(battle: Battle, attacker: Combatant, victim: Combatant, accD
 }
 
 /**
+ * `attacker` -> `victim` en iyi saldırısının beklenen hasarındaki AZALMA, saldıranın isabetine `accDelta` ve kritik şansına `critDelta` eklenince (Jinxed):
+ * max(skill) [ort. hasar x (hit x (1 + kritik x (çarpan - 1)) - yeni hit x (1 + yeni kritik x (çarpan - 1)))]. Garantili kritik (Backstab) kritiği korur.
+ */
+function hitCritLoss(battle: Battle, attacker: Combatant, victim: Combatant, accDelta: number, critDelta: number): number {
+  const key = `hc|${attacker.uid}|${victim.uid}|${accDelta}|${critDelta}`;
+  const cached = hitLossCache?.get(key);
+  if (cached !== undefined) return cached;
+  const f = battle.formulas;
+  const a = battle.effectiveStats(attacker);
+  const after = hitChance({ accuracy: Math.max(0, a.accuracy + accDelta) }, battle.effectiveStats(victim), f);
+  const cm = attacker.stats.critMult;
+  let top = 0;
+  for (const id of attacker.skills) {
+    const sk = battle.skill(id);
+    if (!sk || !ATTACK_TARGETS.includes(sk.target)) continue;
+    if (sk.cost.resource === 'mp' && attacker.mp < skillCostAmount(sk.cost, attacker)) continue;
+    if (sk.cost.resource === 'rage' && (attacker.rage ?? 0) < sk.cost.amount) continue;
+    const d = previewForTargets(battle, attacker, id, [victim]).find((p) => p.uid === victim.uid)?.damage;
+    if (!d) continue;
+    const sure = d.critChance >= 1; // garantili kritik: Jinxed bozmaz (madde Ö5)
+    const avg = sure ? d.avg / cm : d.avg; // önizleme ortalaması garantili kritikte çarpanı içerir
+    const cBefore = d.critChance;
+    const cAfter = sure ? 1 : Math.max(0, Math.min(1, cBefore + critDelta));
+    const before = avg * d.hitChance * (1 + cBefore * (cm - 1));
+    const now = avg * after * (1 + cAfter * (cm - 1));
+    top = Math.max(top, before - now);
+  }
+  hitLossCache?.set(key, top);
+  return top;
+}
+
+/**
  * İsabet/kaçınma durumlarının (statuses.json > accuracyDelta / evasionDelta: Blinded, Shrouded) koruma değeri, can-eşdeğer, yapay ağırlık YOK:
  * - Düşmana isabet cezası (Blinded): o düşmanın bizim canlı birimlerimize yapabileceği en iyi saldırının beklenen hasar azalması, birimlerimizin ORTALAMASI
  *   (her turda birine vurur) x yeni eklenen tur sayısı (zaten varsa yalnızca uzayan kısım).
@@ -595,15 +799,19 @@ function statusMitigation(battle: Battle, actor: Combatant, skill: SkillDef, tar
     const def = battle.statusDef(e.status);
     const acc = def?.accuracyDelta ?? 0;
     const eva = def?.evasionDelta ?? 0;
-    if (acc >= 0 && eva <= 0) continue;
+    const critD = def?.critDelta ?? 0;
+    if (acc >= 0 && eva <= 0 && critD >= 0) continue;
     const chance = (e as { chance?: number }).chance ?? 1;
     for (const t of targets) {
       if (t.hp <= 0 || !battle.effectAppliesTo(skill, e, t, actor)) continue;
-      const turns = Math.max(0, e.turns - (t.statuses.find((s) => s.kind === e.status)?.turns ?? 0));
+      const has = t.statuses.find((s) => s.kind === e.status);
+      // endsOnOwnAttack (Jinxed): yalnızca hedefin SONRAKİ saldırısı etkilenir (1 tur değer; zaten taşıyorsa 0)
+      const turns = def?.endsOnOwnAttack ? (has ? 0 : 1) : Math.max(0, e.turns - (has?.turns ?? 0));
       if (turns <= 0) continue;
-      if (acc < 0 && t.side !== actor.side) {
+      if ((acc < 0 || critD < 0) && t.side !== actor.side) {
         const victims = battle.living(actor.side);
-        if (victims.length > 0) total += (sum(victims.map((v) => hitLoss(battle, t, v, acc, 0))) / victims.length) * turns * chance;
+        // Kritik cezası varsa isabet+kritik birlikte (hitCritLoss); yoksa eski isabet hesabı (Blinded değerleri değişmez)
+        if (victims.length > 0) total += (sum(victims.map((v) => (critD < 0 ? hitCritLoss(battle, t, v, acc, critD) : hitLoss(battle, t, v, acc, 0)))) / victims.length) * turns * chance;
       }
       if (eva > 0 && t.side === actor.side) {
         const allies = Math.max(1, battle.living(actor.side).length);
@@ -902,7 +1110,7 @@ function chooseGlobal(battle: Battle, actor: Combatant, profile: AiProfile, g: A
   return null;
 }
 
-/** Can ödeyen skill'ler için kullanıcının canı yeterince yüksek mi? (Öldürücü vuruşta bu kural yok.) */
+/** Sabit can bedelli / can bahisli skill'ler için kullanıcının canı yeterince yüksek mi? (Öldürücü vuruşta ve oranlı can bedelinde (Wail) bu kural yok.) */
 const affordable = (actor: Combatant, profile: AiProfile) => (o: Option) =>
   !o.hpCost || ratio(actor) >= profile.minHpRatioForHpCost;
 
@@ -940,12 +1148,13 @@ const PICKERS: Record<AiPriority, Picker> = {
     return best(summonPool(options).pool, (o) => -o.cost);
   },
 
-  // Kalkansız ve canı eşiğin altındaki dosta (veya kendine) kalkan; en yaralı olana öncelik.
+  // Kalkansız ve canı eşiğin altındaki dosta (veya kendine) kalkan; en yaralı olana öncelik. Debuff silen kalkan (Mana Barrier) silme değeri
+  // cleanseMinValue'yu geçiyorsa yaralı olmayan dosta da atılır; silme değeri puana eklenir.
   shield: (_b, _a, profile, options) => {
     if (profile.shieldBelowRatio <= 0) return undefined;
     const needs = (c: Combatant) => c.shield === 0 && c.magicShield === 0 && ratio(c) < profile.shieldBelowRatio;
-    const shielders = options.filter((o) => o.shield > 0 && !o.taunt && o.targets.some(needs));
-    return best(shielders, (o) => o.shield - o.cost + (1 - ratio(o.targets[0]!)) * 50);
+    const shielders = options.filter((o) => o.shield > 0 && !o.taunt && (o.targets.some(needs) || o.cleanse >= (profile.cleanseMinValue ?? Infinity)));
+    return best(shielders, (o) => o.shield - o.cost + (1 - ratio(o.targets[0]!)) * 50 + o.cleanse);
   },
 
   // Taunt: kendinde yoksa ve takımda korunacak başka biri varsa çek.
@@ -974,7 +1183,7 @@ const PICKERS: Record<AiPriority, Picker> = {
   aoe: (battle, actor, profile, options) => {
     if (battle.living(actor.side === 'party' ? 'enemy' : 'party').length < profile.aoeMinTargets) return undefined;
     const aoes = options.filter((o) => (o.skill.target === 'all_enemies' || o.skill.target === 'area_enemies') && o.damage > 0).filter(affordable(actor, profile));
-    return best(aoes, (o) => o.damage - o.cost);
+    return best(aoes, (o) => o.damage + o.curse - o.cost);
   },
 
   // Odak hedefe (profil: en az can / en düşük can oranı) en verimli hasar; herkese vuran skill de aday.
@@ -986,7 +1195,7 @@ const PICKERS: Record<AiPriority, Picker> = {
     for (const o of damaging) for (const t of o.skill.target === 'single_enemy' ? o.targets.slice(0, 1) : o.targets) reachable.set(t.uid, t);
     const focus = best([...reachable.values()], (c) => (profile.focus === 'lowest_hp' ? -(c.hp + c.shield + c.magicShield) : -ratio(c)));
     const onFocus = damaging.filter((o) => (o.skill.target === 'all_enemies' || (o.skill.target === 'single_enemy' ? o.targets[0] === focus : o.targets.includes(focus!))));
-    return best(onFocus.length > 0 ? onFocus : damaging, (o) => o.damage + o.selfHeal + o.burn * BURN_WEIGHT - o.cost);
+    return best(onFocus.length > 0 ? onFocus : damaging, (o) => o.damage + o.selfHeal + o.burn * BURN_WEIGHT + o.curse - o.cost);
   },
 };
 
@@ -1039,8 +1248,17 @@ export interface AiCandidate {
   /** Ceset tüketen çağrı adayında: tüketilecek ceset (tehlike puanı + gerekçe) ve seçilmeyen diğer cesetler. */
   corpse?: { unit: string; danger: number; why: string };
   otherCorpses?: Array<{ unit: string; danger: number }>;
-  /** Etiketler: summon, empowered (ceset tüketilecek), unfed (ceset yok), taunt, guard, selfBuff, hpCost, hint (skill'in ai bağlam ipucu var). */
+  /** Etiketler: summon, empowered (ceset tüketilecek), unfed (ceset yok), taunt, guard, selfBuff, hpCost (düşük can kuralına tabi; oranlı can bedeli (Wail) taşımaz), hint (skill'in ai bağlam ipucu var). */
   tags: string[];
+  /** Debuff silme değeri (Mana Barrier), Dark Bond değeri ve yarım turn tempo değeri (0 ise yazılmaz). */
+  cleanse?: number;
+  bond?: number;
+  tempo?: number;
+  /** Skill'in turn bedeli 1'den küçükse (yarım turn). */
+  turnCost?: number;
+  /** Hexer laneti ertelenmiş değeri (Omen + Wither; 0 ise yazılmaz) ve Omen/Doom/Jinx notları. */
+  curse?: number;
+  notes?: string[];
   /** Kazanan önceliğin seçicisinde bu adayın puanı (yalnızca seçicinin havuzundaki adaylarda). */
   score?: number;
   /** chosen: seçildi; lost: havuzdaydı ama puanı düşük; blocked: bağlam/MP ayırma yüzünden elendi; skipped: kazanan önceliğin havuzu dışında. */
@@ -1108,9 +1326,9 @@ function pickerView(priority: AiPriority | 'fallback', actor: Combatant, profile
     case 'shield': {
       const needs = (c: Combatant) => c.shield === 0 && c.magicShield === 0 && ratio(c) < profile.shieldBelowRatio;
       return {
-        pool: profile.shieldBelowRatio <= 0 ? [] : options.filter((o) => o.shield > 0 && !o.taunt && o.targets.some(needs)),
-        score: (o) => o.shield - o.cost + (1 - ratio(o.targets[0]!)) * 50,
-        rule: `shield: unshielded ally below ${profile.shieldBelowRatio} HP; shield - cost + (1 - hp ratio) x 50`,
+        pool: profile.shieldBelowRatio <= 0 ? [] : options.filter((o) => o.shield > 0 && !o.taunt && (o.targets.some(needs) || o.cleanse >= (profile.cleanseMinValue ?? Infinity))),
+        score: (o) => o.shield - o.cost + (1 - ratio(o.targets[0]!)) * 50 + o.cleanse,
+        rule: `shield: unshielded ally below ${profile.shieldBelowRatio} HP${profile.cleanseMinValue !== undefined ? ` (or a debuffed ally whose cleanse value >= ${profile.cleanseMinValue})` : ''}; shield - cost + (1 - hp ratio) x 50 + cleanse`,
       };
     }
     case 'taunt':
@@ -1134,8 +1352,8 @@ function pickerView(priority: AiPriority | 'fallback', actor: Combatant, profile
     case 'aoe':
       return {
         pool: options.filter((o) => (o.skill.target === 'all_enemies' || o.skill.target === 'area_enemies') && o.damage > 0).filter(affordable(actor, profile)),
-        score: (o) => o.damage - o.cost,
-        rule: 'aoe: area/all-enemies skills with damage; total expected damage over ALL hit foes - cost',
+        score: (o) => o.damage + o.curse - o.cost,
+        rule: 'aoe: area/all-enemies skills with damage; total expected damage over ALL hit foes + curse (deferred Omen/Wither value) - cost',
       };
     case 'damage': {
       const damaging = options.filter((o) => o.damage > 0).filter(affordable(actor, profile));
@@ -1145,8 +1363,8 @@ function pickerView(priority: AiPriority | 'fallback', actor: Combatant, profile
       const onFocus = damaging.filter((o) => o.skill.target === 'all_enemies' || (o.skill.target === 'single_enemy' ? o.targets[0] === focus : o.targets.includes(focus!)));
       return {
         pool: onFocus.length > 0 ? onFocus : damaging,
-        score: (o) => o.damage + o.selfHeal + o.burn * BURN_WEIGHT - o.cost,
-        rule: `damage: focus = ${focus ? unitLabel(focus) : 'none'} (${profile.focus}); only options that hit the focus; highest (damage + self heal + 0.6 x burn - cost)`,
+        score: (o) => o.damage + o.selfHeal + o.burn * BURN_WEIGHT + o.curse - o.cost,
+        rule: `damage: focus = ${focus ? unitLabel(focus) : 'none'} (${profile.focus}); only options that hit the focus; highest (damage + self heal + 0.6 x burn + curse - cost)`,
       };
     }
     case 'fallback': {
@@ -1246,6 +1464,12 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
       buff: r1(o.buff),
       ...(o.board ? { board: o.board === actor.side ? ('own' as const) : ('foe' as const) } : {}),
       ...(o.mitigation > 0 ? { mitigation: r1(o.mitigation) } : {}),
+      ...(o.cleanse > 0 ? { cleanse: r1(o.cleanse) } : {}),
+      ...(o.bond > 0 ? { bond: r1(o.bond) } : {}),
+      ...(o.tempo > 0 ? { tempo: r1(o.tempo) } : {}),
+      ...(o.curse > 0 ? { curse: r1(o.curse) } : {}),
+      ...(o.notes.length > 0 ? { notes: [...o.notes] } : {}),
+      ...(battle.turnCostOf(o.skill.id) < 1 ? { turnCost: battle.turnCostOf(o.skill.id) } : {}),
       revive: r1(o.revive),
       cost: r1(o.cost),
       net: r1((o.pureBuff ? o.buff : value(o)) - o.cost),
@@ -1348,6 +1572,6 @@ function describeCanUse(battle: Battle, actor: Combatant, id: string, reason: st
   if (reason === 'On cooldown') return `on cooldown (${actor.cooldowns[id] ?? 0} own turn(s) left)`;
   if (reason === 'Not enough MP' && sk) return `not enough MP (needs ${sk.cost.amount}, has ${actor.mp})`;
   if (reason === 'Not enough rage' && sk) return `not enough Rage (needs ${sk.cost.amount}, has ${actor.rage ?? 0})`;
-  if (reason === 'Not enough HP' && sk) return `not enough HP (cost ${sk.cost.amount}, has ${actor.hp})`;
+  if (reason === 'Not enough HP' && sk) return `not enough HP (cost ${skillCostAmount(sk.cost, actor)}, has ${actor.hp})`;
   return reason.charAt(0).toLowerCase() + reason.slice(1);
 }

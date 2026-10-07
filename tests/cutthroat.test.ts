@@ -72,10 +72,10 @@ describe('Cutthroat class verisi', () => {
     const p = ct.passive!;
     expect(p.effect.type).toBe('bonusVsStatus');
     if (p.effect.type !== 'bonusVsStatus') return;
-    expect(p.effect.statuses).toEqual(['wound', 'slow', 'stun']);
+    expect(p.effect.statuses).toEqual(['wound', 'slow', 'stun', 'wither']); // Ö7 (Hexer): Withering eklendi, Omen eklenmedi
     const text = describePassive(p, ct.stats, content.formulas);
     expect(text).toContain(`+${Math.round(p.effect.bonus * 100)}%`);
-    expect(text).toMatch(/Wound, Slow or Stun/);
+    expect(text).toMatch(/Wound, Slow, Stun or Wither/);
   });
 });
 

@@ -3,13 +3,18 @@ import { ICON_KINDS, isIconKind } from '../src/ui/icon-kinds';
 import {
   DOCK_GROUPS,
   DOCK_HINT,
+  DEFAULT_ACTION_ICON,
+  QUICK_TAB,
+  SECTION_ICONS,
   SHORT_MAX_WORDS,
+  TAB_ICONS,
+  labelBadge,
   dockBadge,
   dockTooltip,
   labelBase,
   wordCount,
 } from '../src/ui/debug-layout';
-import { DEBUG_TABS, registerDebugTools } from '../src/ui/debug-tools';
+import { DEBUG_INFO_TAB, DEBUG_TABS, registerDebugTools } from '../src/ui/debug-tools';
 import type { DebugAction, DebugPanel } from '../src/ui/debug-menu';
 
 // BattleScene Phaser ister (node'da yok): yalnızca statik alanları kullanılır
@@ -22,11 +27,11 @@ const fakeMenu = {
   registerPanel: (p: DebugPanel) => void panels.push(p),
   registerInfo: () => undefined,
   openTab: () => undefined,
+  onTabOpen: () => undefined,
   refresh: () => undefined,
 };
 const fakeGame = { scene: { isActive: () => false, getScene: () => null } };
-const openedSections: string[] = [];
-registerDebugTools({ game: fakeGame as never, debug: fakeMenu as never, openAssets: (section) => openedSections.push(section ?? 'assets') });
+registerDebugTools({ game: fakeGame as never, debug: fakeMenu as never });
 
 const text = (v: string | (() => string)): string => (typeof v === 'function' ? v() : v);
 
@@ -43,9 +48,8 @@ describe('debug menüsü: bölümlü yapı', () => {
     }
   });
 
-  it('her sekme en az bir eylem ya da panel içerir (Info hariç: bilgi paneli)', () => {
-    for (const tab of DEBUG_TABS) {
-      if (tab === 'Info') continue;
+  it('her sekme en az bir eylem ya da panel içerir (Quick hariç: o, dock alanı olan eylemlerden türer)', () => {
+    for (const tab of DEBUG_TABS.filter((t) => t !== QUICK_TAB)) {
       const has = actions.some((a) => !a.dockOnly && a.tab === tab) || panels.some((p) => p.tab === tab);
       expect(has, tab).toBe(true);
     }
@@ -53,7 +57,7 @@ describe('debug menüsü: bölümlü yapı', () => {
 
   it('dock düğmeleri: bilinen bölümde, ikonu geçerli, kısa yazısı 1-3 kelime, açıklaması (hint) var', () => {
     const docked = actions.filter((a) => a.dock);
-    expect(docked.length).toBeGreaterThan(20);
+    expect(docked.length).toBeGreaterThan(14);
     for (const a of docked) {
       const d = a.dock!;
       expect(DOCK_GROUPS as readonly string[], a.id).toContain(d.group);
@@ -98,27 +102,90 @@ describe('debug menüsü: bölümlü yapı', () => {
     const a = actions.find((x) => x.id === 'tools.copy-match')!;
     expect(a).toBeTruthy();
     expect(a.dock).toMatchObject({ group: 'Tools', icon: 'clipboard', short: 'Copy match data' });
+    expect(a.tab).toBe('Data');
     expect(a.hint).toMatch(/clipboard/i);
     expect(wordCount(a.dock!.short)).toBeLessThanOrEqual(SHORT_MAX_WORDS);
   });
 
-  it('Sounds sekmesinde başta "Open assets (wiki)" paneli var', () => {
-    const soundPanels = panels.filter((p) => p.tab === 'Sounds');
-    expect(soundPanels.length).toBeGreaterThanOrEqual(2);
-    expect(soundPanels[0]!.id).toBe('panel.assets-wiki-link');
+  it('wikide bulunan bilgi/galeri öğeleri debug menüsünde yok (Sounds sekmesi, assets/wiki düğmeleri, ses listesi)', () => {
+    expect(DEBUG_TABS).not.toContain('Sounds');
+    expect(DEBUG_TABS).toEqual(['Quick', 'Battle', 'Unit', 'Skills', 'Rolls', 'Speed & View', 'Setup', 'Test Mode', 'Characters', 'Data']);
+    expect(DEBUG_INFO_TAB).toBe('Data');
+    const ids = [...actions.map((a) => a.id), ...panels.map((p) => p.id)];
+    for (const gone of ['tools.sounds', 'tools.assets-wiki', 'ui.wiki', 'panel.sounds', 'panel.assets-wiki-link']) expect(ids, gone).not.toContain(gone);
+    expect(panels.some((p) => p.tab === 'Sounds')).toBe(false);
+    expect(actions.some((a) => a.tab === 'Sounds')).toBe(false);
   });
 
-  it('Tools bölümündeki "Open assets (wiki)" düğmesi wikiyi Assets bölümünde açar (ayrı galeri sayfası yok)', () => {
-    const a = actions.find((x) => x.id === 'tools.assets-wiki')!;
-    expect(a).toBeTruthy();
-    expect(a.dock).toMatchObject({ group: 'Tools', icon: 'frame', short: 'Open assets (wiki)' });
-    expect(wordCount(a.dock!.short)).toBeLessThanOrEqual(SHORT_MAX_WORDS);
-    a.run();
-    expect(openedSections).toEqual(['assets']);
+  it('Skills sekmesi yalnızca savaşı değiştiren cast aracıdır; dock kısayolu "Cast skill"', () => {
+    expect(panels.some((p) => p.id === 'panel.gallery' && p.tab === 'Skills')).toBe(true);
+    const a = actions.find((x) => x.id === 'tools.skills')!;
+    expect(a.dock).toMatchObject({ group: 'Tools', short: 'Cast skill' });
   });
 
   it('eylem etiketi ve dock kısayolları ikon listesiyle tutarlı (yeni ikonlar kayıtlı)', () => {
-    for (const k of ['restart', 'eye', 'swap', 'info', 'frame', 'clipboard']) expect(ICON_KINDS as readonly string[]).toContain(k);
+    for (const k of ['restart', 'eye', 'swap', 'info', 'frame', 'clipboard', 'speaker']) expect(ICON_KINDS as readonly string[]).toContain(k);
+  });
+});
+
+describe('debug menüsü: toparlanmış düzen', () => {
+  it("hızlı düğme dock'u en sık kullanılanlarla sınırlı", () => {
+    expect(DOCK_GROUPS).toEqual(['Battle', 'Rolls', 'Speed & View', 'Tools']);
+    // Speed & View dock'una See-through/Side DebugMenu içinde (DOM) eklenir: burada 3 hız düğmesi
+    expect(actions.filter((a) => a.dock).length).toBeLessThanOrEqual(20);
+  });
+
+  it('aynı sekmede aynı etiketli iki eylem yok (tekrar/ölü girdi yok); dockOnly yalnızca kısayol ve döngü düğmeleri', () => {
+    const seen = new Set<string>();
+    for (const a of actions.filter((x) => !x.dockOnly)) {
+      const key = `${a.tab}|${text(a.label).split(':')[0]}`;
+      if (a.id.startsWith('tweak.speed.') || a.id.startsWith('tweak.damage.') || /^tweak\.(crit|dodge|miss)\./.test(a.id)) continue; // değer düğmeleri
+      expect(seen.has(key), key).toBe(false);
+      seen.add(key);
+    }
+    for (const a of actions.filter((x) => x.dockOnly)) expect(a.dock, a.id).toBeTruthy();
+  });
+
+  it('gruplar: Rolls (hasar/kritik/kaçınma/iska), Speed & View, Setup (takım/seed), Data (maç kaydı), Characters (görünüm varyantları)', () => {
+    const inTab = (tab: string): string[] => actions.filter((a) => a.tab === tab).map((a) => a.id);
+    for (const id of ['tweak.damage-ohk', 'tweak.crit.always', 'tweak.dodge.always', 'tweak.miss.always']) expect(inTab('Rolls'), id).toContain(id);
+    for (const id of ['tweak.speed-cycle', 'tweak.skip', 'tweak.pause', 'tweak.numbers', 'battle.slots', 'screen.fps', 'screen.portrait', 'tools.fullscreen']) expect(inTab('Speed & View'), id).toContain(id);
+    for (const id of ['battle.random', 'battle.restart-same', 'battle.rematch', 'scene.team-select', 'mode.toggle', 'battle.test-aoe', 'battle.test-cutthroat']) expect(inTab('Setup'), id).toContain(id);
+    expect(panels.some((p) => p.id === 'panel.seed' && p.tab === 'Setup')).toBe(true);
+    expect(inTab('Data')).toContain('tools.copy-match');
+    expect(panels.some((p) => p.id === 'panel.characters' && p.tab === 'Characters')).toBe(true);
+    for (const id of ['unit.heal-team', 'unit.heal-enemies', 'unit.revive-all', 'unit.kill-enemies', 'unit.kill-party', 'unit.clear-cooldowns', 'battle.skip-turn', 'battle.autoplay', 'battle.free-mp', 'tweak.enemy-ai', 'tools.result-victory', 'tools.result-defeat']) expect(inTab('Battle'), id).toContain(id);
+  });
+});
+
+describe('debug menüsü: tek yapı (sekmeler + ikonlu düğmeler)', () => {
+  it('her düğmenin geçerli bir ikonu var (dock ikonu ya da icon); yedek ikon da geçerli', () => {
+    expect(isIconKind(DEFAULT_ACTION_ICON)).toBe(true);
+    for (const a of actions) {
+      const ic = a.dock ? (typeof a.dock.icon === 'string' ? a.dock.icon : 'next') : a.icon;
+      expect(ic, `${a.id} ikonu`).toBeTruthy();
+      expect(isIconKind(ic!), `${a.id} ikon ${ic}`).toBe(true);
+    }
+  });
+
+  it('her sekmenin ve bölüm başlığının ikonu geçerli; ayrı yazı-düğme grubu/dock yok (ilk sekme Quick)', () => {
+    expect(DEBUG_TABS[0]).toBe(QUICK_TAB);
+    for (const t of DEBUG_TABS) expect(isIconKind(TAB_ICONS[t] ?? ''), `sekme ${t}`).toBe(true);
+    for (const [name, ic] of Object.entries(SECTION_ICONS)) expect(isIconKind(ic), `bölüm ${name}`).toBe(true);
+  });
+
+  it('labelBadge: "Etiket: on/off/değer" -> rozet; iki nokta yoksa rozet yok', () => {
+    expect(labelBadge('Skip anims: on')).toEqual({ text: 'ON', kind: 'on' });
+    expect(labelBadge('Free MP: off')).toEqual({ text: 'OFF', kind: 'off' });
+    expect(labelBadge('Rotate view: auto')).toEqual({ text: 'auto', kind: 'val' });
+    expect(labelBadge('Always crit')).toBeNull();
+    expect(labelBadge('2x')).toBeNull();
+  });
+
+  it('Test Mode sekmesi: Enable + 3 anahtar (MP, Rage, cooldown) + takım seçici paneli', () => {
+    const ids = actions.filter((a) => a.tab === 'Test Mode').map((a) => a.id);
+    for (const id of ['test.enable', 'test.unlimited-mp', 'test.unlimited-rage', 'test.no-cooldowns']) expect(ids, id).toContain(id);
+    expect(panels.some((p) => p.id === 'panel.test-teams' && p.tab === 'Test Mode')).toBe(true);
   });
 });
 
@@ -143,12 +210,11 @@ describe('debug-layout yardımcıları', () => {
     expect(DOCK_HINT).toBe('Hover a button for details');
   });
 
-  it('Test AOE shapes: Battle flow bölümünde, ikonlu, kısa yazılı ve açıklamalı hızlı düğme (Geometer test savaşı)', () => {
+  it('Test AOE shapes: Setup > Test battles bölümünde, açıklamalı (Geometer test savaşı)', () => {
     const a = actions.find((x) => x.id === 'battle.test-aoe')!;
     expect(a).toBeDefined();
-    expect(a.dock!.group).toBe('Battle flow');
-    expect(a.dock!.short).toBe('Test AOE shapes');
-    expect(isIconKind(a.dock!.icon as string)).toBe(true);
+    expect(a.tab).toBe('Setup');
+    expect(a.section).toBe('Test battles');
     expect(a.hint).toMatch(/Geometer/);
   });
 });

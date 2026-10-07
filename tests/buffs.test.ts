@@ -31,7 +31,12 @@ describe('buff / debuff tanımları (data/statuses.json)', () => {
       expect(['buff', 'debuff'], id).toContain(def.type);
       expect(def.color, id).toMatch(/^#[0-9a-fA-F]{6}$/);
       expect(def.text.length, id).toBeGreaterThan(0);
-      expect(def.speedMult !== undefined || def.damageTakenMult !== undefined || def.healTakenMult !== undefined || def.skipTurn === true || def.accuracyDelta !== undefined || def.evasionDelta !== undefined, id).toBe(true);
+      // dark_bond (madde 240): etkisi motorda özel kodlu bağ durumu (lifesteal kopyası); statuses.json yalnızca rozet/ad/renk taşır ve silinemez
+      if (id === 'dark_bond') {
+        expect(def.dispellable, id).toBe(false);
+        continue;
+      }
+      expect(def.speedMult !== undefined || def.damageTakenMult !== undefined || def.healTakenMult !== undefined || def.skipTurn === true || def.accuracyDelta !== undefined || def.evasionDelta !== undefined || def.critDelta !== undefined || def.critDeltaPerStack !== undefined || def.maxStacks !== undefined || def.dot !== undefined, id).toBe(true);
     }
   });
 
@@ -323,9 +328,9 @@ describe('sınıf verisi (bu turun düzenlemeleri)', () => {
     expect(content.skills.meteor!.skyCenter).toBe(true);
   });
 
-  it('Undead kiti: Bone Throw, Blood Rite, Wail of the Dead, Raise Dead; Blood Rite yerden çıkan ağız (ground), Thorn Whip kırbaç', () => {
-    expect(content.classes.undead!.skills.slice(0, 4)).toEqual(['bone_throw', 'blood_rite', 'wail_of_the_dead', 'raise_dead']);
-    expect(content.skills.blood_rite!.motion).toBe('ground');
+  it('Undead kiti (madde 240): Bone Throw, Wail of the Dead, Dark Bond (3. yuva), Raise Dead (4. yuva); Blood Rite kaldırıldı; Thorn Whip kırbaç', () => {
+    expect(content.classes.undead!.skills.slice(0, 4)).toEqual(['bone_throw', 'wail_of_the_dead', 'dark_bond', 'raise_dead']);
+    expect(content.skills.blood_rite).toBeUndefined();
     expect(content.skills.thorn_whip!.motion).toBe('whip');
   });
 

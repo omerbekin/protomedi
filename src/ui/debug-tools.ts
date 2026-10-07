@@ -1,13 +1,12 @@
 /**
- * Debug menüsünün içeriği: sekmeler, düğmeler ve paneller (birim araçları, skill galerisi, ses listesi, seed, hız...).
- * Dock'taki (altta bölümlü hızlı düğmeler) her düğme: bölüm + ikon + kısa yazı + hint. Yeni eylem eklerken bir bölüme koy (src/ui/debug-layout.ts DOCK_GROUPS).
+ * Debug menüsünün içeriği: sekmeler, ikonlu düğmeler ve paneller (birim araçları, skill cast, seed, hız, Test Mode...).
+ * Her düğmenin bir ikonu olur (`dock.icon` ya da `icon`). `dock` alanı olan eylemler ayrıca ilk sekmede (Quick) bölüm bölüm görünür (src/ui/debug-layout.ts DOCK_GROUPS). Yeni eylem eklerken ikon ver.
  * Sahneye yalnızca BattleScene'in debug* yöntemleri ve motorun debug* yöntemleri üzerinden dokunur; oyun kuralı burada yoktur.
  */
 import type Phaser from 'phaser';
 import layout from '../../data/battle-layout.json';
 import { content, TARGET_TEXT } from '../engine';
 import type { Combatant } from '../engine';
-import { audioSettings, playSfxOn, SFX_IDS } from '../game/audio';
 import {
   DAMAGE_MULTS,
   debugState,
@@ -15,7 +14,6 @@ import {
   nextInCycle,
   parseSeed,
   resourceValue,
-  sfxLabel,
   SPEEDS,
   speedLabel,
   STATUS_TURNS,
@@ -24,19 +22,22 @@ import {
 } from '../game/debug-state';
 import { BattleScene } from '../game/scenes/BattleScene';
 import { newSeed } from '../game/seed';
-import { debugButton, debugSection, type DebugMenu } from './debug-menu';
+import { DEFAULT_VARIANT, SPRITE_VARIANTS, getSpriteVariant, setSpriteVariant, variantLabel } from '../game/sprite-variants';
+import { debugButton, debugHeading, debugSection, type DebugMenu } from './debug-menu';
+import { QUICK_TAB } from './debug-layout';
+import { DEFAULT_TEST_SIZE, buildTestBattleData, clampTeam, placeClass, removeSlot, resizeTeam, setTestSwitches, testClassIds, testMode, testModeSummary, type TestSide } from '../game/test-mode';
 import { copyMatchData } from './match-copy';
 import { isFullscreen, toggleFullscreen } from './fullscreen';
 import { getRotateMode, setRotateMode } from './viewport';
 
 /** Sekme sırası (menü bu sırayla gösterir). */
-export const DEBUG_TABS = ['Battle', 'Unit', 'Skills', 'Sounds', 'Tweaks', 'Info'];
+export const DEBUG_TABS = [QUICK_TAB, 'Battle', 'Unit', 'Skills', 'Rolls', 'Speed & View', 'Setup', 'Test Mode', 'Characters', 'Data'];
+/** Canlı bilgi paneli (Info) bu sekmededir. */
+export const DEBUG_INFO_TAB = 'Data';
 
 interface Ctx {
   game: Phaser.Game;
   debug: DebugMenu;
-  /** Wiki'yi verilen bölümde açar (varsayılan: Assets). Asset Gallery artık Wiki > Assets içindedir. */
-  openAssets: (section?: string) => void;
 }
 
 let fps: HTMLDivElement | null = null;
@@ -60,11 +61,7 @@ function noteLine(panel: string): HTMLElement {
   return el;
 }
 
-const heading = (text: string): HTMLElement => {
-  const h = document.createElement('h3');
-  h.textContent = text;
-  return h;
-};
+const heading = (text: string): HTMLElement => debugHeading(text);
 
 const row = (...children: HTMLElement[]): HTMLElement => {
   const el = document.createElement('div');
@@ -73,8 +70,7 @@ const row = (...children: HTMLElement[]): HTMLElement => {
   return el;
 };
 
-export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
-  const openAssetGallery = (): void => openAssets('assets');
+export function registerDebugTools({ game, debug }: Ctx): void {
   /** The battle scene, only while a battle is actually running (not on the team selection screen). */
   const battle = (): BattleScene | null => (game.scene.isActive(BattleScene.KEY) ? (game.scene.getScene(BattleScene.KEY) as BattleScene) : null);
   const applyFlags = (): void => {
@@ -82,23 +78,22 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
     if (b) Object.assign(b.battle.debug, debugState.flags);
   };
   const applyTiming = (): void => battle()?.applyDebugTiming();
-  const audioCtx = (): AudioContext | undefined => (game.sound as unknown as { context?: AudioContext }).context;
 
   // ===== Battle =====
   debug.register({
     id: 'scene.team-select',
-    tab: 'Battle',
-    section: 'Battle',
-    dock: { group: 'Battle flow', order: 2, icon: 'team', short: 'Team select' },
+    icon: 'team',
+    tab: 'Setup',
+    section: 'Battle setup',
     label: 'Team select',
     hint: 'Go back to the team selection screen to pick new classes',
     run: () => battle()?.goToTeamSelect(),
   });
   debug.register({
     id: 'mode.toggle',
-    tab: 'Battle',
-    section: 'Battle',
-    dock: { group: 'Battle flow', order: 3, icon: 'flask', short: 'Mode', on: () => battle()?.mode === 'test', state: () => (battle()?.mode === 'test' ? 'Test' : 'Turns') },
+    tab: 'Setup',
+    section: 'Battle setup',
+    dock: { group: 'Battle', order: 2, icon: 'flask', short: 'Mode', on: () => battle()?.mode === 'test', state: () => (battle()?.mode === 'test' ? 'Test' : 'Turns') },
     label: () => (battle()?.mode === 'test' ? 'Mode: Test' : 'Mode: Turns'),
     hint: 'Switch between turn-based and test mode (no turn order, any unit can act); restarts the battle',
     run: () => {
@@ -108,9 +103,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   });
   debug.register({
     id: 'battle.random',
-    tab: 'Battle',
-    section: 'Battle',
-    dock: { group: 'Battle flow', order: 1, icon: 'dice', short: 'New teams' },
+    tab: 'Setup',
+    section: 'Battle setup',
+    dock: { group: 'Battle', order: 1, icon: 'dice', short: 'New teams' },
     label: 'New teams',
     hint: 'Start a new battle with random teams and a new seed',
     run: () => battle()?.scene.restart({ seed: newSeed(), teams: undefined }),
@@ -118,9 +113,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   // Geometer (aoe_tester) test battle: player team = Geometer + 4 random classes, 5 random enemies, test mode (no turn order, no cooldowns)
   debug.register({
     id: 'battle.test-aoe',
-    tab: 'Battle',
-    section: 'Battle',
-    dock: { group: 'Battle flow', order: 9, icon: 'blast', short: 'Test AOE shapes' },
+    icon: 'geometerlogo',
+    tab: 'Setup',
+    section: 'Test battles',
     label: 'Test AOE shapes',
     hint: 'Start a test battle with the Geometer (row, column, block and cross shapes) on your team against 5 random enemies; test mode: no turn order, no cooldowns',
     run: () => {
@@ -142,9 +137,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   // Cutthroat + Undead + Paladin test battle: Smoke Bomb on both boards, Backstab targets, corpse marks, Raise Dead preview, Resurrection (test mode: no turn order, no cooldowns)
   debug.register({
     id: 'battle.test-cutthroat',
-    tab: 'Battle',
-    section: 'Battle',
-    dock: { group: 'Battle flow', order: 10, icon: 'skull', short: 'Test Cutthroat corpses' },
+    icon: 'cutthroatlogo',
+    tab: 'Setup',
+    section: 'Test battles',
     label: 'Test Cutthroat corpses',
     hint: 'Start a test battle with a Cutthroat (Smoke Bomb on either side, Backstab), an Undead and a Paladin on your team against 5 random enemies; kill enemies (Units tools) to see corpse marks, then try Raise Dead and Resurrection',
     run: () => {
@@ -164,17 +159,18 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   });
   debug.register({
     id: 'battle.rematch',
-    tab: 'Battle',
-    section: 'Battle',
+    icon: 'swap',
+    tab: 'Setup',
+    section: 'Battle setup',
     label: 'Rematch',
     hint: 'Start a new battle with the same teams but a new seed',
     run: () => battle()?.scene.restart({ seed: newSeed() }),
   });
   debug.register({
     id: 'battle.restart-same',
-    tab: 'Battle',
-    section: 'Battle',
-    dock: { group: 'Battle flow', order: 0, icon: 'restart', short: 'Restart battle' },
+    tab: 'Setup',
+    section: 'Battle setup',
+    dock: { group: 'Battle', order: 0, icon: 'restart', short: 'Restart battle' },
     label: 'Restart battle',
     hint: 'Restart the battle from the beginning with the same seed and teams',
     run: () => battle()?.scene.restart({ seed: battle()?.seed }),
@@ -182,8 +178,8 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   debug.register({
     id: 'battle.skip-turn',
     tab: 'Battle',
-    section: 'Turn',
-    dock: { group: 'Battle flow', order: 4, icon: 'next', short: 'Skip turn' },
+    section: 'Flow',
+    dock: { group: 'Battle', order: 3, icon: 'next', short: 'Skip turn' },
     label: 'Skip turn',
     hint: "Skip the current unit's turn",
     run: () => battle()?.skipCurrentTurn(),
@@ -191,10 +187,10 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   debug.register({
     id: 'battle.cycle-actor',
     tab: 'Battle',
-    section: 'Turn',
+    section: 'Flow',
     dock: {
-      group: 'Units',
-      order: 4,
+      group: 'Battle',
+      order: 5,
       short: 'Next unit',
       icon: () => {
         const a = battle()?.activeActor;
@@ -213,8 +209,8 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   debug.register({
     id: 'battle.autoplay',
     tab: 'Battle',
-    section: 'Control',
-    dock: { group: 'Battle flow', order: 5, icon: 'robot', short: 'Auto-play', on: () => !!battle()?.autoPlay },
+    section: 'Flow',
+    dock: { group: 'Battle', order: 4, icon: 'robot', short: 'Auto-play', on: () => !!battle()?.autoPlay },
     label: () => (battle()?.autoPlay ? 'Auto-play: on' : 'Auto-play: off'),
     on: () => !!battle()?.autoPlay,
     hint: 'Let the AI play your own party turns',
@@ -222,9 +218,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   });
   debug.register({
     id: 'battle.free-mp',
+    icon: 'freemp',
     tab: 'Battle',
-    section: 'Control',
-    dock: { group: 'Combat tweaks', order: 4, icon: 'freemp', short: 'Free MP', on: () => BattleScene.freeMp },
+    section: 'Rules',
     label: () => (BattleScene.freeMp ? 'Free MP: on' : 'Free MP: off'),
     on: () => BattleScene.freeMp,
     hint: 'Skills cost no mana (both sides)',
@@ -239,9 +235,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   });
   debug.register({
     id: 'tweak.enemy-ai',
+    icon: 'robot',
     tab: 'Battle',
-    section: 'Control',
-    dock: { group: 'Combat tweaks', order: 5, icon: 'helm', short: 'Enemy AI', on: () => debugState.enemyAiOff, state: () => (debugState.enemyAiOff ? 'OFF' : 'ON') },
+    section: 'Rules',
     label: () => (debugState.enemyAiOff ? 'Enemy AI: off' : 'Enemy AI: on'),
     on: () => debugState.enemyAiOff,
     hint: 'Off: enemies never act and their turns are skipped (turn mode)',
@@ -253,7 +249,7 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   // Seed panel
   debug.registerPanel({
     id: 'panel.seed',
-    tab: 'Battle',
+    tab: 'Setup',
     render: (el, refresh) => {
       const note = noteLine('seed');
       const seed = battle()?.seed;
@@ -291,20 +287,16 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
       });
       const inputRow = document.createElement('div');
       inputRow.className = 'debug-inline';
-      inputRow.append(input, debugButton('Start', start, { title: 'Restart the battle (same teams) with this seed' }));
+      inputRow.append(input, debugButton('Start', start, { icon: 'next', title: 'Restart the battle (same teams) with this seed' }));
       el.append(
         heading('Seed'),
         row(
-          debugButton(`Seed: ${seed ?? '-'}`, () => seed !== undefined && void copy(String(seed), 'Seed'), { title: 'Click to copy the seed' }),
-          debugButton('Copy link', () => seed !== undefined && void copy(`${window.location.origin}${window.location.pathname}?seed=${seed}`, 'Link'), { title: 'Copy a link that opens this exact battle' }),
+          debugButton(`Seed: ${seed ?? '-'}`, () => seed !== undefined && void copy(String(seed), 'Seed'), { icon: 'clover', title: 'Click to copy the seed' }),
+          debugButton('Copy link', () => seed !== undefined && void copy(`${window.location.origin}${window.location.pathname}?seed=${seed}`, 'Link'), { icon: 'clipboard', title: 'Copy a link that opens this exact battle' }),
         ),
         inputRow,
         note,
       );
-      const ver = document.createElement('div');
-      ver.className = 'debug-note dim';
-      ver.textContent = `Version ${__APP_VERSION__} - built ${new Date(__BUILD_TIME__).toLocaleString('en-GB')}`;
-      el.append(ver);
     },
   });
 
@@ -320,31 +312,38 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
       }
       const b = scene.battle;
       const unit = scene.debugUnit;
+      const selected = new Set(scene.selectedUids);
+      // Tools act on every Ctrl+clicked unit (or the one picked below)
       const act = (fn: (u: Combatant) => { ok: boolean; reason?: string } | void): (() => void) => () => {
-        const u = scene.debugUnit;
-        if (!u) return;
-        const r = fn(u);
-        notes.set('unit', r && !r.ok ? (r.reason ?? 'Not possible') : '');
+        const targets = scene.debugTargets();
+        if (targets.length === 0) return;
+        let reason = '';
+        for (const u of targets) {
+          const r = fn(u);
+          if (r && !r.ok) reason = r.reason ?? 'Not possible';
+        }
+        notes.set('unit', reason);
         scene.debugAfterChange();
         refresh();
       };
-      const team = (fn: () => void): (() => void) => () => {
-        fn();
-        notes.set('unit', '');
-        scene.debugAfterChange();
-        refresh();
-      };
-
       // Unit picker
       const chips = scene.debugUnits().map((c) => {
         const btn = debugButton(`${c.name}${c.summoned ? '*' : ''}`, () => {
+          scene.clearUnitSelection();
           scene.debugUnitUid = c.uid;
           refresh();
-        }, { on: unit?.uid === c.uid, className: `chip ${c.side}${c.hp <= 0 ? ' dead' : ''}`, title: `${c.side === 'party' ? 'Player' : 'Enemy'} ${c.name}${c.hp <= 0 ? ' (dead)' : ''}` });
+        }, { icon: c.logo, accent: c.color, on: unit?.uid === c.uid || selected.has(c.uid), className: `chip ${c.side}${c.hp <= 0 ? ' dead' : ''}`, title: `${c.side === 'party' ? 'Player' : 'Enemy'} ${c.name}${c.hp <= 0 ? ' (dead)' : ''}` });
         return btn;
       });
-      el.append(heading('Unit (tools apply to the highlighted one)'), row(...chips));
-      if (unit) {
+      el.append(heading('Unit (tools apply to the highlighted ones)'), row(...chips));
+      const hintLine = noteLineText(`Ctrl + click (Mac: Cmd, touch: long press) any unit in the battle to select it; click again to deselect, Esc or a click on empty ground clears. ${selected.size > 0 ? `Selected: ${selected.size}.` : ''}`);
+      hintLine.classList.add('dim');
+      el.append(hintLine);
+      if (selected.size > 0) el.append(row(debugButton('Clear selection', () => {
+        scene.clearUnitSelection();
+        refresh();
+      }, { icon: 'frame', title: 'Deselect all Ctrl+clicked units' })));
+      if (unit && selected.size <= 1) {
         const line = document.createElement('div');
         line.className = 'debug-note dim';
         line.textContent = `${unit.side === 'party' ? 'Player' : 'Enemy'} ${unit.name}: ${unit.hp <= 0 ? 'DEAD' : `HP ${unit.hp}/${unit.maxHp}, MP ${unit.mp}/${unit.maxMp}${unit.maxRage !== undefined ? `, Rage ${unit.rage ?? 0}/${unit.maxRage}` : ''}`}`;
@@ -352,8 +351,8 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
       }
       el.append(noteLine('unit'));
 
-      const hp = (label: string, preset: ResourcePreset): HTMLElement => debugButton(label, act((u) => b.debugSetResource(u.uid, 'hp', resourceValue(u.maxHp, preset))));
-      const mp = (label: string, preset: ResourcePreset): HTMLElement => debugButton(label, act((u) => b.debugSetResource(u.uid, 'mp', resourceValue(u.maxMp, preset))));
+      const hp = (label: string, preset: ResourcePreset): HTMLElement => debugButton(label, act((u) => b.debugSetResource(u.uid, 'hp', resourceValue(u.maxHp, preset))), { icon: 'heart' });
+      const mp = (label: string, preset: ResourcePreset): HTMLElement => debugButton(label, act((u) => b.debugSetResource(u.uid, 'mp', resourceValue(u.maxMp, preset))), { icon: 'droplet' });
       el.append(...debugSection('Health', hp('HP 1', 'one'), hp('HP 25%', 'quarter'), hp('HP 50%', 'half'), hp('HP full', 'full')));
       el.append(...debugSection('Mana', mp('MP 0', 'zero'), mp('MP 50%', 'half'), mp('MP full', 'full')));
       if (unit?.maxRage !== undefined) {
@@ -379,7 +378,7 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
         });
         const wrap = document.createElement('div');
         wrap.className = 'debug-inline';
-        wrap.append(input, debugButton('Set', go));
+        wrap.append(input, debugButton('Set', go, { icon: 'next' }));
         return wrap;
       };
       el.append(
@@ -391,44 +390,25 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
       el.append(
         ...debugSection(
           'Life',
-          debugButton('Kill', act((u) => b.debugKill(u.uid))),
-          debugButton('Revive', act((u) => b.debugRevive(u.uid))),
-          debugButton('Clear cooldowns', act((u) => b.debugClearCooldowns(u.uid)), { title: 'Reset all skill cooldowns of this unit' }),
-          debugButton('Clear status', act((u) => b.debugClearStatuses(u.uid)), { title: 'Remove statuses and shields from this unit' }),
+          debugButton('Kill', act((u) => b.debugKill(u.uid)), { icon: 'skull' }),
+          debugButton('Revive', act((u) => b.debugRevive(u.uid)), { icon: 'ankh' }),
+          debugButton('Clear cooldowns', act((u) => b.debugClearCooldowns(u.uid)), { icon: 'hourglass', title: 'Reset all skill cooldowns of this unit' }),
+          debugButton('Clear status', act((u) => b.debugClearStatuses(u.uid)), { icon: 'drop', title: 'Remove statuses and shields from this unit' }),
         ),
       );
 
       const statusButtons = Object.entries(content.statuses).map(([kind, def]) =>
-        debugButton(def.name, act((u) => b.debugAddStatus(u.uid, kind, STATUS_TURNS)), { title: `${def.text} (${STATUS_TURNS} turns)`, className: def.type === 'debuff' ? 'bad' : 'good' }),
+        debugButton(def.name, act((u) => b.debugAddStatus(u.uid, kind, STATUS_TURNS)), { icon: def.type === 'debuff' ? 'poison' : 'shield', title: `${def.text} (${STATUS_TURNS} turns)`, className: def.type === 'debuff' ? 'bad' : 'good' }),
       );
       el.append(...debugSection('Add status', ...statusButtons));
 
-      const healSide = (side: 'party' | 'enemy'): void => {
-        for (const c of b.combatants) if (c.side === side && c.hp <= 0 && !c.summoned) b.debugRevive(c.uid);
-        b.debugFill(side);
-      };
-      const killSide = (side: 'party' | 'enemy'): void => {
-        for (const c of b.living(side)) b.debugKill(c.uid);
-      };
-      el.append(
-        ...debugSection(
-          'Teams',
-          debugButton('Heal my team', team(() => healSide('party')), { title: 'Revive and fully restore HP and MP of all your units', icon: 'heart' }),
-          debugButton('Heal enemies', team(() => healSide('enemy')), { title: 'Revive and fully restore all enemies' }),
-          debugButton('Clear all cooldowns', team(() => b.debugClearCooldowns()), { title: 'Reset every unit\'s cooldowns' }),
-          debugButton('Revive everyone', team(() => b.debugReviveAll())),
-          debugButton('Kill enemies', team(() => killSide('enemy')), { title: 'Kill all enemies (you win)', icon: 'skull' }),
-          debugButton('Kill my team', team(() => killSide('party')), { title: 'Kill all your units (you lose)' }),
-        ),
-      );
     },
   });
   debug.register({
     id: 'unit.heal-team',
-    dockOnly: true,
-    tab: 'Unit',
-    section: 'Quick',
-    dock: { group: 'Units', order: 0, icon: 'heart', short: 'Heal my team' },
+    tab: 'Battle',
+    section: 'Team',
+    dock: { group: 'Battle', order: 6, icon: 'heart', short: 'Heal my team' },
     label: 'Heal my team',
     hint: 'Revive and fully restore HP and MP of all your units',
     run: () => {
@@ -441,10 +421,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   });
   debug.register({
     id: 'unit.kill-enemies',
-    dockOnly: true,
-    tab: 'Unit',
-    section: 'Quick',
-    dock: { group: 'Units', order: 2, icon: 'skull', short: 'Kill enemies' },
+    tab: 'Battle',
+    section: 'Team',
+    dock: { group: 'Battle', order: 7, icon: 'skull', short: 'Kill enemies' },
     label: 'Kill enemies',
     hint: 'Kill all enemies (you win)',
     run: () => {
@@ -457,10 +436,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
 
   debug.register({
     id: 'unit.revive-all',
-    dockOnly: true,
-    tab: 'Unit',
-    section: 'Quick',
-    dock: { group: 'Units', order: 1, icon: 'ankh', short: 'Revive everyone' },
+    icon: 'ankh',
+    tab: 'Battle',
+    section: 'Team',
     label: 'Revive everyone',
     hint: 'Bring every fallen unit (both sides) back to life',
     run: () => {
@@ -472,10 +450,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   });
   debug.register({
     id: 'unit.clear-cooldowns',
-    dockOnly: true,
-    tab: 'Unit',
-    section: 'Quick',
-    dock: { group: 'Units', order: 3, icon: 'rune', short: 'Clear all cooldowns' },
+    icon: 'hourglass',
+    tab: 'Battle',
+    section: 'Team',
     label: 'Clear all cooldowns',
     hint: "Reset every unit's skill cooldowns",
     run: () => {
@@ -486,11 +463,39 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
     },
   });
   debug.register({
+    id: 'unit.heal-enemies',
+    icon: 'heart',
+    tab: 'Battle',
+    section: 'Team',
+    label: 'Heal enemies',
+    hint: 'Revive and fully restore HP and MP of all enemies',
+    run: () => {
+      const s = battle();
+      if (!s) return;
+      for (const c of s.battle.combatants) if (c.side === 'enemy' && c.hp <= 0 && !c.summoned) s.battle.debugRevive(c.uid);
+      s.battle.debugFill('enemy');
+      s.debugAfterChange();
+    },
+  });
+  debug.register({
+    id: 'unit.kill-party',
+    icon: 'skull',
+    tab: 'Battle',
+    section: 'Team',
+    label: 'Kill my team',
+    hint: 'Kill all your units (you lose)',
+    run: () => {
+      const s = battle();
+      if (!s) return;
+      for (const c of s.battle.living('party')) s.battle.debugKill(c.uid);
+      s.debugAfterChange();
+    },
+  });
+  debug.register({
     id: 'unit.set-rage',
-    dockOnly: true,
+    icon: 'rage',
     tab: 'Unit',
     section: 'Quick',
-    dock: { group: 'Units', order: 6, icon: 'flame', short: 'Set rage' },
     label: 'Set rage',
     hint: 'Fill the Rage bar of the picked unit (or of your first Rage unit, e.g. the Warrior); exact values are in the Unit tab',
     run: () => {
@@ -507,13 +512,13 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
     dockOnly: true,
     tab: 'Unit',
     section: 'Quick',
-    dock: { group: 'Units', order: 5, icon: 'muscle', short: 'Unit tools' },
+    dock: { group: 'Tools', order: 1, icon: 'muscle', short: 'Unit tools' },
     label: 'Unit tools',
     hint: 'Open the Unit tab: pick one unit, then set HP/MP, kill, revive or add a status',
     run: () => debug.openTab('Unit'),
   });
 
-  // ===== Skills (gallery) =====
+  // ===== Skills (cast tool: changes the running battle; animation/sound previews live in the wiki) =====
   let galleryMsg = '';
   debug.registerPanel({
     id: 'panel.gallery',
@@ -521,12 +526,12 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
     render: (el, refresh) => {
       const scene = battle();
       if (!scene) {
-        el.append(noteLineText('Start a battle to use the skill gallery'));
+        el.append(noteLineText('Start a battle to cast skills'));
         return;
       }
       const caster = scene.galleryActor;
       const living = scene.debugUnits().filter((c) => c.hp > 0);
-      const intro = noteLineText('Tap a skill to play it (animation and sound) from the caster onto the target. Cost, cooldown, range and turn order are ignored.');
+      const intro = noteLineText('Tap a skill to cast it from the caster onto the target cell in this battle (damage, statuses and summons really happen). Cost, cooldown, range and turn order are ignored.');
       intro.classList.add('dim');
       el.append(intro);
 
@@ -540,11 +545,11 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
       el.append(
         heading('Caster and options'),
         row(
-          debugButton(`Caster: ${caster ? `${caster.side === 'enemy' ? 'Enemy ' : ''}${caster.name}` : '-'}`, changeCaster, { title: 'Tap to switch to the next unit' }),
+          debugButton(`Caster: ${caster ? `${caster.side === 'enemy' ? 'Enemy ' : ''}${caster.name}` : '-'}`, changeCaster, { icon: caster?.logo ?? 'wand', ...(caster ? { accent: caster.color } : {}), title: 'Tap to switch to the next unit' }),
           debugButton(debugState.galleryReset ? 'Reset after: on' : 'Reset after: off', () => {
             debugState.galleryReset = !debugState.galleryReset;
             refresh();
-          }, { on: debugState.galleryReset, title: 'On: after each cast everything goes back (dead revived, summons removed, full HP/MP). Off: effects stay.' }),
+          }, { icon: 'restart', on: debugState.galleryReset, title: 'On: after each cast everything goes back (dead revived, summons removed, full HP/MP). Off: effects stay.' }),
         ),
       );
 
@@ -587,40 +592,12 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
     },
   });
 
-  // ===== Sounds =====
-  debug.registerPanel({
-    id: 'panel.assets-wiki-link',
-    tab: 'Sounds',
-    render: (el) => {
-      el.append(
-        ...debugSection('Assets (wiki)', debugButton('Open assets (wiki)', openAssetGallery, { icon: 'frame', title: 'Open the wiki at Assets: sounds, animations, icons, character art, palette and legacy' })),
-        noteLineText('The full sound list is also in the wiki, under Assets > Sounds. These buttons play the same sounds.'),
-      );
-    },
-  });
-  debug.registerPanel({
-    id: 'panel.sounds',
-    tab: 'Sounds',
-    render: (el, refresh) => {
-      const note = noteLine('sound');
-      const users = new Map<string, string[]>();
-      for (const s of Object.values(content.skills)) for (const k of s.sfx ?? []) users.set(k, [...(users.get(k) ?? []), s.name]);
-      const buttons = SFX_IDS.map((id) =>
-        debugButton(sfxLabel(id), () => {
-          notes.set('sound', audioSettings.enabled && audioSettings.volume > 0 ? '' : 'Sound is muted (volume 0 in settings, top right)');
-          playSfxOn(audioCtx(), id);
-          refresh();
-        }, { title: users.has(id) ? `Used by: ${users.get(id)!.join(', ')}` : 'Not used by any skill' }),
-      );
-      el.append(...debugSection(`All sounds (${SFX_IDS.length})`, ...buttons), note);
-    },
-  });
-
   // ===== Tweaks =====
   for (const sp of SPEEDS) {
     debug.register({
       id: `tweak.speed.${sp}`,
-      tab: 'Tweaks',
+      icon: 'hourglass',
+      tab: 'Speed & View',
       section: 'Animation speed',
       label: speedLabel(sp),
       on: () => debugState.speed === sp,
@@ -634,9 +611,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   debug.register({
     id: 'tweak.speed-cycle',
     dockOnly: true,
-    tab: 'Tweaks',
-    section: 'Animation speed',
-    dock: { group: 'Battle flow', order: 7, icon: 'hourglass', short: 'Speed', on: () => debugState.speed !== 1, state: () => speedLabel(debugState.speed) },
+    tab: 'Speed & View',
+    section: 'Quick',
+    dock: { group: 'Speed & View', order: 0, icon: 'hourglass', short: 'Speed', on: () => debugState.speed !== 1, state: () => speedLabel(debugState.speed) },
     label: () => `Speed: ${speedLabel(debugState.speed)}`,
     hint: 'Tap to cycle the animation speed (0.25x, 0.5x, 1x, 2x, 4x)',
     run: () => {
@@ -646,9 +623,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   });
   debug.register({
     id: 'tweak.skip',
-    tab: 'Tweaks',
+    tab: 'Speed & View',
     section: 'Animation speed',
-    dock: { group: 'Battle flow', order: 8, icon: 'ffwd', short: 'Skip anims', on: () => debugState.skipAnims },
+    dock: { group: 'Speed & View', order: 2, icon: 'ffwd', short: 'Skip anims', on: () => debugState.skipAnims },
     label: () => (debugState.skipAnims ? 'Skip anims: on' : 'Skip anims: off'),
     on: () => debugState.skipAnims,
     hint: 'Play animations extremely fast so battle results come almost instantly',
@@ -659,9 +636,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   });
   debug.register({
     id: 'tweak.pause',
-    tab: 'Tweaks',
+    tab: 'Speed & View',
     section: 'Animation speed',
-    dock: { group: 'Battle flow', order: 6, icon: 'pause', short: 'Pause', on: () => debugState.paused },
+    dock: { group: 'Speed & View', order: 1, icon: 'pause', short: 'Pause', on: () => debugState.paused },
     label: () => (debugState.paused ? 'Pause: on' : 'Pause: off'),
     on: () => debugState.paused,
     hint: 'Freeze all animations and timers (tap again to continue)',
@@ -672,9 +649,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   });
   debug.register({
     id: 'tweak.numbers',
-    tab: 'Tweaks',
+    icon: 'eye',
+    tab: 'Speed & View',
     section: 'Display',
-    dock: { group: 'View', order: 2, icon: 'eye', short: 'Hide numbers', on: () => debugState.hideNumbers },
     label: () => (debugState.hideNumbers ? 'Hide numbers: on' : 'Hide numbers: off'),
     on: () => debugState.hideNumbers,
     hint: 'Hide the damage and heal numbers floating above units',
@@ -684,9 +661,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   });
   debug.register({
     id: 'battle.slots',
-    tab: 'Tweaks',
+    icon: 'frame',
+    tab: 'Speed & View',
     section: 'Display',
-    dock: { group: 'View', order: 3, icon: 'frame', short: 'Show slots', on: () => !!battle()?.showSlots },
     label: () => (battle()?.showSlots ? 'Show slots: on' : 'Show slots: off'),
     on: () => !!battle()?.showSlots,
     hint: 'Draw the formation cells (4 rows x 3 lanes) on the battlefield',
@@ -697,9 +674,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   });
   debug.register({
     id: 'screen.fps',
-    tab: 'Tweaks',
+    icon: 'info',
+    tab: 'Speed & View',
     section: 'Display',
-    dock: { group: 'View', order: 4, icon: 'info', short: 'Show FPS', on: () => !!fps },
     label: () => (fps ? 'Show FPS: on' : 'Show FPS: off'),
     on: () => !!fps,
     hint: 'Show a frames-per-second counter in the top left corner',
@@ -724,9 +701,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   // Rotate view (portrait phones): auto = rotate only on touch devices held upright; on/off force it (for testing on a desktop window)
   debug.register({
     id: 'screen.portrait',
-    tab: 'Tweaks',
+    icon: 'swap',
+    tab: 'Speed & View',
     section: 'Display',
-    dock: { group: 'View', order: 5, icon: 'swap', short: 'Rotate view', on: () => getRotateMode() !== 'auto', state: () => getRotateMode().toUpperCase() },
     label: () => `Rotate view: ${getRotateMode()}`,
     on: () => getRotateMode() !== 'auto',
     hint: 'Turn the game 90 degrees so it fills a phone held upright: auto (touch devices only), on, off. Pointer input and all panels follow the rotation',
@@ -735,7 +712,8 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   for (const m of DAMAGE_MULTS) {
     debug.register({
       id: `tweak.damage.${m}`,
-      tab: 'Tweaks',
+      icon: 'sword',
+      tab: 'Rolls',
       section: 'Damage dealt (both sides)',
       label: m >= 1000 ? 'One-hit kill' : `${m}x`,
       on: () => debugState.flags.damageMult === m,
@@ -749,9 +727,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   debug.register({
     id: 'tweak.damage-ohk',
     dockOnly: true,
-    tab: 'Tweaks',
+    tab: 'Rolls',
     section: 'Quick',
-    dock: { group: 'Combat tweaks', order: 0, icon: 'sword', short: 'Damage', on: () => debugState.flags.damageMult > 1, state: () => (debugState.flags.damageMult >= 1000 ? 'Kill' : `${debugState.flags.damageMult}x`) },
+    dock: { group: 'Rolls', order: 0, icon: 'sword', short: 'Damage', on: () => debugState.flags.damageMult > 1, state: () => (debugState.flags.damageMult >= 1000 ? 'Kill' : `${debugState.flags.damageMult}x`) },
     label: () => (debugState.flags.damageMult > 1 ? `Damage: ${debugState.flags.damageMult >= 1000 ? 'one-hit kill' : `${debugState.flags.damageMult}x`}` : 'Damage: 1x'),
     hint: 'Tap to cycle the damage multiplier for both sides: 1x, 10x, one-hit kill',
     run: () => {
@@ -762,7 +740,8 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   for (const v of ['auto', 'always', 'never'] as const) {
     debug.register({
       id: `tweak.crit.${v}`,
-      tab: 'Tweaks',
+      icon: 'burst',
+      tab: 'Rolls',
       section: 'Critical hits',
       label: v === 'auto' ? 'Crit: normal' : v === 'always' ? 'Always crit' : 'Never crit',
       on: () => debugState.flags.crit === v,
@@ -773,7 +752,8 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
     });
     debug.register({
       id: `tweak.dodge.${v}`,
-      tab: 'Tweaks',
+      icon: 'feather',
+      tab: 'Rolls',
       section: 'Dodging (physical hits)',
       label: v === 'auto' ? 'Dodge: normal' : v === 'always' ? 'Always dodge' : 'Never dodge',
       on: () => debugState.flags.dodge === v,
@@ -786,7 +766,8 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   for (const v of ['auto', 'always'] as const) {
     debug.register({
       id: `tweak.miss.${v}`,
-      tab: 'Tweaks',
+      icon: 'arrow',
+      tab: 'Rolls',
       section: 'Misses (attacker misses)',
       label: v === 'auto' ? 'Miss: normal' : 'Always miss',
       hint: v === 'auto' ? 'Misses follow the accuracy rule' : 'Every damaging hit misses: a pale MISS appears above the attacker (Always dodge wins if both are on)',
@@ -800,9 +781,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   debug.register({
     id: 'tweak.crit-cycle',
     dockOnly: true,
-    tab: 'Tweaks',
+    tab: 'Rolls',
     section: 'Quick',
-    dock: { group: 'Combat tweaks', order: 1, icon: 'burst', short: 'Crit', on: () => debugState.flags.crit !== 'auto', state: () => FORCE_LABEL[debugState.flags.crit] },
+    dock: { group: 'Rolls', order: 1, icon: 'burst', short: 'Crit', on: () => debugState.flags.crit !== 'auto', state: () => FORCE_LABEL[debugState.flags.crit] },
     label: () => `Crit: ${FORCE_LABEL[debugState.flags.crit]}`,
     hint: 'Tap to cycle critical hits: normal, always, never',
     run: () => {
@@ -813,9 +794,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   debug.register({
     id: 'tweak.dodge-cycle',
     dockOnly: true,
-    tab: 'Tweaks',
+    tab: 'Rolls',
     section: 'Quick',
-    dock: { group: 'Combat tweaks', order: 2, icon: 'feather', short: 'Dodge', on: () => debugState.flags.dodge !== 'auto', state: () => FORCE_LABEL[debugState.flags.dodge] },
+    dock: { group: 'Rolls', order: 2, icon: 'feather', short: 'Dodge', on: () => debugState.flags.dodge !== 'auto', state: () => FORCE_LABEL[debugState.flags.dodge] },
     label: () => `Dodge: ${FORCE_LABEL[debugState.flags.dodge]}`,
     hint: 'Tap to cycle dodging: normal, always, never',
     run: () => {
@@ -827,9 +808,9 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   debug.register({
     id: 'tweak.miss-cycle',
     dockOnly: true,
-    tab: 'Tweaks',
+    tab: 'Rolls',
     section: 'Quick',
-    dock: { group: 'Combat tweaks', order: 3, icon: 'arrow', short: 'Miss', on: () => (debugState.flags.miss ?? 'auto') !== 'auto', state: () => ((debugState.flags.miss ?? 'auto') === 'auto' ? 'Auto' : 'Always') },
+    dock: { group: 'Rolls', order: 3, icon: 'arrow', short: 'Miss', on: () => (debugState.flags.miss ?? 'auto') !== 'auto', state: () => ((debugState.flags.miss ?? 'auto') === 'auto' ? 'Auto' : 'Always') },
     label: () => `Miss: ${(debugState.flags.miss ?? 'auto') === 'auto' ? 'Auto' : 'Always'}`,
     hint: 'Tap to toggle misses: automatic (accuracy rule) or always (a pale MISS above the attacker)',
     run: () => {
@@ -841,25 +822,13 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   // ===== Tools: shortcuts to the tab / page that holds each tool =====
   const shortcut = (id: string, order: number, icon: string, short: string, tab: string, hint: string): void =>
     debug.register({ id, dockOnly: true, tab, section: 'Tools', dock: { group: 'Tools', order, icon, short }, label: short, hint, run: () => debug.openTab(tab) });
-  shortcut('tools.skills', 0, 'wand', 'Skill preview', 'Skills', 'Open the Skills tab: play any skill animation and sound on a target without spending a turn');
-  shortcut('tools.sounds', 1, 'speaker', 'Sounds', 'Sounds', 'Open the Sounds tab: listen to every sound effect');
-  debug.register({
-    id: 'tools.assets-wiki',
-    dockOnly: true,
-    tab: 'Sounds',
-    section: 'Tools',
-    dock: { group: 'Tools', order: 2, icon: 'frame', short: 'Open assets (wiki)' },
-    label: 'Open assets (wiki)',
-    hint: 'Open the wiki at Assets (sounds, animations, icons, character art, palette, legacy)',
-    run: openAssetGallery,
-  });
-  for (const [id, victory, order, icon, short] of [['tools.result-victory', true, 5, 'sword', 'Preview victory'], ['tools.result-defeat', false, 6, 'skull', 'Preview defeat']] as const) {
+  shortcut('tools.skills', 0, 'wand', 'Cast skill', 'Skills', 'Open the Skills tab: cast any skill from a chosen unit onto a chosen cell of the running battle without spending a turn (animations and sounds themselves are in the wiki under Assets)');
+  for (const [id, victory, short] of [['tools.result-victory', true, 'Preview victory'], ['tools.result-defeat', false, 'Preview defeat']] as const) {
     debug.register({
       id,
-      dockOnly: true,
+      icon: victory ? 'helm' : 'skull',
       tab: 'Battle',
-      section: 'Tools',
-      dock: { group: 'Tools', order, icon, short },
+      section: 'Result screens',
       label: short,
       hint: `Show the ${victory ? 'VICTORY' : 'DEFEAT'} screen with the stats so far, without ending the battle (Esc or Enter closes it)`,
       run: () => battle()?.showResult(victory, true),
@@ -868,28 +837,197 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
   // Match record (every move + AI reasons) to the clipboard: paste it to ask "why did unit X do move Y?" (src/engine/match-log.ts, docs/design/match-log.md)
   debug.register({
     id: 'tools.copy-match',
-    dockOnly: true,
-    tab: 'Battle',
-    section: 'Tools',
-    dock: { group: 'Tools', order: 7, icon: 'clipboard', short: 'Copy match data' },
+    tab: 'Data',
+    section: 'Match record',
+    dock: { group: 'Tools', order: 2, icon: 'clipboard', short: 'Copy match data' },
     label: 'Copy match data',
     hint: 'Copy the match record to the clipboard: every move so far with the state before it, the result, and for AI moves all candidates with their scores and why one was chosen. Works mid-battle and in test mode',
     run: () => void copyMatchData({ get: () => battle()?.matchLogData() ?? null }),
   });
   debug.register({
     id: 'tools.fullscreen',
-    dockOnly: true,
-    tab: 'Tweaks',
-    section: 'Tools',
-    dock: { group: 'Tools', order: 8, icon: 'fullscreen', short: 'Fullscreen', on: () => isFullscreen() },
+    icon: 'fullscreen',
+    tab: 'Speed & View',
+    section: 'Display',
     label: 'Fullscreen',
+    on: () => isFullscreen(),
     hint: 'Toggle full screen (hides the browser address bar; landscape is locked where the browser allows it)',
     run: () => void toggleFullscreen(),
   });
-  shortcut('tools.seed', 3, 'clover', 'Seed & link', 'Battle', 'Open the Battle tab: copy this battle\'s seed or link, or restart with a typed seed');
-  shortcut('tools.info', 4, 'info', 'Info', 'Info', 'Open the Info tab: live stats, turn queue and AI decisions');
+  shortcut('tools.seed', 3, 'clover', 'Seed & link', 'Setup', "Open the Setup tab: copy this battle's seed or link, or restart with a typed seed");
 
-  // ===== Info =====
+
+  // ===== Test Mode: test-mode battle + unlimited resources + custom teams =====
+  const applyTestSwitches = (): void => {
+    const b = battle();
+    if (!b) return;
+    b.battle.freeMp = BattleScene.freeMp;
+    b.battle.freeRage = testMode.unlimitedRage;
+    b.battle.noCooldowns = testMode.noCooldowns;
+    b.refreshCommandsNow();
+  };
+  const setMode = (mode: 'test' | 'turns'): void => {
+    const b = battle();
+    if (b && b.mode !== mode) b.scene.restart({ seed: b.seed, mode }); // same seed and teams, only the mode changes
+  };
+  // The first time the tab opens: Test mode on, and all three switches on (afterwards the switches below are yours to change)
+  debug.onTabOpen('Test Mode', () => {
+    if (testMode.autoEnabled) return;
+    testMode.autoEnabled = true;
+    BattleScene.freeMp = true;
+    setTestSwitches(true);
+    applyTestSwitches();
+    setMode('test');
+  });
+  debug.register({
+    id: 'test.enable',
+    icon: 'flask',
+    tab: 'Test Mode',
+    section: 'Test Mode',
+    label: () => (battle()?.mode === 'test' ? 'Test mode: on' : 'Test mode: off'),
+    on: () => battle()?.mode === 'test',
+    hint: 'On: no turn order, every unit can act at any time (the battle restarts with the same teams). Off: normal turn-based battle',
+    run: () => setMode(battle()?.mode === 'test' ? 'turns' : 'test'),
+  });
+  debug.register({
+    id: 'test.unlimited-mp',
+    icon: 'freemp',
+    tab: 'Test Mode',
+    section: 'Switches',
+    label: () => (BattleScene.freeMp ? 'Unlimited MP: on' : 'Unlimited MP: off'),
+    on: () => BattleScene.freeMp,
+    hint: 'Skills cost no mana (both sides); the same switch as Battle > Free MP',
+    run: () => {
+      BattleScene.freeMp = !BattleScene.freeMp;
+      applyTestSwitches();
+    },
+  });
+  debug.register({
+    id: 'test.unlimited-rage',
+    icon: 'rage',
+    tab: 'Test Mode',
+    section: 'Switches',
+    label: () => (testMode.unlimitedRage ? 'Unlimited Rage: on' : 'Unlimited Rage: off'),
+    on: () => testMode.unlimitedRage,
+    hint: 'Rage skills (Abyssal Cry) cost no Rage and need none (both sides)',
+    run: () => {
+      testMode.unlimitedRage = !testMode.unlimitedRage;
+      applyTestSwitches();
+    },
+  });
+  debug.register({
+    id: 'test.no-cooldowns',
+    icon: 'hourglass',
+    tab: 'Test Mode',
+    section: 'Switches',
+    label: () => (testMode.noCooldowns ? 'No cooldowns: on' : 'No cooldowns: off'),
+    on: () => testMode.noCooldowns,
+    hint: 'Cooldowns never run: every skill is always ready, also in turn mode (both sides)',
+    run: () => {
+      testMode.noCooldowns = !testMode.noCooldowns;
+      applyTestSwitches();
+    },
+  });
+  debug.registerPanel({
+    id: 'panel.test-teams',
+    tab: 'Test Mode',
+    render: (el, refresh) => {
+      const side = testMode.side;
+      const team = testMode.teams[side];
+      const sideName = (s: TestSide): string => (s === 'party' ? 'Allies' : 'Enemies');
+      const classOf = (id: string) => content.classes[id];
+      el.append(heading('Teams'));
+      el.append(
+        row(
+          ...(['party', 'enemies'] as const).map((s) =>
+            debugButton(`${sideName(s)} (${testMode.teams[s].length})`, () => {
+              testMode.side = s;
+              testMode.slot = null;
+              refresh();
+            }, { icon: s === 'party' ? 'team' : 'skull', on: side === s, className: `sidebtn ${s}`, title: `Edit the ${sideName(s).toLowerCase()} team of the test battle` }),
+          ),
+        ),
+      );
+      // The slots of the edited side: tap one, then tap a class below to replace it
+      const slots = team.map((id, i) => {
+        const def = classOf(id);
+        return debugButton(def?.name ?? id, () => {
+          testMode.slot = testMode.slot === i ? null : i;
+          refresh();
+        }, { icon: def?.logo ?? 'helm', ...(def ? { accent: def.color } : {}), className: `slot${testMode.slot === i ? ' sel' : ''}`, on: testMode.slot === i, title: `${sideName(side)} slot ${i + 1}: ${def?.name ?? id}. Tap to select it, then pick a class below to replace it` });
+      });
+      const grid = document.createElement('div');
+      grid.className = 'debug-slots';
+      grid.append(...slots);
+      el.append(grid);
+      const edit = (r: { team: string[]; slot: number | null }): void => {
+        testMode.teams[side] = r.team;
+        testMode.slot = r.slot;
+        refresh();
+      };
+      el.append(
+        row(
+          debugButton('Remove', () => edit(removeSlot(team, testMode.slot ?? team.length - 1)), { icon: 'skull', title: 'Remove the selected slot (or the last one); a team keeps at least 1 unit' }),
+          debugButton('Smaller', () => edit({ team: resizeTeam(team, team.length - 1), slot: null }), { icon: 'arrow', title: 'Team size - 1' }),
+          debugButton('Bigger', () => edit({ team: resizeTeam(team, clampTeam(team.length + 1)), slot: null }), { icon: 'next', title: 'Team size + 1 (up to the board size)' }),
+          debugButton('Random', () => edit({ team: content.randomTeam(newSeed(), team.length), slot: null }), { icon: 'dice', title: 'Fill this team with random different classes (same size)' }),
+        ),
+      );
+      // Class palette
+      el.append(heading(testMode.slot !== null ? `Pick a class for slot ${testMode.slot + 1}` : 'Pick a class to add'));
+      el.append(
+        row(
+          ...testClassIds().map((id) => {
+            const def = classOf(id)!;
+            return debugButton(def.name, () => edit(placeClass(team, testMode.slot, id)), { icon: def.logo, accent: def.color, title: `${def.name}: ${testMode.slot !== null ? 'replaces the selected slot' : 'added to the end of the team'}` });
+          }),
+        ),
+      );
+      el.append(
+        row(
+          debugButton('Start test battle', () => {
+            const data = buildTestBattleData(testMode.teams, newSeed());
+            const b = battle();
+            if (b) b.scene.restart(data);
+            else game.scene.getScenes(true)[0]?.scene.start(BattleScene.KEY, data);
+          }, { icon: 'flask', className: 'good', title: `Start a test-mode battle with exactly these teams (${testMode.teams.party.length} vs ${testMode.teams.enemies.length}); the switches above apply` }),
+        ),
+      );
+      const note = noteLineText(`Default size ${DEFAULT_TEST_SIZE} per side; up to ${content.CELL_COUNT}. Units are placed on the board automatically (tanks in front).`);
+      note.classList.add('dim');
+      el.append(note);
+    },
+  });
+
+  // ===== Characters: look variants (assets/sprites/<id>/idle-<variant>.png; src/game/sprite-variants.ts) =====
+  debug.registerPanel({
+    id: 'panel.characters',
+    tab: 'Characters',
+    render: (el, refresh) => {
+      const ids = Object.keys(SPRITE_VARIANTS).sort();
+      if (ids.length === 0) {
+        el.append(noteLineText('No character has alternative looks yet'));
+        return;
+      }
+      for (const id of ids) {
+        const def = Object.values(content.classes).find((c) => c.spriteId === id) ?? Object.values(content.summons).find((c) => c.spriteId === id);
+        const name = def?.name ?? id.charAt(0).toUpperCase() + id.slice(1);
+        const current = getSpriteVariant(id) ?? DEFAULT_VARIANT;
+        const buttons = [DEFAULT_VARIANT, ...SPRITE_VARIANTS[id]!].map((v) =>
+          debugButton(variantLabel(id, v), () => {
+            setSpriteVariant(id, v === DEFAULT_VARIANT ? null : v);
+            refresh();
+          }, { icon: 'team', on: current === v, title: `${name} look: ${variantLabel(id, v)}${v === DEFAULT_VARIANT ? ' (default)' : ''}` }),
+        );
+        el.append(...debugSection(`${name} look`, ...buttons));
+      }
+      const note = noteLineText('Saved in this browser. Applies from the next battle or Team Select screen (use Restart battle); the wiki updates after the page is reloaded.');
+      note.classList.add('dim');
+      el.append(note);
+    },
+  });
+
+  // ===== Info (Data tab) =====
   debug.registerInfo('units', () =>
     Object.fromEntries(
       (battle()?.battle?.combatants ?? []).map((c) => [
@@ -933,7 +1071,7 @@ export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
       'Player team': eng ? eng.livingByDepth('party').map((c) => c.name).join(' > ') : '-',
       'Enemy team': eng ? eng.livingByDepth('enemy').map((c) => c.name).join(' > ') : '-',
       'Recent damage (! = crit)': lastDamage || '-',
-      'Debug tweaks': tweaksSummary(debugState, BattleScene.freeMp),
+      'Debug tweaks': tweaksSummary(debugState, BattleScene.freeMp, testModeSummary(testMode)),
       Version: __APP_VERSION__,
       'Build time': new Date(__BUILD_TIME__).toLocaleString('en-GB'),
       'Game resolution': `${layout.width} x ${layout.height}`,

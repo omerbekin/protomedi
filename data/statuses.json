@@ -1,5 +1,5 @@
 {
-  "_not": "Süreli durumlar (buff/debuff). Süre, durumu taşıyanın kendi turlarıyla sayılır. speedMult: hız çarpanı; damageTakenMult: alınan hasar çarpanı; healTakenMult: alınan şifa çarpanı; skipTurn: sıradaki turu pas geçirir. breaksTaunt: bu durum uygulandığı AN taşıyıcının taunt'ı silinir (CC durumu; şu an yalnızca Stun). taunt/guard/regen özel kodlu durumlardır (motorda). Yeni bir durum = buraya bir giriş + skill'de {type:'status'} etkisi. İleride durumların birbiriyle etkileşimi için burası genişletilecek. accuracyDelta / evasionDelta: isabete / kaçınmaya eklenen miktar (battle.effectiveStats; hit şansı yine [0, hit.max] arasına sıkışır; Dex evasionMax sınırı bu eke uygulanmaz). Blinded (debuff, Resilience kısaltabilir) ve Shrouded (buff) Cutthroat Smoke Bomb ile gelir; ikonları blinded (gözü kesen kömür dumanı) ve shrouded (duman perdesinin ardındaki siluet).",
+  "_not": "Süreli durumlar (buff/debuff). Süre, durumu taşıyanın kendi turlarıyla sayılır. speedMult: hız çarpanı; damageTakenMult: alınan hasar çarpanı; healTakenMult: alınan şifa çarpanı; skipTurn: sıradaki turu pas geçirir. breaksTaunt: bu durum uygulandığı AN taşıyıcının taunt'ı silinir (CC durumu; şu an yalnızca Stun). taunt/guard/regen özel kodlu durumlardır (motorda). Yeni bir durum = buraya bir giriş + skill'de {type:'status'} etkisi. İleride durumların birbiriyle etkileşimi için burası genişletilecek. accuracyDelta / evasionDelta: isabete / kaçınmaya eklenen miktar (battle.effectiveStats; hit şansı yine [0, hit.max] arasına sıkışır; Dex evasionMax sınırı bu eke uygulanmaz). Blinded (debuff, Resilience kısaltabilir) ve Shrouded (buff) Cutthroat Smoke Bomb ile gelir; ikonları blinded (gözü kesen kömür dumanı) ve shrouded (duman perdesinin ardındaki siluet). dispellable: false ise dispel/cleanse (Spell Ward, Mana Barrier) silemez. dark_bond (madde 240): Dark Bond bağı, özel kodlu (iki uçta da durur, süre bağı kuranın turlarıyla; ikon yer tutucu soul); debug ile eklenirse bağ ucu olmadığı için etkisizdir. HEXER: omen: Hexer (docs/design/classes/hexer.md 3.1-3.3, Ömer kararları Ö1-Ö12). Yığılan durum: en çok 3; süre (duration) ilk Omen'le başlar, yeni Omen süreyi YENİLEMEZ; yığın 3'e ulaşınca Doom anında; süre dolunca (taşıyanın tur başı, Wither tikinden sonra) yığın sayısı kadar Doom (burstOnExpire, expireMult balans kolu). Misfortune: yığın başına kritik -%3 (critDeltaPerStack). Doom: LUCK x powerPerStack x yığın x çarpan, büyü/dark, isabet zarı yok, kritik zarı var. İkon yer tutucu: eye (content-designer gerçeğini yapacak: eflatun mühür pulu). Sayılar PROVİZYON. | wither: Hexer Withering Curse: karakter üstü DoT (ilk). Tik taşıyanın tur başında, zemin tiklerinden sonra; miktar uygulama anında sabit (skill'in dot etkisi), büyü zırhı uygulanır, isabet/kritik yok, Guard'a aktarılmaz. Yığılmaz: yeniden uygulanınca süre yenilenir, büyük miktar kalır. Kaynak ölse de sürer (Ö3). İkon yer tutucu: poison (gerçeği: eriyen kara mum). | jinxed: Hexer Jinx: isabet -%20, kritik yok (critDelta -1, 0'a kırpılır); taşıyanın bir sonraki HASAR skill'inin tüm vuruşlarından sonra düşer (endsOnOwnAttack) ya da 2 tur. Backstab'ın garantili kritiğini bozmaz (Ö5). İkon yer tutucu: finger (gerçeği: kırmızı iplik düğümü).",
   "slow": {
     "name": "Slow",
     "type": "debuff",
@@ -64,5 +64,43 @@
     "color": "#c9cfd6",
     "evasionDelta": 0.2,
     "text": "Evasion +20% (hidden in smoke)"
+  },
+  "dark_bond": {
+    "name": "Dark Bond",
+    "type": "buff",
+    "icon": "soul",
+    "color": "#b0304f",
+    "dispellable": false,
+    "text": "Bound to an Undead: its life steal heals the bonded ally too"
+  },
+  "omen": {
+    "name": "Bad Omen",
+    "type": "debuff",
+    "icon": "eye",
+    "color": "#b04fa8",
+    "maxStacks": 3,
+    "duration": 3,
+    "burstOnExpire": true,
+    "critDeltaPerStack": -0.03,
+    "doom": { "scale": "luck", "powerPerStack": 0.6, "damageType": "magic", "element": "dark", "expireMult": 1 },
+    "text": "At 3 Omens, Doom strikes. After 3 turns, the Omens burst into Doom. Misfortune: crit chance -3% per Omen"
+  },
+  "wither": {
+    "name": "Withering",
+    "type": "debuff",
+    "icon": "poison",
+    "color": "#9cab3c",
+    "dot": { "damageType": "magic", "element": "dark" },
+    "text": "Takes dark damage at the start of each of its turns"
+  },
+  "jinxed": {
+    "name": "Jinxed",
+    "type": "debuff",
+    "icon": "finger",
+    "color": "#c0203a",
+    "accuracyDelta": -0.2,
+    "critDelta": -1,
+    "endsOnOwnAttack": true,
+    "text": "Accuracy -20% and no critical hits on its next attack"
   }
 }

@@ -35,13 +35,18 @@ const LEGACY: Record<string, SkillDef> = {
     id: 'soul_drain', name: 'Soul Drain', icon: 'drain', target: 'single_enemy', cost: { resource: 'mp', amount: 10 },
     motion: 'cast', fx: '#b36bff', effects: [{ type: 'damage', damageType: 'magic', scale: 'str', power: 1.3, element: 'dark', lifesteal: 1.0 }],
   },
+  // Undead'in eski 2. skill'i (madde 240 ile Dark Bond'a değişti): can bedeli (cost hp) mekaniğini ölçen testler için
+  blood_rite: {
+    id: 'blood_rite', name: 'Blood Rite', icon: 'bloodrite', target: 'single_enemy', cost: { resource: 'hp', amount: 20 }, cooldown: 2,
+    motion: 'ground', fx: '#c0203a', effects: [{ type: 'damage', damageType: 'magic', scale: 'int', power: 2.1, element: 'dark' }],
+  },
 };
 
 const GIVE: Record<string, string[]> = {
   warrior: ['power_strike', 'shield_wall'],
   paladin: ['lay_on_hands', 'blessing'],
   defender: ['shield_bash'],
-  undead: ['bone_slash', 'soul_drain'],
+  undead: ['bone_slash', 'soul_drain', 'blood_rite'],
 };
 
 /** Eski skill'leri kayda ve sınıfların skill listesine ekler. */
@@ -58,4 +63,9 @@ export function installLegacySkill(id: string, cls?: string): void {
   content.skills[id] = LEGACY[id]!;
   const def = cls ? content.classes[cls] : undefined;
   if (def && !def.skills.includes(id)) def.skills.push(id);
+}
+
+/** Eski bir skill tanımının kopyası (kayda eklemeden): yalnızca tek bir savaşın setup'ına koymak için. */
+export function legacySkill(id: string): SkillDef {
+  return structuredClone(LEGACY[id]!);
 }

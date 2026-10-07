@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import layout from '../../../data/battle-layout.json';
-import { Battle, MatchLog, chooseAction, content, explainChoice, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, previewSkill, armorReduction } from '../../engine';
+import { Battle, MatchLog, chooseAction, isRatioCost, skillCostAmount, skillCostLabel, content, explainChoice, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, previewSkill, armorReduction } from '../../engine';
 import type { AreaStage, BattleEvent, BattleMode, Combatant, SkillDef, StatKind, Teams, TargetPreview } from '../../engine';
 import { type DamageTags } from '../float-text';
 import { ATTACK_STATS, DEFENSE_STATS, MAIN_STATS, rowCenters, statBlockMetrics, statRowText } from '../stat-columns';
@@ -15,6 +15,8 @@ import { playSfx } from '../audio';
 import { BattleStats, showResultScreen } from '../result-screen';
 import type { ResultScreen } from '../result-screen';
 import { debugState, effectiveTimeScale, tweaksSummary } from '../debug-state';
+import { testMode, testModeSummary } from '../test-mode';
+import { LONG_PRESS_MS, LONG_PRESS_SLOP, UnitSelection, isSelectModifier, pickUnitAt } from '../unit-select';
 import { VFX, corpseDrainFx, groundArea, meleeApproach, summonFx } from '../vfx';
 import type { VfxKind } from '../../ui/vfx-kinds';
 import { skillMiniGrid } from '../../ui/shape-diagram';
@@ -23,7 +25,8 @@ import { drawCellTiles, drawMiniShape, miniShapeSize } from '../shape-draw';
 import type { CellTileSpec } from '../shape-draw';
 import { stageMap } from '../cell-style';
 import type { CellTone } from '../cell-style';
-import { boardBounds, cellCenter, pickCell } from '../shape-geometry';
+import { boardBounds, cellCenter } from '../shape-geometry';
+import { alphaOpaque, pickCellAt, type PickSprite } from '../pick-cell';
 import type { Pt } from '../shape-geometry';
 import { cellKey, corpseMarkPos, corpseTip, empoweredLine, summonPreviewLine, visibleCorpseMarks } from '../corpse-marks';
 import type { CorpseState } from '../corpse-marks';
@@ -111,6 +114,11 @@ export class BattleScene extends Phaser.Scene {
   private badgeKeys = new Map<string, string>();
   private slotMarkers?: Phaser.GameObjects.Container;
   private hoverView?: CombatantView;
+  /** Ctrl+sol tık (Mac Cmd, dokunmatik uzun basma) ile seçilen birimler: bilgi/inceleme ve debug Unit araçlarının hedefi. */
+  private unitSel = new UnitSelection();
+  /** Dokunmatik uzun basma sayacı ve 'bu basış seçim jestiydi' bayrağı (bırakınca skill seçmesin). */
+  private pressTimer?: Phaser.Time.TimerEvent;
+  private longPressFired = false;
   private unitTipKey = '';
   private hint?: Phaser.GameObjects.Text;
   /** test mode: the unit the tester is controlling. */
@@ -166,6 +174,9 @@ export class BattleScene extends Phaser.Scene {
     this.busy = false;
     this.selected = null;
     this.hoverView = undefined;
+    this.unitSel = new UnitSelection();
+    this.pressTimer = undefined;
+    this.longPressFired = false;
     this.infoTip = undefined;
     this.slotMarkers = undefined;
     this.areaMarker = undefined;
@@ -197,9 +208,12 @@ export class BattleScene extends Phaser.Scene {
     this.enemySize = this.battle.combatants.filter((c) => c.side === 'enemy' && !c.summoned).length || this.enemySize;
     for (const c of this.battle.combatants) if (c.maxRage !== undefined) this.rageShown.set(c.uid, c.rage ?? 0);
     this.battle.freeMp = BattleScene.freeMp;
+    this.battle.freeRage = testMode.unlimitedRage;
+    this.battle.noCooldowns = testMode.noCooldowns;
     Object.assign(this.battle.debug, debugState.flags);
     this.applyDebugTiming();
     this.bindSkillHotkeys();
+    this.bindUnitSelect();
     for (const c of this.battle.combatants) this.addView(c);
     this.syncCorpsesNow();
     this.uiActor = this.battle.currentUid;
@@ -208,7 +222,7 @@ export class BattleScene extends Phaser.Scene {
     this.matchLog?.stop();
     this.matchLog = debugState.matchLog
       ? new MatchLog(this.battle, () => {
-          const tweaks = tweaksSummary(debugState, BattleScene.freeMp);
+          const tweaks = tweaksSummary(debugState, BattleScene.freeMp, testModeSummary(testMode));
           return {
             version: typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : undefined,
             builtAt: typeof __BUILD_TIME__ === 'string' ? __BUILD_TIME__ : undefined,
@@ -278,6 +292,7 @@ export class BattleScene extends Phaser.Scene {
         this.raiseBack();
         return;
       }
+      if (e.key === 'Escape' && this.clearUnitSelection()) return;
       const n = '1234'.indexOf(e.key) + 1;
       if (n === 0) return;
       const skillId = this.activeActor?.skills[n - 1];
@@ -285,6 +300,88 @@ export class BattleScene extends Phaser.Scene {
     };
     window.addEventListener('keydown', onKey);
     this.events.once('shutdown', () => window.removeEventListener('keydown', onKey));
+  }
+
+  // --- Global unit selection: Ctrl + left click (Mac: Cmd; touch: long press) toggles any unit, friend or foe ---
+
+  /** Pointer handlers for the selection gesture; ordinary clicks (skill targeting, turn flow) are never touched. */
+  private bindUnitSelect(): void {
+    const panelTop = layout.commandPanel.y;
+    const cancelPress = (): void => {
+      this.pressTimer?.remove(false);
+      this.pressTimer = undefined;
+    };
+    const unitAt = (x: number, y: number): string | undefined =>
+      pickUnitAt(
+        [...this.views.values()].filter((v) => v.alive && v.container.visible && v.container.alpha >= 0.3).map((v) => ({ uid: v.combatant.uid, x: v.container.x, y: v.container.y, w: v.w, h: v.h })),
+        x,
+        y,
+      );
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      this.longPressFired = false;
+      cancelPress();
+      if (p.y >= panelTop) return;
+      if (isSelectModifier(p.event as MouseEvent | undefined)) {
+        const uid = unitAt(p.x, p.y);
+        if (uid) this.toggleUnitSelect(uid);
+        return;
+      }
+      if (p.wasTouch) {
+        const sx = p.x;
+        const sy = p.y;
+        this.pressTimer = this.time.delayedCall(LONG_PRESS_MS, () => {
+          this.pressTimer = undefined;
+          if (!p.isDown || Math.hypot(p.x - sx, p.y - sy) > LONG_PRESS_SLOP) return;
+          const uid = unitAt(sx, sy);
+          if (!uid) return;
+          this.longPressFired = true;
+          this.toggleUnitSelect(uid);
+        });
+        return;
+      }
+      // Ordinary click on empty ground clears the selection (a click on a unit never does: it may be a skill target)
+      if (this.unitSel.size > 0 && !unitAt(p.x, p.y)) this.clearUnitSelection();
+    });
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (this.pressTimer && p.isDown && Math.hypot(p.x - p.downX, p.y - p.downY) > LONG_PRESS_SLOP) cancelPress();
+    });
+    this.input.on('pointerup', cancelPress);
+    this.events.once('shutdown', cancelPress);
+  }
+
+  /** Was this pointer event part of a selection gesture (Ctrl/Cmd held, or a finished long press)? Then it must not also pick a target. */
+  private isSelectGesture(p: Phaser.Input.Pointer): boolean {
+    return isSelectModifier(p.event as MouseEvent | undefined) || this.longPressFired;
+  }
+
+  private applySelectionFrames(): void {
+    for (const v of this.views.values()) v.setSelected(this.unitSel.has(v.combatant.uid));
+  }
+
+  /** Toggle the selection of a unit (Ctrl+click); the newest selection is also the Debug > Unit target. */
+  toggleUnitSelect(uid: string): void {
+    if (!this.battle.get(uid)) return;
+    if (this.unitSel.toggle(uid)) this.debugUnitUid = uid;
+    this.applySelectionFrames();
+  }
+
+  /** Clear the selection (Esc, click on empty ground). Returns whether anything was selected. */
+  clearUnitSelection(): boolean {
+    const had = this.unitSel.clear();
+    if (had) this.applySelectionFrames();
+    return had;
+  }
+
+  get selectedUids(): string[] {
+    return this.unitSel.uids;
+  }
+
+  /** The units Debug > Unit tools act on: every selected unit, or the single picked one. */
+  debugTargets(): Combatant[] {
+    const picked = this.unitSel.uids.map((uid) => this.battle.get(uid)).filter((c): c is Combatant => !!c);
+    if (picked.length > 0) return picked;
+    const one = this.debugUnit;
+    return one ? [one] : [];
   }
 
   /** The unit whose command panel is shown. */
@@ -370,7 +467,8 @@ export class BattleScene extends Phaser.Scene {
 
   /** Debug: birim araçlarının hedef birimi. */
   get debugUnit(): Combatant | undefined {
-    const chosen = this.debugUnitUid ? this.battle.get(this.debugUnitUid) : undefined;
+    const sel = this.unitSel.last ? this.battle.get(this.unitSel.last) : undefined;
+    const chosen = sel ?? (this.debugUnitUid ? this.battle.get(this.debugUnitUid) : undefined);
     return chosen ?? this.activeActor ?? this.battle.living('party')[0];
   }
 
@@ -431,6 +529,16 @@ export class BattleScene extends Phaser.Scene {
       });
     }
     return '';
+  }
+
+  /** True while the battle is undecided (no winner yet); the settings menu asks for confirmation only then. */
+  isBattleLive(): boolean {
+    return !!this.battle && !this.battle.winner;
+  }
+
+  /** New Game: fresh random seed and random teams of the same sizes, skips team select (result screen and settings menu share this). */
+  newGame(): void {
+    this.scene.restart({ seed: newSeed(), teams: undefined, partySize: this.partySize, enemySize: this.enemySize });
   }
 
   /** Back to the team selection screen. */
@@ -601,17 +709,21 @@ export class BattleScene extends Phaser.Scene {
     };
     for (const board of boards) {
       const slots = this.slotsOf(board);
-      const b = boardBounds(slots, body);
+      const bodyMax = this.boardBody(board, body);
+      const b = boardBounds(slots, bodyMax);
       const y1 = Math.min(b.y1, layout.commandPanel.y - 2);
       const zone = this.add.zone(b.x0, b.y0, b.x1 - b.x0, y1 - b.y0).setOrigin(0, 0).setDepth(3600).setInteractive();
-      const at = (p: Phaser.Input.Pointer) => pickCell(slots, lanes, p.x, p.y, body);
+      // The unit's DRAWING picks its cell first (head, body, weapon), then the floor plate; the sprite list is rebuilt per event (<= 24 units)
+      const at = (p: Phaser.Input.Pointer) => pickCellAt(slots, lanes, p.x, p.y, this.pickSprites(board), body);
       zone.on('pointermove', (p: Phaser.Input.Pointer) => setHover(board, at(p)));
       zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
+        if (isSelectModifier(p.event as MouseEvent | undefined)) return; // Ctrl/Cmd+click selects a unit (bindUnitSelect), it never picks
         const cell = at(p);
         downWasHover = cell !== null && this.cellHover?.board === board && this.cellHover.slot === cell;
         setHover(board, cell);
       });
       zone.on('pointerup', (p: Phaser.Input.Pointer) => {
+        if (this.isSelectGesture(p)) return;
         const cell = at(p);
         if (cell === null) return;
         if (p.wasTouch && h.twoTap && !downWasHover) return; // touch: the first tap only previews
@@ -623,6 +735,40 @@ export class BattleScene extends Phaser.Scene {
       });
       this.cellZones.push(zone);
     }
+  }
+
+  /** Visible living units of a board as pick rectangles (feet + fitted drawing size, alpha-aware); fallen/hidden units have no sprite to hit. */
+  private pickSprites(board: 'party' | 'enemy'): PickSprite[] {
+    const out: PickSprite[] = [];
+    for (const v of this.views.values()) {
+      const c = v.combatant;
+      if (c.board !== board || c.hp <= 0 || !v.container.visible || v.container.alpha < 0.3) continue;
+      const rect = { x: v.container.x, y: v.container.y, w: v.w, h: v.h };
+      const sp = v.sprite;
+      const key = sp.texture.key;
+      const frame = sp.frame.name;
+      const alphaAt = (u: number, w: number): number | null => {
+        try {
+          return this.textures.getPixelAlpha(u, w, key, frame);
+        } catch {
+          return null;
+        }
+      };
+      out.push({ slot: c.slot, ...rect, opaque: alphaOpaque(rect, sp.frame.width, sp.frame.height, sp.flipX, alphaAt) });
+    }
+    return out;
+  }
+
+  /** Largest drawing box on a board (a scaled-up unit is taller than the layout's spriteBox): sizes the interaction zone. */
+  private boardBody(board: 'party' | 'enemy', base: { w: number; h: number }): { w: number; h: number } {
+    let w = base.w;
+    let h = base.h;
+    for (const v of this.views.values()) {
+      if (v.combatant.board !== board) continue;
+      w = Math.max(w, v.w);
+      h = Math.max(h, v.h);
+    }
+    return { w, h };
   }
 
   /**
@@ -1538,11 +1684,13 @@ export class BattleScene extends Phaser.Scene {
       k === 'shield' ? colors.shield : k === 'magicShield' ? colors.magicShield : k ? colors.element[k] : undefined;
     const rows: Array<[string, string?]> = info.lines.map((l, i): [string, string?] => [l, kindColor(info.kinds[i])]);
     const meta: InfoMeta[] = [];
-    if (skill.cost.resource === 'rage' && skill.cost.amount > 0) {
-      meta.push({ icon: ensureIcon(this, RAGE_ICON, RAGE_COLOR, false), text: `RAGE ${skill.cost.amount}`, hex: RAGE_COLOR });
-    } else if (skill.cost.amount > 0) {
+    const costNow = skillCostAmount(skill.cost, actor); // proportional costs (Wail of the Dead: 20% of current HP) show the real amount right now
+    const ratio = isRatioCost(skill.cost);
+    if (skill.cost.resource === 'rage' && costNow > 0) {
+      meta.push({ icon: ensureIcon(this, RAGE_ICON, RAGE_COLOR, false), text: `RAGE ${costNow}${ratio ? ` (${skillCostLabel(skill.cost)})` : ''}`, hex: RAGE_COLOR });
+    } else if (costNow > 0) {
       const kind = skill.cost.resource === 'mp' ? 'mp' : 'hp';
-      meta.push({ icon: ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false), text: info.cost, hex: colors.text });
+      meta.push({ icon: ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false), text: ratio ? `${costNow} ${skill.cost.resource.toUpperCase()} (${skillCostLabel(skill.cost)})` : info.cost, hex: colors.text });
     } else meta.push({ text: info.cost, hex: colors.muted });
     if (this.battle.mode === 'turns' && (skill.cooldown ?? 0) > 0) meta.push({ icon: ensureIcon(this, UI_ICON.hourglass, UI_COLOR, false), text: info.cooldown, hex: colors.muted });
     if (this.battle.mode === 'turns' && info.initialCooldown && !actor.summoned) rows.push([info.initialCooldown, colors.muted]);
@@ -2274,10 +2422,10 @@ export class BattleScene extends Phaser.Scene {
   private addGroundView(e: { id: string; ground: string; board: 'party' | 'enemy'; slots: number[]; turns: number }): void {
     const def = content.grounds[e.ground];
     const hex = color(def?.color ?? '#ffffff');
-    // Holy Fire / Poison / Burning: zeminin bırakıldığı hücrelerin karesini kenarlarına kadar dolduran canlı piksel yüzey (vfx.groundArea), ground süresince canlı
+    // Holy Fire / Poison / Burning: zeminin bırakıldığı hücrelerin karesini kenarlarına kadar dolduran yumuşak, yarı saydam dolgu (vfx.groundArea);
+    // hafif nefes alma efektin içinde (yalnız dolgu, abartısız), burada ayrıca alfa titreşimi yok
     const area = groundArea(this, e.ground, e.board, e.slots, 120);
     if (area) {
-      this.tweens.add({ targets: area, alpha: 0.65, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       this.groundViews.set(e.id, area);
       return;
     }
@@ -2534,11 +2682,14 @@ export class BattleScene extends Phaser.Scene {
     if (!slot) return undefined;
     const view = new CombatantView(this, c, slot.x, slot.y);
     view.makeTappable(
-      () => this.onCombatantTap(view),
+      (p?: Phaser.Input.Pointer) => {
+        if (!p || !this.isSelectGesture(p)) this.onCombatantTap(view);
+      },
       () => this.onUnitOver(view),
       () => this.onUnitOut(view),
     );
     this.views.set(c.uid, view);
+    if (this.unitSel.has(c.uid)) view.setSelected(true);
     return view;
   }
 
@@ -2768,11 +2919,12 @@ export class BattleScene extends Phaser.Scene {
     const hourglass = ensureIcon(this, UI_ICON.hourglass, UI_COLOR, false);
     if (remaining > 0) parts.push({ icon: hourglass, text: String(remaining), hex: colors.targetHighlight });
     else {
-      if (skill.cost.amount > 0 && skill.cost.resource === 'rage') {
-        parts.push({ icon: ensureIcon(this, RAGE_ICON, RAGE_COLOR, false), text: `RAGE ${skill.cost.amount}`, hex: RAGE_COLOR, px: 15 });
-      } else if (skill.cost.amount > 0) {
+      const costNow = skillCostAmount(skill.cost, actor); // proportional costs (Wail of the Dead) show the real amount for the current resource
+      if (costNow > 0 && skill.cost.resource === 'rage') {
+        parts.push({ icon: ensureIcon(this, RAGE_ICON, RAGE_COLOR, false), text: `RAGE ${costNow}`, hex: RAGE_COLOR, px: 15 });
+      } else if (costNow > 0) {
         const kind = skill.cost.resource === 'mp' ? 'mp' : 'hp';
-        parts.push({ icon: ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false), text: String(skill.cost.amount), hex: colors.text });
+        parts.push({ icon: ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false), text: String(costNow), hex: colors.text });
       }
       if (turns && (skill.cooldown ?? 0) > 0) parts.push({ icon: hourglass, text: String(skill.cooldown), hex: colors.muted });
     }
@@ -2857,7 +3009,7 @@ export class BattleScene extends Phaser.Scene {
       battle: this.battle,
       stats: this.stats,
       avatar: (unit, cx, cy, size) => this.avatarImage(unit, cx, cy, size),
-      onNewGame: () => this.scene.restart({ seed: newSeed(), teams: undefined, partySize: this.partySize, enemySize: this.enemySize }), // fresh random seed + random teams of the same sizes, skips team select
+      onNewGame: () => this.newGame(),
       onTeamSelect: () => this.goToTeamSelect(),
       matchData: () => this.matchLogData(),
       preview,

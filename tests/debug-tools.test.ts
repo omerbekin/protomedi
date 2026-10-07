@@ -10,10 +10,8 @@ import {
   nextInCycle,
   parseSeed,
   resourceValue,
-  sfxLabel,
   tweaksSummary,
 } from '../src/game/debug-state';
-import { SFX_IDS } from '../src/game/audio';
 
 const mk = (seed = 1, mode: 'turns' | 'test' = 'test') => new Battle(content.battleSetup('first-battle', seed, mode));
 const types = (b: Battle, from: number) => b.log.slice(from).map((e: BattleEvent) => e.type);
@@ -330,10 +328,7 @@ describe('debug-state yardımcıları', () => {
     }
   });
 
-  it('sfxLabel ve tweaksSummary', () => {
-    expect(sfxLabel('stunChime')).toBe('stun Chime');
-    expect(sfxLabel('thud')).toBe('thud');
-    expect(SFX_IDS.length).toBeGreaterThan(0);
+  it('tweaksSummary', () => {
     const base = { ...debugState, flags: { ...debugState.flags } };
     expect(tweaksSummary(base, false)).toBe('none');
     expect(tweaksSummary({ ...base, speed: 2, flags: { damageMult: 10, crit: 'always', dodge: 'auto' } }, true)).toBe('speed 2x, free MP, damage 10x, always crit');

@@ -123,7 +123,7 @@ describe('Wiki > Legacy: kullanılmayan / eski her şey OTOMATİK türetilir', (
   });
 
   it('diskte class/çağrıya bağlı olmayan sprite/avatar dosyası listelenir; her görsel ya karakterde ya Legacy de', () => {
-    const shown = new Set(catalog.characters.flatMap((c) => [...c.sprites.map((s) => s.url), ...(c.avatarUrl ? [c.avatarUrl] : [])]));
+    const shown = new Set(catalog.characters.flatMap((c) => [...c.sprites.map((s) => s.url), ...(c.avatarUrl ? [c.avatarUrl] : []), ...c.variants.flatMap((v) => (v.avatarUrl ? [v.avatarUrl] : []))]));
     const orphanPaths = new Set(ofKind('orphan'));
     for (const [path, url] of [...Object.entries(files.sprites), ...Object.entries(files.avatars)]) expect(shown.has(url) || orphanPaths.has(path), `${path} bağlantısız`).toBe(true);
   });

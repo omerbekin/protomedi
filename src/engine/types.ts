@@ -66,7 +66,14 @@ export type PassiveEffect =
   /** Kullanıcının KENDİ zırhının `pct` kadarı, kendine ve 1 yarıçaplı (artı şekli) komşu dostlara bonus zırh olur; bir birim en fazla `maxStacks` kaynaktan alır. */
   | { type: 'armorAura'; pct: number; maxStacks: number }
   /** Opportunist (Cutthroat): hasar verdiği hedefin üzerinde `statuses` listesindeki durumlardan biri varsa verilen hasar x(1 + bonus) (tüm vuruşlar; kritik ayrıca son çarpan). */
-  | { type: 'bonusVsStatus'; statuses: StatusKind[]; bonus: number };
+  | { type: 'bonusVsStatus'; statuses: StatusKind[]; bonus: number }
+  /**
+   * Ill Omen (Hexer): yığılan durum (`status`, ör. 'omen') taşıyan bir DÜŞMAN ölünce yığını, ölenin tahtasındaki en yakın canlı birime geçer
+   * (formation.screenGrid Manhattan; eşitlikte önce aynı sıra, sonra küçük yuva). Doom DIŞI ölüm: tüm yığın; Doom ile ölüm: `onDoomKill` yığın.
+   * Varışta yığın en fazla `maxOnArrival` (maxStacks'ten küçük: geçiş asla Doom tetiklemez). Geçen yığın ölenin KALAN süresini (en az 1) ve
+   * snapshot'ını taşır; alıcıda zaten yığın varsa alıcının sayacı korunur. Pasif, yığının kaynağı (son ekleyen) bu birimse ve canlıysa çalışır.
+   */
+  | { type: 'omenTransfer'; status: StatusKind; maxOnArrival: number; onDoomKill: number };
 
 export interface PassiveDef {
   id: string;
@@ -247,7 +254,30 @@ export type SkillEffectKind =
   | { type: 'revive'; hpRatio: number; mpRatio: number; regen?: { turns: number; ratio: number } }
   /** Tur bazlı şifa: hedefin sonraki `turns` turunun başında `power` kadar iyileştirir. */
   | { type: 'hot'; scale: Attribute; power: number; turns: number }
-  | { type: 'shield'; scale: Attribute; power: number; shieldType?: 'magic'; /** Kullanıcının kalan MP'si başına eklenen kalkan. */ bonusPerMana?: number; /** true: kalkan hedefe değil kullanıcının kendisine gider (ör. Shield Bash). */ self?: boolean }
+  | {
+      type: 'shield';
+      scale: Attribute;
+      power: number;
+      shieldType?: 'magic';
+      /** Kullanıcının kalan MP'si başına eklenen kalkan. */
+      bonusPerMana?: number;
+      /** true: kalkan hedefe değil kullanıcının kendisine gider (ör. Shield Bash). */
+      self?: boolean;
+      /** Kalkan hasar EMDİKÇE tetiklenen kancalar (Spell Ward, Mana Barrier; bkz. OnAbsorbSpec). Yoksa kalkan sıradan kalkandır. */
+      onAbsorb?: OnAbsorbSpec;
+    }
+  /**
+   * Hedefteki durumları siler (dispel/cleanse): `status` 'debuff' = kötü durumlar (statuses.json type debuff), 'buff' = iyi durumlar.
+   * `count` yoksa hepsi; varsa en uzun süreliler önce (eşitlikte önce uygulanan). statuses.json'da `dispellable: false` olanlar silinmez.
+   * Olay: her silinen için `statusEnd { dispelled: true, source, cause: skill id }`.
+   */
+  | { type: 'dispel'; status: 'debuff' | 'buff'; count?: number }
+  /**
+   * Karanlık bağ (Dark Bond): kullanıcı ile hedef dost arasında `turns` (kullanıcının kendi turları) sürecek bağ kurar. Bağ sürerken kullanıcının
+   * her lifesteal kazancının (skill lifesteal'i ve soulDrain pasifi; çağrılarının hasarından gelen dahil) `ratio` katı bağlı dosta da şifa olur
+   * (kullanıcının kendi şifası azalmaz). Aynı anda tek bağ (yenisi eskisini koparır); ikisinden biri ölünce biter. Durum: 'dark_bond' (iki tarafta da).
+   */
+  | { type: 'bond'; turns: number; ratio: number }
   /**
    * Birim kullanıcının KENDİ tahtasında boş bir yuvaya çağrılır (`battle.summonSlots`: ölü dostun ayrılmış yuvası hariç). `consumeCorpse`: çağırmadan önce
    * karşı taraftaki tüketilebilir (revivable, çağrı olmayan) düşman cesetlerinden SEÇİLENİ tüketir (madde 230: oyuncu `corpseUid` ile seçer, ceset varken
@@ -271,7 +301,45 @@ export type SkillEffectKind =
   /** Skill'in kapsadığı hücrelere `turns` turluk yer etkisi (zehir, yanan zemin...) bırakır. */
   | { type: 'ground'; ground: string; turns: number; scale: Attribute; power: number }
   /** Kullanıcı kendine maks canının `ratio` kadarını hasar verir (canı en az 1 kalır). */
-  | { type: 'selfDamage'; ratio: number };
+  | { type: 'selfDamage'; ratio: number }
+  /**
+   * Yığılan durum ekler (Hexer Omen; durum tanımında `maxStacks` olmalı): İSABET EDEN hasar vuruşundan sonra her vurulan hedefe `stacks`
+   * (o hedefe bu skill'de en az bir KRİTİK vuruş geldiyse `critStacks`). Hasarı olmayan skill'de tüm hedeflere. Yığın maxStacks'e ulaşınca durumun
+   * `doom` patlaması anında tetiklenir (aynı skill'de `detonate` etkisi varsa tetiklenmez: patlatmayı detonate yapar). `status` yoksa 'omen'.
+   */
+  | { type: 'omen'; status?: StatusKind; stacks: number; critStacks?: number }
+  /** Hedefteki yığını (en az 1) durumun `doom` patlamasıyla, `mult` çarpanıyla anında patlatır (Doom Mark); yalnızca isabet eden hedeflerde. */
+  | { type: 'detonate'; status: StatusKind; mult: number }
+  /**
+   * Karakter üstü zamanla hasar (DoT; `hot`'un aynası): vurulan hedeflere `status` durumunu `turns` tur verir; tik miktarı uygulama anında sabitlenir
+   * (scale x power). Tik: taşıyanın kendi turunun başında, zemin tiklerinden sonra; büyü zırhı/zayıflık uygulanır, isabet/kritik yok, Guard'a
+   * aktarılmaz (origin 'status'). Yeniden uygulanınca süre yenilenir, büyük miktar kalır. Element/hasar türü durum tanımının `dot` alanından.
+   */
+  | { type: 'dot'; status: StatusKind; scale: Attribute; power: number; turns: number };
+
+/**
+ * Kalkan emilim kancaları (generic; her kalkan türünde çalışır: physical / magic). Kalkan ayaktayken bir SKILL vuruşunun hasarını emdiğinde tetiklenir
+ * (yer etkisi tiki, kendine hasar tetiklemez: doğrudan saldıran yok). Aynı havuzda kancalı kalkan kancasız kalkandan ÖNCE tükenir (kancalılar kendi aralarında
+ * eskiden yeniye). Sayılar data/skills.json'dan.
+ * - burnMana: saldıranın MP'sinden bu kadar yakar (0'ın altına inmez). Kalkanın emdiği HER darbede (madde 241).
+ * - dispelChance: saldıranın üstünde silinebilir bir BUFF (statuses.json type buff) varsa bu ihtimalle (seed'li RNG) RASTGELE birini siler
+ *   (seed'li). Zar yalnızca buff varken atılır. HER darbede (madde 241).
+ * - giveMana: kalkanın emdiği HER darbede kalkanın sahibine (taşıyana) bu kadar SABİT MP verir (madde 241; MP maks'ı aşmaz).
+ */
+export interface OnAbsorbSpec {
+  burnMana?: number;
+  dispelChance?: number;
+  giveMana?: number;
+}
+
+/** Kancalı kalkan katmanı (Combatant.shieldHooks): hangi skill, kim attı, hangi havuz (magic), havuzdaki kalan payı ve kancalar. */
+export interface ShieldHook {
+  skill: string;
+  caster: string;
+  magic: boolean;
+  amount: number;
+  onAbsorb: OnAbsorbSpec;
+}
 
 /**
  * `side`: 'everyone' hedefli skill'lerde etkinin hangi tarafa gideceği (varsayılan: hasar/mana yakma/durum düşmana, şifa/kalkan/koruma dosta).
@@ -282,7 +350,13 @@ export type SkillEffect = SkillEffectKind & { side?: 'allies' | 'enemies' };
 export interface SkillCost {
   /** mp: mana; hp: can; rage: Rage barı (yalnızca Rage'li class'lar; yetmiyorsa kullanılamaz). */
   resource: 'mp' | 'hp' | 'rage';
+  /** Sabit bedel (ofCurrent varsa sabit kısım; genelde 0). */
   amount: number;
+  /**
+   * 0-1: bedel kullanıcının o anki (MEVCUT) kaynağının bu oranı kadardır: amount + round(mevcut x ofCurrent), en az 1 (Wail of the Dead: canın %20'si).
+   * Gerçek bedel her yerde `skillCostAmount` (src/engine/cost.ts) ile hesaplanır. Bedel kaynağa eşit/büyükse kullanılamaz (can bedeli asla öldürmez).
+   */
+  ofCurrent?: number;
 }
 
 /** Görsel ipucu + menzil: melee = hedefe atılır VE yalnızca en öndeki birimlere vurur, ranged = mermi, cast = büyü hazırlığı, sky = yukarıdan düşer. */
@@ -326,6 +400,16 @@ export interface SkillAiCond {
   minTargetMaxHpShare?: number;
   /** Ana hedef, normal yakın dövüşün erişemediği bir sırada (ön sıranın gerisinde, korunan arka saf). */
   targetBehindFront?: boolean;
+  /** Dost hedefli skill: hedef dostun can oranı en çok bu (tehdit altındaki / yaralı dost). */
+  maxTargetHpRatio?: number;
+  /** Düşman takımında büyü hasarı skill'i olan ve MP'si en az bu kadar olan canlı bir birim var. */
+  minFoeMagicMp?: number;
+  /** Düşman takımında silinebilir (dispellable) bir buff taşıyan en az bu kadar canlı birim var. */
+  minFoeBuffs?: number;
+  /** Ana hedefin (hamleden ÖNCE) `status` yığını en az `count` (Doom Mark: Omen 2+). */
+  minTargetStacks?: { status: StatusKind; count: number };
+  /** Seçeneğin durum koruma değeri (Option.mitigation: isabet/kritik cezası ya da kaçınma bonusuyla önlenen beklenen hasar) en az bu (Jinx). */
+  minStatusMitigation?: number;
 }
 
 /** Skill'in YZ bağlamı: `requires` hepsi, `anyOf` (doluysa) en az biri sağlanmalı; sağlanmazsa skill yalnızca öldürücü vuruşta seçilebilir. */
@@ -365,6 +449,11 @@ export interface SkillDef {
   ai?: SkillAiHint;
   /** true (target 'single_ally'): kullanıcı KENDİNİ hedefleyemez (Guard: 'Cannot guard yourself'). */
   excludeSelf?: boolean;
+  /**
+   * Turn bedeli (0 < turnCost <= 1; yoksa 1): skill kullanılınca sıra sayacından eşiğin bu katı düşer (0,5 = yarım turn: kullanıcı normalin yarısı
+   * sürede tekrar sıra alır; kalan sayaç korunur). Yalnızca turns modunda anlamlı. Global skill'ler ve pas her zaman tam turn.
+   */
+  turnCost?: number;
   /** true: yakın dövüş skill'i olsa da kullanıcının ön sırada olma şartı aranmaz (ileride dash/charge gibi skill'ler için). */
   ignoreFrontRow?: boolean;
   /**
@@ -518,7 +607,17 @@ export type Side = 'party' | 'enemy';
  * Durum türleri. 'thorns' (eski Thorn Shield) motorda ve veride KALDIRILDI (madde 222); ad yalnızca src/game/scenes/BattleScene.ts eski bir
  * `e.status === 'thorns'` karşılaştırması yaptığı için tür listesinde duruyor (ui-dev silince buradan da silinecek). Hiçbir skill/durum tanımı onu üretmez.
  */
-export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns' | 'blinded' | 'shrouded';
+export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns' | 'blinded' | 'shrouded' | 'dark_bond' | 'omen' | 'wither' | 'jinxed';
+
+/** Yığılan durumun patlaması (Hexer Doom): hasar = scale statı x powerPerStack x yığın x çarpan; büyü zırhı/kalkan uygulanır, isabet zarı YOK, kritik zarı VAR. */
+export interface DoomDef {
+  scale: Attribute;
+  powerPerStack: number;
+  damageType: 'physical' | 'magic';
+  element: Element;
+  /** Süre dolunca patlayan Doom'un çarpanı (burstOnExpire; balans kolu, varsayılan 1). */
+  expireMult: number;
+}
 
 /** data/statuses.json girişi: veriyle tanımlı buff/debuff. */
 export interface StatusDef {
@@ -533,10 +632,28 @@ export interface StatusDef {
   skipTurn?: boolean;
   /** true: bu durum bir birime uygulandığı AN o birimin kendi taunt'ı silinir (kontrol/CC durumu; şu an yalnızca Stun). Yeni durum eklemek tek satır. */
   breaksTaunt?: boolean;
+  /** false: dispel/cleanse etkileri (Spell Ward, Mana Barrier) bu durumu silemez (ör. Dark Bond bağı). Yoksa silinebilir. */
+  dispellable?: boolean;
   /** İsabete (accuracy) eklenen miktar (ör. Blinded -0,30). battle.effectiveStats uygular; hit şansı yine [0, hit.max] arasına sıkıştırılır. */
   accuracyDelta?: number;
   /** Kaçınmaya (evasion) eklenen miktar (ör. Shrouded +0,20; Dex'in evasionMax sınırı bu eke uygulanmaz). */
   evasionDelta?: number;
+  /** Kritik şansına eklenen miktar (Jinxed -1 = kritik yok); sonuç [0, 1] arasına kırpılır. guaranteedCrit (Backstab) bunu okumaz. */
+  critDelta?: number;
+  /** Yığın başına kritik şansı eki (Omen Misfortune -0,03 x yığın). */
+  critDeltaPerStack?: number;
+  /** true: taşıyanın bir sonraki HASAR VEREN skill'inin tüm vuruşlarından sonra düşer (statusEnd consumed). Jinxed. */
+  endsOnOwnAttack?: boolean;
+  /** Yığılan durum: en çok bu kadar yığın (Omen 3). Yığın maxStacks'e ulaşınca `doom` anında patlar. */
+  maxStacks?: number;
+  /** Yığılan durumun süresi (ilk yığınla başlar; yeni yığın süreyi YENİLEMEZ, madde Ö2). */
+  duration?: number;
+  /** true: süre dolunca yığın sessizce düşmez, yığın sayısı kadar `doom` patlar (taşıyanın tur başı; Wither tikinden sonra, yenilenmeden önce). */
+  burstOnExpire?: boolean;
+  /** Patlama tanımı (yığılan durum). */
+  doom?: DoomDef;
+  /** Zamanla hasar (DoT) durumu: tikin hasar türü ve elementi (miktar skill'in `dot` etkisinden, uygulama anında sabitlenir). */
+  dot?: { damageType: 'physical' | 'magic'; element: Element };
 }
 
 /** data/grounds.json girişi: yerde kalan etki türü. */
@@ -587,6 +704,19 @@ export interface Status {
   critMult?: number;
   /** Görsel/kaynak nedeni (status olayındaki `cause` ile aynı): ör. 'revival' = Resurrection sonrası yenilenme. */
   cause?: string;
+  /** dark_bond: bağın öbür ucu (sahibinde = bağlı dost, dostta = bağı kuran). Sahibin kopyası `source === taşıyan`. */
+  partner?: string;
+  /** dark_bond: lifesteal kazancının bağlı dosta aktarılan katı (1 = aynı miktar). */
+  ratio?: number;
+  /** Yığılan durum (Omen): yığın sayısı. */
+  stacks?: number;
+  /**
+   * Yığılan durumun snapshot'ı (son yığını ekleyenin, eklendiği andaki): doom ölçek statının değeri, kritik şansı ve kritik çarpanı.
+   * Süre bitimi patlaması bunları kullanır (kaynak ölmüş olsa da: madde Ö3). `source` = son ekleyen.
+   */
+  snapStat?: number;
+  snapCrit?: number;
+  snapCritMult?: number;
 }
 
 export interface Combatant {
@@ -611,6 +741,8 @@ export interface Combatant {
   shield: number;
   /** Yalnızca büyü hasarını emen kalkan. */
   magicShield: number;
+  /** Kancalı (onAbsorb) kalkan katmanları: shield / magicShield havuzunun hangi kısmının hangi kalkandan geldiği (yoksa kancalı kalkan yok). */
+  shieldHooks?: ShieldHook[];
   statuses: Status[];
   tags: string[];
   skills: string[];
@@ -675,6 +807,8 @@ type BattleEventBody =
       slot?: number;
       /** Ceset tüketen çağrıda (Raise Dead): tüketilen cesedin uid'si (ceset yoksa tanımsız). */
       corpseUid?: string;
+      /** Skill'in turn bedeli 1'den küçükse (yarım turn: 0,5); tam turn skill'lerde tanımsız. */
+      turnCost?: number;
     }
   | { type: 'resource'; actor: string; resource: 'mp' | 'hp'; amount: number; after: number }
   | {
@@ -692,7 +826,7 @@ type BattleEventBody =
       redirected?: boolean;
       /**
        * Hasarın kaynağı (UI yazı/ikon için): 'skill' = skill vuruşu (guard aktarımı dahil), 'ground' = yer etkisi tiki (zehir/yanma/holy fire;
-       * `ground` türü + `groundId` örneği), 'status' = durum kaynaklı tik (şu an yok; ileride DoT), 'self' = kendine hasar (selfDamage, kaybedilen can bahsi).
+       * `ground` türü + `groundId` örneği), 'status' = durum kaynaklı hasar (Wither tiki, süre bitimi Doom'u; `status` alanı hangi durum), 'self' = kendine hasar (selfDamage, kaybedilen can bahsi).
        */
       origin?: DamageOrigin;
       /** Hasarın elementi (skill etkisinin `element`'i ya da yer etkisinin elementi; yoksa 'physical'). */
@@ -702,6 +836,8 @@ type BattleEventBody =
       /** origin 'ground': yer etkisi türü (data/grounds.json anahtarı: poison | burning | holy_fire) ve örnek kimliği (ground olayındaki id). */
       ground?: string;
       groundId?: string;
+      /** Durum kaynaklı hasar: 'wither' (DoT tiki, origin 'status') ya da 'omen' (Doom patlaması; süre bitiminde origin 'status', skill içinde origin 'skill'). */
+      status?: StatusKind;
     }
   /**
    * İska (tek zardan ayrıştırılır): 'dodge' = hedefin KAÇINMASI yüzünden vurulamadı (UI: hedefin üstünde "Dodge");
@@ -709,13 +845,34 @@ type BattleEventBody =
    */
   | { type: 'dodge'; source: string; target: string }
   | { type: 'miss'; source: string; target: string }
-  | { type: 'heal'; source: string; target: string; amount: number; hpAfter: number; crit: boolean }
+  /** `cause`: 'dark_bond' = Dark Bond kopyası (kaynak bağı kuran, hedef bağlı dost); yoksa sıradan şifa. */
+  | { type: 'heal'; source: string; target: string; amount: number; hpAfter: number; crit: boolean; cause?: string }
   /** amount negatifse kalkan tüketildi (ör. Shield Crush). */
   | { type: 'shield'; source: string; target: string; amount: number; shieldAfter: number; magicShieldAfter: number; magic: boolean }
-  | { type: 'manaBurn'; source: string; target: string; amount: number; mpAfter: number }
+  /** `cause`: kalkan kancasıyla yakıldıysa kalkanın skill id'si (ör. 'spell_ward'; kaynak = kalkanı taşıyan, hedef = saldıran). */
+  | { type: 'manaBurn'; source: string; target: string; amount: number; mpAfter: number; cause?: string }
   /** `cause`: skill etkisinin görsel nedeni (ör. 'vines' = sarmaşıkla yere bağlandı; UI 'rooted' görseli). Yoksa sıradan durum. */
-  | { type: 'status'; target: string; status: StatusKind; turns: number; source: string; cause?: string }
-  | { type: 'statusEnd'; target: string; status: StatusKind; broken?: boolean }
+  | { type: 'status'; target: string; status: StatusKind; turns: number; source: string; cause?: string; /** dark_bond: bağın öbür ucu. */ partner?: string; /** Yığılan durum (Omen): güncel yığın sayısı. */ stacks?: number }
+  /** Yığın değişimi (Omen): `delta` eklenen, `stacks` yeni yığın, `max` üst sınır; `crit` kritik lanet (critStacks); `cause` skill ya da Ill Omen geçişi. Ardından 'status' olayı da gelir. */
+  | { type: 'omen'; source: string; target: string; delta: number; stacks: number; max: number; crit?: boolean; cause: 'skill' | 'transfer' }
+  /**
+   * Doom patlaması (ardından normal 'damage' olayı gelir: status 'omen', element 'dark'). cause: complete (yığın doldu, anında), expire (süre doldu, taşıyanın
+   * tur başı; origin 'status', Guard yok), detonate (Doom Mark; `skill`). `omens` tüketilen yığın, `mult` çarpan.
+   */
+  | { type: 'doom'; source: string; target: string; omens: number; mult: number; cause: 'complete' | 'expire' | 'detonate'; skill?: string }
+  /** Ill Omen geçişi: `from` ölen, `to` alıcı, `stacks` geçen yığın, `after` alıcının yeni yığını; `source` pasifin sahibi (Hexer). */
+  | { type: 'omenTransfer'; source: string; from: string; to: string; stacks: number; after: number }
+  /**
+   * Durum bitti. `cause: 'doom'`: yığın Doom ile patladı; `cause: 'ill_omen'`: ölen birimin yığını Ill Omen ile geçti. `broken`: taunt kırıldı (UI "Taunt broken"). `dispelled`: bir dispel/cleanse sildi (`source` silen birim, `cause` skill id'si:
+   * 'spell_ward' (saldıranın buff'ı) / 'mana_barrier' (dostun debuff'ı)). `cause: 'bond_broken'`: Dark Bond bağı ölüm ya da yeni bağ yüzünden koptu.
+   */
+  | { type: 'statusEnd'; target: string; status: StatusKind; broken?: boolean; dispelled?: boolean; source?: string; cause?: string; /** endsOnOwnAttack (Jinxed): taşıyanın saldırısı durumu tüketti. */ consumed?: boolean }
+  /**
+   * Kalkan kancası tetiklendi (OnAbsorbSpec): `bearer` kalkanı taşıyan, `caster` kalkanı atan, `attacker` vuran, `skill` kalkanın skill'i, `absorbed` bu vuruşta
+   * kancalı kalkanın emdiği hasar. Sonuç alanları: `burned` saldırandan yakılan MP, `dispelled` saldırandan silinen buff, `mana` taşıyana verilen MP.
+   * Ayrıntı olayları hemen ARKASINDAN gelir: manaBurn {cause}, statusEnd {dispelled}, mpRegen {cause}.
+   */
+  | { type: 'shieldTrigger'; bearer: string; caster: string; attacker: string; skill: string; absorbed: number; burned?: number; dispelled?: StatusKind; mana?: number }
   /** `empowered`: yalnızca ceset tüketen çağrıda (Raise Dead): true = ceset tüketildi, beslenmiş (fed) çağrı; false = beslenmemiş (unfed). `combatant.empowered` aynı. */
   | { type: 'summon'; actor: string; combatant: Combatant; empowered?: boolean }
   /** Bir ceset tüketildi (Raise Dead): `uid` ölü birim, `by` tüketen, `slot` cesedin yuvası, `side` cesedin tarafı. Ceset artık `consumed`: diriltilemez, yuvası rezerve değil. */
@@ -723,7 +880,8 @@ type BattleEventBody =
   | { type: 'despawn'; target: string }
   /** Düşmüş bir birim olduğu yerde dirildi. */
   | { type: 'revive'; source: string; target: string; hpAfter: number; mpAfter: number }
-  | { type: 'mpRegen'; actor: string; amount: number; after: number }
+  /** `cause`: kalkan kancası (ör. 'mana_barrier') verdiyse skill id'si; yoksa tur başı yenilenme / Rest / pasif. */
+  | { type: 'mpRegen'; actor: string; amount: number; after: number; cause?: string }
   /** Rage değişimi (yalnızca Rage'li birim): delta + = kazanç (skill hasar verince), - = bedel (Abyssal Cry); after = yeni değer, max = üst sınır. */
   | { type: 'rage'; actor: string; delta: number; after: number; max: number }
   /** Global skill kullanıldı (rest / skip_turn / move_tile); ayrıntı olayları (mpRegen, turnSkipped, moved) hemen arkasından gelir. */

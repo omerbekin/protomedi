@@ -1,4 +1,5 @@
 import { iconUrl } from './dom-icons';
+import { flowButtons, type FlowContext } from '../game/session-flow';
 import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from './fullscreen';
 
 /**
@@ -9,6 +10,12 @@ export interface SettingsHooks {
   onVolume: (level: number) => void;
   /** Kaydırıcı bırakıldığında duyulacak deneme sesi. */
   preview: () => void;
+  /** Oyun akışı düğmeleri (New Game / Team Select); verilmezse satırlar gösterilmez. */
+  flow?: {
+    context: () => FlowContext;
+    newGame: () => void;
+    teamSelect: () => void;
+  };
 }
 
 const KEY = 'proto.settings.v1';
@@ -107,12 +114,89 @@ export class SettingsMenu {
       fsRow.append(fsIcon, fsName, fsBtn);
       this.panel.append(fsRow, note);
     }
+    if (hooks.flow) this.buildFlow(hooks.flow);
     root.append(toggle, this.panel);
     hooks.onVolume(Number(slider.value));
   }
 
+  /** New Game / Team Select rows. An unfinished battle asks "Leave the current battle?" (Yes / No) first. */
+  private buildFlow(flow: NonNullable<SettingsHooks['flow']>): void {
+    const mkBtn = (label: string): HTMLButtonElement => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'settings-btn';
+      b.textContent = label;
+      return b;
+    };
+    const mkRow = (icon: string, label: string, btn: HTMLButtonElement): HTMLDivElement => {
+      const row = document.createElement('div');
+      row.className = 'settings-row';
+      const img = document.createElement('img');
+      img.src = iconUrl(icon);
+      img.alt = '';
+      const name = document.createElement('span');
+      name.textContent = label;
+      row.append(img, name, btn);
+      return row;
+    };
+    const newBtn = mkBtn('Start');
+    const teamBtn = mkBtn('Go');
+    const newRow = mkRow('dice', 'New Game', newBtn);
+    const teamRow = mkRow('team', 'Team Select', teamBtn);
+
+    const confirmBox = document.createElement('div');
+    confirmBox.className = 'settings-confirm';
+    confirmBox.hidden = true;
+    const question = document.createElement('div');
+    question.className = 'settings-confirm-text';
+    question.textContent = 'Leave the current battle?';
+    const answers = document.createElement('div');
+    answers.className = 'settings-confirm-row';
+    const yes = mkBtn('Yes');
+    const no = mkBtn('No');
+    answers.append(yes, no);
+    confirmBox.append(question, answers);
+
+    let pending: (() => void) | null = null;
+    const hideConfirm = (): void => {
+      pending = null;
+      confirmBox.hidden = true;
+    };
+    const run = (action: () => void): void => {
+      hideConfirm();
+      this.setOpen(false);
+      action();
+    };
+    const ask = (action: () => void): void => {
+      if (flowButtons(flow.context()).confirm) {
+        pending = action;
+        confirmBox.hidden = false;
+      } else run(action);
+    };
+    newBtn.addEventListener('click', () => ask(flow.newGame));
+    teamBtn.addEventListener('click', () => ask(flow.teamSelect));
+    yes.addEventListener('click', () => {
+      const action = pending;
+      if (action) run(action);
+    });
+    no.addEventListener('click', hideConfirm);
+
+    // Buttons follow the active scene: hidden when there is no scene; Team Select is hidden on the team select screen itself
+    this.refreshFlow = (): void => {
+      hideConfirm();
+      const f = flowButtons(flow.context());
+      newRow.hidden = !f.newGame;
+      teamRow.hidden = !f.teamSelect;
+    };
+    this.panel.append(newRow, teamRow, confirmBox);
+    this.refreshFlow();
+  }
+
+  private refreshFlow: () => void = () => {};
+
   setOpen(open: boolean): void {
     this.open = open;
     this.panel.hidden = !open;
+    if (open) this.refreshFlow();
   }
 }

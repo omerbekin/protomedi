@@ -1,3 +1,4 @@
+import { classGroupRank, sortByPrimary } from '../src/game/class-order';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -24,6 +25,12 @@ describe('Wiki kataloğu (sağ üst kitap simgesi)', () => {
   it('kitap ikonu tanımlı ve arayüz ikonu olarak kullanılıyor', () => {
     expect(ICON_KINDS as readonly string[]).toContain('book');
     expect(UI_ICONS as readonly string[]).toContain('book');
+  });
+
+  it('wiki class listesi primary statına göre sıralı (STR, DEX, INT, LUCK; test class yok)', () => {
+    const ranks = wiki.classes.map((c) => classGroupRank(content.classes[c.id]!));
+    expect([...ranks].sort((a, b) => a - b)).toEqual(ranks);
+    expect(wiki.classes.map((c) => c.id)).toEqual(sortByPrimary(Object.values(content.classes).filter((d) => !d.hidden)).map((d) => d.id));
   });
 
   it('tüm class ve çağrılar kartlarıyla, sprite/avatar/logo/skill/pasifleriyle yer alır', () => {

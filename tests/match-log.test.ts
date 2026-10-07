@@ -217,7 +217,7 @@ describe('MatchLog: kayıt', () => {
     expect(b.winner).toBeNull();
     const t = log!.serialize();
     expect(t).toContain('status: in progress');
-    expect(log!.moves.length).toBe(12);
+    expect(log!.moves.filter((m) => m.control !== 'auto').length).toBe(12); // 12 eylem; sersemlik (AUTO) turları ayrıca kaydedilir
     expect(t).toContain('battle still in progress');
   });
 

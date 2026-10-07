@@ -213,7 +213,7 @@ describe('önizleme: şifa, kalkan, tur bazlı şifa, mana yakma, durumlar', () 
 
     const am = testBattle(1, { party: ['antimage', 'warrior', 'archer', 'mage'], enemies: ['warrior', 'archer', 'mage', 'druid'] });
     const amUid = am.combatants.find((c) => c.side === 'party' && c.defId === 'antimage')!.uid;
-    expect(previewSkill(am, amUid, 'spell_ward')[0]!.shield!.magic).toBe(true);
+    expect(previewSkill(am, amUid, 'spell_ward', amUid)[0]!.shield!.magic).toBe(true); // madde 240: tek dost (kendisi dahil)
   });
 
   it('tur bazlı şifa (Rejuvenate): tur başına miktar, tur sayısı ve eksik canla sınırlı toplam', () => {

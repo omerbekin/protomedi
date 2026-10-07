@@ -170,116 +170,58 @@ body {
   z-index: 25;
 }
 
-/* --- Debug menüsü: altta sabit, bölümlü hızlı düğme dock'u (ikon + kısa işlev yazısı + ON/OFF rozeti) --- */
+/* --- Debug menüsü: sekmeler + her sekmede ikonlu düğmeler (ikon + kısa etiket + ON/OFF ya da değer rozeti) --- */
 .debug-panel {
   display: flex;
   flex-direction: column;
 }
 
-.debug-dock {
-  display: flex;
-  flex-direction: column;
-  flex: 0 1 auto;
-  max-height: 52%;
-  margin: 0 -12px -12px;
-  padding: 8px 12px 10px;
-  background: rgba(15, 15, 25, 0.98);
-  border-top: 1px solid #ffd23f;
-}
-
-.debug-dock-bar {
+.debug-panel h3 {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 36px;
-  padding-bottom: 6px;
-}
-
-.debug-dock-hint {
-  font: 13px system-ui, sans-serif;
-  color: #8d99ae;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.debug-dock-fold {
-  flex: none;
-  min-height: 36px;
-  padding: 0 10px;
-  font: bold 13px system-ui, sans-serif;
-  color: #edf2f4;
-  background: #2b2d42;
-  border: 1px solid #4a4e69;
-  border-radius: 6px;
-}
-
-.debug-dock-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 4px;
-  touch-action: pan-y;
-}
-
-.debug-dock-title {
-  margin: 8px 0 6px;
-  padding-bottom: 3px;
-  font: bold 13px system-ui, sans-serif;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #ffd23f;
-  border-bottom: 1px solid rgba(255, 210, 63, 0.45);
-}
-
-.debug-dock-title:first-child {
-  margin-top: 0;
-}
-
-.debug-dock-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
-.debug-dock-btn {
-  display: flex;
-  align-items: center;
+.debug-h-icon {
+  width: 18px;
+  height: 18px;
+  image-rendering: pixelated;
+}
+
+.debug-grid {
+  grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
+}
+
+.debug-action.debug-ibtn {
+  justify-content: flex-start;
   gap: 8px;
   min-height: 48px;
   padding: 4px 8px 4px 6px;
   text-align: left;
-  color: #edf2f4;
-  background: #2b2d42;
-  border: 2px solid #4a4e69;
+  border-width: 2px;
   border-radius: 8px;
 }
 
-.debug-dock-btn.on {
+.debug-action.debug-ibtn.on {
   background: #25402e;
   border-color: #7dff9b;
   box-shadow: 0 0 8px rgba(125, 255, 155, 0.35);
 }
 
-.debug-dock-btn:active {
-  background: #4a4e69;
-}
-
-.debug-dock-iconbox {
+.debug-ibtn-iconbox {
   position: relative;
   flex: none;
   width: 32px;
   height: 32px;
 }
 
-.debug-dock-icon {
+.debug-ibtn-icon {
   width: 32px;
   height: 32px;
   image-rendering: pixelated;
 }
 
-.debug-dock-overlay {
+.debug-ibtn-overlay {
   position: absolute;
   right: -3px;
   bottom: -3px;
@@ -288,33 +230,71 @@ body {
   image-rendering: pixelated;
 }
 
-.debug-dock-text {
+.debug-ibtn-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
   line-height: 1.15;
 }
 
-.debug-dock-label {
+.debug-ibtn-label {
   font: bold 13px system-ui, sans-serif;
   overflow-wrap: anywhere;
 }
 
-.debug-dock-badge {
+.debug-ibtn-badge {
   margin-top: 2px;
   font: bold 13px monospace;
 }
 
-.debug-dock-badge.on {
+.debug-ibtn-badge.on {
   color: #7dff9b;
 }
 
-.debug-dock-badge.off {
+.debug-ibtn-badge.off {
   color: #8d99ae;
 }
 
-.debug-dock-badge.val {
+.debug-ibtn-badge.val {
   color: #ffd23f;
+}
+
+.debug-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.debug-tab-icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  image-rendering: pixelated;
+}
+
+/* Test Mode: takım yuvaları ve class seçici */
+.debug-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 6px;
+}
+
+.debug-action.debug-ibtn.slot {
+  min-height: 48px;
+}
+
+.debug-action.debug-ibtn.slot.sel {
+  border-color: #ffd23f;
+  box-shadow: 0 0 8px rgba(255, 210, 63, 0.45);
+}
+
+.debug-action.debug-ibtn.sidebtn.party.on {
+  border-color: #6ec1ff;
+}
+
+.debug-action.debug-ibtn.sidebtn.enemies.on {
+  border-color: #ff6b6b;
 }
 
 /* --- Ayarlar (sağ üst) --- */
@@ -401,6 +381,38 @@ body {
 
 .settings-btn:active {
   background: #4a4e69;
+}
+
+.settings-row[hidden] {
+  display: none;
+}
+
+.settings-confirm {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(255, 210, 63, 0.08);
+  border: 1px solid #ffd23f;
+  border-radius: 6px;
+}
+
+.settings-confirm[hidden] {
+  display: none;
+}
+
+.settings-confirm-text {
+  font: bold 14px system-ui, sans-serif;
+  color: #ffd23f;
+}
+
+.settings-confirm-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.settings-confirm-row .settings-btn {
+  flex: 1;
+  margin-left: 0;
 }
 
 .settings-note {
@@ -621,16 +633,7 @@ body {
   border-radius: 6px;
 }
 
-/* Kısa sahnede (<= 720px; JS: html.compact, döndürülmüş sahnede de doğru) dock daha az yer kaplar, sekme içeriğine yer kalır */
-:root.compact .debug-dock {
-  max-height: 44%;
-  padding: 4px 12px 6px;
-}
-
-:root.compact .debug-dock-btn {
-  min-height: 44px;
-}
-
+/* Kısa sahnede (<= 720px; JS: html.compact, döndürülmüş sahnede de doğru) sekme çubuğu sıkışık */
 :root.compact .debug-tabs {
   margin: 6px 0 2px;
 }
@@ -645,6 +648,3 @@ body {
   width: min(520px, calc(var(--stage-w, 100vw) - 190px - var(--sar) - var(--sal)));
 }
 
-:root.short .debug-dock {
-  max-height: 38%;
-}

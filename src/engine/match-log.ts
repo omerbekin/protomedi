@@ -85,7 +85,7 @@ export function snapshotUnit(battle: Battle, c: Combatant): UnitSnap {
     counter: Math.round(c.turnCounter),
     speedBoost: battle.speedBoostOf(c.uid),
     cooldowns: { ...c.cooldowns },
-    statuses: c.statuses.map((s) => `${s.kind}:${s.turns}`),
+    statuses: c.statuses.map((s) => `${s.kind}${s.stacks !== undefined ? `x${s.stacks}` : ''}:${s.turns}`),
     ground: battle.ground.filter((g) => g.board === c.board && g.slots.includes(c.slot)).map((g) => `${g.ground}:${g.turns}${g.sourceSide === c.side ? '(own)' : ''}`),
     board: c.board,
     summoned: c.summoned,
@@ -117,21 +117,31 @@ function describeEventBody(battle: Battle, e: BattleEvent): string | null {
     case 'rage':
       return `${L(e.actor)} rage ${e.delta >= 0 ? '+' : ''}${e.delta} (now ${e.after}/${e.max})`;
     case 'damage':
-      return `${L(e.source)} -> ${L(e.target)}: ${e.amount} dmg${e.absorbed ? ` (+${e.absorbed} absorbed)` : ''}${e.crit ? ' CRIT' : ''}${e.redirected ? ' (guard redirect)' : ''}, hp ${e.hpAfter}${e.shieldAfter ? `, shield ${e.shieldAfter}` : ''}${e.magicShieldAfter ? `, mshield ${e.magicShieldAfter}` : ''}`;
+      return `${L(e.source)} -> ${L(e.target)}: ${e.amount} dmg${e.absorbed ? ` (+${e.absorbed} absorbed)` : ''}${e.crit ? ' CRIT' : ''}${e.redirected ? ' (guard redirect)' : ''}${e.status === 'wither' ? ' [wither tick]' : e.status === 'omen' ? ' [DOOM]' : e.status ? ` [${e.status}]` : ''}, hp ${e.hpAfter}${e.shieldAfter ? `, shield ${e.shieldAfter}` : ''}${e.magicShieldAfter ? `, mshield ${e.magicShieldAfter}` : ''}`;
+    case 'omen':
+      return e.cause === 'transfer' ? `${L(e.target)} +omen ${e.delta} (Ill Omen) [${e.stacks}/${e.max}]` : `${L(e.source)} -> ${L(e.target)}: +omen ${e.delta}${e.crit ? ' (crit)' : ''} [${e.stacks}/${e.max}]`;
+    case 'doom':
+      return e.cause === 'expire'
+        ? `DOOM (omens expired) on ${L(e.target)}: ${e.omens} omen(s) x${e.mult} (snapshot of ${L(e.source)})`
+        : `DOOM on ${L(e.target)}: ${e.omens} omen(s) x${e.mult}${e.cause === 'detonate' ? ` (detonated by ${L(e.source)}${e.skill ? ` ${battle.skill(e.skill)?.name ?? e.skill}` : ''})` : ` (completed by ${L(e.source)})`}`;
+    case 'omenTransfer':
+      return `Ill Omen (${L(e.source)}): ${e.stacks} omen(s) pass ${L(e.from)} -> ${L(e.to)} [${e.after}]`;
     case 'dodge':
       return `${L(e.source)} -> ${L(e.target)}: DODGED`;
     case 'miss':
       return `${L(e.source)} -> ${L(e.target)}: MISSED`;
     case 'heal':
-      return `${L(e.source)} heals ${L(e.target)} ${e.amount}${e.crit ? ' CRIT' : ''}, hp ${e.hpAfter}`;
+      return `${L(e.source)} heals ${L(e.target)} ${e.amount}${e.crit ? ' CRIT' : ''}${e.cause === 'dark_bond' ? ' (Dark Bond copy of life steal)' : ''}, hp ${e.hpAfter}`;
+    case 'shieldTrigger':
+      return `${L(e.bearer)}'s ${battle.skill(e.skill)?.name ?? e.skill} (from ${L(e.caster)}) absorbed ${e.absorbed} from ${L(e.attacker)}: ${[e.burned ? `burns ${e.burned} MP` : '', e.dispelled ? `dispels ${e.dispelled}` : '', e.mana ? `+${e.mana} MP to ${L(e.bearer)}` : ''].filter(Boolean).join(', ')}`;
     case 'shield':
       return `${L(e.source)} -> ${L(e.target)}: ${e.amount >= 0 ? '+' : ''}${e.amount} ${e.magic ? 'magic ' : ''}shield (now ${e.magic ? e.magicShieldAfter : e.shieldAfter})`;
     case 'manaBurn':
-      return `${L(e.source)} burns ${e.amount} MP of ${L(e.target)} (now ${e.mpAfter})`;
+      return `${L(e.source)} burns ${e.amount} MP of ${L(e.target)} (now ${e.mpAfter})${e.cause ? ` [${e.cause}]` : ''}`;
     case 'status':
-      return `${L(e.target)} +${e.status} ${e.turns}t (from ${L(e.source)})${e.cause ? ` [${e.cause}]` : ''}`;
+      return `${L(e.target)} +${e.status}${e.stacks !== undefined ? ` x${e.stacks}` : ''} ${e.turns}t (from ${L(e.source)})${e.stacks !== undefined ? ` [omen timer ${e.turns}]` : ''}${e.partner ? ` bond with ${L(e.partner)}` : ''}${e.cause ? ` [${e.cause}]` : ''}`;
     case 'statusEnd':
-      return `${L(e.target)} -${e.status}${e.broken ? ' (ended early: broken / control)' : ' (expired)'}`;
+      return `${L(e.target)} -${e.status}${e.broken ? ' (ended early: broken / control)' : e.dispelled ? ` (DISPELLED by ${e.source ? L(e.source) : '?'}${e.cause ? ` [${e.cause}]` : ''})` : e.cause === 'bond_broken' ? ' (bond broken)' : e.cause === 'doom' ? ' (burst into Doom)' : e.cause === 'ill_omen' ? ' (passed on by Ill Omen)' : e.consumed ? ' (used up by its own attack)' : ' (expired)'}`;
     case 'summon':
       return `${L(e.actor)} summons ${unitLabel(e.combatant)}${e.empowered === true ? ' EMPOWERED (fed: corpse consumed)' : e.empowered === false ? ' unfed (no corpse to consume)' : ''} (hp ${e.combatant.hp}, str ${e.combatant.stats.str}, int ${e.combatant.stats.int}, own board cell ${e.combatant.slot})`;
     case 'corpseConsumed':
@@ -141,7 +151,7 @@ function describeEventBody(battle: Battle, e: BattleEvent): string | null {
     case 'revive':
       return `${L(e.source)} revives ${L(e.target)} (hp ${e.hpAfter}, mp ${e.mpAfter})`;
     case 'mpRegen':
-      return `${L(e.actor)} +${e.amount} MP (now ${e.after})`;
+      return `${L(e.actor)} +${e.amount} MP (now ${e.after})${e.cause ? ` [${e.cause}]` : ''}`;
     case 'moved':
       return `${L(e.actor)} moves cell ${e.from} -> ${e.to}`;
     case 'passive':
@@ -489,6 +499,11 @@ function candidateLine(c: AiExplanation['candidates'][number], withPer: boolean)
   if (c.burn) parts.push(`burn ${c.burn}`);
   if (c.buff) parts.push(`buff ${c.buff}`);
   if (c.mitigation) parts.push(`mitigation ${c.mitigation}`);
+  if (c.curse) parts.push(`curse ${c.curse}`);
+  if (c.notes && c.notes.length > 0) parts.push(`{${c.notes.join('; ')}}`);
+  if (c.cleanse) parts.push(`cleanse ${c.cleanse}`);
+  if (c.bond) parts.push(`bond ${c.bond}`);
+  if (c.turnCost !== undefined) parts.push(`half-turn x${c.turnCost}${c.tempo ? ` tempo ${c.tempo}` : ''}`);
   if (c.revive) parts.push(`revive ${c.revive}`);
   if (c.summonValue !== undefined) parts.push(`summonValue ${c.summonValue}`);
   if (c.summonSlot !== undefined) parts.push(`-> own cell ${c.summonSlot}`);
@@ -517,10 +532,12 @@ function globalText(g: AiExplanation['global']): string {
 }
 
 function skillLine(sk: SkillDef): string {
-  const cost = `${sk.cost.resource.toUpperCase()} ${sk.cost.amount}`;
+  const cost = sk.cost.ofCurrent ? `${sk.cost.resource.toUpperCase()} ${Math.round(sk.cost.ofCurrent * 100)}% of current${sk.cost.amount ? ` +${sk.cost.amount}` : ''}` : `${sk.cost.resource.toUpperCase()} ${sk.cost.amount}`;
   const extra = [
     sk.cooldown ? `cd ${sk.cooldown}` : '',
     sk.initialCooldown ? `initialCd ${sk.initialCooldown}` : '',
+    sk.turnCost !== undefined && sk.turnCost < 1 ? `turnCost ${sk.turnCost}` : '',
+    sk.excludeSelf ? 'excludeSelf' : '',
     sk.motion === 'melee' ? 'melee' : sk.motion,
     sk.reach ? `reach ${sk.reach}` : '',
     sk.area ? `area shape ${shapeLabel(sk.area)}` : '',

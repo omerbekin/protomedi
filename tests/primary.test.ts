@@ -552,7 +552,7 @@ describe('Luck primary: Lucky Escape (ölümcül vuruştan kurtulma) savaşta', 
 
 describe('skill temasına uygun stat (class verisi)', () => {
   it('Undead (Dark Mage, Int primary): hasar/yer etkisi skill\'leri Int ile ölçeklenir', () => {
-    for (const id of ['bone_throw', 'blood_rite', 'wail_of_the_dead']) {
+    for (const id of ['bone_throw', 'wail_of_the_dead']) { // madde 240: Blood Rite kalktı; Dark Bond ölçeksiz (hasar yok)
       const scales = content.skills[id]!.effects.flatMap((e) => ('scale' in e ? [e.scale] : []));
       expect(scales.length, id).toBeGreaterThan(0);
       expect(new Set(scales), id).toEqual(new Set(['int']));

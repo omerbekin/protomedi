@@ -4,7 +4,7 @@ import { betMultipliers, betStake } from './gamble';
 import { damageSpecFor, type DamageEffect } from './spec';
 import { slotOfTileUid } from './battle';
 import { attributePower, hitChance } from './stats';
-import type { Combatant, Side } from './types';
+import type { Combatant, OnAbsorbSpec, Side, SkillDef, SkillEffect } from './types';
 
 /**
  * Bir skill'in bir hedefe tahmini etkisi. Kalkan önce emer; değerler ortalama ve [min, max] aralığıdır
@@ -37,7 +37,10 @@ export interface TargetPreview {
   heal?: { min: number; max: number; avg: number; critChance: number; critMax: number };
   /** Tur bazlı şifa: tur başına miktar, tur sayısı, toplam (eksik canla sınırlı). */
   hot?: { perTurn: number; turns: number; total: number };
-  shield?: { amount: number; magic: boolean };
+  /** `onAbsorb`: kancalı kalkan (Spell Ward / Mana Barrier): emdikçe tetiklenecek kancalar (skills.json aynen). */
+  shield?: { amount: number; magic: boolean; onAbsorb?: OnAbsorbSpec };
+  /** Dispel/cleanse: hedeften silinecek durumların adları (Mana Barrier: debuff'lar). Silinecek yoksa boş dizi. */
+  dispel?: string[];
   /**
    * Çağrı (kullanıcının girdisinde): çağrılacak birim, maks canı ve (ceset tüketen çağrıda) beslenmiş mi + tüketilecek ceset (yoksa null).
    * `empowered` yalnızca Raise Dead gibi ceset tüketen çağrılarda tanımlı (UI mor parıltı / "Empowered" yazısı).
@@ -49,6 +52,24 @@ export interface TargetPreview {
   burn?: number;
   /** Uygulanacak durumlar, okunur metin (ör. "Taunt 2 turns"). */
   statuses?: string[];
+  /**
+   * Yığılan durum (Omen; skill isabet ederse): önce/sonra yığın (kritikte `afterCrit`), üst sınır, sayaç (`turnsLeft`: mevcut süre ya da yeni başlayacak süre;
+   * yeni Omen süreyi uzatmaz). `doom`: bu hamle Doom tetikliyorsa (yığın doluyor ya da detonate) patlama aralığı (kritik hariç; `critMax` kritikte en çok),
+   * patlayacak yığın, çarpan ve neden; `doomOnCrit`: kritik lanet (critStacks) yığını farklı yaparsa o durumdaki patlama (kritiksiz doldurmuyorsa
+   * yalnızca kritikte tetiklenir; detonate'te daha büyük patlama).
+   */
+  omen?: {
+    status: string;
+    before: number;
+    after: number;
+    afterCrit: number;
+    max: number;
+    turnsLeft: number;
+    doom?: DoomPreview;
+    doomOnCrit?: DoomPreview;
+  };
+  /** Karakter üstü DoT (Wither): tik başına hasar (zırh/zayıflık dahil), tur sayısı, toplam. */
+  dot?: { status: string; perTick: number; turns: number; total: number };
 }
 
 /**
@@ -142,7 +163,7 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
       hpLossMin: (prev?.hpLossMin ?? 0) + loss(r.min),
       hpLossMax: (prev?.hpLossMax ?? 0) + loss(r.max),
       lethal: null,
-      critChance: effect.guaranteedCrit ? 1 : actor.stats.critChance,
+      critChance: effect.guaranteedCrit ? 1 : battle.effectiveStats(actor).critChance,
       critMax: (prev?.critMax ?? 0) + (effect.guaranteedCrit ? r.max : Math.round(r.max * actor.stats.critMult)),
       hitChance: hit,
       expected: (prev?.expected ?? 0) + r.avg * hit,
@@ -208,7 +229,15 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         const recipient = effect.self ? actor : target;
         const mpLeft = skill.cost.resource === 'mp' ? actor.mp - skill.cost.amount : actor.mp;
         const amount = Math.round(attributePower(actor.stats, effect.scale, f) * effect.power) + Math.round((effect.bonusPerMana ?? 0) * mpLeft);
-        entry(recipient.uid).shield = { amount, magic: effect.shieldType === 'magic' };
+        entry(recipient.uid).shield = { amount, magic: effect.shieldType === 'magic', ...(effect.onAbsorb ? { onAbsorb: { ...effect.onAbsorb } } : {}) };
+      } else if (effect.type === 'dispel') {
+        const e = entry(target.uid);
+        const names = battle.dispelCandidates(target, effect.status).slice(0, effect.count ?? Infinity).map((s) => battle.statusDef(s.kind)?.name ?? s.kind);
+        e.dispel = [...(e.dispel ?? []), ...names];
+        if (names.length > 0) e.statuses = [...(e.statuses ?? []), `Removes ${names.join(', ')}`];
+      } else if (effect.type === 'bond') {
+        const e = entry(target.uid);
+        e.statuses = [...(e.statuses ?? []), `${battle.statusDef('dark_bond')?.name ?? 'Dark Bond'} ${effect.turns} turns`];
       } else if (effect.type === 'summon') {
         const sp = battle.summonPreview(actor.uid, skill.id, summonPick?.corpseUid, summonPick?.slot);
         if (sp.unit) entry(actor.uid).summon = { unit: sp.unit.id, name: sp.unit.name, hp: sp.unit.stats.hp, slot: sp.slot, ...(sp.empowered !== undefined ? { empowered: sp.empowered, corpse: sp.corpse?.uid ?? null } : {}) };
@@ -225,6 +254,14 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
       } else if (effect.type === 'guard') {
         const e = entry(target.uid);
         e.statuses = [...(e.statuses ?? []), `Guard ${effect.turns} turns`];
+      } else if (effect.type === 'dot') {
+        const amount = Math.round(attributePower(actor.stats, effect.scale, f) * effect.power);
+        const old = target.statuses.find((s) => s.kind === effect.status)?.amount ?? 0;
+        const perTick = battle.dotTickDamage(effect.status, Math.max(amount, old), target);
+        entry(target.uid).dot = { status: effect.status, perTick, turns: effect.turns, total: perTick * effect.turns };
+      } else if (effect.type === 'omen') {
+        const o = omenPreview(battle, actor, skill, target, effect.status ?? 'omen', effect.stacks, effect.critStacks ?? effect.stacks, pool(target));
+        if (o) entry(target.uid).omen = o;
       }
     }
   }
@@ -236,4 +273,44 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
     e.damage.lethal = e.damage.hpLossMin >= target.hp ? 'sure' : e.damage.hpLossMax >= target.hp ? 'maybe' : null;
   }
   return [...out.values()];
+}
+
+/** Doom patlamasının önizlemesi (kritik hariç aralık; `hpLoss`: skill'in vuruşundan sonra kalan kalkan/canla sınırlı ortalama can kaybı). */
+export interface DoomPreview {
+  min: number;
+  max: number;
+  avg: number;
+  critMax: number;
+  critChance: number;
+  omens: number;
+  mult: number;
+  cause: 'complete' | 'detonate';
+  hpLoss: number;
+}
+
+/**
+ * Omen etkisinin hedefteki önizlemesi (isabet ederse): yığın önce/sonra, sayaç ve tetiklenecekse Doom aralığı (Hexer'in o anki ölçek statı ve kritik şansı;
+ * gerçek patlamayla aynı battle.doomRange). `p`: skill'in hasar etkilerinden sonra hedefte kalan can/kalkan (önizleme havuzu).
+ */
+function omenPreview(battle: Battle, actor: Combatant, skill: SkillDef, target: Combatant, kind: string, stacks: number, critStacks: number, p: { hp: number; shield: number; magicShield: number }): TargetPreview['omen'] {
+  const def = battle.statusDef(kind);
+  if (!def?.maxStacks) return undefined;
+  const max = def.maxStacks;
+  const cur = target.statuses.find((s) => s.kind === kind);
+  const before = cur?.stacks ?? 0;
+  const after = Math.min(max, before + stacks);
+  const afterCrit = Math.min(max, before + critStacks);
+  const det = skill.effects.find((e): e is Extract<SkillEffect, { type: 'detonate' }> => e.type === 'detonate' && e.status === kind);
+  const doomAt = (omens: number): DoomPreview | undefined => {
+    const doom = def.doom;
+    if (!doom || (!det && omens < max)) return undefined;
+    const mult = det ? det.mult : 1;
+    const r = battle.doomRange(target, kind, omens, mult, actor.stats[doom.scale]);
+    if (!r) return undefined;
+    const soak = doom.damageType === 'magic' ? p.magicShield + p.shield : p.shield;
+    return { min: r.min, max: r.max, avg: r.avg, critMax: Math.round(r.max * actor.stats.critMult), critChance: battle.effectiveStats(actor).critChance, omens, mult, cause: det ? 'detonate' : 'complete', hpLoss: Math.min(p.hp, Math.max(0, r.avg - soak)) };
+  };
+  const doom = doomAt(after);
+  const doomCrit = afterCrit !== after ? doomAt(afterCrit) : undefined;
+  return { status: kind, before, after, afterCrit, max, turnsLeft: cur ? cur.turns : (def.duration ?? 3), ...(doom ? { doom } : {}), ...(doomCrit ? { doomOnCrit: doomCrit } : {}) };
 }

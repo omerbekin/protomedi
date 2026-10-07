@@ -17,8 +17,8 @@
   "ai": "darkmage",
   "skills": [
     "bone_throw",
-    "blood_rite",
     "wail_of_the_dead",
+    "dark_bond",
     "raise_dead"
   ],
   "passive": {
@@ -28,7 +28,7 @@
     "text": "",
     "effect": {
       "type": "soulDrain",
-      "ratio": 0.2
+      "ratio": 0.35
     }
   },
   "role": "Dark Mage"

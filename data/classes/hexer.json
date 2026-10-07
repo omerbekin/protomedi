@@ -1,0 +1,37 @@
+{
+  "id": "hexer",
+  "name": "Hexer",
+  "spriteId": "hexer",
+  "color": "#6a2f5f",
+  "logo": "rune",
+  "role": "Curse Caster",
+  "frontPriority": 6.5,
+  "attributes": {
+    "str": 6,
+    "int": 7,
+    "dex": 3,
+    "luck": 14
+  },
+  "primary": "luck",
+  "armor": 4,
+  "magicArmor": 0,
+  "ai": "hexer",
+  "skills": [
+    "evil_eye",
+    "withering_curse",
+    "jinx",
+    "doom_mark"
+  ],
+  "passive": {
+    "id": "ill_omen",
+    "name": "Ill Omen",
+    "icon": "soul",
+    "text": "When a cursed enemy dies, its Omens pass to the nearest enemy (at most 2; a Doom kill passes 1). Passed Omens never trigger Doom.",
+    "effect": {
+      "type": "omenTransfer",
+      "status": "omen",
+      "maxOnArrival": 2,
+      "onDoomKill": 1
+    }
+  }
+}

@@ -78,7 +78,7 @@ describe('kritik vuruş', () => {
     const mage = unit(b, 'party', 'mage');
     Object.assign(mage.stats, { critChance: 1, critMult: 3 });
     const sh = ofType(act(b, mage.uid, 'mana_barrier', unit(b, 'party', 'warrior').uid), 'shield')[0]!;
-    expect(sh.amount).toBe(Math.round(attributePower(mage.stats, 'int', content.formulas) * (content.skills.mana_barrier!.effects[0] as { power: number }).power));
+    expect(sh.amount).toBe(Math.round(attributePower(mage.stats, 'int', content.formulas) * (content.skills.mana_barrier!.effects.find((e) => e.type === 'shield') as { power: number }).power));
   });
 
   it('kritik damage olayında işaretlenir; kritik yokken false', () => {
@@ -558,7 +558,7 @@ describe('Anti-Mage: mana yakma, eksik manaya göre hasar, büyü kalkanı', () 
       const b = make(TA);
       const am = unit(b, 'party', 'antimage');
       am.mp = mp;
-      return ofType(act(b, am.uid, 'spell_ward'), 'shield')[0]!.amount;
+      return ofType(act(b, am.uid, 'spell_ward', am.uid), 'shield')[0]!.amount; // madde 240: tek dost (kendisi dahil)
     };
     expect(shield(40)).toBeGreaterThan(shield(15));
     const b = make(TA);
@@ -607,7 +607,7 @@ describe('Anti-Mage: mana yakma, eksik manaya göre hasar, büyü kalkanı', () 
   it('Spell Ward kendine büyü kalkanı basar: yalnızca büyü hasarını emer, fizikseli emmez', () => {
     const b = make({ party: ['antimage', 'warrior', 'archer', 'mage'], enemies: ['warrior', 'mage', 'druid', 'archer'] });
     const am = unit(b, 'party', 'antimage');
-    const ev = ofType(act(b, am.uid, 'spell_ward'), 'shield')[0]!;
+    const ev = ofType(act(b, am.uid, 'spell_ward', am.uid), 'shield')[0]!;
     expect(ev.magic).toBe(true);
     expect(am.magicShield).toBe(ev.amount);
     expect(am.shield).toBe(0);
@@ -949,7 +949,7 @@ describe('Pasif skill\'ler', () => {
       expect(def.passive, id).toBeDefined();
       expect(def.passive!.name.length, id).toBeGreaterThan(0);
       expect(describePassive(def.passive!, def.stats, content.formulas).length, id).toBeGreaterThan(20); // açıklama değerleri de yazar
-      expect(['rage', 'divineLight', 'spellEcho', 'longshot', 'verdantBlessing', 'soulDrain', 'manaOverflow', 'armorAura', 'bonusVsStatus'], id).toContain(def.passive!.effect.type);
+      expect(['rage', 'divineLight', 'spellEcho', 'longshot', 'verdantBlessing', 'soulDrain', 'manaOverflow', 'armorAura', 'bonusVsStatus', 'omenTransfer'], id).toContain(def.passive!.effect.type);
     }
   });
 
@@ -977,20 +977,22 @@ describe('Pasif skill\'ler', () => {
     expect(dmg(6) / dmg(0)).toBeLessThan(1 + perRow * 2 + 0.03);
   });
 
-  it('Undead (Dark Mage) - Vampiric Bite: verdiği hasarın %20\'si (en az 1) kadar iyileşir; çağrısının hasarından da', () => {
+  it('Undead (Dark Mage) - Vampiric Bite: verdiği hasarın %20\'si (en az 1) kadar iyileşir (oran veriden, madde 240: %35); çağrısının hasarından da', () => {
+    const ratio = (content.classes.undead!.passive!.effect as { ratio: number }).ratio;
+    expect(ratio).toBe(0.35);
     const b = calm(grid(cells({ 0: 'undead' }), cells({ 0: 'defender' })));
     const u = b.get('party-0')!;
     u.hp = u.maxHp - 30;
     const events = act(b, 'party-0', 'bone_slash', 'enemy-0');
     const dmg = ofType(events, 'damage')[0]!.amount;
-    expect(ofType(events, 'heal')[0]!.amount).toBe(Math.max(1, Math.round(dmg * 0.2)));
+    expect(ofType(events, 'heal')[0]!.amount).toBe(Math.max(1, Math.round(dmg * ratio)));
     // iskeletin vurduğu hasardan da sahibi iyileşir
     const sk = ofType(act(b, 'party-0', 'raise_dead', undefined, 1), 'summon')[0]!.combatant.uid;
     Object.assign(b.get(sk)!.stats, { accuracy: 10, evasion: 0 });
     const before = u.hp;
     const ev2 = act(b, sk, 'skeleton_strike', 'enemy-0');
     const dmg2 = ofType(ev2, 'damage')[0]!.amount;
-    expect(u.hp - before).toBe(Math.max(1, Math.round(dmg2 * 0.2)));
+    expect(u.hp - before).toBe(Math.max(1, Math.round(dmg2 * ratio)));
     expect(ofType(ev2, 'heal')[0]!.target).toBe('party-0');
   });
 

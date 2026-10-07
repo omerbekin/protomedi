@@ -4,7 +4,8 @@ import { audioSettings, playSfxOn } from './game/audio';
 import { BattleScene } from './game/scenes/BattleScene';
 import { TeamSelectScene } from './game/scenes/TeamSelectScene';
 import { DebugMenu } from './ui/debug-menu';
-import { DEBUG_TABS, registerDebugTools } from './ui/debug-tools';
+import { DEBUG_INFO_TAB, DEBUG_TABS, registerDebugTools } from './ui/debug-tools';
+import { flowContext, startNewGame, startTeamSelect } from './game/session-flow';
 import { SettingsMenu } from './ui/settings';
 import { createFullscreenButton } from './ui/fullscreen';
 import { installViewport, parseRotateMode } from './ui/viewport';
@@ -38,7 +39,7 @@ if (import.meta.env.DEV) (window as unknown as { __game: Phaser.Game }).__game =
 installViewport(game, document.getElementById('stage')!, parseRotateMode(window.location.search));
 
 // --- Debug menu ---
-const debug = new DebugMenu(document.getElementById('ui-root')!, DEBUG_TABS);
+const debug = new DebugMenu(document.getElementById('ui-root')!, DEBUG_TABS, DEBUG_INFO_TAB);
 
 // --- Settings (top right): sound volume 0-10 ---
 new SettingsMenu(document.getElementById('ui-root')!, {
@@ -46,6 +47,8 @@ new SettingsMenu(document.getElementById('ui-root')!, {
     audioSettings.volume = level / 10;
   },
   preview: () => playSfxOn((game.sound as unknown as { context?: AudioContext }).context, 'stunChime'),
+  // New Game / Team Select (an unfinished battle asks for confirmation first)
+  flow: { context: () => flowContext(game), newGame: () => startNewGame(game), teamSelect: () => startTeamSelect(game) },
 });
 
 // --- Fullscreen button (top right, next to the wiki); hidden where the browser has no Fullscreen API (iPhone: shows an Add to Home Screen hint) ---
@@ -63,25 +66,8 @@ const wiki = new WikiPanel(document.getElementById('ui-root')!, {
     battleNow()?.applyDebugTiming();
   },
 });
-debug.register({
-  id: 'ui.wiki',
-  tab: 'Tweaks',
-  section: 'Display',
-  dock: { group: 'Tools', order: 90, icon: 'book', short: 'Open wiki' },
-  label: 'Open wiki',
-  hint: 'Open the in-game wiki (the book button, top right)',
-  run: () => wiki.setOpen(true),
-});
-
-registerDebugTools({
-  game,
-  debug,
-  // Asset Gallery artık Wiki > Assets içinde: debug menüsünden o bölümde açılır
-  openAssets: (section = 'assets') => {
-    wiki.show(section);
-    wiki.setOpen(true);
-  },
-});
+registerDebugTools({ game, debug });
+debug.registerMenuControls();
 
 // Derin bağlantı: ?wiki=<bölüm> wiki'yi o bölümde açar (assets, sounds, animations, icons, art, palette, legacy, classes, skills...); ?wiki= boşsa başlangıç
 const wikiParam = new URLSearchParams(window.location.search).get('wiki');

@@ -6857,6 +6857,61 @@
         }
       ]
     },
+    "gauntletDrop": {
+      "gain": 1.25,
+      "layers": [
+        {
+          "type": "noise",
+          "filter": "lowpass",
+          "f0": 160,
+          "f1": 520,
+          "q": 0.9,
+          "attack": 0.24,
+          "decay": 0.08,
+          "gain": 1
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 220,
+          "f1": 560,
+          "q": 1.1,
+          "attack": 0.22,
+          "decay": 0.06,
+          "gain": 0.45
+        },
+        {
+          "type": "tone",
+          "wave": "sawtooth",
+          "f0": 36,
+          "f1": 58,
+          "attack": 0.23,
+          "decay": 0.1,
+          "gain": 0.5,
+          "filter": {
+            "type": "lowpass",
+            "f": 150,
+            "q": 0.8
+          }
+        },
+        {
+          "type": "tone",
+          "wave": "triangle",
+          "f0": 48,
+          "f1": 70,
+          "attack": 0.2,
+          "decay": 0.08,
+          "gain": 0.3,
+          "tremHz": 18,
+          "tremDepth": 0.35,
+          "filter": {
+            "type": "lowpass",
+            "f": 220,
+            "q": 0.7
+          }
+        }
+      ]
+    },
     "shieldBang": {
       "gain": 1,
       "layers": [

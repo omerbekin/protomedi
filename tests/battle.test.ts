@@ -228,7 +228,8 @@ describe('Dark Mage pasifi: Soul Drain (verilen hasarın %10\'u şifa)', () => {
     const dmg = ofType(events, 'damage')[0]!;
     const heal = ofType(events, 'heal')[0]!;
     expect(heal.target).toBe(UNDEAD);
-    expect(heal.amount).toBe(Math.max(1, Math.round(dmg.amount * 0.2)));
+    const ratio = (content.classes.undead!.passive!.effect as { ratio: number }).ratio; // veriden (madde 240: %35)
+    expect(heal.amount).toBe(Math.max(1, Math.round(dmg.amount * ratio)));
   });
 
   it('canı doluysa boş şifa olayı üretilmez (bedelsiz saldırıda)', () => {
@@ -257,7 +258,7 @@ describe('kalkan', () => {
     const b = newBattle(1, false); // kritik açık: kalkan yine de sabit olmalı
     b.get(E_MAGE)!.stats.critChance = 1; // her vuruş kritik olurdu
     const shield = ofType(act(b, E_MAGE, 'mana_barrier', E_DRUID), 'shield')[0]!;
-    const effect = content.skills.mana_barrier!.effects[0]!;
+    const effect = content.skills.mana_barrier!.effects.find((e) => e.type === 'shield')!; // madde 240: önce dispel, sonra kalkan
     const power = effect.type === 'shield' ? effect.power : 0;
     const mage = b.get(E_MAGE)!;
     expect(shield.amount).toBe(Math.round(attributePower(mage.stats, 'int', content.formulas) * power));

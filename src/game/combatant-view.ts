@@ -68,6 +68,8 @@ export class CombatantView {
   private glowFx?: Phaser.FX.Glow;
   private glowKey = '';
   private readonly marker: Phaser.GameObjects.Triangle;
+  /** Ctrl+tık seçimi: birimin çevresinde ince çerçeve. */
+  private readonly selFrame: Phaser.GameObjects.Rectangle;
   private readonly realSprite: boolean;
   private homeX: number;
   private readonly hpY: number;
@@ -136,6 +138,8 @@ export class CombatantView {
       .setStrokeStyle(3, 0x000000)
       .setVisible(false);
 
+    this.selFrame = scene.add.rectangle(0, -this.h / 2, this.w + 16, this.h + 16).setStrokeStyle(3, 0x6ec1ff, 0.95).setVisible(false);
+
     // Durum ikonları (taunt, guard, regen) can çubuğunun solunda
     this.statusBox = scene.add.container(0, this.hpY);
 
@@ -151,6 +155,7 @@ export class CombatantView {
       this.statusBox,
       name,
       this.marker,
+      this.selFrame,
     ]);
     this.container.setDepth(y); // öndeki sıra arkadakinin üstünde çizilir
     this.setHp(combatant.hp, false);
@@ -187,13 +192,22 @@ export class CombatantView {
     this.scene.tweens.add({ targets: fx, outerStrength: hi, duration: strong ? 480 : 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
 
+  /** Ctrl+tık ile seçili birimin çerçevesi (ince, açık mavi). */
+  setSelected(on: boolean): void {
+    this.selFrame.setVisible(on);
+  }
+
+  get selected(): boolean {
+    return this.selFrame.visible;
+  }
+
   /** Komut verilen (aktif) karakterin üstünde ok işareti. */
   setActive(on: boolean): void {
     this.marker.setVisible(on && this.alive);
   }
 
   /** Dokunma/tıklama alanı: karakterin tamamı; fare üstüne gelince onOver/onOut çağrılır. */
-  makeTappable(onTap: () => void, onOver?: () => void, onOut?: () => void): void {
+  makeTappable(onTap: (p?: Phaser.Input.Pointer) => void, onOver?: () => void, onOut?: () => void): void {
     const zone = this.scene.add.zone(0, -this.h / 2, this.w + 24, this.h + 24).setInteractive();
     zone.on('pointerdown', onTap);
     if (onOver) zone.on('pointerover', onOver);
@@ -422,7 +436,7 @@ export class CombatantView {
 
   play(anim: AnimName): void {
     if (!this.realSprite) return;
-    const key = animKey(this.combatant.spriteId, anim);
+    const key = animKey(this.combatant.spriteId, anim, this.scene);
     if (key && this.scene.anims.exists(key)) this.sprite.play(key);
   }
 
@@ -664,7 +678,7 @@ export class CombatantView {
    */
   damageText(amount: number, ratio: number, crit = false, tags: DamageTags = {}): void {
     const level = damageNumberLevel(ratio);
-    const px = Math.round(52 + 64 * level) + (crit ? 14 : 0);
+    const px = Math.round(timing.damageNumberMinPx + timing.damageNumberSpanPx * level) + (crit ? timing.damageNumberCritBonusPx : 0); // boyutlar data/battle-layout.json > animation
     const icon = damageIconKind({ ...tags, crit });
     this.floatText(String(amount), crit ? colors.crit : damageColor(level), px, true, {
       kind: crit ? 'crit' : 'damage',

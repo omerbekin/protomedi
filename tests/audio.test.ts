@@ -11,8 +11,10 @@ describe('ses efektleri (data/audio.json)', () => {
       used.add(k);
     }
     // yedek: Holy Strike'ın eski (düşen kılıç) animasyonunun sesleri ve Charge'ın eski sesleri, silinmedi
-    // yedek: Defender'ın eski (rework öncesi) sesleri
-    const backup = ['swordWhoosh', 'swordStab', 'armorCharge', 'armorCrash', 'stunChime', 'warShout', 'testudo', 'effortHah', 'armorStomp', 'punchImpact'];
+    // yedek: Defender'ın eski (rework öncesi) sesleri; armorLeap: Fist Crush artık yürümüyor/sıçramıyor (madde 239)
+    const backup = ['swordWhoosh', 'swordStab', 'armorCharge', 'armorCrash', 'stunChime', 'warShout', 'testudo', 'effortHah', 'armorStomp', 'punchImpact', 'armorLeap',
+      // yedek: kaldırılan Blood Rite'ın sesi (Dark Bond ile değişti; Wiki > Legacy)
+      'clawRake'];
     for (const k of SFX_IDS) if (!backup.includes(k)) expect(used.has(k), `kullanılmayan ses: ${k}`).toBe(true);
   });
 

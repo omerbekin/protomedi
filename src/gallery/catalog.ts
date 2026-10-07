@@ -236,6 +236,8 @@ export interface CharacterEntry {
   sprites: Array<{ anim: string; url: string }>;
   idleUrl: string | null;
   avatarUrl: string | null;
+  /** Alternatif görünümler (assets/sprites/<id>/idle-<varyant>.png + assets/avatars/<id>-<varyant>.png; debug > Characters ile seçilir). */
+  variants: Array<{ variant: string; idleUrl: string; avatarUrl: string | null }>;
   /** assets/sprites_old altındaki eski sürümler. */
   oldSprites: Array<{ anim: string; url: string }>;
   missing: Array<'sprite' | 'avatar'>;
@@ -246,6 +248,8 @@ const toEntry = (kind: CharacterEntry['kind'], def: CombatantDef, files: AssetFi
   const old = groupByDir(files.spritesOld)[def.spriteId] ?? [];
   const avatar = avatarMap(files.avatars)[def.spriteId] ?? null;
   const idle = sprites.find((s) => s.anim === 'idle')?.url ?? null;
+  const avatars = avatarMap(files.avatars);
+  const variants = sprites.flatMap((s) => (s.anim.startsWith('idle-') ? [{ variant: s.anim.slice(5), idleUrl: s.url, avatarUrl: avatars[`${def.spriteId}-${s.anim.slice(5)}`] ?? null }] : []));
   const st = def.stats;
   return {
     id: def.id,
@@ -265,6 +269,7 @@ const toEntry = (kind: CharacterEntry['kind'], def: CombatantDef, files: AssetFi
     sprites,
     idleUrl: idle,
     avatarUrl: avatar,
+    variants,
     oldSprites: old,
     missing: [...(idle ? [] : (['sprite'] as const)), ...(avatar ? [] : (['avatar'] as const))],
   };
@@ -278,7 +283,10 @@ export function buildCharacters(files: AssetFiles): CharacterEntry[] {
 export function orphanAssets(files: AssetFiles): { sprites: string[]; avatars: string[]; old: string[] } {
   const known = new Set([...Object.values(content.classes), ...Object.values(content.summons)].map((d) => d.spriteId));
   const outside = (ids: string[]) => ids.filter((id) => !known.has(id)).sort();
-  return { sprites: outside(Object.keys(groupByDir(files.sprites))), avatars: outside(Object.keys(avatarMap(files.avatars))), old: outside(Object.keys(groupByDir(files.spritesOld))) };
+  // Varyant avatarı (<id>-<varyant>.png) bağlıdır: sahibi biliniyorsa ve idle-<varyant>.png varsa
+  const sprites = groupByDir(files.sprites);
+  const isVariantAvatar = (id: string): boolean => [...known].some((base) => id.startsWith(`${base}-`) && !!sprites[base]?.some((s) => s.anim === `idle-${id.slice(base.length + 1)}`));
+  return { sprites: outside(Object.keys(sprites)), avatars: outside(Object.keys(avatarMap(files.avatars))).filter((id) => !isVariantAvatar(id)), old: outside(Object.keys(groupByDir(files.spritesOld))) };
 }
 
 // ---------------------------------------------------------------- ikonlar
@@ -345,7 +353,7 @@ export function buildStatuses(): StatusEntry[] {
   const users = new Map<string, SkillRef[]>();
   for (const s of allSkills())
     for (const e of s.effects) {
-      const ids = e.type === 'status' ? [e.status] : e.type === 'randomStatus' ? e.options.map((o) => o.status) : [];
+      const ids = e.type === 'status' || e.type === 'dot' ? [e.status] : e.type === 'omen' ? [e.status ?? 'omen'] : e.type === 'randomStatus' ? e.options.map((o) => o.status) : [];
       for (const id of ids) if (!(users.get(id) ?? []).some((r) => r.id === s.id)) users.set(id, [...(users.get(id) ?? []), skillRef(s)]);
     }
   return Object.entries(content.statuses).map(([id, st]) => ({ id, name: st.name, type: st.type, icon: st.icon, color: st.color, text: st.text, usedBy: users.get(id) ?? [] }));

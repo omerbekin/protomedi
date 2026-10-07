@@ -15,8 +15,9 @@ export { accuracyOf, applySummonVariant, armorReduction, attributePower, buildDe
 export type { HitOutcome } from './stats';
 export { damageSpecFor } from './spec';
 export { betMultipliers, betStake } from './gamble';
+export { isRatioCost, skillCostAmount, skillCostLabel } from './cost';
 export { previewForTargets, previewSkill } from './preview';
-export type { TargetPreview } from './preview';
+export type { DoomPreview, TargetPreview } from './preview';
 export { ATTRIBUTE_NAME, describeGlobalSkill, describePassive, describeRage, describeSkill, TARGET_TEXT } from './skill-info';
 export type { EffectDefs, GlobalSkillInfo } from './skill-info';
 export type { SkillInfo } from './skill-info';

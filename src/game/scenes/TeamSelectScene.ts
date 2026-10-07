@@ -8,7 +8,8 @@ import { PRIMARY_GOLD, STAT_COLOR, STAT_ICON, STAT_LABEL } from '../../ui/stat-i
 import { initialSizes, newSeed } from '../seed';
 import { buildBackdrop, buildTip, classAvatar, ensureGlow, fitText, fx, goldText, makeMenuButton, placeTip, serif } from '../menu-ui';
 import type { MenuButton, TipContent } from '../menu-ui';
-import { archetypeOf, clampSize, freeCellFor, isTeamFull, isTestClass, missingMessage, pipLayout, randomizePool, rangeOf, rosterIds, rosterLayout, sizeSummary, stepSize, teamCount, trimToSize } from '../team-select-model';
+import { groupColor } from '../class-order';
+import { archetypeOf, clampSize, freeCellFor, isTeamFull, isTestClass, missingMessage, pipLayout, randomizePool, rangeOf, rosterGroups, rosterIds, rosterLayout, sizeSummary, stepSize, teamCount, trimToSize } from '../team-select-model';
 import { skillMiniGrid } from '../../ui/shape-diagram';
 import { drawQuadTile } from '../shape-draw';
 import type { SideSizes } from '../team-select-model';
@@ -42,6 +43,9 @@ const COL_GAP = 17;
 const LANE_GAP = 14;
 const ROSTER = { x: 40, y: 616, w: 1840, h: 320 };
 const CARD = { w: 188, h: 270 };
+/** Extra width of the divider between two primary-stat groups on the class shelf. */
+const ROSTER_SEP = 14;
+const PRIMARY_GROUP = colors.primaryGroup as Record<string, string>;
 const SIDE_HEX: Record<Side, string> = { party: colors.partySlot, enemies: colors.enemySlot };
 const SIDE_TITLE: Record<Side, string> = { party: 'PLAYER', enemies: 'ENEMY' };
 const SIDE_NAME: Record<Side, string> = { party: 'Player', enemies: 'Enemy' };
@@ -223,6 +227,14 @@ export class TeamSelectScene extends Phaser.Scene {
         teams: { party: [...this.teams.party], enemies: [...this.teams.enemies] } satisfies Teams, // cell lists (index = slot)
       });
     });
+  }
+
+  /** New Game from the settings menu: random teams of the chosen sizes, straight into a battle (same as the result screen's New Game). */
+  newGame(): void {
+    if (this.starting) return;
+    this.starting = true;
+    this.hideTip(true);
+    this.scene.start('BattleScene', { seed: newSeed(), mode: 'turns', battleId: content.DEFAULT_BATTLE, partySize: this.sizes.party, enemySize: this.sizes.enemies, teams: undefined });
   }
 
   private missingText(): string {
@@ -505,17 +517,35 @@ export class TeamSelectScene extends Phaser.Scene {
     serif(this, x + w - 36, y + 25, 'Tap a class to add it to the glowing team  -  or drag it onto a slot', 18, '#a8946f', { bold: false, stroke: 2 }).setOrigin(1, 0.5).setDepth(12);
 
     const ids = rosterIds();
+    const groupOf = new Map<string, number>();
+    rosterGroups().forEach((g, gi) => g.items.forEach((c) => groupOf.set(c.id, gi)));
+    const groupCount = new Set(groupOf.values()).size;
+    // Extra room for the thin coloured dividers between STR / DEX / INT / LCK groups (worst case: all of them in one row)
     const area = { x: x + 24, y: y + 62, w: w - 48, h: h - 62 - 12 };
-    const lay = rosterLayout(ids.length, area.w, area.h, CARD.w, CARD.h);
-    const rowsWidth = (r: number) => Math.min(lay.cols, ids.length - r * lay.cols) * lay.cardW + (Math.min(lay.cols, ids.length - r * lay.cols) - 1) * lay.gap;
-    ids.forEach((id, i) => {
-      const r = Math.floor(i / lay.cols);
-      const c = i % lay.cols;
-      const left = area.x + (area.w - rowsWidth(r)) / 2;
-      const cx = left + c * (lay.cardW + lay.gap) + lay.cardW / 2;
-      const cy = area.y + r * (lay.cardH + lay.gap) + lay.cardH / 2 + (area.h - (lay.rows * lay.cardH + (lay.rows - 1) * lay.gap)) / 2;
-      this.cards.set(id, this.buildCard(content.classes[id]!, cx, cy, lay.scale));
-    });
+    const lay = rosterLayout(ids.length, area.w - Math.max(0, groupCount - 1) * ROSTER_SEP, area.h, CARD.w, CARD.h);
+    const rowIds = (r: number) => ids.slice(r * lay.cols, (r + 1) * lay.cols);
+    const breaks = (arr: string[], k: number) => k > 0 && groupOf.get(arr[k]!) !== groupOf.get(arr[k - 1]!);
+    const rowsWidth = (r: number) => {
+      const arr = rowIds(r);
+      return arr.length * lay.cardW + (arr.length - 1) * lay.gap + arr.reduce((n, _, k) => n + (breaks(arr, k) ? ROSTER_SEP : 0), 0);
+    };
+    const dividers = this.add.graphics().setDepth(12);
+    const blockH = lay.rows * lay.cardH + (lay.rows - 1) * lay.gap;
+    for (let r = 0; r < lay.rows; r++) {
+      const arr = rowIds(r);
+      let cursor = area.x + (area.w - rowsWidth(r)) / 2;
+      const cy = area.y + r * (lay.cardH + lay.gap) + lay.cardH / 2 + (area.h - blockH) / 2;
+      arr.forEach((id, k) => {
+        if (breaks(arr, k)) {
+          const col = hexNum(groupColor(PRIMARY_GROUP, content.classes[id]?.primary));
+          const lx = cursor + (ROSTER_SEP - lay.gap) / 2; // middle of the gap between the two cards
+          dividers.lineStyle(2, col, 0.75).lineBetween(lx, cy - lay.cardH / 2 + 6, lx, cy + lay.cardH / 2 - 6);
+          cursor += ROSTER_SEP;
+        }
+        this.cards.set(id, this.buildCard(content.classes[id]!, cursor + lay.cardW / 2, cy, lay.scale));
+        cursor += lay.cardW + lay.gap;
+      });
+    }
   }
 
   private statCell(def: CombatantDef, kind: (typeof ATTRS)[number]): TipContent {
@@ -580,6 +610,14 @@ export class TeamSelectScene extends Phaser.Scene {
     tint.fillGradientStyle(col, col, col, col, 0.3, 0.3, 0, 0).fillRect(5, 5, CARD.w - 10, 150);
     cornerOrnaments(tint, 0, 0, CARD.w, CARD.h, 3);
 
+    // Primary-stat group accent: coloured top strip + inner outline, and an icon + letters badge straddling the top edge (colour-blind safe)
+    const grp = def.primary ? hexNum(groupColor(PRIMARY_GROUP, def.primary)) : null;
+    if (grp !== null && def.primary) {
+      const accent = add(this.add.graphics());
+      accent.fillStyle(grp, 0.9).fillRect(5, 5, CARD.w - 10, 4);
+      accent.lineStyle(1.5, grp, 0.55).strokeRect(4, 4, CARD.w - 8, CARD.h - 8);
+    }
+
     // Avatar (head portrait) in a framed plate
     const px = 44;
     const py = 14;
@@ -620,6 +658,19 @@ export class TeamSelectScene extends Phaser.Scene {
       const gem = this.add.container(gx, 24, [g, count]).setVisible(false);
       add(gem);
       gems[side] = { gem, count };
+    }
+
+    if (grp !== null && def.primary) {
+      const bw = 62;
+      const bh = 20;
+      const bx = CARD.w / 2 - bw / 2;
+      const by = -8;
+      const badge = add(this.add.graphics());
+      badge.fillStyle(0x120c07, 1).fillRoundedRect(bx, by, bw, bh, 6);
+      badge.fillStyle(grp, 0.28).fillRoundedRect(bx, by, bw, bh, 6);
+      badge.lineStyle(2, grp, 1).strokeRoundedRect(bx, by, bw, bh, 6);
+      add(this.add.image(bx + 15, by + bh / 2, ensureIcon(this, STAT_ICON[def.primary], groupColor(PRIMARY_GROUP, def.primary), false)).setDisplaySize(15, 15));
+      add(serif(this, bx + 25, by + bh / 2 + 1, STAT_LABEL[def.primary], 13, '#f6ead0', { spacing: 1, stroke: 2 }).setOrigin(0, 0.5));
     }
 
     // Name + archetype pill

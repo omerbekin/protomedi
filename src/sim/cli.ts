@@ -62,7 +62,7 @@ for (const { name, s } of rows) {
   for (const [skillId, n] of [...s.skillUses].sort((a, b) => b[1] - a[1])) {
     const skill = content.skills[skillId] ?? (content.globalSkills[skillId] ? { name: content.globalSkills[skillId]!.name, cost: { amount: 0 } } : undefined);
     const share = pct(n, total);
-    const paid = (skill?.cost.amount ?? 0) > 0;
+    const paid = (skill?.cost.amount ?? 0) > 0 || ((skill?.cost as { ofCurrent?: number } | undefined)?.ofCurrent ?? 0) > 0; // oranlı bedel (Wail) de bedellidir
     const flag = paid && share > SKILL_SHARE_LIMIT ? '  <-- baskın' : '';
     if (flag) skillWarnings.push(`${name} ${skill?.name} %${fmt(share, 0)}`);
     console.log(`      ${(skill?.name ?? skillId).padEnd(18)} %${fmt(share, 0).padStart(3)}${paid ? '' : '  (bedelsiz)'}${flag}`);

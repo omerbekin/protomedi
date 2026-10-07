@@ -1,5 +1,6 @@
 import { content } from '../engine';
 import type { CombatantDef } from '../engine';
+import { groupByPrimary, sortByPrimary } from './class-order';
 
 /**
  * Takım seçim ekranının saf (Phaser'sız) mantığı: arketip etiketi, sınıf kartı yerleşimi, yeni seçilen sınıfın hücresi.
@@ -37,12 +38,16 @@ export function rangeOf(def: CombatantDef): string {
 /** Test class'ı mı (ör. Geometer)? Kartta 'TEST' rozeti taşır, rastgele takımlara girmez ama elle eklenebilir. */
 export const isTestClass = (def: CombatantDef): boolean => !!def.testOnly;
 
-/** Sınıf kartlarının sırası: seçilebilir tüm sınıflar (test class'ları dahil), test class'ları SONDA. */
+/**
+ * Sınıf kartlarının sırası: primary statına göre STR - DEX - INT - LUCK grupları (grup içi ada göre), primary'siz olanlar
+ * ardından, test class'ları SONDA. Sıra veriden (`class.primary`) türer; yeni class kendi grubuna girer (`class-order.ts`).
+ */
 export function rosterIds(): string[] {
-  const all = content.selectableClasses;
-  const test = (id: string) => !!content.classes[id]?.testOnly;
-  return [...all.filter((id) => !test(id)), ...all.filter(test)];
+  return sortByPrimary(content.selectableClasses.map((id) => content.classes[id]!)).map((c) => c.id);
 }
+
+/** Raf grupları (ayraç ve renk için): her grup ardışık kartlardır. */
+export const rosterGroups = () => groupByPrimary(content.selectableClasses.map((id) => content.classes[id]!));
 
 /** Randomize / `?seed=` akışının havuzu: test class'ları HARİÇ (content.randomPool). */
 export const randomizePool = (): string[] => content.randomPool;
@@ -67,14 +72,18 @@ export function rosterLayout(n: number, availW: number, availH: number, designW:
     return Math.min(cw / designW, ch / designH, maxScale);
   };
   const count = Math.max(1, n);
-  let cols = count;
+  // Smallest row count whose scale reaches minScale; if none does, the row count with the largest scale (cards never collapse)
   let rows = 1;
+  let cols = count;
   let scale = fit(cols, rows);
+  let best = { rows, cols, scale };
   while (scale < minScale && rows < count) {
     rows++;
     cols = Math.ceil(count / rows);
     scale = fit(cols, rows);
+    if (scale > best.scale) best = { rows, cols, scale };
   }
+  if (scale < minScale) ({ rows, cols, scale } = best);
   return { cols, rows, scale, cardW: designW * scale, cardH: designH * scale, gap };
 }
 

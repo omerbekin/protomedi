@@ -1,4 +1,5 @@
 import { isShapeArea, RECT_CENTER_MIN, shapeBadge } from './area-shape';
+import { isRatioCost, skillCostLabel } from './cost';
 import { betMultipliers, betStake } from './gamble';
 import { applySummonVariant, attributePower } from './stats';
 import type { AreaDef, Attribute, CombatantDef, Element, Formulas, GlobalSkillDef, GroundDef, PassiveDef, SkillDef, SkillTarget, Stats, StatusDef } from './types';
@@ -13,6 +14,8 @@ export interface SkillInfo {
   cooldown: string;
   /** Savaş başında bu skill bekleme sayacıyla başlıyorsa tek satır ('Opens on cooldown: 3 turns'), yoksa boş. Yalnızca turns modunda gösterilir. */
   initialCooldown: string;
+  /** Turn bedeli 1'den küçükse kısa etiket ('Half turn'); tam turn skill'de boş. (Açıklama satırı da lines içinde.) */
+  turnCost: string;
   /** Etki satırları: hasar ölçeği, şifa, kalkan, çağrı, menzil ve ek kurallar. */
   lines: string[];
   /** `lines` ile aynı sırada: satırın rengini belirleyen element ('shield' / 'magicShield' kalkan satırları). */
@@ -128,6 +131,8 @@ export function describePassive(passive: PassiveDef, stats: Stats, formulas: For
       const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : (names[0] ?? '');
       return `Deal +${pct(e.bonus)} damage to targets suffering from ${list} (every hit, crits included).`;
     }
+    case 'omenTransfer':
+      return `When an enemy carrying your Omens dies, its Omens pass to the nearest enemy (at most ${e.maxOnArrival} arrive; if Doom killed it, ${e.onDoomKill} passes). Passed Omens keep the time they had left and never trigger Doom. Works only while you live.`;
   }
 }
 
@@ -240,6 +245,11 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       const magic = e.shieldType === 'magic';
       add(`${magic ? 'Magic shield' : 'Shield'} ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)})${e.self ? ' on you' : ''}`, magic ? 'magicShield' : 'shield');
       if (e.bonusPerMana) add(`+${e.bonusPerMana} per MP left after casting`, magic ? 'magicShield' : 'shield');
+      const hook = e.onAbsorb;
+      if (hook?.burnMana) add(`Every hit the shield absorbs burns ${hook.burnMana} MP from the attacker`, magic ? 'magicShield' : 'shield');
+      if (hook?.dispelChance) add(`Every hit the shield absorbs has a ${pct(hook.dispelChance)} chance to remove a random buff from the attacker`, magic ? 'magicShield' : 'shield');
+      if (hook?.giveMana) add(`Every hit the shield absorbs gives the shielded unit ${hook.giveMana} MP`, magic ? 'magicShield' : 'shield');
+      if (hook?.burnMana || hook?.dispelChance) add('Only direct attacks trigger it (not ground effects)');
     } else if (e.type === 'summon') {
       const unit = units[e.unit];
       const life = e.lifespan ? ` for ${e.lifespan} turns` : '';
@@ -278,8 +288,37 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
     } else if (e.type === 'guard') {
       add(`Guard ${e.turns} turns: take ${pct(e.share)} of the damage ally takes`);
       if (skill.excludeSelf) add('Cannot target yourself');
+    } else if (e.type === 'dispel') {
+      const names = Object.values(defs.statuses ?? {}).filter((d) => d.type === e.status && d.dispellable !== false).map((d) => d.name);
+      const what = e.status === 'debuff' ? 'debuff' : 'buff';
+      add(`${e.count ? `Removes the ${e.count} longest-lasting ${what}${e.count > 1 ? 's' : ''}` : `Removes every ${what}`} from the target${names.length ? ` (${names.join(', ')})` : ''}`);
+    } else if (e.type === 'omen') {
+      const kind = e.status ?? 'omen';
+      const def = defs.statuses?.[kind];
+      const name = def?.name ?? 'Bad Omen';
+      const doom = def?.doom;
+      const crit = e.critStacks !== undefined && e.critStacks !== e.stacks ? ` (${e.critStacks} on a critical hit)` : '';
+      const detonates = skill.effects.some((x) => x.type === 'detonate' && x.status === kind);
+      add(`Adds ${e.stacks} ${name}${crit} to every enemy hit`, 'dark');
+      if (doom && def?.maxStacks && !detonates) add(`At ${def.maxStacks} Omens, Doom strikes at once: ${pct(doom.powerPerStack)} ${ATTRIBUTE_NAME[doom.scale]} (${raw(doom.scale, doom.powerPerStack)}) ${doom.element} damage per Omen; it cannot miss but can crit`, doom.element);
+    } else if (e.type === 'detonate') {
+      const def = defs.statuses?.[e.status];
+      const doom = def?.doom;
+      if (doom) add(`Then Doom strikes at once with every Omen on the target, x${e.mult}: ${pct(doom.powerPerStack * e.mult)} ${ATTRIBUTE_NAME[doom.scale]} (${raw(doom.scale, doom.powerPerStack * e.mult)}) ${doom.element} damage per Omen; it cannot miss but can crit`, doom.element);
+      else add(`Detonates ${e.status} x${e.mult}`);
+      add('On a miss nothing happens: the Omens stay');
+    } else if (e.type === 'dot') {
+      const def = defs.statuses?.[e.status];
+      add(`${def?.name ?? e.status} for ${e.turns} turns: ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)}) ${def?.dot?.element ?? ''} damage at the start of each of its turns (cannot miss or crit; recasting renews it)`.replace('  ', ' '), def?.dot?.element);
+    } else if (e.type === 'bond') {
+      const name = defs.statuses?.dark_bond?.name ?? 'Dark Bond';
+      add(`${name} for ${e.turns} of your turns: whenever you heal from life steal, the bonded ally heals ${e.ratio === 1 ? 'the same amount' : `${pct(e.ratio)} of it`} (you still heal fully; at full HP you steal nothing, so nothing is shared)`);
+      add('One bond at a time: a new bond breaks the old one; it ends if either of you falls');
+      if (skill.excludeSelf) add('Cannot target yourself');
     }
   }
+  const turnCost = skill.turnCost !== undefined && skill.turnCost > 0 && skill.turnCost < 1 ? skill.turnCost : 1;
+  if (turnCost < 1) add(turnCost === 0.5 ? 'Takes half a turn: your next turn comes in half the usual time' : `Takes ${pct(turnCost)} of a turn: your next turn comes sooner`);
   const waves = skill.target === 'area_enemies' || skill.target === 'area_any' ? stageText(skill.area) : '';
   if (waves) add(waves);
   if (skill.splash && skill.target === 'single_enemy') add(`Also hits the units beside the target (the neighbors above and below it on screen) for ${pct(skill.splash.mult ?? 1)} damage`, 'physical');
@@ -289,15 +328,17 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
   if (skill.effects.some((e) => e.type === 'damage' && e.guaranteedCrit)) add(`Always a critical hit (x${formulas.attributes.critMult}); it can still miss`, 'physical');
   if (skill.requiresOpenBehind) add('Only targets with an empty cell right behind them (a living unit there blocks it; a corpse does not); never a unit in the back row');
   if (skill.motion === 'melee' && skill.target !== 'self') add(skill.requiresOpenBehind ? 'Slips behind any enemy, strikes, and returns' : skill.ignoreReach ? 'Charges at any enemy' : skill.reach ? `Melee: front ${skill.reach + 1} rows only (reach +${skill.reach})` : 'Melee: front row only');
-  const { resource, amount } = skill.cost;
+  // Oranlı bedel (Wail of the Dead: mevcut canın %20'si): açıklama satırı; başlık skillCostLabel
+  if (isRatioCost(skill.cost)) add(`Costs ${pct(skill.cost.ofCurrent!)} of current ${skill.cost.resource.toUpperCase()} (rounded, at least 1)${skill.cost.resource === 'hp' ? ': it can never bring you below 1 HP' : ''}`);
   const initialTurns = Math.min(formulas.cooldown?.maxInitial ?? 0, Math.floor(skill.initialCooldown ?? 0));
   return {
     name: skill.name,
     target: (skill.target === 'area_enemies' || skill.target === 'area_any') && isShapeArea(skill.area) ? shapeText(skill.area) : skill.target === 'random_enemies' ? `${skill.count ?? 3} random enemies` : TARGET_TEXT[skill.target],
     targetBadge: targetBadge(skill),
-    cost: amount > 0 ? `${amount} ${resource.toUpperCase()}` : 'Free',
+    cost: skillCostLabel(skill.cost),
     cooldown: (skill.cooldown ?? 0) > 0 ? `${skill.cooldown} turns` : 'None',
     initialCooldown: initialTurns > 0 ? `Opens on cooldown: ${initialTurns} turn${initialTurns > 1 ? 's' : ''}` : '',
+    turnCost: turnCost < 1 ? (turnCost === 0.5 ? 'Half turn' : `${pct(turnCost)} turn`) : '',
     lines,
     kinds,
   };

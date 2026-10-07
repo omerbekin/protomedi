@@ -12,6 +12,7 @@ import type { WikiArticle, WikiBlock, WikiCatalog, WikiElement, WikiGround, Wiki
 import { WIKI_ALIASES } from './assets/nav';
 import { assetSections, setNavigator, skillArt, unitArt } from './assets/sections';
 import { wikiFiles } from './files';
+import { applyVariantFiles } from '../game/sprite-variants';
 import './wiki.css';
 
 export interface WikiHooks {
@@ -228,7 +229,7 @@ export class WikiPanel {
   constructor(root: HTMLElement, private readonly hooks: WikiHooks) {
     const toggle = h('button', { class: 'settings-toggle wiki-toggle', title: 'Wiki', attrs: { 'aria-label': 'Wiki', type: 'button' }, on: { click: () => this.toggle() } }, h('img', { attrs: { src: iconUrl('book'), alt: '' } }));
 
-    const cat = buildWiki(wikiFiles);
+    const cat = buildWiki(applyVariantFiles(wikiFiles));
     this.sections = [
       simpleSection('start', 'GETTING STARTED', 'sword', cat.gettingStarted.length, articleGroups(cat.gettingStarted)),
       classesSection(cat),

@@ -17,7 +17,7 @@ const ATTRIBUTES = ['str', 'int', 'dex', 'luck'];
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const PLACEHOLDER_SPRITE_CLASSES: string[] = [];
 /** Kendi görseli henüz çizilmemiş, başka bir class'ın sprite'ını GEÇİCİ kullanan class'lar (class id -> ödünç spriteId). Görsel gelince listeden çıkar. */
-const BORROWED_SPRITE_CLASSES: Record<string, string> = { cutthroat: 'archer' };
+const BORROWED_SPRITE_CLASSES: Record<string, string> = {}; // başka class'ın görselini ödünç alan class'lar (şu an yok: Cutthroat'ın kendi görseli var)
 const everyone = { ...content.classes, ...content.summons };
 
 describe('skill verisi', () => {
@@ -36,7 +36,18 @@ describe('skill verisi', () => {
       expect(s.fx).toMatch(HEX);
       expect(['mp', 'hp', 'rage']).toContain(s.cost.resource);
       expect(s.cost.amount).toBeGreaterThanOrEqual(0);
+      // Oranlı bedel (ofCurrent: mevcut kaynağın oranı; Wail of the Dead): 0 < oran < 1
+      if (s.cost.ofCurrent !== undefined) {
+        expect(s.cost.ofCurrent, `${key} ofCurrent`).toBeGreaterThan(0);
+        expect(s.cost.ofCurrent, `${key} ofCurrent`).toBeLessThan(1);
+      }
       expect(s.effects.length).toBeGreaterThan(0);
+      // Yarım turn (madde 240): 0 < turnCost <= 1; turnCost < 1 skill'ler üst üste kullanılamasın diye cooldown >= 2 (sömürü koruması)
+      if (s.turnCost !== undefined) {
+        expect(s.turnCost, `${key} turnCost`).toBeGreaterThan(0);
+        expect(s.turnCost, `${key} turnCost`).toBeLessThanOrEqual(1);
+        if (s.turnCost < 1) expect(s.cooldown ?? 0, `${key}: yarım turn skill'inin cooldown'u en az 2`).toBeGreaterThanOrEqual(2);
+      }
       for (const e of s.effects) {
         switch (e.type) {
           case 'damage':
@@ -85,6 +96,32 @@ describe('skill verisi', () => {
             expect(ATTRIBUTES, `${key} scale`).toContain(e.scale);
             expect(e.power).toBeGreaterThan(0);
             if (e.shieldType !== undefined) expect(e.shieldType).toBe('magic');
+            if (e.onAbsorb) {
+              // kalkan kancaları (madde 240): en az bir kanca; sayılar geçerli aralıkta
+              const h = e.onAbsorb;
+              expect(Object.keys(h).every((k) => ['burnMana', 'dispelChance', 'giveMana'].includes(k)), `${key} onAbsorb alanları`).toBe(true);
+              expect(Object.keys(h).length, `${key} onAbsorb boş`).toBeGreaterThan(0);
+              if (h.burnMana !== undefined) expect(h.burnMana).toBeGreaterThan(0);
+              if (h.dispelChance !== undefined) {
+                expect(h.dispelChance).toBeGreaterThan(0);
+                expect(h.dispelChance).toBeLessThanOrEqual(1);
+              }
+              if (h.giveMana !== undefined) {
+                // madde 241: darbe başına SABİT MP (tam sayı)
+                expect(h.giveMana).toBeGreaterThan(0);
+                expect(Number.isInteger(h.giveMana)).toBe(true);
+              }
+            }
+            break;
+          case 'dispel':
+            expect(['buff', 'debuff']).toContain(e.status);
+            if (e.count !== undefined) expect(e.count).toBeGreaterThan(0);
+            break;
+          case 'bond':
+            expect(e.turns).toBeGreaterThan(0);
+            expect(e.ratio).toBeGreaterThan(0);
+            expect(s.target, `${key}: bağ tek dosta`).toBe('single_ally');
+            expect(content.statuses.dark_bond, 'dark_bond durumu tanımlı').toBeDefined();
             break;
           case 'summon':
             expect(content.summons[e.unit] ?? content.classes[e.unit], `${key} -> ${e.unit}`).toBeDefined();
@@ -134,6 +171,28 @@ describe('skill verisi', () => {
             expect(e.turns).toBeGreaterThan(0);
             expect(e.share).toBeGreaterThan(0);
             expect(e.share).toBeLessThanOrEqual(1);
+            break;
+          case 'omen': {
+            // Hexer: yığılan durum (maxStacks + doom tanımlı), isabette stacks, kritikte critStacks (>= stacks)
+            const def = content.statuses[e.status ?? 'omen'];
+            expect(def, `${key} -> omen durumu`).toBeDefined();
+            expect(def!.maxStacks ?? 0, `${key} maxStacks`).toBeGreaterThan(1);
+            expect(def!.doom, `${key} doom`).toBeDefined();
+            expect(e.stacks).toBeGreaterThan(0);
+            if (e.critStacks !== undefined) expect(e.critStacks).toBeGreaterThanOrEqual(e.stacks);
+            expect(s.effects.some((x) => x.type === 'damage'), `${key}: Omen yalnızca isabet eden vuruşla`).toBe(true);
+            break;
+          }
+          case 'detonate':
+            expect(content.statuses[e.status]?.doom, `${key} -> ${e.status} doom`).toBeDefined();
+            expect(e.mult).toBeGreaterThan(0);
+            expect(s.effects.some((x) => x.type === 'omen' && (x.status ?? 'omen') === e.status), `${key}: detonate aynı skill'de yığın ekler`).toBe(true);
+            break;
+          case 'dot':
+            expect(content.statuses[e.status]?.dot, `${key} -> ${e.status} dot tanımı`).toBeDefined();
+            expect(ATTRIBUTES).toContain(e.scale);
+            expect(e.power).toBeGreaterThan(0);
+            expect(e.turns).toBeGreaterThan(0);
             break;
           default:
             throw new Error(`${key}: bilinmeyen etki türü ${(e as { type: string }).type}`);
@@ -340,7 +399,7 @@ describe('güç sınırları (kalkan ve çağrı çok güçlü olmasın)', () =>
         for (const def of Object.values(content.classes)) {
           if (!def.skills.includes(id)) continue;
           const amount = attributePower(def.stats, e.scale, content.formulas) * e.power;
-          expect(amount, `${def.id} ${id}`).toBeLessThanOrEqual(avgHp * 0.42); // Mana Barrier INT ile ölçeklenir; ortalama class canının %42'sini aşmasın (stat 30 kuralı sonrası gevşetildi, bkz. open-questions 175; kırılgan Cutthroat (can 50) ortalamayı düşürdüğü için %40 -> %42, madde 225)
+          expect(amount, `${def.id} ${id}`).toBeLessThanOrEqual(avgHp * 0.43); // Mana Barrier INT ile ölçeklenir; ortalama class canının %43'ünü aşmasın (stat 30 kuralı sonrası gevşetildi, bkz. open-questions 175; kırılgan Cutthroat (can 50) ortalamayı düşürdüğü için %40 -> %42, madde 225; kırılgan Hexer (can 56) eklenince ortalama yine düştü: %42 -> %43, Mana Barrier değişmedi)
         }
       }
     }
@@ -437,6 +496,7 @@ describe('görsel veri: skill ikonları, class logoları, stat ikonları, hareke
       'guard', // yedek: Defender'ın eski ikonları (rework: guard2, tremor2, fistcrush2, taunt2)
       'tremor',
       'fistcrush',
+      'bloodrite', // yedek: kaldırılan Blood Rite'ın ikonu (yerine Dark Bond; Wiki > Legacy)
       ...UI_ICONS, // debug dock ve ayarlar (DOM)
     ]);
     for (const kind of ICON_KINDS) expect(used.has(kind), kind).toBe(true);
@@ -452,7 +512,10 @@ describe('görsel veri: skill ikonları, class logoları, stat ikonları, hareke
     }
     // her efekt en az bir skill tarafından kullanılıyor
     const used = new Set(Object.values(content.skills).map((s) => s.vfx));
-    for (const k of VFX_KINDS) if (!BACKUP_VFX.includes(k)) expect(used.has(k), k).toBe(true);
+    // kaldırılan Blood Rite'ın animasyonu (bloodhands) artık hiçbir skill'de yok: Wiki > Legacy'ye 'Unused' olarak düşer
+    // (ui-dev/content-designer isterse src/ui/vfx-kinds.ts > BACKUP_VFX'e taşır; o zaman bu istisna gereksizleşir)
+    const removedSkillVfx = ['bloodhands'];
+    for (const k of VFX_KINDS) if (!BACKUP_VFX.includes(k) && !removedSkillVfx.includes(k)) expect(used.has(k), k).toBe(true);
   });
 
   it("yukarıdan düşen skill'lerin hepsinin düşen şey türü var", () => {

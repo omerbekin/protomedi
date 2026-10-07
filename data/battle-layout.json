@@ -149,6 +149,9 @@
     "skillSlowdown": 1.2,
     "hitMaxRatio": 0.35,
     "damageNumberMaxRatio": 0.25,
+    "damageNumberMinPx": 34,
+    "damageNumberSpanPx": 37,
+    "damageNumberCritBonusPx": 9,
     "cameraShakeRatio": 0.25,
     "hpGhostDelayMs": 350,
     "hpGhostBaseMs": 350,
@@ -185,6 +188,12 @@
     "damageMid": "#ff9f43",
     "damageHigh": "#ff4d4d",
     "magicShield": "#c58bff",
+    "primaryGroup": {
+      "str": "#e0643c",
+      "dex": "#8fdc50",
+      "int": "#8a8cf5",
+      "luck": "#2fcfa0"
+    },
     "element": {
       "physical": "#e8e2d0",
       "fire": "#ff7a1a",

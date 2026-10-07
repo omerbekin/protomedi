@@ -7,9 +7,20 @@ export const PIXEL_FX: Record<string, Draw> = {
   towershield: (g) => {
     towerShield(g, 16, 0.5, 20, 31);
   },
-  /** Defender: aşağı inen çelik zırh eldiveni (Fist Crush). */
+  /**
+   * Defender: gökten düşen dev çelik zırh eldiveni (Fist Crush). Üstte plakalı kolluk (vambrace) ve üstünde küçük kule kalkanı arması
+   * (pirinç kenar, lacivert alan, kemik burç), altta yumruğu aşağı bakan eldiven; boğumlar sprite'ın alt kenarına değer.
+   */
   gauntlet: (g) => {
-    gauntletFist(g, 16, 2, 1.45);
+    // kolluk: yukarı doğru hafif daralan çelik plaka, sol kenarda ışık şeridi, plaka bantları
+    g.poly([10.6, 0, 21.4, 0, 22.2, 13, 9.8, 13], 'd');
+    g.poly([11.4, 0, 20.6, 0, 21.2, 12.6, 10.8, 12.6], 'm');
+    g.poly([11.4, 0, 13.6, 0, 13.4, 12.6, 10.8, 12.6], 'l');
+    for (const y of [3.2, 9.6]) g.line(10.6, y, 21.6, y, 'd', 0.6);
+    g.set(11.6, 1.4, 'y').set(19.8, 1.4, 'y').set(11.6, 11.2, 'y').set(19.8, 11.2, 'y');
+    // kule kalkanı arması (Defender ailesi)
+    towerShield(g, 16, 2.6, 7.2, 8.6, { rim: 'Y', rivet: null });
+    gauntletFist(g, 16, 12.2, 1.04);
   },
   shard: (g) => {
     crystal(g, 16, 16, 14, 31, 'c', 'u');

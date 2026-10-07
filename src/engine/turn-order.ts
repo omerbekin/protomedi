@@ -41,6 +41,8 @@ export function advanceTurn(slots: TurnSlot[], threshold: number, firstSide: Sid
 /**
  * Sıra çubuğu için tahmin: şu anki aktör (varsa) + sonraki aktörler. Girdiyi değiştirmez.
  * Ölüm/çağrı gibi gelecek olayları bilemez; her olaydan sonra yeniden hesaplanır.
+ * `currentCost`: şu anki aktörün bu eyleminin turn bedeli (1 = tam turn; 0,5 = yarım turn skill: sayacından eşiğin yarısı düşer, sonraki
+ * sırası yarı sürede gelir). Sonraki tahmini turlar tam turn sayılır.
  */
 export function predictQueue(
   slots: TurnSlot[],
@@ -48,13 +50,14 @@ export function predictQueue(
   count: number,
   currentUid: string | null,
   firstSide: Side = 'party',
+  currentCost = 1,
 ): string[] {
   const copy = slots.map((s) => ({ ...s }));
   const queue: string[] = [];
   const current = currentUid ? copy.find((s) => s.uid === currentUid) : undefined;
   if (current) {
     queue.push(current.uid);
-    current.counter -= threshold;
+    current.counter -= threshold * currentCost;
   }
   while (queue.length < count) {
     const next = advanceTurn(copy, threshold, firstSide);

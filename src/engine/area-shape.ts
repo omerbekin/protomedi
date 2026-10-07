@@ -165,7 +165,8 @@ export function skillAreaProblem(skill: SkillDef, formation: Pick<ShapeFormation
   }
   if (skill.area?.stages) {
     for (const e of skill.effects) {
-      const ok = (e.type === 'damage' && !e.bet && !e.bonusFromShield) || (e.type === 'status' && !e.self) || e.type === 'randomStatus' || e.type === 'ground';
+      // Hedef başı etkiler: hasar, durum, DoT (Wither), yığın (Omen) ve patlatma her aşamada o aşamanın hedeflerine uygulanır
+      const ok = (e.type === 'damage' && !e.bet && !e.bonusFromShield) || (e.type === 'status' && !e.self) || e.type === 'randomStatus' || e.type === 'ground' || e.type === 'dot' || e.type === 'omen' || e.type === 'detonate';
       if (!ok) return `aşamalı (stages) skill'de desteklenmeyen etki: ${e.type}`;
     }
   }

@@ -16,3 +16,7 @@
 ## Karar (Ömer, 2026-10-04)
 - Hedef: yapay zeka vs yapay zeka, her seed'de farklı takımlarla, taraf kazanma oranı **%50**; sınıf kazanma oranları **%40-60** (ideal ~%50).
 - Ölçüm: `npm run sim -- 20000` (rapor), korunan sınır: `tests/balance.test.ts`.
+
+## Dengesi bekleyen class'lar (geçici muafiyet)
+- `tests/balance.test.ts > PENDING_BALANCE`: bu listedeki class'lar %40-60 bant kontrolünden **geçici olarak** muaftır; oranları yine ölçülür ve test çıktısına `[balance] DENGESİ BEKLİYOR: ...` uyarısı olarak yazılır. Bant gevşetilmedi; diğer tüm class'lar aynı bantta kalır. Liste normalde **boş** olmalıdır; class dengelenince listeden çıkarılır.
+- **Hexer** (madde 247, Ömer kararı 2026-10-07: "şimdilik denge işine girmeyeceğiz"): test ölçümünde (seed 900001, 3000 savaş) %37,8 (bant dışı). Denge turu yapılınca (balance-tester; ayar kolları `docs/design/classes/hexer.md` 11.3) listeden çıkarılacak.

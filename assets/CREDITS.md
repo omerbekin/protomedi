@@ -34,3 +34,16 @@ Kaynak: Ömer'in ChatGPT ile ürettirdiği 11 karakter görseli (antimage, arche
 - `avatars/<id>.png`: kafa+boyun kırpması (256x256), koordinatlar aynı betikteki `HEADS` tablosunda. Savaş sıra çubuğu, sol alt blok ve takım seçimi bunları kullanır.
 - Tüm karakterler sağa bakar (düşman tarafta yatay çevrilir, avatarlar dahil).
 - `skeleton` ve `treant` çağrılan birimlerdir (`data/summons/`).
+
+## Cutthroat (2026-10-08 import)
+
+Kaynak: Ömer'in ChatGPT ile ürettirdiği Cutthroat görseli (1254x1254 RGBA, şeffaf arka plan). Lisans: Ömer'e ait.
+- Orijinal: `source/characters-v2/cutthroat.png`; `sprites/cutthroat/idle.png` (640 px yükseklik) ve `avatars/cutthroat.png` (256x256 kafa) `tools/import-characters-v2.py --only cutthroat` ile üretildi (`HEADS` tablosunda `cutthroat`).
+- Sağa bakar; class `cutthroat` (`data/classes/cutthroat.json > spriteId`).
+
+## Hexer (2026-10-08 import)
+
+Kaynak: Ömer'in ChatGPT ile ürettirdiği iki Hexer görseli (1254x1254, arka plan zaten şeffaf; WebP'den PNG'ye çevrildi). Lisans: Ömer'e ait.
+- Orijinaller: `source/characters-v2/hexer.webp|png` (kapüşonsuz, VARSAYILAN) ve `hexer-hood.webp|png` (kapüşonlu).
+- `sprites/hexer/idle.png` + `avatars/hexer.png` (kapüşonsuz); `sprites/hexer/idle-hood.png` + `avatars/hexer-hood.png` (kapüşonlu varyant). `tools/import-characters-v2.py --only hexer` ile üretildi; iki görünüm AYNI kırpma kutusunu kullanır (aynı ölçek ve ayak hizası).
+- Varyant altyapısı: `sprites/<id>/idle-<varyant>.png` + `avatars/<id>-<varyant>.png`; debug > Characters bölümünden seçilir. Sağa bakar.

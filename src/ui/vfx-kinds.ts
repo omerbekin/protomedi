@@ -41,7 +41,7 @@ export const VFX_KINDS = [
   'guardlink',
   'tremor',
   'fistcrush',
-  /** Defender (rework): kalkan-vuruşu + kükreme + hedef işaretleri; dostun önünde kule kalkanı hayaleti; yere çakılan kalkan + sıra boyunca kabaran taş levhalar; 3 hedefe sıralı zırhlı sıçrayış + eldiven darbesi. */
+  /** Defender (rework): kalkan-vuruşu + kükreme + hedef işaretleri; dostun önünde kule kalkanı hayaleti; yere çakılan kalkan + sıra boyunca kabaran taş levhalar; 3 hedefe sıralı ağır zırhlı yürüyüş (zıplama yok) + eldiven darbesi. */
   'taunt2',
   'guard2',
   'tremor2',

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import layout from '../../data/battle-layout.json';
+import { getSpriteVariant } from './sprite-variants';
 
 /**
  * Asset bulucu. Build sırasında assets/ klasörü taranır:
@@ -32,6 +33,14 @@ export type AnimName = (typeof ANIMATIONS)[number];
 const spriteKey = (id: string, anim: string) => `sprite:${id}:${anim}`;
 const placeholderKey = (id: string) => `placeholder:${id}`;
 const avatarKey = (id: string) => `avatar:${id}`;
+
+/** Sprite görünüm varyantları (idle-<varyant>.png / <id>-<varyant>.png): seçim src/game/sprite-variants.ts, ayar debug > Characters. */
+/** Seçili varyant; dosyası yüklenmemişse (ya da seçim yoksa) null: varsayılan görünüm. */
+function activeVariant(scene: Phaser.Scene | null, spriteId: string): string | null {
+  const v = getSpriteVariant(spriteId);
+  if (!v) return null;
+  return !scene || scene.textures.exists(spriteKey(spriteId, `idle-${v}`)) ? v : null;
+}
 export const backgroundKey = (id: string) => `bg:${id}`;
 
 function fileStem(path: string): string[] {
@@ -58,7 +67,11 @@ export function preloadAssets(scene: Phaser.Scene): void {
 
 /** Kafa avatarının doku anahtarı; avatar dosyası yoksa null (çağıran eski kırpmaya/silüete döner). Kare, sağa bakar. */
 export function avatarTexture(scene: Phaser.Scene, spriteId: string): string | null {
-  const key = avatarKey(spriteId.replace(/^enemy_/, ''));
+  const id = spriteId.replace(/^enemy_/, '');
+  const v = getSpriteVariant(id);
+  const vKey = v ? avatarKey(`${id}-${v}`) : null;
+  if (vKey && scene.textures.exists(vKey)) return vKey;
+  const key = avatarKey(id);
   return scene.textures.exists(key) ? key : null;
 }
 
@@ -71,21 +84,25 @@ export function hasBackground(scene: Phaser.Scene, id: string): boolean {
  * ve animasyon kaydeder; yoksa sınıfı simgeleyen placeholder üretir.
  */
 export function characterTexture(scene: Phaser.Scene, spriteId: string, color: string): { key: string; real: boolean } {
-  const idleKey = spriteKey(spriteId, 'idle');
+  const variant = activeVariant(scene, spriteId);
+  const idleKey = spriteKey(spriteId, variant ? `idle-${variant}` : 'idle');
   if (scene.textures.exists(idleKey)) {
-    for (const anim of ANIMATIONS) registerSheet(scene, spriteId, anim);
+    for (const anim of ANIMATIONS) registerSheet(scene, spriteId, anim, variant);
     return { key: idleKey, real: true };
   }
   return { key: makePlaceholder(scene, spriteId, color), real: false };
 }
 
-export function animKey(spriteId: string, anim: AnimName): string | null {
-  return `anim:${spriteId}:${anim}`;
+export function animKey(spriteId: string, anim: AnimName, scene: Phaser.Scene | null = null): string | null {
+  const variant = anim === 'idle' ? activeVariant(scene, spriteId) : null;
+  return `anim:${spriteId}:${anim}${variant ? `-${variant}` : ''}`;
 }
 
-function registerSheet(scene: Phaser.Scene, spriteId: string, anim: AnimName): void {
-  const key = spriteKey(spriteId, anim);
-  const animName = `anim:${spriteId}:${anim}`;
+function registerSheet(scene: Phaser.Scene, spriteId: string, anim: AnimName, variant: string | null = null): void {
+  // Varyant yalnızca idle için vardır (idle-<varyant>.png); diğer animasyonlar ortak
+  const v = anim === 'idle' ? variant : null;
+  const key = spriteKey(spriteId, v ? `idle-${v}` : anim);
+  const animName = `anim:${spriteId}:${anim}${v ? `-${v}` : ''}`;
   if (!scene.textures.exists(key) || scene.anims.exists(animName)) return;
   const texture = scene.textures.get(key);
   texture.setFilter(Phaser.Textures.FilterMode.NEAREST); // pixel art keskin kalsın

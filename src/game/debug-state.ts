@@ -103,11 +103,8 @@ export function groupSkillsByOwner(classes: Record<string, CombatantDef>, summon
   return groups;
 }
 
-/** Ses adını okunur hale getirir: "stunChime" -> "stun Chime". */
-export const sfxLabel = (id: string): string => id.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
-
 /** Açık olan debug ayarlarının kısa özeti (hiçbiri açık değilse "none"). */
-export function tweaksSummary(s: DebugState, freeMp: boolean): string {
+export function tweaksSummary(s: DebugState, freeMp: boolean, extra: string[] = []): string {
   const parts: string[] = [];
   if (s.speed !== 1) parts.push(`speed ${speedLabel(s.speed)}`);
   if (s.skipAnims) parts.push('skip anims');
@@ -115,6 +112,7 @@ export function tweaksSummary(s: DebugState, freeMp: boolean): string {
   if (s.hideNumbers) parts.push('numbers hidden');
   if (s.enemyAiOff) parts.push('enemy AI off');
   if (freeMp) parts.push('free MP');
+  parts.push(...extra);
   if (s.flags.damageMult !== 1) parts.push(`damage ${s.flags.damageMult}x`);
   if (s.flags.crit !== 'auto') parts.push(`${s.flags.crit} crit`);
   if (s.flags.dodge !== 'auto') parts.push(`${s.flags.dodge} dodge`);

@@ -13,6 +13,7 @@ import cutthroat from '../../data/classes/cutthroat.json';
 import defender from '../../data/classes/defender.json';
 import druid from '../../data/classes/druid.json';
 import gambler from '../../data/classes/gambler.json';
+import hexer from '../../data/classes/hexer.json';
 import mage from '../../data/classes/mage.json';
 import paladin from '../../data/classes/paladin.json';
 import undead from '../../data/classes/undead.json';
@@ -51,6 +52,7 @@ const classData: Record<string, CombatantData> = {
   antimage,
   gambler,
   cutthroat,
+  hexer,
   aoe_tester: aoeTester,
 } as unknown as Record<string, CombatantData>;
 

@@ -1,5 +1,5 @@
 {
-  "_not": "Etkiler: damage (damageType physical|magic, element physical|fire|ice|holy|dark|nature|arcane (yalnızca renk/yazı), scale str|int|dex|luck, power; opsiyonel ignoreDefense, lifesteal, bonusVsTag, bonusPerMissingMana, bonusFromShield {ratio, consume}), heal, hot (tur bazlı şifa: turns), shield (shieldType 'magic' ise yalnızca büyü hasarını emer), summon (lifespan: kendi tur sayısı), manaBurn, taunt (turns, breakRatio: taunt'lı bu oranda can kaybedince biter), guard (turns, share). scale: etkinin hangi temel özelliğe (str/int/dex/luck) bağlı olduğu. motion melee olan skill'ler yalnızca düşmanın en öndeki 2 canlı birimine vurabilir. cooldown: kullanıcının kendi tur sayısıyla bekleme. motion/fx/icon yalnızca görsel. Sayılar GEÇİCİDİR. Çağrı skill'inde oyuncu boş yuvayı seçer. HEDEF BİÇİMLERİ: alan skill'i = area_enemies + area {shape: row | column | plus | rect (rows 1-4 sıra x cols 1-3 şerit, anchor bottom_left), stages?: row | column | distance, reverse?}: oyuncu bir anchor HÜCRE seçer (boş olabilir), şeklin hücrelerindeki canlı düşmanlar vurulur (docs/design/combat.md > AOE şekilleri). stages: vuruş aşama aşama gelir (row = sıra sıra, ön sıra önce; column = şerit şerit; distance = anchor'dan dışarı halkalar; reverse ters), olaylarda stage numarası; hasar aynıdır. Eski area.radius ve column_enemies KALDIRILDI. Dizilim: sıra (derinlik) x şerit; motion melee olanlar yalnızca en öndeki dolu sıraya vurur. Çağrı skill'inde oyuncu boş yuvayı seçer. shield efektinde self: true ise kalkan hedefe değil kullanıcıya gider (Shield Bash). Alan skill'leri boş hücreye de atılabilir (useSkill'in slot parametresi). summon efekti birimi daima kullanıcının KENDİ tahtasına çağırır; consumeCorpse: true ise önce karşı taraftaki diriltilebilir düşman cesetlerinden SEÇİLENİ tüketir (madde 230: oyuncu seçer, ceset varken zorunlu; YZ en tehlikelisini; ceset consumed olur) ve birim fed (beslenmiş) varyantıyla, ceset yoksa unfed varyantıyla gelir (data/summons > variants). status efektinde chance (0-1) her alıcı için bağımsız zar, cause görsel neden (status olayına yazılır, ör. vines). Skill'de ignoreFrontRow: true ise yakın dövüş 'yalnızca ön sıradan' kuralından muaf (dash/charge). BUFF/DEBUFF: {type:'status', status, turns, self?} (data/statuses.json: slow, haste, wound, stun, fortify, blessed...). YER ETKİSİ: {type:'ground', ground, turns, scale, power} (data/grounds.json: poison, burning); skill'in kapsadığı hücrelere bırakılır. {type:'selfDamage', ratio}: kullanıcıya maks canının ratio'su kadar hasar. target 'everyone': herkese gider, her etki 'side' (allies|enemies) ile ya da varsayılanla (hasar/durum düşmana, şifa/kalkan dosta) taraf seçer. Hasar etkisinde falloff: çok hedefli vuruşta her yeni hedef bir öncekinin falloff katı hasar alır (sıra: aşamalıda aşama sırası, değilse öndeki önce). Skill'de ignoreReach: melee olsa da menzil/ön sıra sınırı yok (charge). target 'random_enemies' + count: rastgele (seed'li) farklı count düşmana gider. skyCenter: yukarıdan düşen etki seçilen alanın merkezine tek büyük olarak düşer. skyStagger: hedeflere sırayla (rastgele sıra, ms arayla) başlar. motion 'ground' (yerden çıkan etki: Blood Rite ağzı), 'whip' (kırbaç). taunt etkisinde allyDamageMult: taunt sürerken taunt'lı olmayan dostlar bu çarpanla hasar alır. reach: yakın dövüş menzili bonusu (satır); kullanıcı ön sıranın reach kadar gerisinden vurabilir ve düşmanın meleeRows+reach ön sırasına ulaşır. revive/dead_ally: düşmüş dostu olduğu yerde maks can/mana oranıyla diriltir; regen {turns, ratio}: dirilen sonraki turns turunun başında maks canın ratio'sunu yeniler. excludeSelf (single_ally): kullanıcı kendini hedefleyemez (Guard). sfx: skill'in animasyonunun çaldığı ses adları (data/audio.json). vfx bunlardan yalnızca listede olanları çalar. KUMAR (Gambler): hasar etkisinde repeatChance (0-1): her hedefe vuruştan sonra bu ihtimalle aynı vuruş bir kez daha (çifte vuruş). Hasar etkisinde bet {resource hp|mp, ratio, winChance, winMult, loseMult (varsayılan 1, 0 = iska), perStake}: skill başına bir zar; bahis hp ise maks canın ratio'su (canı en fazla 1'e indirir), mp ise bedel düşüldükten sonra KALAN MP'nin ratio'su; kazanırsa hasar winMult + perStake x bahis katı ve bahis geri kalır, kaybederse loseMult katı ve bahis kaybedilir. {type:'randomStatus', options:[{status, turns, weight}]}: vurulan her hedefe ağırlıklı zarla tek bir durum. cooldown: kullanıldıktan sonra kaç tur beklenir. initialCooldown: savaş başında (yalnızca turns modu, çağrılan birimler hariç) bu skill zaten bu kadar tur bekleme sayacıyla başlar; sayaç mevcut cooldown sayacıyla aynıdır (kullanıcının kendi turlarında azalır), üst sınır data/formulas.json > cooldown.maxInitial (3). ai: yapay zeka bağlam ipucu (src/engine/ai.ts): requires = hepsi sağlanmalı, anyOf = en az biri sağlanmalı; sağlanmayınca skill yalnızca öldürücü vuruş önceliğinde seçilebilir. Koşullar: kill, minTargets (vurulan düşman sayısı), minLivingEnemies, minLivingAllies, minSelfHpRatio, minSelfHpRatioAfter (can bedeli sonrası), minSelfMpRatio, minBattleTurns, minWoundedAllies+woundedBelowRatio, minTargetArmorReduction, minTargetHpToDamage, minMissingManaShare. Saf self-buff skill'lerinde incomingShare (düşman takımının bana vuracak payı, savunma değeri) ve opportunityShare (buff turunda yapılabilecek en iyi saldırının bedele eklenen payı). reserveMp: N; skill en geç N tur sonra hazır olacaksa ona yetecek MP'yi tüketecek saldırılar ertelenir. CUTTHROAT EKLERİ: area.shape x (anchor + 4 çapraz komşu) ve area.hitsAtCenter (anchor hücredeki birim N kez vurulur, ayrı zarlar); target area_any (alan İKİ tahtaya da atılabilir; etkiler side: allies|enemies ile ayrılır; şimdilik yalnızca status); damage.guaranteedCrit (kritik zarı atılmaz, her vuruş kritik; isabet zarı normal); requiresOpenBehind (yalnızca arkasındaki hücrede canlı birim olmayan, en arka sırada olmayan hedef; skillUsed olayında behindSlot/behindBoard/from). RECT ANCHOR: boyutu 3+ olan eksende fare hücresi ortada (ortalanamazsa soldan referans, taşarsa kaydır), 1-2 boyutlu eksende sol-alt köşe.",
+  "_not": "Etkiler: damage (damageType physical|magic, element physical|fire|ice|holy|dark|nature|arcane (yalnızca renk/yazı), scale str|int|dex|luck, power; opsiyonel ignoreDefense, lifesteal, bonusVsTag, bonusPerMissingMana, bonusFromShield {ratio, consume}), heal, hot (tur bazlı şifa: turns), shield (shieldType 'magic' ise yalnızca büyü hasarını emer), summon (lifespan: kendi tur sayısı), manaBurn, taunt (turns, breakRatio: taunt'lı bu oranda can kaybedince biter), guard (turns, share). scale: etkinin hangi temel özelliğe (str/int/dex/luck) bağlı olduğu. motion melee olan skill'ler yalnızca düşmanın en öndeki 2 canlı birimine vurabilir. cooldown: kullanıcının kendi tur sayısıyla bekleme. motion/fx/icon yalnızca görsel. Sayılar GEÇİCİDİR. Çağrı skill'inde oyuncu boş yuvayı seçer. HEDEF BİÇİMLERİ: alan skill'i = area_enemies + area {shape: row | column | plus | rect (rows 1-4 sıra x cols 1-3 şerit, anchor bottom_left), stages?: row | column | distance, reverse?}: oyuncu bir anchor HÜCRE seçer (boş olabilir), şeklin hücrelerindeki canlı düşmanlar vurulur (docs/design/combat.md > AOE şekilleri). stages: vuruş aşama aşama gelir (row = sıra sıra, ön sıra önce; column = şerit şerit; distance = anchor'dan dışarı halkalar; reverse ters), olaylarda stage numarası; hasar aynıdır. Eski area.radius ve column_enemies KALDIRILDI. Dizilim: sıra (derinlik) x şerit; motion melee olanlar yalnızca en öndeki dolu sıraya vurur. Çağrı skill'inde oyuncu boş yuvayı seçer. shield efektinde self: true ise kalkan hedefe değil kullanıcıya gider (Shield Bash). Alan skill'leri boş hücreye de atılabilir (useSkill'in slot parametresi). summon efekti birimi daima kullanıcının KENDİ tahtasına çağırır; consumeCorpse: true ise önce karşı taraftaki diriltilebilir düşman cesetlerinden SEÇİLENİ tüketir (madde 230: oyuncu seçer, ceset varken zorunlu; YZ en tehlikelisini; ceset consumed olur) ve birim fed (beslenmiş) varyantıyla, ceset yoksa unfed varyantıyla gelir (data/summons > variants). status efektinde chance (0-1) her alıcı için bağımsız zar, cause görsel neden (status olayına yazılır, ör. vines). Skill'de ignoreFrontRow: true ise yakın dövüş 'yalnızca ön sıradan' kuralından muaf (dash/charge). BUFF/DEBUFF: {type:'status', status, turns, self?} (data/statuses.json: slow, haste, wound, stun, fortify, blessed...). YER ETKİSİ: {type:'ground', ground, turns, scale, power} (data/grounds.json: poison, burning); skill'in kapsadığı hücrelere bırakılır. {type:'selfDamage', ratio}: kullanıcıya maks canının ratio'su kadar hasar. target 'everyone': herkese gider, her etki 'side' (allies|enemies) ile ya da varsayılanla (hasar/durum düşmana, şifa/kalkan dosta) taraf seçer. Hasar etkisinde falloff: çok hedefli vuruşta her yeni hedef bir öncekinin falloff katı hasar alır (sıra: aşamalıda aşama sırası, değilse öndeki önce). Skill'de ignoreReach: melee olsa da menzil/ön sıra sınırı yok (charge). target 'random_enemies' + count: rastgele (seed'li) farklı count düşmana gider. skyCenter: yukarıdan düşen etki seçilen alanın merkezine tek büyük olarak düşer. skyStagger: hedeflere sırayla (rastgele sıra, ms arayla) başlar. motion 'ground' (yerden çıkan etki: Blood Rite ağzı), 'whip' (kırbaç). taunt etkisinde allyDamageMult: taunt sürerken taunt'lı olmayan dostlar bu çarpanla hasar alır. reach: yakın dövüş menzili bonusu (satır); kullanıcı ön sıranın reach kadar gerisinden vurabilir ve düşmanın meleeRows+reach ön sırasına ulaşır. revive/dead_ally: düşmüş dostu olduğu yerde maks can/mana oranıyla diriltir; regen {turns, ratio}: dirilen sonraki turns turunun başında maks canın ratio'sunu yeniler. excludeSelf (single_ally): kullanıcı kendini hedefleyemez (Guard). sfx: skill'in animasyonunun çaldığı ses adları (data/audio.json). vfx bunlardan yalnızca listede olanları çalar. KUMAR (Gambler): hasar etkisinde repeatChance (0-1): her hedefe vuruştan sonra bu ihtimalle aynı vuruş bir kez daha (çifte vuruş). Hasar etkisinde bet {resource hp|mp, ratio, winChance, winMult, loseMult (varsayılan 1, 0 = iska), perStake}: skill başına bir zar; bahis hp ise maks canın ratio'su (canı en fazla 1'e indirir), mp ise bedel düşüldükten sonra KALAN MP'nin ratio'su; kazanırsa hasar winMult + perStake x bahis katı ve bahis geri kalır, kaybederse loseMult katı ve bahis kaybedilir. {type:'randomStatus', options:[{status, turns, weight}]}: vurulan her hedefe ağırlıklı zarla tek bir durum. cooldown: kullanıldıktan sonra kaç tur beklenir. initialCooldown: savaş başında (yalnızca turns modu, çağrılan birimler hariç) bu skill zaten bu kadar tur bekleme sayacıyla başlar; sayaç mevcut cooldown sayacıyla aynıdır (kullanıcının kendi turlarında azalır), üst sınır data/formulas.json > cooldown.maxInitial (3). ai: yapay zeka bağlam ipucu (src/engine/ai.ts): requires = hepsi sağlanmalı, anyOf = en az biri sağlanmalı; sağlanmayınca skill yalnızca öldürücü vuruş önceliğinde seçilebilir. Koşullar: kill, minTargets (vurulan düşman sayısı), minLivingEnemies, minLivingAllies, minSelfHpRatio, minSelfHpRatioAfter (can bedeli sonrası), minSelfMpRatio, minBattleTurns, minWoundedAllies+woundedBelowRatio, minTargetArmorReduction, minTargetHpToDamage, minMissingManaShare. Saf self-buff skill'lerinde incomingShare (düşman takımının bana vuracak payı, savunma değeri) ve opportunityShare (buff turunda yapılabilecek en iyi saldırının bedele eklenen payı). reserveMp: N; skill en geç N tur sonra hazır olacaksa ona yetecek MP'yi tüketecek saldırılar ertelenir. CUTTHROAT EKLERİ: area.shape x (anchor + 4 çapraz komşu) ve area.hitsAtCenter (anchor hücredeki birim N kez vurulur, ayrı zarlar); target area_any (alan İKİ tahtaya da atılabilir; etkiler side: allies|enemies ile ayrılır; şimdilik yalnızca status); damage.guaranteedCrit (kritik zarı atılmaz, her vuruş kritik; isabet zarı normal); requiresOpenBehind (yalnızca arkasındaki hücrede canlı birim olmayan, en arka sırada olmayan hedef; skillUsed olayında behindSlot/behindBoard/from). RECT ANCHOR: boyutu 3+ olan eksende fare hücresi ortada (ortalanamazsa soldan referans, taşarsa kaydır), 1-2 boyutlu eksende sol-alt köşe. MADDE 240: shield.onAbsorb {burnMana?, dispelChance?, giveMana?} = kalkan bir skill vuruşunu emdikçe kancalar (madde 241: hepsi kalkanın emdiği HER darbede: burnMana saldıranın MP'sini yakar, dispelChance ihtimalle saldıranın RASTGELE bir buff'ını siler, giveMana taşıyana SABİT MP verir); {type:'dispel', status: debuff|buff, count?}: hedefin durumlarını siler (count yoksa hepsi); {type:'bond', turns, ratio}: Dark Bond (kullanıcının lifesteal kazancının ratio katı bağlı dosta şifa); skill'de turnCost (0-1, yoksa 1): kullanınca sayaçtan eşiğin bu katı düşer (0,5 = yarım turn).",
   "melee_attack": {
     "id": "melee_attack",
     "name": "Double Strike",
@@ -296,11 +296,19 @@
     "cooldown": 3,
     "motion": "cast",
     "fx": "#6ec1ff",
+    "_not": "Madde 240 (Ömer): atıldığı dostun tüm DEBUFF'larını siler (dispel), sonra kalkan; kalkan emdiği HER vuruşta taşıyana giveMana kadar SABİT MP verir (madde 241; MP maks'ı aşmaz). Sayılar PROVİZYON.",
     "effects": [
+      {
+        "type": "dispel",
+        "status": "debuff"
+      },
       {
         "type": "shield",
         "scale": "int",
-        "power": 1.7
+        "power": 1.7,
+        "onAbsorb": {
+          "giveMana": 3
+        }
       }
     ],
     "vfx": "barrier",
@@ -308,37 +316,42 @@
       "magicHum"
     ]
   },
-  "blood_rite": {
-    "id": "blood_rite",
-    "name": "Blood Rite",
-    "icon": "bloodrite",
-    "target": "single_enemy",
+  "dark_bond": {
+    "id": "dark_bond",
+    "name": "Dark Bond",
+    "_not": "Madde 240 (Ömer): Blood Rite'ın yerine. Kendisi hariç tek dosta 3 tur (Undead'in kendi turları) karanlık bağ: Undead'in her lifesteal kazancının aynısı (ratio 1; madde 241: yalnızca Undead'in GERÇEKTEN iyileştiği miktar, canı doluyken 0) bağlı dosta da şifa olur. Aynı anda tek bağ; biri ölünce kopar. Yarım turn (turnCost 0,5). Hasar yok (damage-scale kuralı dışı değil: ölçekli etki yok). İkon/vfx/ses YER TUTUCU (soul ikon, guardlink vfx, chainTether + darkChant). Sayılar PROVİZYON.",
+    "icon": "soul",
+    "target": "single_ally",
+    "excludeSelf": true,
     "cost": {
-      "resource": "hp",
-      "amount": 20
+      "resource": "mp",
+      "amount": 8
     },
     "cooldown": 2,
-    "motion": "ground",
-    "fx": "#c0203a",
+    "turnCost": 0.5,
+    "motion": "cast",
+    "fx": "#8a1f3d",
     "effects": [
       {
-        "type": "damage",
-        "damageType": "magic",
-        "scale": "int",
-        "power": 2.1,
-        "element": "dark"
+        "type": "bond",
+        "turns": 3,
+        "ratio": 1
       }
     ],
-    "vfx": "bloodhands",
+    "ai": {
+      "requires": {
+        "minLivingAllies": 2
+      }
+    },
+    "vfx": "guardlink",
     "sfx": [
       "darkChant",
-      "earthCrack",
-      "clawRake",
-      "bloodSplat"
+      "chainTether"
     ]
   },
   "wail_of_the_dead": {
     "id": "wail_of_the_dead",
+    "_not": "Madde 241 + Ömer kararı (2026-10-07): bedel CAN ve Undead'in MEVCUT (anlık) canının %20'si (cost.ofCurrent 0.2; eski sabit 18 HP). Bedel = round(mevcut can x 0,2), en az 1 (src/engine/cost.ts); mevcut canın %20'si olduğu için asla öldürmez (canı 1 iken bedel 1 = kullanılamaz: 'Not enough HP'). Yapay zekada düşük can kuralı YOK (madde 247, Ömer kararı: oranlı bedel minHpRatioForHpCost'tan muaf; bedel zaten anlık canın %20'si).",
     "name": "Wail of the Dead",
     "icon": "wail",
     "target": "area_enemies",
@@ -347,8 +360,9 @@
       "stages": "distance"
     },
     "cost": {
-      "resource": "mp",
-      "amount": 12
+      "resource": "hp",
+      "amount": 0,
+      "ofCurrent": 0.2
     },
     "cooldown": 3,
     "motion": "cast",
@@ -804,8 +818,9 @@
   "spell_ward": {
     "id": "spell_ward",
     "name": "Spell Ward",
+    "_not": "Madde 240 (Ömer): artık dosta ya da kendine atılır (single_ally, excludeSelf YOK). Büyü kalkanı Int x 0,3 + kalan MP x 0,6 AYNEN. Kalkan bir skill vuruşunu emdiği HER darbede (madde 241) saldıranın MP'sinden burnMana yakar ve saldıranın üstünde buff varsa dispelChance ihtimalle RASTGELE bir buff'ını siler. Yer etkisi tiki tetiklemez. Sayılar PROVİZYON.",
     "icon": "spellward",
-    "target": "self",
+    "target": "single_ally",
     "cost": {
       "resource": "mp",
       "amount": 10
@@ -819,9 +834,18 @@
         "scale": "int",
         "power": 0.3,
         "shieldType": "magic",
-        "bonusPerMana": 0.6
+        "bonusPerMana": 0.6,
+        "onAbsorb": {
+          "burnMana": 8,
+          "dispelChance": 0.25
+        }
       }
     ],
+    "ai": {
+      "requires": {
+        "maxTargetHpRatio": 0.45
+      }
+    },
     "vfx": "spellward",
     "sfx": [
       "wardHum"
@@ -1146,7 +1170,9 @@
     ],
     "vfx": "fistcrush2",
     "sfx": [
-      "armorLeap",
+      "plateCreak",
+      "heaveGrunt",
+      "gauntletDrop",
       "gauntletCrush"
     ],
     "ai": {
@@ -1635,6 +1661,191 @@
       "shadowStep",
       "backstabThud",
       "bloodSplat"
+    ]
+  },
+  "evil_eye": {
+    "_not": "Hexer ana saldırı (0 MP): nazar. docs/design/classes/hexer.md 4.2. İsabet ederse +1 Omen (kritikse +2); 3 Omen = Doom. İkon/vfx/ses YER TUTUCU (ödünç: ikon eye, vfx voidstrike, ses darkChant + boneImpact); content-designer gerçeklerini yapacak (evileye ikon/vfx, hexWhisper + boneCharmRattle). Sayılar PROVİZYON.",
+    "id": "evil_eye",
+    "name": "Evil Eye",
+    "icon": "eye",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "cast",
+    "fx": "#b04fa8",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "element": "dark",
+        "scale": "luck",
+        "power": 0.9
+      },
+      {
+        "type": "omen",
+        "stacks": 1,
+        "critStacks": 2
+      }
+    ],
+    "vfx": "voidstrike",
+    "sfx": [
+      "darkChant",
+      "boneImpact"
+    ]
+  },
+  "withering_curse": {
+    "_not": "Hexer alan laneti: rect 2x3 (Nature's Wrath şekli), aşamalı önden arkaya (Ö6). Her vurulana hasar + Wither 3 tur (LUCK x 0,2 / tur, karakter üstü DoT) + 1 Omen (kritikse 2). İkon/vfx/ses YER TUTUCU (ödünç: ikon drainfield, vfx wail, ses graveMoan + voidSuction); gerçekleri: witheringcurse ikon/vfx, candleGutter + rotSeep. Sayılar PROVİZYON.",
+    "id": "withering_curse",
+    "name": "Withering Curse",
+    "icon": "drainfield",
+    "target": "area_enemies",
+    "area": {
+      "shape": "rect",
+      "rows": 2,
+      "cols": 3,
+      "anchor": "bottom_left",
+      "stages": "row"
+    },
+    "cost": {
+      "resource": "mp",
+      "amount": 10
+    },
+    "cooldown": 3,
+    "motion": "cast",
+    "fx": "#9cab3c",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "element": "dark",
+        "scale": "luck",
+        "power": 0.5
+      },
+      {
+        "type": "dot",
+        "status": "wither",
+        "scale": "luck",
+        "power": 0.2,
+        "turns": 3
+      },
+      {
+        "type": "omen",
+        "stacks": 1,
+        "critStacks": 2
+      }
+    ],
+    "ai": {
+      "requires": {
+        "minTargets": 2
+      }
+    },
+    "vfx": "wail",
+    "sfx": [
+      "graveMoan",
+      "voidSuction"
+    ]
+  },
+  "jinx": {
+    "_not": "Hexer: uğursuzluk düğümü. Hasar + Jinxed 2 tur (isabet -%20, kritik yok; hedefin bir sonraki hasar skill'inden sonra düşer) + 1 Omen (kritikse 2). Backstab'ın garantili kritiğini bozmaz (Ö5). İkon/vfx/ses YER TUTUCU (ödünç: ikon clover, vfx bonethrow, ses chainTether + boneImpact); gerçekleri: jinx ikon/vfx, threadCinch + ceramicCrack. Sayılar PROVİZYON.",
+    "id": "jinx",
+    "name": "Jinx",
+    "icon": "clover",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 6
+    },
+    "cooldown": 3,
+    "motion": "cast",
+    "fx": "#c0203a",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "element": "dark",
+        "scale": "luck",
+        "power": 0.5
+      },
+      {
+        "type": "status",
+        "status": "jinxed",
+        "turns": 2
+      },
+      {
+        "type": "omen",
+        "stacks": 1,
+        "critStacks": 2
+      }
+    ],
+    "ai": {
+      "anyOf": [
+        {
+          "kill": true
+        },
+        {
+          "minStatusMitigation": 6
+        }
+      ]
+    },
+    "vfx": "bonethrow",
+    "sfx": [
+      "chainTether",
+      "boneImpact"
+    ]
+  },
+  "doom_mark": {
+    "_not": "Hexer 4. yuva: vurur, +1 Omen (kritikse 2), sonra yığın kaç olursa olsun Doom x1,5 (Ö10; otomatik Doom bastırılır: çift patlama yok). İskada hiçbir şey olmaz. İkon/vfx/ses YER TUTUCU (ödünç: ikon voidstrike, vfx voidstrike, ses voidPulse + implode); gerçekleri: doommark ikon/vfx, doomBreath + hexWhisper + ceramicCrack + doomThud. Sayılar PROVİZYON.",
+    "id": "doom_mark",
+    "name": "Doom Mark",
+    "icon": "voidstrike",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 14
+    },
+    "cooldown": 4,
+    "initialCooldown": 2,
+    "motion": "cast",
+    "fx": "#6a2f5f",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "element": "dark",
+        "scale": "luck",
+        "power": 1
+      },
+      {
+        "type": "omen",
+        "stacks": 1,
+        "critStacks": 2
+      },
+      {
+        "type": "detonate",
+        "status": "omen",
+        "mult": 1.5
+      }
+    ],
+    "ai": {
+      "anyOf": [
+        {
+          "kill": true
+        },
+        {
+          "minTargetStacks": {
+            "status": "omen",
+            "count": 2
+          }
+        }
+      ],
+      "reserveMp": 2
+    },
+    "vfx": "voidstrike",
+    "sfx": [
+      "voidPulse",
+      "implode"
     ]
   }
 }

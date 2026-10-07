@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Battle, chooseAction, content } from '../src/engine';
 import type { AiConfig } from '../src/engine';
+import { legacySkill } from './legacy-skills';
 
 /** Class skill kuralları testleri global skill'siz YZ ile (global skill kuralları: tests/ai-global.test.ts); tam savaş testleri content.aiConfig'i (global dahil) kullanır. */
 const ai: AiConfig = { ...content.aiConfig, global: undefined };
@@ -14,6 +15,13 @@ const sturdy = (b: Battle): Battle => {
   return b;
 };
 const testBattle = (seed = 1) => sturdy(new Battle(content.battleSetup('first-battle', seed, 'test')));
+/** Undead'e (yalnızca bu savaşta) can bedelli eski Blood Rite'ı ekler: can bedeli kuralı testleri için (tests/legacy-skills.ts). */
+const withBloodRite = (seed = 1): Battle => {
+  const setup = content.battleSetup('first-battle', seed, 'test');
+  setup.skills = { ...setup.skills, blood_rite: legacySkill('blood_rite') };
+  setup.party = setup.party.map((d) => (d.id === 'undead' ? { ...d, skills: [...d.skills, 'blood_rite'] } : d));
+  return sturdy(new Battle(setup));
+};
 
 /** Seçimin gerçekte vuracağı birimler (alan skill'inde anchor hücre ya da birim; tek hedefte hedef). */
 const hitsOf = (b: Battle, actor: string, pick: { skillId: string; targetUid?: string; slot?: number }): string[] =>
@@ -64,8 +72,9 @@ describe('yapay zeka: öncelik 1 - öldürebiliyorsa öldür', () => {
     expect(chooseAction(b, E_ARCHER, ai)?.reason).not.toBe('kill');
   });
 
-  it('kendi canı pahasına de olsa (Blood Rite) öldürücü vuruşu yapabilir', () => {
-    const b = testBattle();
+  it('kendi canı pahasına de olsa (can bedelli skill: eski Blood Rite) öldürücü vuruşu yapabilir', () => {
+    // Blood Rite oyundan kalktı (madde 240: Dark Bond); can bedeli kuralı motorda duruyor, test eski tanımı yalnızca bu savaşa ekler
+    const b = withBloodRite();
     b.get(UNDEAD)!.hp = 25; // oran düşük ama 20 can bedeli ödeyebilir
     b.get(E_MAGE)!.hp = 30; // Blood Rite 14*2.4-5 ≈ 28.6; Soul Drain 14-5=9. Sadece Blood Rite öldürür
     b.get(E_MAGE)!.hp = 20; // Mage kısa canlı: Blood Rite ortalaması 20 canı aşar
@@ -173,8 +182,8 @@ describe('yapay zeka: hasar tercihleri', () => {
     expect(hits).not.toContain(UNDEAD);
   });
 
-  it('Undead canı azken can ödeyen skill\'i (Blood Rite) hasar için kullanmaz', () => {
-    const b = testBattle();
+  it('Undead canı azken can ödeyen skill\'i (eski Blood Rite) hasar için kullanmaz', () => {
+    const b = withBloodRite();
     b.get(UNDEAD)!.hp = 30; // 30/80 < 0.5 ve Blood Rite öldürmüyor
     const choice = chooseAction(b, UNDEAD, ai);
     expect(choice?.skillId).not.toBe('blood_rite');
@@ -298,8 +307,8 @@ describe('yapay zeka: yeni sınıflar ve menzil/taunt kuralları', () => {
     const b = make(['antimage', 'warrior', 'archer', 'mage'], ['warrior', 'mage', 'druid', 'archer']);
     for (const c of b.living('enemy')) { c.maxMp = 0; c.mp = 0; } // burn ve eksik-mana (kill) önceliği devreye girmesin
     const am = b.get(uid(b, 'party', 'antimage'))!;
-    am.hp = Math.round(am.maxHp * 0.5);
-    expect(chooseAction(b, am.uid, ai)).toMatchObject({ skillId: 'spell_ward', reason: 'shield' });
+    am.hp = Math.round(am.maxHp * 0.35); // madde 241: eşik veride 0,45 (ölçümle düşürüldü)
+    expect(chooseAction(b, am.uid, ai)).toMatchObject({ skillId: 'spell_ward', targetUid: am.uid, reason: 'shield' });
   });
 
   it('yakın dövüşçü yalnızca menzildeki hedefleri seçer, öldürülebilecek biri menzil dışındaysa ona gitmez', () => {

@@ -18,12 +18,30 @@ describe('sağlamlık (rastgele takımlar, YZ vs YZ)', () => {
 
   // Sınıf bandı docs/balance.md hedefine geri çekildi (madde 214): her class %40-60.
   const CLASS_BAND = { low: 40, high: 60 };
-  it(`her class kazanma oranı bantta (%${CLASS_BAND.low}-${CLASS_BAND.high}, docs/balance.md)`, () => {
+
+  /**
+   * DENGESİ BEKLEYEN CLASS'LAR (madde 247, Ömer kararı 2026-10-07: "şimdilik denge işine girmeyeceğiz").
+   * Bu listedeki class'lar bant kontrolünden GEÇİCİ olarak muaftır; oranları yine ölçülür ve test çıktısına
+   * uyarı olarak yazılır. Bant GEVŞETİLMEZ: diğer tüm class'lar aynı %40-60 bandında kalır.
+   * UYARI: bu liste normalde BOŞ olmalıdır. Bir class'ın dengesi yapılınca listeden çıkarılır (docs/balance.md > Dengesi bekleyen class'lar).
+   */
+  const PENDING_BALANCE: readonly string[] = ['hexer'];
+
+  it(`her class kazanma oranı bantta (%${CLASS_BAND.low}-${CLASS_BAND.high}, docs/balance.md; dengesi bekleyenler hariç)`, () => {
     for (const id of content.randomPool) {
       const win = winRate(result.classes.get(id)!);
+      if (PENDING_BALANCE.includes(id)) {
+        const inBand = win >= CLASS_BAND.low && win <= CLASS_BAND.high;
+        console.warn(`[balance] DENGESİ BEKLİYOR: ${id} %${win.toFixed(1)} (${inBand ? 'bantta' : 'BANT DIŞI'}; bant %${CLASS_BAND.low}-${CLASS_BAND.high}, kontrolden muaf: PENDING_BALANCE)`);
+        continue;
+      }
       expect(win, `${id} %${win.toFixed(1)}`).toBeGreaterThanOrEqual(CLASS_BAND.low);
       expect(win, `${id} %${win.toFixed(1)}`).toBeLessThanOrEqual(CLASS_BAND.high);
     }
+  });
+
+  it('dengesi bekleyen liste yalnızca rastgele havuzdaki class\'ları içerir (yazım hatası sessizce muaf tutmasın)', () => {
+    for (const id of PENDING_BALANCE) expect(content.randomPool, id).toContain(id);
   });
 
   it('yeterince örneklenen kompozisyonlar uç değerde değil (%10-90)', () => {

@@ -1,7 +1,7 @@
 {
   "id": "cutthroat",
   "name": "Cutthroat",
-  "spriteId": "archer",
+  "spriteId": "cutthroat",
   "color": "#5b4a6b",
   "logo": "cutthroatlogo",
   "role": "Assassin",
@@ -29,7 +29,7 @@
     "text": "",
     "effect": {
       "type": "bonusVsStatus",
-      "statuses": ["wound", "slow", "stun"],
+      "statuses": ["wound", "slow", "stun", "wither"],
       "bonus": 0.25
     }
   }

@@ -30,6 +30,15 @@ describe('takım seçimi (veriden)', () => {
     }
   });
 
+  it('kart yerleşimi çok kalabalıkta da çökmez: 14-30 kart makul ölçekte, iki-üç satır', () => {
+    for (const n of [13, 14, 18, 24, 30]) {
+      const l = rosterLayout(n, 1792, 246, 188, 270);
+      expect(l.cols * l.rows).toBeGreaterThanOrEqual(n);
+      expect(l.scale, `n=${n}`).toBeGreaterThan(0.35);
+      expect(l.rows * l.cardH + (l.rows - 1) * l.gap).toBeLessThanOrEqual(246 + 0.01);
+    }
+  });
+
   it('yeni seçilen sınıf boş bir hücre bulur; yakın dövüşçü ön sıraya gider', () => {
     const cells = Array.from({ length: content.CELL_COUNT }, () => '');
     const melee = ids.find((id) => content.isMeleeClass(id));
@@ -80,7 +89,8 @@ describe('takım boyutu (saf mantık)', () => {
   });
 
   it('boyut küçülünce fazla birimler sondan çıkar; tekrar eden sınıflar serbest (12 kişi, 9 sınıf)', () => {
-    const big = cells(12);
+    // 9 sınıflık döngü: 12 kişide sınıflar tekrar eder (class sayısı 12'ye ulaştığı için cells(12) artık tekrarsız; Hexer eklenince)
+    const big = Array.from({ length: content.CELL_COUNT }, (_, i) => ids[i % 9]!);
     expect(new Set(big.filter(Boolean)).size).toBeLessThan(12);
     const t = trimToSize(big, 4);
     expect(teamCount(t)).toBe(4);

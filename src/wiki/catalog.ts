@@ -5,6 +5,7 @@
  * Elle yazılan tek şey, mekanik açıklamalarının CÜMLELERİdir (şablon): yeni mekanik/özel kural/pasif eklenince
  * Mechanics bölümündeki ilgili metin güncel mi kontrol edilmelidir (CLAUDE.md kuralı).
  */
+import { sortByPrimary } from '../game/class-order';
 import layout from '../../data/battle-layout.json';
 import { applySummonVariant, content, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, TARGET_TEXT } from '../engine';
 import { TARGET_BADGE } from '../engine/skill-info';
@@ -247,7 +248,8 @@ function buildUnit(kind: WikiUnit['kind'], def: CombatantDef, files: WikiFiles):
 }
 
 export function buildClasses(files: WikiFiles): WikiUnit[] {
-  return Object.values(content.classes).filter((d) => !d.hidden).map((d) => buildUnit('class', d, files));
+  // Order: primary stat STR - DEX - INT - LUCK, alphabetical inside a group, test classes last (same rule as the team select shelf)
+  return sortByPrimary(Object.values(content.classes).filter((d) => !d.hidden)).map((d) => buildUnit('class', d, files));
 }
 
 export function buildSummons(files: WikiFiles): WikiUnit[] {
@@ -382,6 +384,45 @@ function skillsWith(pred: (e: SkillDef['effects'][number]) => boolean): string[]
   return allSkills().filter((s) => s.effects.some(pred)).map((s) => s.name);
 }
 
+/**
+ * "Curses" makalesi (Hexer; docs/design/classes/hexer.md 8.7): Omen yığını, Doom, süre bitimi, Misfortune, Withering, Jinxed ve Ill Omen. Sayılar
+ * data/statuses.json ve skill/pasif verisinden. Yığılan durum (maxStacks + doom) yoksa makale yok.
+ */
+function curseArticles(): WikiArticle[] {
+  const entry = Object.entries(content.statuses).find(([, d]) => d.maxStacks && d.doom);
+  if (!entry) return [];
+  const [omenId, om] = entry;
+  const doom = om.doom!;
+  const max = om.maxStacks!;
+  const dur = om.duration ?? 3;
+  const crit = allSkills().flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'omen' }> => e.type === 'omen' && (e.status ?? 'omen') === omenId)).find((e) => e.critStacks !== undefined && e.critStacks > e.stacks);
+  const detonators = allSkills().flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'detonate' }> => e.type === 'detonate' && e.status === omenId).map((e) => `${s.name} (x${num(e.mult)})`));
+  const dots = Object.values(content.statuses).filter((d) => d.dot);
+  const jinx = Object.values(content.statuses).filter((d) => d.endsOnOwnAttack);
+  const passives = Object.values(content.classes).filter((c) => c.passive?.effect.type === 'omenTransfer');
+  const cursers = allSkills().filter((s) => s.effects.some((e) => e.type === 'omen')).map((s) => s.name);
+  return [
+    article('curses', 'Special rules', 'Curses: Omen, Doom, Withering', om.icon, [
+      p(`Some attacks leave a ${om.name} on their target (${cursers.join(', ') || 'none yet'}). Omens stack up to ${max}${crit ? `; a critical curse leaves ${crit.critStacks}` : ''}. A curse that misses leaves nothing.`),
+      list(...[
+        `Timer: the first Omen starts a ${dur}-turn timer (counted on the cursed unit's own turns). New Omens never renew or extend it.`,
+        `Doom: when the ${max === 3 ? 'third' : `${max}th`} Omen lands, Doom strikes at once: ${pct(doom.powerPerStack)} of the curser's ${STAT_LABEL[doom.scale]} as ${doom.element} ${doom.damageType} damage for every Omen, then the Omens are spent. Doom cannot miss or be dodged, but it can crit (the curser's crit chance); armor of its kind, shields and Lucky Escape work as usual.`,
+        `Timer runs out: the Omens do not fade quietly. At the start of the cursed unit's turn (after ground and Withering damage, before regeneration) they burst into Doom, one share per Omen${doom.expireMult !== 1 ? ` (x${num(doom.expireMult)})` : ''}, using the curser's Luck and crit chance from when the last Omen was added. If the unit dies earlier that turn, no Doom happens.`,
+        'Guard: a Doom set off by a skill is part of that hit, so a guarding ally shares it. A Doom from a timer running out is a curse, not a skill hit: guard never takes any of it.',
+        `Misfortune: each Omen lowers the cursed unit's crit chance by ${pct(Math.abs(om.critDeltaPerStack ?? 0))} (never below 0%).`,
+        detonators.length > 0 ? `Detonate: ${detonators.join(', ')} sets off Doom at once with every Omen on the target, however many there are, multiplied as shown; it does not also trigger a second Doom.` : '',
+        'A curse outlives its caster: Omens and Withering keep running after the curser falls, and the timer Doom still bursts.',
+        'Two cursers on the same side fill the same Omen stack.',
+      ].filter((x) => x !== '')),
+      ...(dots.length > 0
+        ? [p(`${dots.map((d) => d.name).join(', ')}: the cursed unit takes ${dots.map((d) => d.dot!.element).join('/')} damage at the start of each of its own turns, right after ground effects. The amount is fixed when the curse lands; it cannot miss or crit, armor of its kind reduces it, and guard never takes it. Casting it again renews the duration and keeps the stronger amount.`)]
+        : []),
+      ...(jinx.length > 0 ? [p(`${jinx.map((d) => `${d.name}: ${d.text}`).join('. ')}. It ends after the unit's next damaging skill (every hit of that skill is affected) or when its time runs out. Hits that are always critical stay critical.`)] : []),
+      ...(passives.length > 0 ? [list(...passives.map((c) => `${c.name}, ${c.passive!.name}: ${describePassive(c.passive!, c.stats, f)}`))] : []),
+    ], om.color),
+  ];
+}
+
 export function buildMechanics(): WikiArticle[] {
   const a = f.attributes;
   const k = f.armor.k;
@@ -477,6 +518,7 @@ export function buildMechanics(): WikiArticle[] {
       p('Some passives deal extra damage to a target that already suffers from certain statuses. The bonus multiplies every hit (a crit multiplies on top of it) and shows in the damage preview.'),
       list(...Object.values(content.classes).filter((c) => c.passive?.effect.type === 'bonusVsStatus').map((c) => `${c.name}, ${c.passive!.name}: ${describePassive(c.passive!, c.stats, f)}`)),
     ], '#c9a227'),
+    ...curseArticles(),
     article('echo', 'Special rules', 'Ready again immediately', 'echo', [
       p('Some passives let a damaging skill with a cooldown be ready again right after it is cast, with a set chance. Classes with such a passive: ' + Object.values(content.classes).filter((c) => c.passive?.effect.type === 'spellEcho').map((c) => `${c.name} (${c.passive!.name})`).join(', ') + '.'),
     ]),
@@ -502,7 +544,44 @@ export function buildMechanics(): WikiArticle[] {
     article('shields', 'Special rules', 'Shields', 'shield', [
       p('A shield soaks damage before HP. A normal shield absorbs any damage; a magic shield only absorbs magic damage. Shield amounts are fixed (no variance, no crit).'),
       p(`Skills that shield: ${skillsWith((e) => e.type === 'shield').join(', ') || 'none yet'}.`),
+      p('Some shields do something extra whenever they absorb a hit (only direct hits from an enemy skill; damage from ground effects never triggers them). Their extra part soaks damage before any plain shield on the same unit. Every absorbed hit triggers them again: an attack that hits several times triggers them on every hit.'),
+      list(
+        ...allSkills().flatMap((s) =>
+          s.effects
+            .filter((e): e is Extract<typeof e, { type: 'shield' }> => e.type === 'shield' && !!e.onAbsorb)
+            .map((e) => {
+              const h = e.onAbsorb!;
+              const parts = [
+                h.burnMana ? `burns ${h.burnMana} MP from the attacker` : '',
+                h.dispelChance ? `${pct(h.dispelChance)} chance to remove a random buff from the attacker` : '',
+                h.giveMana ? `gives the shielded unit ${h.giveMana} MP (never above its maximum)` : '',
+              ].filter(Boolean);
+              return `${s.name} (${e.shieldType === 'magic' ? 'magic shield' : 'shield'}): when it absorbs a hit, it ${parts.join('; ')}.`;
+            }),
+        ),
+      ),
     ]),
+    article('dispel', 'Special rules', 'Removing buffs and debuffs', 'manabarrier', [
+      p('Some skills remove statuses: a cleanse wipes the debuffs from an ally (Slow, Wound, Stun, Blinded...), a dispel strips a buff from an enemy. A shield that strips a buff from an attacker picks a random one; a skill that removes only some debuffs removes the longest-lasting first. A few special statuses (such as Dark Bond) can never be removed.'),
+      p(`Remove debuffs: ${skillsWith((e) => e.type === 'dispel' && e.status === 'debuff').join(', ') || 'none'}. Remove an attacker's buff: ${skillsWith((e) => e.type === 'shield' && !!e.onAbsorb?.dispelChance).join(', ') || 'none'}.`),
+      p('Removing a Stun from a taunting unit does not bring its taunt back: a Stun ends the taunt the moment it lands.'),
+    ], '#6ec1ff'),
+    article('dark-bond', 'Special rules', 'Dark Bond and life steal', 'soul', [
+      p('Life steal heals the attacker for part of the damage it deals (a passive such as Vampiric Bite, or a skill that says so). Damage dealt by a summon counts for its owner.'),
+      p('A dark bond links the caster to one other ally for a number of the caster\'s own turns. While it lasts, every time the caster heals from life steal, the bonded ally is healed the same amount too; the caster\'s own healing is not reduced. Only what the caster really heals is shared: at full HP the caster steals no life, so the ally gets nothing; the ally is never healed above its maximum.'),
+      list(
+        'Only one bond at a time: a new bond breaks the old one.',
+        'The bond ends when its time runs out (counted on the caster\'s turns; both badges show the same number), or at once if either unit falls.',
+        'The bond cannot be removed by dispels or cleanses.',
+      ),
+      list(...allSkills().flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'bond' }> => e.type === 'bond').map((e) => `${s.name}: bond for ${e.turns} turns; the ally heals ${e.ratio === 1 ? 'the same amount' : pct(e.ratio)} of every life steal heal.`))),
+      p(`Life steal passives: ${Object.values(content.classes).filter((c) => c.passive?.effect.type === 'soulDrain').map((c) => `${c.name} (${c.passive!.name}, ${pct((c.passive!.effect as { ratio: number }).ratio)})`).join(', ') || 'none'}.`),
+    ], '#b0304f'),
+    article('half-turn', 'Special rules', 'Half-turn skills', 'hourglass', [
+      p(`Using a skill normally takes a whole turn: the unit's action counter drops by ${f.turn.threshold}. A half-turn skill only takes half of that, so the unit's next turn comes in half the usual time (Haste, Slow and the Skip Turn boost still change how fast the counter fills). The turn bar shows this as soon as the skill is used.`),
+      p('Cooldown and MP work as usual, and a half-turn skill always has a cooldown, so it cannot be chained. In test mode there is no turn order, so this has no effect there.'),
+      p(`Half-turn skills: ${allSkills().filter((s) => s.turnCost !== undefined && s.turnCost < 1).map((s) => s.name).join(', ') || 'none yet'}.`),
+    ], '#c9a227'),
     article('control', 'Special rules', 'Taunt, guard and mana burn', 'guardian', [
       p(`Taunt forces enemies to target the taunting unit for some turns (it can end early if the unit loses enough HP, or at once if the unit is hit by a control status: ${Object.values(content.statuses).filter((d) => d.breaksTaunt).map((d) => d.name).join(', ') || 'none'}). Guard makes a protector take a share of the damage dealt to another ally (a unit cannot guard itself). Mana burn removes MP from a target (and may give some of it to the caster) without hurting its HP.`),
       p(`Taunt: ${skillsWith((e) => e.type === 'taunt').join(', ') || 'none'}. Guard: ${skillsWith((e) => e.type === 'guard').join(', ') || 'none'}. Mana burn: ${skillsWith((e) => e.type === 'manaBurn').join(', ') || 'none'}.`),
