@@ -5,7 +5,7 @@ import { preloadAssets } from '../assets';
 import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
 import { H, W, crown, hpBar, openModal, type Modal } from '../campaign-ui';
 import { MAP_SCENE, loadEntry, startNewCampaign, storage } from '../campaign-session';
-import { buildBackdrop, classAvatar, goldText, makeMenuButton, serif } from '../menu-ui';
+import { buildBackdrop, classAvatar, classLogoBadge, goldText, makeMenuButton, serif } from '../menu-ui';
 import { makePanel } from '../ui-frame';
 
 export interface MainMenuData {
@@ -105,6 +105,7 @@ export class MainMenuScene extends Phaser.Scene {
         if (!def) return;
         const ax = x + 720 + k * 74;
         root.add(classAvatar(this, def, ax, y + 52, 56));
+        root.add(classLogoBadge(this, def, ax - 22, y + 72, 11));
         root.add(hpBar(this, ax - 28, y + 86, 56, 8, l.summary.hp[k] ?? 1));
         if (l.state.roster.find((h) => h.class === cls)?.leader) root.add(crown(this, ax + 22, y + 26, 0.7));
       });
@@ -248,6 +249,7 @@ export class MainMenuScene extends Phaser.Scene {
         if (!def) return;
         const ax = x + 720 + k * 74;
         root.add(classAvatar(this, def, ax, y + 40, 56));
+        root.add(classLogoBadge(this, def, ax - 22, y + 60, 11));
         root.add(hpBar(this, ax - 28, y + 74, 56, 8, e.summary.hp[k] ?? 1));
       });
       root.add(makeMenuButton(this, x + 1110, y + 52, 150, 64, 'Load', () => this.loadSave(e), { primary: true, size: 26 }).container);

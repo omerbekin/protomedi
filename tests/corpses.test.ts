@@ -153,7 +153,8 @@ describe('Raise Dead: kendi tarafına çağrı + ceset tüketimi', () => {
   it('summonSlots (madde 257, Faz 4): kendi tahtasındaki TÜM boş yuvalar; ölü dostun cesedinin üstüne de çağrılır, dost yine diriltilebilir', () => {
     const b = mk();
     b.debugKill('party-0', false); // party-0 (Warrior) yuva 0'da düştü
-    expect(b.fallenSlots('party')).toEqual([0]); // Move için hâlâ ayrılmış (freeTiles)
+    expect(b.fallenSlots('party')).toEqual([0]); // bilgi amaçlı (madde 258: Move da girebilir)
+    expect(b.freeTiles('party-2')).toContain(0);
     expect(b.summonSlots('party-1', 'raise_dead')).toEqual(b.freeSlots('party'));
     expect(b.summonSlots('party-1', 'raise_dead')).toContain(0);
     const sk = ofType(act(b, 'party-1', 'raise_dead', undefined, 0), 'summon')[0]!.combatant;
@@ -213,11 +214,11 @@ describe('Resurrection ve tüketilmiş ceset', () => {
     expect(previewSkill(b, 'enemy-2', 'resurrection', 'enemy-0')).toEqual([]);
   });
 
-  it('fallenSlots güncel: tüketilmiş cesedin yuvası artık rezerve değil (Move Tile ve çağrılar kullanabilir)', () => {
+  it('fallenSlots güncel: tüketilmiş cesedin yuvası listeden düşer; Move ceset hücresine her durumda girebilir (madde 258)', () => {
     const b = mk();
     b.debugKill('enemy-1', false);
     expect(b.fallenSlots('enemy')).toEqual([1]);
-    expect(b.freeTiles('enemy-0')).not.toContain(1);
+    expect(b.freeTiles('enemy-0')).toContain(1);
     act(b, 'party-1', 'raise_dead', undefined, undefined, 'enemy-1');
     expect(b.fallenSlots('enemy')).toEqual([]);
     expect(b.freeTiles('enemy-0')).toContain(1);

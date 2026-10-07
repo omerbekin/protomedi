@@ -49,12 +49,53 @@ export const VFX: Record<string, V2Vfx> = {
 ```
 
 - `c`: `actor`, `targets`, `centerPos`, `cells`, `slots`, `stages`/`releaseStage`, `lunge`, `windUp`, `gate`, `sfx`, `result`, `behind`, `foes`.
+- **`c.usage`** (madde 259): bu kullanımın motor olay özeti (`src/game/skill-usage.ts`). Sahnenin iç alanlarını (`scene.battle.log`,
+  `scene.views`) OKUMA; bunu kullan: `c.usage.dispelledFrom(uid)` (silinen durumlar; Mana Barrier arınması yalnızca doluysa),
+  `c.usage.healsOn(uid, cause?)` (can çalma şifası; `'dark_bond'` = bağ kopyası), `c.usage.corpseUid` (Raise Dead'in tüketilen cesedi),
+  `c.usage.slot` (çağrı yuvası), `c.usage.statuses`, `c.usage.damages`, `c.usage.deaths`, `c.usage.summoned`, ham `c.usage.events`.
+  `c.viewOf(uid)` hedef listesinde olmayan birimin görünümü (ceset, bağlı dost). Galeri önizlemesinde `c.usage` tanımsız olabilir: yoksa
+  "tam" görünümü oyna (ör. arınmayı göster).
 - `k`: `sprite`, `burst`, `ring`, `travel`, `flash`, `shake`, `wait`, `counter`, `grow`, `sprout`, `arcSlash`, `hit`, `cracks`,
   `dustCloud`, `spot`, `feet`, `slow`, `rnd`, `snap`, `DEPTH`, `colors`, `Phaser`, **`v1.<ad>(c)`** (eskiyi çağırıp üstüne eklemek için),
   **`v2Sprite(c, 'ad', renk, x, y, boyut)`** (kendi `SPRITES` çizimin).
 - Promise **vuruş anında** çözülmeli (hasar rakamları o an çıkar). Efekt hata verirse savaş kilitlenmez (uyarı + devam).
 - **Phaser'ı ve `../../vfx`'i çalışma zamanında import etme** (yalnızca `import type`); her şey `k` üzerinden. Test bunu denetler.
 - Alan skill'i tıklanan merkez hücreye (`c.centerPos`) ve seçim göstergesinin şekline uyar; yakın dövüşçü vuracağı yere koşar.
+
+### 3.1 Olay efektleri (skill'e bağlı olmayan anlar; madde 259)
+
+Aynı `VFX` nesnesine **şu adlarla** yazılan efektler, sahibi v2 seçiliyken v1'in yerine oynar (yoksa v1 / basit efekt). Bağlam aynı `c`
+(+ `c.event` = tetikleyen motor olayı; `c.skill` = sahibin ilgili skill'i, `k.v2Sprite` ve `c.sfx` çalışır). Kanca: `src/game/event-fx.ts`,
+oynatma `BattleScene.runEventFx`.
+
+| Ad | Dosya | Ne zaman | `c` |
+|---|---|---|---|
+| `summon_skeleton` | `undead/vfx.ts` | Skeleton doğuşu (summon olayı) | `actor` = Undead (yoksa çağrı), `targets[0]` = yeni çağrı (görünmez başlar: efekt `riseFromGround(ms, n)` ya da `fadeIn()` ile GÖRÜNÜR yapmalı; unutursa sahne sonunda soldurarak gösterir), `c.event.empowered` beslenmiş mi (aura sahne tarafından yakılır), `c.usage` Raise Dead kullanımı |
+| `corpsedrain` | `undead/vfx.ts` | Raise Dead ceset emme (corpseConsumed) | `actor` = Undead, `centerPos` = ceset hücresi, `c.event.uid` ölü birim |
+| `summondeath_skeleton` | `undead/vfx.ts` | Skeleton öldü | `actor = targets[0]` = ölen çağrı; efekt bitince sahne birimi düşürür (die) |
+| `summonvanish_skeleton` | `undead/vfx.ts` | Skeleton'un süresi doldu (despawn) | aynı; sonra sahne soldurur (vanish) |
+| `summon_treant`, `summondeath_treant`, `summonvanish_treant` | `druid/vfx.ts` | Treant için aynıları | aynı |
+| `doomburst` | `hexer/vfx.ts` (hazır) | otomatik Doom (yığın doldu / süre bitti; Doom Mark kendi efektinde) | `targets` = Doom yiyen, `actor` = Hexer; Promise sütun inince |
+| `omentransfer` | `hexer/vfx.ts` (hazır) | Ill Omen geçişi | `actor` = ölen, `targets` = alıcı |
+| `withertick` | `hexer/vfx.ts` (hazır) | Wither tiki | `targets` = taşıyan |
+
+**Undead ve Druid dosyalarında bu adlar henüz YOK** (Skeleton/Treant v2'de v1 doğuşla gelir): ilgili class'ın tasarımcısı ekler.
+Sahne ayrıca şunları kendisi gösterir (efekte gerek yok): yüzen yazılar `+1 Omen` / `+2 Omen!` / `DOOM` / küçük Wither rakamı,
+Omen mühür yuvaları, `Dispelled: Haste`, `-8 MP`, `+3 MP`, kalkan kancası parlaması + (v2 seçiliyse) `wardLock` / `domeLock` sesi.
+
+### 3.2 Durum rozetleri (madde 259 kararı)
+
+Durum **tek bir class'ın** skill'lerince uygulanıyorsa (Omen/Wither/Jinxed -> Hexer, Dark Bond -> Undead) rozeti o class'ın sürümünü izler:
+class v2 seçiliyken o class'ın `icons.ts` dosyasında **`badge_<durumId>`** (SPRITES ya da ICONS; ör. `badge_omen`, `badge_dark_bond`)
+varsa o çizilir; yoksa durumun statuses.json ikon adı o class'ın v2 `ICONS`'unda varsa o (ör. Dark Bond -> `darkbond`, Undead'in
+Dark Bond ikonu). Aksi halde (ortak durum: Stun, Slow...; ya da class'ın v2'sinde karşılık yok) **Shared** sürümü + statuses.json'daki ikon adı
+(`shared/icons.ts`). Savaşta can çubuğu yanı, wiki Statuses aynı kuralı kullanır (`art-registry.ts > statusBadge`).
+
+### 3.3 Geniş palet (yalnızca v2)
+
+v1 paletine ek, yalnızca v2 çizimlerinin kullanabildiği jetonlar (`pixel-art.ts > V2_PALETTE`; v1 ikonlarında yasak, v1 çıktısı değişmez):
+`'h'` erik #6a2f5f, `'H'` lanet eflatunu #b04fa8, `'v'` safra yeşili #9cab3c, `'V'` koyu safra #6f7a2a, `'q'` kandil kehribarı #d9a441,
+`'t'` ruh turkuazı #3fd6b4, `'T'` koyu turkuaz #1f7a68. Yeni renk gerekirse ui-dev'den kullanılmayan bir harfle eklemesini iste.
 
 ## 4. Ses nasıl yazılır
 

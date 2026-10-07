@@ -10,7 +10,7 @@
  * Çizimler ilk istendiğinde üretilir ve önbelleğe alınır (tembel).
  */
 import { GRID, PxGrid, spriteCells, type Cell } from './pixel-art';
-import { wantsV2 } from './asset-versions';
+import { SHARED_KEY, statusOwner, wantsV2 } from './asset-versions';
 import { ICONS_V2 } from './art-v2/icons-index';
 import { V2_DEFAULT_SIZE, type V2Sprite, type V2SpriteEntry } from './art-v2/types';
 
@@ -86,6 +86,28 @@ export function resolveSprite(name: string, owner?: string | null): ResolvedSpri
     }
   }
   return { key: name, version: 'v1', size: GRID, cells: () => spriteCells(name) };
+}
+
+/** Durum rozetinin v2 çizim adı (sınıfa özgü durumda, sahibin v2 dosyasında `badge_<durumId>`; SPRITES ya da ICONS). */
+export const badgeSpriteName = (statusId: string): string => `badge_${statusId}`;
+
+/**
+ * DURUM ROZETİ çözümü (savaşta can çubuğunun yanı, wiki Statuses): `{ name, owner }` ensureIcon/iconUrl'e aynen verilir.
+ * Karar (madde 259): durum TEK bir class'a aitse (statusOwner: yalnızca onun skill'leri uygular; ör. Omen/Wither/Jinxed -> Hexer) rozet o
+ * class'ın sürümünü izler: o class v2 seçiliyken v2 dosyasında `badge_<durumId>` varsa o çizim, yoksa durumun ikon adı o class'ın v2 ICONS'unda
+ * varsa o (ör. Dark Bond -> 'darkbond'). Aksi halde (ortak durum, class v1, ya da class'ın v2'sinde karşılık yok) Shared sürümüyle statuses.json'daki
+ * ikon adı (Shared v2 seçiliyse shared/icons.ts çizimi).
+ */
+export function statusBadge(statusId: string, icon: string): { name: string; owner: string } {
+  const owner = statusOwner(statusId);
+  if (owner && wantsV2(owner, 'icon')) {
+    const file = ICONS_V2[owner];
+    const n = badgeSpriteName(statusId);
+    if (file && (file.SPRITES[n] || file.ICONS[n])) return { name: v2SpriteName(owner, n), owner };
+    // Ayrı rozet çizimi yoksa: durumun ikon adı o class'ın kendi v2 ikonuysa (ör. dark_bond -> 'darkbond' = Dark Bond skill ikonu) o
+    if (file?.ICONS[icon]) return { name: icon, owner };
+  }
+  return { name: icon, owner: SHARED_KEY };
 }
 
 /** Sahibin v2 ikonunu seçimden BAĞIMSIZ çözer (wiki'deki v1 | v2 karşılaştırması); yoksa null. */

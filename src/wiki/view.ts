@@ -4,7 +4,8 @@
  */
 import layout from '../../data/battle-layout.json';
 import { applyFilter, chipBar, h, isolateKeys, openLightbox, searchable } from '../gallery/dom';
-import { iconUrl } from '../ui/dom-icons';
+import { bindIcon, bindStatusIcon, iconUrl } from '../ui/dom-icons';
+import { SHARED_KEY, ownerOfSkill, ownerOfUnit } from '../game/asset-versions';
 import { STAT_COLOR } from '../ui/stat-icons';
 import type { MiniShape } from '../ui/shape-diagram';
 import { buildWiki } from './catalog';
@@ -26,8 +27,19 @@ const ELEMENT_COLOR = layout.colors.element as Record<string, string>;
 const lineColor = (kind: string | undefined): string | undefined =>
   kind === 'shield' ? STAT_COLOR.armor : kind === 'magicShield' ? layout.colors.magicShield : kind ? ELEMENT_COLOR[kind] : undefined;
 
-const icon = (name: string, accent: string, cls = 'wk-icon'): HTMLImageElement =>
-  h('img', { class: `${cls} pixelated`, attrs: { src: iconUrl(name, accent), alt: '' }, on: { click: (e) => { e.stopPropagation(); openLightbox(iconUrl(name, accent), name, true); } }, title: `${name} (click to enlarge)` });
+/**
+ * Wiki ikonu: `owner` (class id / 'shared') verilirse o sahibin SEÇİLİ sürümüyle (debug > Versions) çizilir ve seçim değişince sayfa
+ * yenilenmeden güncellenir (bindIcon); verilmezse class logoları yine sahibini izler, diğer adlar v1.
+ */
+const icon = (name: string, accent: string, cls = 'wk-icon', owner?: string | null): HTMLImageElement => {
+  const img: HTMLImageElement = h('img', { class: `${cls} pixelated`, attrs: { alt: '' }, on: { click: (e) => { e.stopPropagation(); openLightbox(img.src, name, true); } }, title: `${name} (click to enlarge)` });
+  return bindIcon(img, name, accent, owner);
+};
+/** Durum rozeti: sınıfa özgü durum (Omen, Wither, Jinxed...) sahibinin sürümünü izler, ortak durum Shared (src/game/art-registry.ts > statusBadge). */
+const statusIcon = (id: string, iconName: string, accent: string, cls: string): HTMLImageElement => {
+  const img: HTMLImageElement = h('img', { class: `${cls} pixelated`, attrs: { alt: '' }, on: { click: (e) => { e.stopPropagation(); openLightbox(img.src, iconName, true); } }, title: `${iconName} (click to enlarge)` });
+  return bindStatusIcon(img, id, iconName, accent);
+};
 
 const art = (url: string | null, caption: string, cls: string): HTMLElement =>
   url ? h('img', { class: cls, attrs: { src: url, alt: caption, loading: 'lazy' }, title: `${caption} (click to enlarge)`, on: { click: () => openLightbox(url, caption) } }) : h('div', { class: `${cls} missing`, text: 'no art' });
@@ -70,7 +82,7 @@ function articleCard(a: WikiArticle): HTMLElement {
   const shapes = a.shapes?.length
     ? h('div', { class: 'wk-shapes' }, ...a.shapes.map((s) => h('figure', {}, shapeGrid(s.shape), h('figcaption', { text: s.label }))))
     : null;
-  return searchable(h('article', { class: 'wk-card wk-article', style: { '--accent': a.accent } }, h('h3', {}, icon(a.icon, a.accent), h('span', { text: a.title })), ...blocks(a.blocks), shapes), a.search);
+  return searchable(h('article', { class: 'wk-card wk-article', style: { '--accent': a.accent } }, h('h3', {}, icon(a.icon, a.accent, 'wk-icon', null), h('span', { text: a.title })), ...blocks(a.blocks), shapes), a.search);
 }
 
 /** Başlıkları gruplayan makale listesi (Mechanics, Getting Started). */
@@ -88,7 +100,7 @@ function skillBlock(s: WikiSkill): HTMLElement {
     h('span', { class: 'wk-chip', text: `Cooldown: ${s.cooldown}` }),
     s.initialCooldown ? h('span', { class: 'wk-chip warn', text: s.initialCooldown }) : null);
   return h('div', { class: 'wk-skill', style: { '--accent': s.accent } },
-    icon(s.icon, s.accent, 'wk-icon big'),
+    icon(s.icon, s.accent, 'wk-icon big', ownerOfSkill(s.id)),
     h('div', { class: 'wk-skill-body' },
       h('div', { class: 'wk-skill-name' }, h('b', { text: s.name }), ...s.elements.map((e) => h('span', { class: 'wk-el', text: e, style: { color: ELEMENT_COLOR[e] ?? '#fff', 'border-color': ELEMENT_COLOR[e] ?? '#fff' } }))),
       meta,
@@ -99,16 +111,16 @@ function skillBlock(s: WikiSkill): HTMLElement {
 function unitCard(u: WikiUnit): HTMLElement {
   const attrs = u.attributes.map((a) =>
     h('div', { class: `wk-attr${a.primary ? ' primary' : ''}`, title: a.primary ? `${a.label} ${a.value} (primary)` : `${a.label} ${a.value}` },
-      icon(a.icon, a.color, 'wk-icon small'),
+      icon(a.icon, a.color, 'wk-icon small', null),
       h('span', { class: 'wk-attr-name', text: a.label }),
       h('span', { class: 'wk-bar' }, h('span', { class: 'wk-fill', style: { width: `${Math.min(100, a.value * 5)}%`, background: a.color } })),
       h('span', { class: 'wk-attr-val', text: String(a.value) })));
-  const derived = u.derived.map((d) => h('span', { class: 'wk-stat' }, icon(d.icon, d.color, 'wk-icon tiny'), h('span', { class: 'muted', text: d.label }), h('b', { text: d.value })));
+  const derived = u.derived.map((d) => h('span', { class: 'wk-stat' }, icon(d.icon, d.color, 'wk-icon tiny', null), h('span', { class: 'muted', text: d.label }), h('b', { text: d.value })));
   return searchable(
     h('article', { class: 'wk-card wk-unit', style: { '--accent': u.color } },
       h('div', { class: 'wk-unit-art' },
         art(u.spriteUrl, `${u.name} (full body)`, 'wk-sprite'),
-        h('div', { class: 'wk-unit-mini' }, art(u.avatarUrl, `${u.name} avatar`, 'wk-avatar'), icon(u.logo, u.color, 'wk-icon logo'))),
+        h('div', { class: 'wk-unit-mini' }, art(u.avatarUrl, `${u.name} avatar`, 'wk-avatar'), icon(u.logo, u.color, 'wk-icon logo', ownerOfUnit(u.id)))),
       h('div', { class: 'wk-unit-main' },
         h('h3', { class: 'wk-unit-name' }, h('span', { text: u.name }), u.role ? h('span', { class: 'wk-role', text: u.role }) : null, u.testOnly ? h('span', { class: 'wk-chip test', text: 'TEST', title: 'Test class: left out of random teams; add it by hand in team selection' }) : null, u.kind === 'class' ? h('span', { class: 'wk-chip', text: u.melee ? 'Melee' : 'Ranged' }) : h('span', { class: 'wk-chip', text: 'Summon' })),
         u.primary && u.primaryBonus
@@ -116,7 +128,7 @@ function unitCard(u: WikiUnit): HTMLElement {
           : null,
         h('div', { class: 'wk-attrs' }, ...attrs),
         h('div', { class: 'wk-stats' }, ...derived),
-        u.passive ? h('div', { class: 'wk-passive' }, icon(u.passive.icon, u.color, 'wk-icon big'), h('div', {}, h('b', { text: `Passive: ${u.passive.name}` }), h('div', { class: 'muted', text: u.passive.text }))) : h('div', { class: 'muted small', text: 'No passive' }),
+        u.passive ? h('div', { class: 'wk-passive' }, icon(u.passive.icon, u.color, 'wk-icon big', ownerOfUnit(u.id)), h('div', {}, h('b', { text: `Passive: ${u.passive.name}` }), h('div', { class: 'muted', text: u.passive.text }))) : h('div', { class: 'muted small', text: 'No passive' }),
         h('div', { class: 'wk-skills' }, ...u.skills.map(skillBlock)),
         unitArt(u.id))),
     u.search,
@@ -127,7 +139,7 @@ function unitCard(u: WikiUnit): HTMLElement {
 
 function sectionShell(id: string, title: string, iconName: string, ...children: Array<HTMLElement | null>): { root: HTMLElement; countEl: HTMLElement } {
   const countEl = h('span', { class: 'wk-count' });
-  const root = h('section', { class: 'wk-section', attrs: { id: `wiki-${id}`, hidden: '' } }, h('h2', {}, icon(iconName, '#ffe29a', 'wk-icon head'), h('span', { text: title }), countEl), ...children);
+  const root = h('section', { class: 'wk-section', attrs: { id: `wiki-${id}`, hidden: '' } }, h('h2', {}, icon(iconName, '#ffe29a', 'wk-icon head', null), h('span', { text: title }), countEl), ...children);
   return { root, countEl };
 }
 
@@ -184,10 +196,10 @@ function skillsSection(cat: WikiCatalog): Section {
 }
 
 const statusCard = (s: WikiStatus): HTMLElement =>
-  searchable(h('article', { class: 'wk-card wk-status', style: { '--accent': s.color } }, icon(s.icon, s.color, 'wk-icon big'), h('div', {}, h('b', { text: s.name, style: { color: s.color } }), h('span', { class: `wk-chip ${s.type}`, text: s.type }), h('div', { text: s.text }), s.usedBy.length ? h('div', { class: 'muted small', text: `Used by: ${s.usedBy.join(', ')}` }) : null)), s.search);
+  searchable(h('article', { class: 'wk-card wk-status', style: { '--accent': s.color } }, statusIcon(s.id, s.icon, s.color, 'wk-icon big'), h('div', {}, h('b', { text: s.name, style: { color: s.color } }), h('span', { class: `wk-chip ${s.type}`, text: s.type }), h('div', { text: s.text }), s.usedBy.length ? h('div', { class: 'muted small', text: `Used by: ${s.usedBy.join(', ')}` }) : null)), s.search);
 
 const groundCard = (g: WikiGround): HTMLElement =>
-  searchable(h('article', { class: 'wk-card wk-status', style: { '--accent': g.color } }, icon(g.icon, g.color, 'wk-icon big'), h('div', {}, h('b', { text: g.name, style: { color: g.color } }), h('span', { class: 'wk-chip', text: g.element }), h('div', { text: g.text }), g.usedBy.length ? h('div', { class: 'muted small', text: `Used by: ${g.usedBy.join(', ')}` }) : null)), g.search);
+  searchable(h('article', { class: 'wk-card wk-status', style: { '--accent': g.color } }, icon(g.icon, g.color, 'wk-icon big', SHARED_KEY), h('div', {}, h('b', { text: g.name, style: { color: g.color } }), h('span', { class: 'wk-chip', text: g.element }), h('div', { text: g.text }), g.usedBy.length ? h('div', { class: 'muted small', text: `Used by: ${g.usedBy.join(', ')}` }) : null)), g.search);
 
 function statusesSection(cat: WikiCatalog): Section {
   return simpleSection('statuses', 'STATUSES & GROUNDS', 'drop', cat.statuses.length + cat.grounds.length, [

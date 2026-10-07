@@ -68,7 +68,7 @@
   "dark_bond": {
     "name": "Dark Bond",
     "type": "buff",
-    "icon": "soul",
+    "icon": "darkbond",
     "color": "#b0304f",
     "dispellable": false,
     "text": "Bound to an Undead: its life steal heals the bonded ally too"

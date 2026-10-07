@@ -236,10 +236,8 @@ describe('Rage: harcama (Abyssal Cry)', () => {
     expect(chooseAction(rich, 'party-0', classOnly)).toMatchObject({ skillId: 'abyssal_cry', reason: 'tactic' });
   });
 
-  it('skill bağlamı minSelfRage koşulu artık seçimi engellemez (terazi, madde 257); Rage bedelli skill Rage yetmezse kullanılamaz', () => {
-    // Rage koşullu sentetik ipucu: whirlwind yalnızca Rage >= 90 iken bağlamı sağlar
+  it('düşük Rage seçimi engellemez (terazi, madde 257; madde 258: skill ipuçlarında koşul yok); seçim en yüksek puandır', () => {
     const setup = content.battleSetup('random-battle', 1, 'test', { party: cells({ 0: 'warrior', 1: 'paladin' }), enemies: cells({ 0: 'archer', 1: 'mage' }) }, false);
-    setup.skills = { ...setup.skills, whirlwind: { ...setup.skills.whirlwind!, ai: { requires: { minSelfRage: 90 } } } };
     const c = new Battle(setup);
     for (const u of c.combatants) Object.assign(u.stats, { critChance: 0, accuracy: 10, evasion: 0 });
     c.get('party-0')!.mp = 100;

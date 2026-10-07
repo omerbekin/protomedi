@@ -1329,6 +1329,7 @@ describe('Paladin: Resurrection', () => {
 
   it('AI (healer): düşmüş dostu varsa diriltir; yoksa Resurrection seçmez', () => {
     const b = setup();
+    b.get('enemy-0')!.maxHp = b.get('enemy-0')!.hp = 3000; // savaş belli olmasın (madde 258: kazanılmış savaşta diriltme değeri 0)
     expect(chooseAction(b, 'party-1', content.aiConfig)?.skillId).not.toBe('resurrection');
     fall(b, 'party-0');
     expect(chooseAction(b, 'party-1', content.aiConfig)).toMatchObject({ skillId: 'resurrection', targetUid: 'party-0' });

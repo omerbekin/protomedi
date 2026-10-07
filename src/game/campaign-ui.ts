@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { content } from '../engine';
-import { classAvatar, goldText, makeMenuButton, serif } from './menu-ui';
+import { classAvatar, classLogoBadge, goldText, makeMenuButton, serif } from './menu-ui';
 import { GOLD, SERIF, makePanel } from './ui-frame';
 
 /**
@@ -128,6 +128,7 @@ export function classCard(
   c.add(bg);
   const av = Math.min(w - 30, h - 80);
   c.add(classAvatar(scene, def, 0, -h / 2 + 12 + av / 2, av));
+  c.add(classLogoBadge(scene, def, -av / 2 + 14, -h / 2 + 12 + av - 12, 15)); // class logosu (seçili sanat sürümüyle)
   const name = serif(scene, 0, h / 2 - 50, def.name, 22, '#f3e4c4').setOrigin(0.5);
   if (name.width > w - 12) name.setScale((w - 12) / name.width);
   c.add(name);

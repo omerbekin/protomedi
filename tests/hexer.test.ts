@@ -229,8 +229,9 @@ describe('Süre bitimi Doom (Ö2/Ö3/Ö12)', () => {
     });
     const dmg = ofType(b.log, 'damage').filter((e) => e.status === 'omen');
     expect(dmg).toHaveLength(1);
-    expect(dmg[0]!.absorbed).toBe(3);
-    expect(dmg[0]!.hpAfter).toBe(1); // Lucky Escape (sonra tur başı can yenilenmesi gelir)
+    // Madde 258: Lucky Escape ölümcül Doom'u TAMAMEN yok sayar: kalkan harcanmaz, can değişmez
+    expect(dmg[0]).toMatchObject({ amount: 0, absorbed: 0, magicShieldAfter: 3, luckyEscape: true });
+    expect(dmg[0]!.hpAfter).toBeGreaterThan(0);
     expect(ofType(b.log, 'passive').some((e) => e.actor === w.uid && e.name === 'Lucky Escape')).toBe(true);
   });
 

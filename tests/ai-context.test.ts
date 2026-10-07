@@ -148,14 +148,14 @@ describe('YZ bağlam: Gambler - All In', () => {
     b.turnsTaken = turns;
     return b;
   };
-  const longBattle = (hint = content.skills.all_in!.ai!) => (hint.anyOf?.find((c) => c.minBattleTurns !== undefined)?.minBattleTurns ?? 0) + 1;
+  const longBattle = () => 11; // (eski minBattleTurns 10 ipucu madde 258'de silindi; terazi savaş turuna bakmaz)
 
   it('MP yüksek ve savaş uzadıysa All In seçilir', () => {
     expect(choose(gambler(1, longBattle()))).toMatchObject({ skillId: 'all_in' });
   });
 
   it('MP düşükken seçilmez (bahis küçük kalır)', () => {
-    const low = (content.skills.all_in!.ai!.requires!.minSelfMpRatio ?? 0.6) - 0.2;
+    const low = (content.skills.all_in!.ai!.reserveMinMpRatio ?? 0.6) - 0.2;
     expect(choose(gambler(low, longBattle()))?.skillId).not.toBe('all_in');
   });
 
@@ -174,7 +174,9 @@ describe('YZ bağlam: Anti-Mage - Void Strike', () => {
     expect(choose(drained)).toMatchObject({ skillId: 'void_strike' });
     const full = mk({ 0: 'antimage' }, { 0: 'mage' });
     full.get('enemy-0')!.hp = full.get('enemy-0')!.maxHp = 5000;
-    expect(choose(full)?.skillId).not.toBe('void_strike');
+    // madde 258: eski minMissingManaShare ipucu silindi; terazide mana doluyken Void Strike'ın değeri belirgin düşük (eksik mana eki yok)
+    const vs = (b: Battle) => Math.max(...explainChoice(b, 'party-0', ai)!.candidates.filter((c) => c.skill === 'void_strike').map((c) => c.score ?? 0));
+    expect(vs(full)).toBeLessThan(vs(drained) * 0.6);
   });
 });
 
@@ -195,7 +197,7 @@ describe('YZ bağlam: Warrior - Abyssal Cry (can bedeli + %50 hasar azaltma)', (
   });
 
   it('düşük canda ASLA seçilmez (can bedelinden sonra güvenli eşiğin altına düşecekse)', () => {
-    const min = cry.ai!.requires!.minSelfHpRatioAfter!;
+    const min = 0.35; // (eski minSelfHpRatioAfter ipucu madde 258'de silindi; terazi ölüm riskiyle aynı sonucu vermeli)
     for (const ratio of [0.2, 0.4, min + cost() - 0.05]) {
       const b = war((x) => (x.get('party-0')!.hp = Math.round(x.get('party-0')!.maxHp * ratio)));
       expect(choose(b)?.skillId, `can oranı ${ratio}`).not.toBe('abyssal_cry');
@@ -285,13 +287,15 @@ describe('YZ bağlam: MP ayırma ve genel özellikler', () => {
     expect(JSON.stringify(b.combatants)).toBe(before);
   });
 
-  it('tüm 4. skill\'lerde ve Judgment\'ta bağlam ipucu (ai) tanımlı (artık yalnızca reserveMp ve açıklama); yuva ağırlığı kalmadı', () => {
-    for (const cl of Object.values(content.classes).filter((c) => !c.testOnly)) {
-      const id = cl.skills[3]!;
-      if (cl.id === 'druid' || cl.id === 'undead') continue; // çağrılar: "summon" önceliği bağlamı verir (maxSummons, boş yer, MP)
-      expect(content.skills[id]!.ai, id).toBeDefined();
+  it('madde 258: skill ai ipuçlarında yalnızca MP ayırma alanları kalır (reserveMp, reserveMinMpRatio); bağlam koşulu yok; yuva ağırlığı kalmadı', () => {
+    const allowed = new Set(['reserveMp', 'reserveMinMpRatio']);
+    for (const sk of Object.values(content.skills)) {
+      if (!sk.ai) continue;
+      for (const k of Object.keys(sk.ai)) expect(allowed.has(k), `${sk.id}.ai.${k}`).toBe(true);
+      expect(sk.ai.reserveMp, sk.id).toBeGreaterThan(0);
     }
-    expect(content.skills.judgment!.ai).toBeDefined();
+    for (const id of ['meteor', 'aimed_shot', 'void_strike', 'all_in', 'doom_mark']) expect(content.skills[id]!.ai?.reserveMp, id).toBeDefined();
+    expect(content.skills.judgment!.ai).toBeUndefined();
     for (const p of Object.values(ai.profiles)) expect(p).not.toHaveProperty('ultimateWeight');
   });
 

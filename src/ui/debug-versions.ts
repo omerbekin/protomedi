@@ -9,7 +9,7 @@ import { ASSET_VERSIONS, SHARED_KEY, allVersionsState, getVersion, inScope, setA
 import { v2Label, v2Progress } from '../game/art-v2/status';
 import { assetFiles } from '../gallery/files';
 import { debugButton, debugHeading, type DebugMenu } from './debug-menu';
-import { iconUrl } from './dom-icons';
+import { bindIcon } from './dom-icons';
 
 export const VERSIONS_TAB = 'Versions';
 
@@ -103,10 +103,15 @@ export function registerVersionsPanel(debug: Pick<DebugMenu, 'registerPanel'>, h
         const img = document.createElement('img');
         img.className = 'debug-version-avatar pixelated';
         img.alt = '';
-        img.src = av ?? iconUrl(def ? def.logo : 'frame', def?.color ?? '#e8c47e', key);
+        if (av) img.src = av;
+        else bindIcon(img, def ? def.logo : 'rest', def?.color ?? '#e8c47e', key);
         const name = document.createElement('span');
         name.className = 'debug-version-name';
-        name.textContent = nameOf(key);
+        // Logo (Shared'de Rest ikonu): seçili sürümle çizilir, menü değişince hemen yenilenir
+        const logo = bindIcon(document.createElement('img'), def ? def.logo : 'rest', def?.color ?? '#e8c47e', key);
+        logo.className = 'debug-version-logo pixelated';
+        logo.alt = '';
+        name.append(logo, document.createTextNode(nameOf(key)));
         const note = scopeNote(key);
         if (note) name.title = note;
         if (def?.color) name.style.color = def.color;

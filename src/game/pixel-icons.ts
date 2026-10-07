@@ -496,6 +496,35 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     g.poly([16, 8, 20, 15, 20, 22, 16, 26, 12, 22, 12, 15], 'c').poly([16, 14, 18, 18, 16, 22, 14, 18], 'w');
     g.rect(13, 12, 2, 3, 'o').rect(18, 12, 2, 3, 'o');
   },
+  // Dark Bond (Undead): iki kalp (solda Undead'in mor-ruh kalbi, sağda dostun kan kalbi) arasında sarkan omur boncuklu kemik zincir
+  darkbond: (g) => {
+    const at = (u: number): [number, number] => [7 + 18 * u, 14 + Math.sin(u * Math.PI) * 13];
+    for (let i = 0; i < 20; i++) {
+      const [ax, ay] = at(i / 20);
+      const [bx, by] = at((i + 1) / 20);
+      g.line(ax, ay, bx, by, 'R', 1);
+    }
+    for (const u of [0.2, 0.5, 0.8]) {
+      const [x, y] = at(u);
+      const [qx, qy] = at(u + 0.02);
+      const a = Math.atan2(qy - y, qx - x);
+      const dx = Math.cos(a) * 1.6;
+      const dy = Math.sin(a) * 1.6;
+      g.line(x - dx, y - dy, x + dx, y + dy, 'e', 2.6);
+      g.disc(x - dx, y - dy, 1.4, 'e').disc(x + dx, y + dy, 1.4, 'e');
+      g.rect(x - 0.5, y - 0.5, 1, 1, 'R');
+    }
+    g.disc(16, 30, 1.2, 'r');
+    const heart = (cx: number, cy: number, hi: string, lo: string) => {
+      g.disc(cx - 2.6, cy, 3.4, lo).disc(cx + 2.6, cy, 3.4, lo).poly([cx - 6, cy + 0.8, cx + 6, cy + 0.8, cx, cy + 7.5], lo);
+      g.disc(cx - 2.6, cy, 2.6, hi).disc(cx + 2.6, cy, 2.6, hi).poly([cx - 5, cy + 0.6, cx + 5, cy + 0.6, cx, cy + 6.3], hi);
+      g.rect(cx - 4, cy - 1.5, 1.5, 1.5, 'w');
+    };
+    heart(7, 6, 'p', 'P');
+    g.poly([7, 4.5, 8.8, 8, 7, 10.5, 5.2, 8], 'c').rect(6.5, 7.5, 1, 1.5, 'w');
+    heart(25, 6, 'r', 'R');
+    g.disc(7, 13.6, 1.3, 'e').disc(25, 13.6, 1.3, 'e');
+  },
   bone: (g) => {
     blade(g, 11, 20, 27, 4, 5, 'l', 'd', 'm');
     g.rect(15, 13, 2, 2, 'b').rect(19, 9, 2, 2, 'b').rect(23, 6, 2, 2, 'b').rect(13, 17, 1, 1, 'k');

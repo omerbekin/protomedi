@@ -43,7 +43,7 @@ export function primaryBonusInfo(kind: 'str' | 'int' | 'dex' | 'luck', f: Formul
     case 'str': return { name: 'Resilience', detail: `${pct(b.str.resilienceChance)} debuff -1 turn`, active };
     case 'dex': return { name: "Hunter's Mark", detail: `+${pct(b.dex.hunterMarkMult)} dmg vs slower`, active };
     case 'int': return { name: 'Mana Echo', detail: `${pct(b.int.manaEchoChance)} refund half MP`, active };
-    case 'luck': return { name: 'Lucky Escape', detail: `${pct(b.luck.surviveChance)} survive`, active };
+    case 'luck': return { name: 'Lucky Escape', detail: `${pct(b.luck.surviveChance)} ignore killing blow`, active };
   }
 }
 
@@ -54,7 +54,7 @@ export function primaryBonusLines(kind: 'str' | 'int' | 'dex' | 'luck', f: Formu
     case 'str': return [`Primary bonus: Resilience - every debuff applied to you has a ${pct(b.str.resilienceChance)} chance to last 1 turn less (never below 1 turn)`];
     case 'dex': return [`Primary bonus: Hunter's Mark - when you are faster than your target, your damaging hits deal ${pct(b.dex.hunterMarkMult)} more damage`];
     case 'int': return [`Primary bonus: Mana Echo - after each skill, ${pct(b.int.manaEchoChance)} chance to get back half of its MP cost (rounded up, at least 1)`];
-    case 'luck': return [`Primary bonus: Lucky Escape - once per battle, a lethal hit has a ${pct(b.luck.surviveChance)} chance to leave you at 1 HP instead`];
+    case 'luck': return [`Primary bonus: Lucky Escape - once per battle, a lethal hit has a ${pct(b.luck.surviveChance)} chance to be ignored completely: you take no damage from it, your HP and shields stay as they were, and it has no side effects (no lifesteal, no on-hit effects)`];
   }
 }
 

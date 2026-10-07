@@ -355,7 +355,23 @@ export function accentTokens(hex: string): Record<string, number> {
   return { a: (r << 16) | (g << 8) | b, A: mix(0.5, 0), z: mix(0.45, 255) };
 }
 
-export const INTERNAL_TOKEN_VALUES = (accent: string): Record<string, number> => ({ ...PALETTE, ...accentTokens(accent) });
+/**
+ * SÜRÜM 2'YE ÖZEL GENİŞ PALET (madde 259): v1'in sabit paletinde olmayan class renkleri; yalnızca src/game/art-v2 çizimleri kullanır
+ * (tests/pixel-art.test.ts v1 ikonlarında bu jetonları yasaklar; v1 parmak izleri değişmez). Jetonlar:
+ *   'h' erik (Hexer class rengi), 'H' lanet eflatunu, 'v' safra/çürük yeşili, 'V' koyu safra, 'q' kandil kehribarı,
+ *   't' ruh turkuazı (Undead v2), 'T' koyu turkuaz. Yeni renk = buraya yeni (kullanılmayan) tek harf.
+ */
+export const V2_PALETTE: Record<string, number> = {
+  h: 0x6a2f5f,
+  H: 0xb04fa8,
+  v: 0x9cab3c,
+  V: 0x6f7a2a,
+  q: 0xd9a441,
+  t: 0x3fd6b4,
+  T: 0x1f7a68,
+};
+
+export const INTERNAL_TOKEN_VALUES = (accent: string): Record<string, number> => ({ ...PALETTE, ...V2_PALETTE, ...accentTokens(accent) });
 
 /** Bir rengi ışık seviyesine göre aydınlatır/karartır. */
 export function shadeColor(rgb: number, s: number): number {

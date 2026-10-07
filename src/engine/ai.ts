@@ -4,17 +4,17 @@ import { skillCostAmount } from './cost';
 import { betStake } from './gamble';
 import { previewForTargets } from './preview';
 import { armorReduction, attributePower, hitChance } from './stats';
-import type { Combatant, CorpseChoice, Side, SkillAiCond, SkillDef } from './types';
-import { DEFAULT_VALUE, ValueContext, pAtLeast, skillRawValue, type AiDifficulty, type AiValueConfig } from './ai-value';
+import type { Combatant, CorpseChoice, Side, SkillDef } from './types';
+import { DEFAULT_VALUE, ValueContext, pAtLeast, skillRawValue, type AiDifficulty, type AiDifficultyConfig, type AiValueConfig } from './ai-value';
 
-export type { AiDifficulty, AiValueConfig } from './ai-value';
+export type { AiDifficulty, AiDifficultyConfig, AiValueConfig } from './ai-value';
 
 /**
  * Yapay zeka: sırası gelen aktör için bir skill ve hedef seçer. Saf ve belirleyici:
  * rastgelelik kullanmaz, motorun RNG'sine dokunmaz; aynı durum = aynı karar.
  * KARAR: TEK DEĞER TERAZİSİ (ai-priorities.md 6.1, madde 254/257; src/engine/ai-value.ts): her aday tek bir can-eşdeğer puan alır, en büyüğü seçilir.
- * Profil öncelik listesi (data/ai.json > priorities) artık seçimi YÖNETMEZ; yalnızca açıklama/etiket. Skill `ai` ipuçlarının requires/anyOf koşulları
- * seçimi engellemez (değer terimleri aynı işi görür); `reserveMp` (MP ayırma) sürer.
+ * Profil öncelik listesi (data/ai.json > priorities) artık seçimi YÖNETMEZ; yalnızca açıklama/etiket. Skill `ai` ipuçlarında yalnızca MP ayırma kalır
+ * (madde 258: reserveMp, reserveMinMpRatio). Zorluk (Easy/Medium/Hard) `opts.difficulty` ile (ai.json > difficulty).
  * Etki tahmini önizlemeyle aynı hesaptır (src/engine/preview.ts): zırh, menzil, taunt, kalkan hepsi hesaba girer.
  */
 /** Profil öncelik etiketleri (artık seçimi yönetmez; terazinin baskın terimi bu adlarla etiketlenir). 'value' = terazi adımı (açıklama). */
@@ -61,7 +61,7 @@ export interface AiProfile {
 
 /**
  * Global skill (Rest / Skip Turn / Move Tile) kuralları (data/ai.json > global). Hepsi taktik DEĞER hesabına bağlıdır (skill değeri = beklenen hasar/şifa/kalkan - bedel;
- * 'şimdiki hamle' = yapay zekanın global olmadan seçeceği hamle). Çağrılan birimler global skill kullanmaz; öldürücü/işlevsel (şifa, çağrı, kalkan, taunt...) hamleler her zaman önce gelir.
+ * 'şimdiki hamle' = yapay zekanın global olmadan seçeceği hamle). Çağrılan birimler global skill kullanmaz; madde 258: sabit kapı yok, kazanç class hamlesinin terazi puanıyla kıyaslanır.
  */
 export interface AiGlobalConfig {
   enabled: boolean;
@@ -106,10 +106,10 @@ export interface AiConfig {
   /** Değer terazisi ayarları (yoksa DEFAULT_VALUE). */
   value?: AiValueConfig;
   /**
-   * Zorluk seviyeleri (madde 256: sefer başında seçilir, değişmez). ŞİMDİLİK ETKİSİZ: Medium = tam terazi; Easy/Hard davranış farkı Faz 5'te.
-   * Burada yalnızca belgelenir (ufuk vb.); chooseAction'ın `opts.difficulty` girdisi hazır.
+   * Zorluk seviyeleri (madde 256: sefer başında seçilir, değişmez; madde 258 Faz 5 UYGULANDI): Easy (ufuk 1, kurtarma/kontrol yok, yalnızca kesin öldürme,
+   * en iyi 3'ten belirleyici seçim, Rest yalnızca boşta), Medium (tam terazi; sim/denge), Hard (takım odak ateşi, fazla vurmama, patlatmada fırsat bekleme).
    */
-  difficulty?: Partial<Record<AiDifficulty, { horizon?: number; note?: string }>>;
+  difficulty?: Partial<Record<AiDifficulty, AiDifficultyConfig>>;
   /** Global skill kuralları; yoksa ya da enabled false ise yapay zeka hiç global skill kullanmaz. */
   global?: AiGlobalConfig;
 }
@@ -146,6 +146,8 @@ export interface AiTrace {
   /** Global skill'ler olmadan class seçimi (null: hiçbir şey seçilemedi). */
   classPick?: { option: Option; reason: AiChoice['reason'] } | null;
   global?: GlobalTrace;
+  /** Kararın zorluk seviyesi (madde 258). */
+  difficulty?: AiDifficulty;
 }
 
 export interface GlobalTrace {
@@ -192,6 +194,9 @@ export interface Option {
   revive: number;
   /** Mana yakmanın değeri: yakılan mana, hedefin mana havuzuyla (büyücüler) ağırlıklanır. */
   burnScore: number;
+  /** Hedef başına doğrudan yakılacak MP (manaBurn) ve kalkan kancası (Spell Ward onAbsorb.burnMana): terazide "engellenen hamle" değeri (madde 258). */
+  burnBy: Record<string, number>;
+  wardBurn?: { amount: number; magic: boolean };
   /** Ana hedef (tek hedefli skill'lerde seçilen düşman, alan skill'lerinde merkez/ilk hedef) ve ona beklenen ortalama hasar. */
   primary?: Combatant;
   primaryAvg: number;
@@ -202,8 +207,10 @@ export interface Option {
   /** Saf self-buff skill'i (yalnızca kendine durum + kendine hasar): net değeri (can-eşdeğer; savunma + hasar artışı - bedel - kaçırılan hamle). */
   pureBuff: boolean;
   buff: number;
-  /** Skill'in `ai` bağlam ipucu sağlanmıyor: bu seçenek yalnızca öldürücü vuruşta (ya da hiçbir şey uymazsa son çare olarak) seçilir. */
+  /** MP ayırma (reserveMp) yüzünden ertelendi: yalnızca başka pozitif değerli seçenek yoksa seçilir. */
   blocked: boolean;
+  /** Bu saldırının bozacağı MP ayırmalarının en büyük değeri (puanı bunu geçen saldırı ertelenmez; madde 258). */
+  reserveValue?: number;
   summon: boolean;
   /** Ceset tüketen çağrı: true = şu an ceset var (beslenmiş/empowered), false = ceset yok (beslenmemiş/unfed); diğer seçeneklerde tanımsız. */
   empowered?: boolean;
@@ -253,17 +260,17 @@ const best = <T>(items: T[], score: (item: T) => number): T | undefined =>
   items.reduce<T | undefined>((top, item) => (top === undefined || score(item) > score(top) ? item : top), undefined);
 
 /**
- * `opts.difficulty`: Easy / Medium / Hard (varsayılan medium). ŞİMDİLİK ETKİSİZ (Faz 5): her seviye tam teraziyle (Medium) oynar; girdi sefer kaydından
- * (campaign-dev) bağlanabilsin diye hazır.
+ * `opts.difficulty`: Easy / Medium / Hard (varsayılan medium; madde 258 Faz 5, data/ai.json > difficulty). Medium = tam terazi (sim ve denge bununla).
+ * Easy: ufuk 1, kurtarma ve kontrol değeri yok, yalnızca kesin öldürme, en iyi 3 adaydan belirleyici seçim (seed + tur + birim), Rest yalnızca boşta.
+ * Hard: takım odak ateşi, zaten ölecek hedefe fazla vurmama, yığın patlatmada uygun anı bekleme. Hepsi saf ve belirleyici.
  */
 export function chooseAction(battle: Battle, actorUid: string, config: AiConfig, trace?: AiTrace, opts?: { difficulty?: AiDifficulty }): AiChoice | null {
-  void opts?.difficulty;
   // hitLoss önbelleği yalnızca bu karar boyunca yaşar (durum değişmez); iç içe çağrıda dıştaki korunur
   const outer = hitLossCache;
   hitLossCache = outer ?? new Map();
   const outerCtx = activeCtx;
   try {
-    return chooseActionInner(battle, actorUid, config, trace);
+    return chooseActionInner(battle, actorUid, config, trace, opts?.difficulty ?? 'medium');
   } finally {
     hitLossCache = outer;
     activeCtx = outerCtx;
@@ -276,44 +283,91 @@ let activeCtx: ValueContext | null = null;
 /** statusMitigation hesabında tekrar eden (saldıran, kurban, ek) sonuçları: tek bir chooseAction çağrısı süresince (saf; seçimi değiştirmez). */
 let hitLossCache: Map<string, number> | null = null;
 
-function chooseActionInner(battle: Battle, actorUid: string, config: AiConfig, trace?: AiTrace): AiChoice | null {
+/** Zorluk kuralları (ai.json > difficulty.<seviye>); Medium ya da tanımsız = boş (tam terazi). */
+export function difficultyRules(config: AiConfig, difficulty: AiDifficulty = 'medium'): AiDifficultyConfig {
+  return config.difficulty?.[difficulty] ?? {};
+}
+
+function chooseActionInner(battle: Battle, actorUid: string, config: AiConfig, trace: AiTrace | undefined, difficulty: AiDifficulty): AiChoice | null {
   const actor = battle.get(actorUid);
   if (!actor || actor.hp <= 0) return null;
   const profile = config.profiles[actor.ai ?? config.defaultProfile] ?? config.profiles[config.defaultProfile];
   if (!profile) return null;
 
   // Değer bağlamı (düşman tahmini, katkılar) karar boyunca bir kez kurulur; seçenek değerleri (buff dahil) ve global kararlar onu kullanır
-  const vc = { ...DEFAULT_VALUE, ...(config.value ?? {}) };
+  const rules = difficultyRules(config, difficulty);
+  const vc = { ...DEFAULT_VALUE, ...(config.value ?? {}), ...(rules.value ?? {}), ...(rules.horizon !== undefined ? { horizon: rules.horizon } : {}) };
   const focusOf = (c: Combatant) => (config.profiles[c.ai ?? config.defaultProfile] ?? config.profiles[config.defaultProfile])?.focus ?? 'lowest_ratio';
   activeCtx = new ValueContext(battle, actor, vc, focusOf);
+  activeCtx.diff = rules;
   const options = buildOptions(battle, actor, profile, trace);
-  const pick = options.length === 0 ? null : pickClassOption(actor, profile, options, activeCtx, trace);
+  const pick = options.length === 0 ? null : pickClassOption(actor, profile, options, activeCtx, trace, battle);
   if (trace) {
     trace.options = options;
     trace.classPick = pick;
+    trace.difficulty = difficulty;
   }
   const g = config.global;
   if (g?.enabled && !actor.summoned && battle.globalSkillIds().length > 0) {
     const gt: GlobalTrace | undefined = trace ? { enabled: true } : undefined;
     if (trace) trace.global = gt;
-    const choice = chooseGlobal(battle, actor, profile, g, pick, gt);
-    if (choice) return choice;
+    if (rules.globals === 'restWhenIdle') {
+      // Easy: Move/Skip yok; yalnızca yapacak hamle yokken Rest (MP biriktir)
+      if (gt) gt.gate = `difficulty ${difficulty}: only Rest when there is nothing to do`;
+      if (!pick && battle.canUseGlobal(actor.uid, 'rest').ok) {
+        if (gt) gt.outcome = 'rest: no move to make (easy)';
+        return { skillId: 'rest', reason: 'rest' };
+      }
+    } else {
+      const choice = chooseGlobal(battle, actor, profile, g, pick, gt);
+      if (choice) return choice;
+    }
   } else if (trace) {
     trace.global = { enabled: false, gate: !g?.enabled ? 'global skills disabled in ai.json' : actor.summoned ? 'summoned units cannot use global skills' : 'no global skills' };
   }
   return pick ? toChoice(pick.option, pick.reason) : null;
 }
 
+/** Belirleyici "zar" [0, 1): savaş seed'i + oynanan tur + birim kimliğinden (motorun RNG'sine dokunmaz; aynı savaş = aynı hata). */
+export function aiNoise(battle: Battle, actorUid: string): number {
+  let h = (battle.seed ^ 0x9e3779b9) >>> 0;
+  const mix = (n: number) => {
+    h = Math.imul(h ^ n, 0x85ebca6b) >>> 0;
+    h = (h ^ (h >>> 13)) >>> 0;
+    h = Math.imul(h, 0xc2b2ae35) >>> 0;
+    h = (h ^ (h >>> 16)) >>> 0;
+  };
+  mix(battle.turnsTaken);
+  for (let i = 0; i < actorUid.length; i++) mix(actorUid.charCodeAt(i));
+  return h / 4294967296;
+}
+
 /**
  * Class skill'leri arasından (global skill'ler olmadan) seçim: TEK DEĞER TERAZİSİ. Her adayın puanı (scoreOption) hesaplanır; puanı > 0 olan en büyük
  * seçilir (eşitlikte aday sırası: skill sırası, hedef sırası). MP ayırma (reserveMp) yüzünden engellenen saldırılar yalnızca başka hiçbir şey yoksa.
+ * Easy (pickTop): puanı en iyinin pickWithin payı içindeki en iyi pickTop aday arasından pickWeights ağırlıklı belirleyici seçim (aiNoise).
  * Hiçbir aday pozitif değilse null (global skill / pas).
  */
-function pickClassOption(actor: Combatant, profile: AiProfile, options: Option[], ctx: ValueContext, trace?: AiTrace): { option: Option; reason: AiChoice['reason'] } | null {
-  void actor;
-  for (const o of options) scoreOption(ctx, profile, o);
+function pickClassOption(actor: Combatant, profile: AiProfile, options: Option[], ctx: ValueContext, trace: AiTrace | undefined, battle: Battle): { option: Option; reason: AiChoice['reason'] } | null {
+  for (const o of options) {
+    scoreOption(ctx, profile, o);
+    // MP ayırma yalnızca ayrılan skill'in değeri bu saldırıdan büyükse erteler (madde 258)
+    if (o.blocked && o.score >= (o.reserveValue ?? 0)) o.blocked = false;
+  }
   const pool = (list: Option[]) => best(list.filter((o) => o.score > 0), (o) => o.score);
-  const pick = pool(options.filter((o) => !o.blocked)) ?? pool(options);
+  let pick = pool(options.filter((o) => !o.blocked)) ?? pool(options);
+  const rules = ctx.diff;
+  if (pick && (rules.pickTop ?? 1) > 1) {
+    const ranked = options.filter((o) => !o.blocked && o.score > 0 && o.score >= pick!.score * (rules.pickWithin ?? 0)).sort((a, b) => b.score - a.score).slice(0, rules.pickTop);
+    const w = (rules.pickWeights ?? []).slice(0, ranked.length);
+    const total = w.reduce((a, b) => a + b, 0);
+    if (ranked.length > 1 && total > 0) {
+      let r = aiNoise(battle, actor.uid) * total;
+      let i = 0;
+      while (i < w.length - 1 && r >= w[i]!) r -= w[i++]!;
+      pick = ranked[i] ?? pick;
+    }
+  }
   trace?.steps.push({ priority: 'value', ...(pick ? { option: pick } : {}) });
   return pick ? { option: pick, reason: reasonOf(pick) } : null;
 }
@@ -385,15 +439,25 @@ function buildOptions(battle: Battle, actor: Combatant, profile: AiProfile, trac
   }
   const reserve = reservedMp(battle, actor, profile);
   if (trace) trace.reserves = reserve;
-  // Bağlam ipucu (requires/anyOf) artık seçimi ENGELLEMEZ (terazi): yalnızca MP ayırma
-  for (const o of options) o.blocked = spendsReserve(actor, o, reserve);
+  // Madde 258: skill ipuçlarında bağlam koşulu yok; yalnızca MP ayırma (puanlama sonrası, pickClassOption değerle kıyaslar)
+  for (const o of options) {
+    const hit = spentReserves(actor, o, reserve);
+    o.blocked = hit.length > 0;
+    o.reserveValue = Math.max(0, ...hit.map((r) => r.value));
+  }
   return options;
 }
 
+/** Bir skill'in gereken MP'si (MP ayırma, Rest, Skip): bedeli ve (varsa) ai.reserveMinMpRatio x maks MP. */
+function mpNeedOf(sk: SkillDef, actor: Combatant): number {
+  return Math.max(sk.cost.amount, Math.ceil((sk.ai?.reserveMinMpRatio ?? 0) * actor.maxMp));
+}
+
 /**
- * MP ayırma: `reserveMp: N` ipuçlu bir skill (ör. Aimed Shot, Meteor) hazırsa ya da en geç N tur sonra hazır olacaksa, bağlamı
- * şu an mevcutsa (ipucu sağlanıyorsa) ve o zamana kadar yenilenmeyle MP'si ona yetebilecekse, onu yetersiz bırakacak SALDIRI harcamaları ertelenir. Şifa, kalkan, çağrı gibi
- * işlevsel skill'ler ve öldürücü vuruş (kill önceliği) etkilenmez. Skill'in gereken MP'si: bedeli ve (varsa) minSelfMpRatio x en yüksek MP.
+ * MP ayırma: `reserveMp: N` ipuçlu bir skill (ör. Aimed Shot, Meteor) hazırsa ya da en geç N tur sonra hazır olacaksa, şu an (bekleme yok sayılarak)
+ * pozitif değerli bir seçeneği varsa ve o zamana kadar yenilenmeyle MP'si ona yetebilecekse, onu yetersiz bırakacak SALDIRI harcamaları ertelenir;
+ * madde 258'den beri yalnızca saldırının puanı, ayrılan skill'in beklenen değerinden (en iyi puanı x value.reserveValueShare) düşükse.
+ * Şifa, kalkan, çağrı gibi işlevsel skill'ler ve MP ayıran skill'lerin kendisi etkilenmez.
  */
 export interface Reserve {
   /** Ayrılan skill'in id'si (yalnızca açıklama için). */
@@ -401,6 +465,8 @@ export interface Reserve {
   need: number;
   /** Hazır olmasına kalan tur (0 = hazır, 1..N). */
   turns: number;
+  /** Ayrılan skill'in beklenen değeri (şu anki en iyi puanı x reserveValueShare); bundan değerli saldırı ertelenmez. */
+  value: number;
 }
 
 function reservedMp(battle: Battle, actor: Combatant, profile: AiProfile): Reserve[] {
@@ -410,18 +476,20 @@ function reservedMp(battle: Battle, actor: Combatant, profile: AiProfile): Reser
     const sk = battle.skill(id);
     const turns = actor.cooldowns[id] ?? 0;
     if (!sk?.ai?.reserveMp || sk.cost.resource !== 'mp' || turns > sk.ai.reserveMp) continue;
-    const need = Math.max(sk.cost.amount, Math.ceil((sk.ai.requires?.minSelfMpRatio ?? 0) * actor.maxMp));
+    const need = mpNeedOf(sk, actor);
     if (actor.mp + actor.stats.mpRegen * turns < need) continue;
-    // Yalnızca bağlam şu an var olan (skill şimdi kullanılabilir olsa seçilebilecek) durumda ayır: bağlam yokken MP boşuna bekletilmez
-    if (skillOptions(battle, actor, id, profile).some((o) => hintHolds(battle, actor, o))) out.push({ skill: id, need, turns });
+    // Yalnızca skill'in şu an (bekleme yok sayılarak) değerli bir seçeneği varsa ayır: değersizken MP boşuna bekletilmez
+    const share = activeCtx?.vc.reserveValueShare ?? DEFAULT_VALUE.reserveValueShare;
+    const value = activeCtx ? Math.max(0, ...skillOptions(battle, actor, id, profile).map((o) => (scoreOption(activeCtx!, profile, o), o.score))) * share : 0;
+    if (value > 0) out.push({ skill: id, need, turns, value });
   }
   return out;
 }
 
-function spendsReserve(actor: Combatant, o: Option, reserves: Reserve[]): boolean {
+function spentReserves(actor: Combatant, o: Option, reserves: Reserve[]): Reserve[] {
   const pureAttack = o.damage > 0 && o.heal === 0 && o.shield === 0 && o.burn === 0 && !o.summon && !o.taunt && !o.guard;
-  if (reserves.length === 0 || o.skill.ai || !pureAttack || o.skill.cost.resource !== 'mp' || o.skill.cost.amount <= 0) return false;
-  return reserves.some((r) => actor.mp - o.skill.cost.amount + actor.stats.mpRegen * r.turns < r.need);
+  if (reserves.length === 0 || o.skill.ai?.reserveMp || !pureAttack || o.skill.cost.resource !== 'mp' || o.skill.cost.amount <= 0) return [];
+  return reserves.filter((r) => actor.mp - o.skill.cost.amount + actor.stats.mpRegen * r.turns < r.need);
 }
 
 /** Bir skill'in tüm (hedef/alan) seçenekleri. Bekleme ve MP denetimi YAPMAZ (çağıran denetler). */
@@ -502,13 +570,12 @@ function incomingDamage(battle: Battle, actor: Combatant): number {
 function buffValue(battle: Battle, actor: Combatant, o: Option, alt: number, basicDamage: number, profile: AiProfile): number {
   const own = o.skill.effects.filter((e): e is Extract<typeof e, { type: 'status' }> => e.type === 'status' && !!e.self);
   if (own.some((e) => actor.statuses.some((s) => s.kind === e.status && s.turns > 0))) return 0; // zaten aktif: yığılmaz
-  const hint = o.skill.ai;
   const turns = Math.max(0, ...own.map((e) => e.turns));
   let mitigation = 0;
   for (const e of own) mitigation = Math.max(mitigation, 1 - (battle.statusDef(e.status)?.damageTakenMult ?? 1));
   // Terazi (madde 257): bana gelecek hasar = düşman tahmininde bana yönelen vuruşlar ile takım içinde eşit payın büyüğü; süre ufukla sınırlı
   const ctx = activeCtx;
-  const share = ctx ? (ctx.round.get(actor.uid) ?? 0) : incomingDamage(battle, actor) * (hint?.incomingShare ?? 0.4);
+  const share = ctx ? (ctx.round.get(actor.uid) ?? 0) : incomingDamage(battle, actor) * 0.4;
   const span = ctx ? Math.min(turns, ctx.vc.horizon) : turns;
   const defend = mitigation > 0 ? mitigation * share * span : 0;
   const pe = actor.passive?.effect;
@@ -522,7 +589,7 @@ function buffValue(battle: Battle, actor: Combatant, o: Option, alt: number, bas
     const aliveAfter = threat * (1 - mitigation) < actor.hp - lost + actor.shield;
     if (!aliveAfter) return -lost * profile.hpCostWeight - (threat < actor.hp + actor.shield ? ctx.save(actor) : 0);
   }
-  return defend + offense - lost * profile.hpCostWeight - alt * (hint?.opportunityShare ?? 0.5);
+  return defend + offense - lost * profile.hpCostWeight - alt * 0.5;
 }
 
 /** Birimin lifesteal oranı: soulDrain pasifi + skill'lerindeki en yüksek damage.lifesteal (Dark Bond değeri için kaba ölçü). */
@@ -548,8 +615,12 @@ function bondValue(battle: Battle, actor: Combatant, o: Option, bestHit: number,
   // Madde 241: canı doluyken can çalınmaz, kopya yalnızca kullanıcının GERÇEKTEN iyileştiği kadar: kullanıcının eksik canı (+ bağ boyunca yiyeceği
   // hasar için maks canının bondSelfFloor payı) üst sınırdır; Undead tam canlıyken değer düşük
   const steal = bestHit * lifestealRatio(battle, actor) * e.turns;
-  const selfCap = actor.maxHp - actor.hp + actor.maxHp * (profile.bondSelfFloor ?? 0);
-  const cap = Math.max(target.maxHp - target.hp, target.maxHp * (profile.bondHpFloor ?? 0));
+  // Madde 258 (Faz 2 düzeltmesi): bağ süresince ikisinin de yiyeceği beklenen hasar (düşman tahmini, tur başı x süre) iyileşme payı açar; eskiden
+  // yalnızca şu anki eksik can sayılıyordu (tam canlı Undead'in bağı neredeyse hep 0'dı, gerçekte bağ süresince hasar yiyip çalıyor)
+  const span = activeCtx ? Math.min(e.turns, activeCtx.vc.horizon) : 0;
+  const room = (c: Combatant) => (activeCtx ? Math.min(c.hp, (activeCtx.round.get(c.uid) ?? 0) * span) : 0);
+  const selfCap = actor.maxHp - actor.hp + room(actor) + actor.maxHp * (profile.bondSelfFloor ?? 0);
+  const cap = Math.max(target.maxHp - target.hp + room(target), target.maxHp * (profile.bondHpFloor ?? 0));
   return Math.max(0, Math.min(Math.min(steal, selfCap) * e.ratio, cap));
 }
 
@@ -561,62 +632,6 @@ function hasMagicAttack(battle: Battle, c: Combatant): boolean {
 /** Birimin herhangi bir hasar skill'i var mı? */
 function hasAttack(battle: Battle, c: Combatant): boolean {
   return c.skills.some((id) => battle.skill(id)?.effects.some((e) => e.type === 'damage'));
-}
-
-/**
- * Bağlam koşulu (SkillAiCond) bu seçenek için sağlanıyor mu? Tanımlı tüm alanlar birlikte sağlanmalı.
- * condFailure: sağlanmayan İLK koşulun adı (sağlanıyorsa null). detail=true ise değerleri de yazar (yalnızca açıklama için; seçimi etkilemez).
- */
-function condHolds(cond: SkillAiCond, battle: Battle, actor: Combatant, o: Option, mpOverride?: number): boolean {
-  return condFailure(cond, battle, actor, o, mpOverride, false) === null;
-}
-
-function condFailure(cond: SkillAiCond, battle: Battle, actor: Combatant, o: Option, mpOverride: number | undefined, detail: boolean): string | null {
-  const foes = battle.living(foeSide(actor));
-  const allies = battle.living(actor.side);
-  const enemyHits = o.targets.filter((t) => t.side !== actor.side).length;
-  const primary = o.primary && o.primary.side !== actor.side ? o.primary : undefined;
-  if (cond.kill && o.kills.length === 0) return detail ? 'kill (option kills nobody)' : '';
-  if (cond.minTargets !== undefined && enemyHits < cond.minTargets) return detail ? `minTargets ${cond.minTargets} (hits ${enemyHits})` : '';
-  if (cond.minLivingEnemies !== undefined && foes.length < cond.minLivingEnemies) return detail ? `minLivingEnemies ${cond.minLivingEnemies} (have ${foes.length})` : '';
-  if (cond.minLivingAllies !== undefined && allies.length < cond.minLivingAllies) return detail ? `minLivingAllies ${cond.minLivingAllies} (have ${allies.length})` : '';
-  if (cond.minSelfHpRatio !== undefined && ratio(actor) < cond.minSelfHpRatio) return detail ? `minSelfHpRatio ${cond.minSelfHpRatio} (hp ${r2(ratio(actor))})` : '';
-  if (cond.minSelfHpRatioAfter !== undefined && (actor.hp - selfHpCost(actor, o.skill)) / actor.maxHp < cond.minSelfHpRatioAfter) return detail ? `minSelfHpRatioAfter ${cond.minSelfHpRatioAfter} (after cost ${r2((actor.hp - selfHpCost(actor, o.skill)) / actor.maxHp)})` : '';
-  if (cond.minSelfMpRatio !== undefined && (actor.maxMp <= 0 || (mpOverride ?? actor.mp) / actor.maxMp < cond.minSelfMpRatio)) return detail ? `minSelfMpRatio ${cond.minSelfMpRatio} (mp ${r2((mpOverride ?? actor.mp) / Math.max(1, actor.maxMp))})` : '';
-  if (cond.minSelfRage !== undefined && (actor.rage ?? 0) < cond.minSelfRage) return detail ? `minSelfRage ${cond.minSelfRage} (rage ${actor.rage ?? 0})` : '';
-  if (cond.minBattleTurns !== undefined && battle.turnsTaken < cond.minBattleTurns) return detail ? `minBattleTurns ${cond.minBattleTurns} (turn ${battle.turnsTaken})` : '';
-  if (cond.minWoundedAllies !== undefined && allies.filter((c) => ratio(c) < (cond.woundedBelowRatio ?? 0.7)).length < cond.minWoundedAllies) return detail ? `minWoundedAllies ${cond.minWoundedAllies} below ${cond.woundedBelowRatio ?? 0.7} (have ${allies.filter((c) => ratio(c) < (cond.woundedBelowRatio ?? 0.7)).length})` : '';
-  if (cond.minTargetArmorReduction !== undefined && (!primary || armorReduction(battle.effectiveStats(primary).armor, battle.formulas) < cond.minTargetArmorReduction)) return detail ? `minTargetArmorReduction ${cond.minTargetArmorReduction} (target ${primary ? r2(armorReduction(battle.effectiveStats(primary).armor, battle.formulas)) : 'none'})` : '';
-  if (cond.minTargetHpToDamage !== undefined && (!primary || o.primaryAvg <= 0 || (primary.hp + primary.shield + primary.magicShield) / o.primaryAvg < cond.minTargetHpToDamage)) return detail ? `minTargetHpToDamage ${cond.minTargetHpToDamage} (target ${primary && o.primaryAvg > 0 ? r2((primary.hp + primary.shield + primary.magicShield) / o.primaryAvg) : 'n/a'})` : '';
-  if (cond.minMissingManaShare !== undefined && o.missingManaShare < cond.minMissingManaShare) return detail ? `minMissingManaShare ${cond.minMissingManaShare} (have ${r2(o.missingManaShare)})` : '';
-  const allyHits = o.targets.filter((t) => t.side === actor.side).length;
-  if (cond.minAllyTargets !== undefined && allyHits < cond.minAllyTargets) return detail ? `minAllyTargets ${cond.minAllyTargets} (covers ${allyHits})` : '';
-  const share = primary && primary.maxHp > 0 ? (o.primaryAvg * o.primaryHit) / primary.maxHp : 0;
-  if (cond.minTargetMaxHpShare !== undefined && share < cond.minTargetMaxHpShare) return detail ? `minTargetMaxHpShare ${cond.minTargetMaxHpShare} (expected ${r2(share)} of max HP)` : '';
-  if (cond.targetBehindFront && (!primary || battle.rowRank(primary.uid) < battle.formulas.formation.meleeRows)) return detail ? `targetBehindFront (target ${primary ? `row rank ${battle.rowRank(primary.uid)}` : 'none'} is within normal melee reach)` : '';
-  // Dost hedefli skill (Spell Ward): hedef dostun can oranı, düşmanda büyü saldırganı / buff
-  const ally = o.primary && o.primary.side === actor.side ? o.primary : undefined;
-  if (cond.maxTargetHpRatio !== undefined && (!ally || ratio(ally) > cond.maxTargetHpRatio)) return detail ? `maxTargetHpRatio ${cond.maxTargetHpRatio} (target ${ally ? r2(ratio(ally)) : 'none'})` : '';
-  if (cond.minFoeMagicMp !== undefined && !foes.some((f) => f.mp >= cond.minFoeMagicMp! && hasMagicAttack(battle, f))) return detail ? `minFoeMagicMp ${cond.minFoeMagicMp} (no magic attacker with that much MP)` : '';
-  if (cond.minFoeBuffs !== undefined) {
-    const buffed = foes.filter((f) => battle.dispelCandidates(f, 'buff').length > 0).length;
-    if (buffed < cond.minFoeBuffs) return detail ? `minFoeBuffs ${cond.minFoeBuffs} (buffed foes ${buffed})` : '';
-  }
-  if (cond.minTargetStacks) {
-    const { status, count } = cond.minTargetStacks;
-    const has = primary ? (primary.statuses.find((s) => s.kind === status)?.stacks ?? 0) : 0;
-    if (has < count) return detail ? `minTargetStacks ${status} ${count} (has ${has})` : '';
-  }
-  if (cond.minStatusMitigation !== undefined && o.mitigation < cond.minStatusMitigation) return detail ? `minStatusMitigation ${cond.minStatusMitigation} (got ${r2(o.mitigation)})` : '';
-  return null;
-}
-
-/** Skill'in `ai` ipucu bu durumda sağlanıyor mu (ipucu yoksa her zaman)? */
-function hintHolds(battle: Battle, actor: Combatant, o: Option, mpOverride?: number): boolean {
-  const hint = o.skill.ai;
-  if (!hint) return true;
-  if (hint.requires && !condHolds(hint.requires, battle, actor, o, mpOverride)) return false;
-  return !hint.anyOf?.length || hint.anyOf.some((c) => condHolds(c, battle, actor, o, mpOverride));
 }
 
 function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Combatant[], targetUid: string | undefined, profile: AiProfile, areaCells?: number[], centerUid?: string): Option {
@@ -637,6 +652,7 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
     burnTargets: 0,
     revive: 0,
     burnScore: 0,
+    burnBy: {},
     primaryAvg: 0,
     missingManaShare: 0,
     pureBuff: isPureBuff(skill),
@@ -710,7 +726,8 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
         const cm = actor.stats.critMult;
         const c = Math.max(0, Math.min(1, d.critChance));
         const pk = d.critChance >= 1 ? pAtLeast(d.min, d.max, need) : (1 - c) * pAtLeast(d.min, d.max, need) + c * pAtLeast(d.min * cm, d.critMax, need);
-        o.killP[target.uid] = Math.max(o.killP[target.uid] ?? 0, d.hitChance * pk);
+        // Madde 258: hedefin kullanılmamış Lucky Escape hakkı ölümcül vuruşu o şansla tamamen yok sayar
+        o.killP[target.uid] = Math.max(o.killP[target.uid] ?? 0, d.hitChance * pk * (1 - battle.luckyEscapeChance(target.uid)));
         if (o.killP[target.uid]! >= 0.5) o.kills.push(target);
       }
       if (lifesteal > 0 && !p.damage.splash) o.selfHeal += p.damage.hpLoss * p.damage.hitChance * lifesteal;
@@ -735,6 +752,7 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
       o.burn += p.burn;
       o.burnScore += p.burn * Math.max(0.5, target.maxMp / 30); // mana havuzu büyük (büyücü) hedefte mana yakmak daha değerli
       o.burnTargets++;
+      o.burnBy[target.uid] = (o.burnBy[target.uid] ?? 0) + p.burn;
     }
   }
   // Yerde kalan etki (zehir, yanan zemin, holy fire): alandaki (şeklin TÜM hücreleri; boş anchor dahil) düşmanların turlar boyunca alacağı beklenen hasar
@@ -763,6 +781,7 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
     if (e.type !== 'shield' || !e.onAbsorb?.burnMana) continue;
     const burn = Math.max(0, ...battle.living(foeSide(actor)).filter((f) => (e.shieldType === 'magic' ? hasMagicAttack(battle, f) : hasAttack(battle, f))).map((f) => Math.min(f.mp, e.onAbsorb!.burnMana!)));
     o.burn += burn;
+    o.wardBurn = { amount: e.onAbsorb.burnMana, magic: e.shieldType === 'magic' };
   }
   curseValue(battle, actor, skill, previews, o, profile);
   // Rastgele hedefli skill: hedefler önceden bilinmez; beklenen hasar hedef sayısına oranlanır, öldürme garanti değildir
@@ -806,9 +825,10 @@ function curseValue(battle: Battle, actor: Combatant, skill: SkillDef, previews:
       const cr = om.afterCrit !== om.after ? branch(om.afterCrit, om.doomOnCrit) : nc;
       o.damage += h * ((1 - crit) * nc.now + crit * cr.now);
       o.curse += h * ((1 - crit) * nc.later + crit * cr.later);
-      if (om.doom && p.damage && (p.damage.hpLoss + om.doom.hpLoss >= target.hp) && h >= killMin && !o.kills.includes(target)) {
+      const hk = h * (1 - battle.luckyEscapeChance(target.uid)); // madde 258
+      if (om.doom && p.damage && (p.damage.hpLoss + om.doom.hpLoss >= target.hp) && hk >= killMin && !o.kills.includes(target)) {
         o.kills.push(target);
-        o.killP[target.uid] = Math.max(o.killP[target.uid] ?? 0, h);
+        o.killP[target.uid] = Math.max(o.killP[target.uid] ?? 0, hk);
       }
       if (o.notes.length < 6) {
         if (om.doom && om.doom.cause === 'detonate') o.notes.push(`${label}: omens ${om.before}->${om.after} detonate ${om.doom.omens} omen x${om.doom.mult} = ${r1(om.doom.avg)}@crit ${r2(om.doom.critChance)}`);
@@ -963,23 +983,35 @@ function scoreOption(ctx: ValueContext, profile: AiProfile, o: Option): void {
   } else {
     add('damage', o.damage);
     add('selfHeal', o.selfHeal);
+    const rules = ctx.diff;
+    // Hard "fazla vurmama" (madde 258 Faz 5): zaten ölecek hedefe (DoT/zemin tiki, ondan önce oynayacak dostlarımız) hasar/öldürme/baskı değerinin yalnızca bir payı
+    const keep = (f: Combatant) => (rules.overkillShare !== undefined && f.side !== actor.side && ctx.dyingAnyway(f) ? rules.overkillShare : 1);
+    if (rules.overkillShare !== undefined) {
+      for (const [uid, d] of Object.entries(o.dmgBy)) {
+        const f = get(uid);
+        if (f && keep(f) < 1) add('overkill', -d * (1 - keep(f)));
+      }
+    }
     // Öldürme: ihtimal x hedefin kalan katkısı (ufuk); öldürülen düşman tehlikedeki bir dostu öldürecek olandıysa kurtarma değeri de (K2)
     for (const [uid, p] of Object.entries(o.killP)) {
       const f = get(uid);
       if (!f || p <= 0) continue;
-      add('kill', p * vc.killWeight * ctx.contribution(f));
+      if (rules.killMinChance !== undefined && p < rules.killMinChance) continue; // Easy: yalnızca kesin öldürme
+      add('kill', p * vc.killWeight * ctx.contribution(f) * keep(f));
       for (const i of ctx.hits) {
         if (i.foe !== uid || !i.before) continue;
         const a = get(i.target);
-        if (a && ctx.rescued(a, 0, i.hit)) add('save', p * ctx.save(a));
+        if (a && ctx.rescued(a, 0, i.hit)) add('save', p * ctx.save(a) * keep(f));
       }
     }
     // Baskı: öldürmeyen hasarın hedefin kalan katkısından götürdüğü pay (odak ateşi: yaralı ve tehlikeli hedef daha değerli)
+    // Hard: dostlarımızın da yöneleceği hedefe ek pay (takım odak ateşi)
     for (const [uid, d] of Object.entries(o.dmgBy)) {
       const f = get(uid);
       if (!f || f.side === actor.side || d <= 0) continue;
       const left = 1 - (o.killP[uid] ?? 0);
-      add('pressure', left * vc.pressureShare * ctx.contribution(f) * Math.min(1, d / Math.max(1, f.hp + f.shield + f.magicShield)));
+      const focus = 1 + (rules.focusFire ?? 0) * (rules.focusFire ? ctx.alliesOn(f) : 0);
+      add('pressure', left * vc.pressureShare * ctx.contribution(f) * Math.min(1, d / Math.max(1, f.hp + f.shield + f.magicShield)) * focus * keep(f));
     }
     // Şifa (fazla şifa sayılmaz: önizleme eksik canla sınırlar) + tehlikedeki dostu kurtarma
     add('heal', o.heal);
@@ -1034,10 +1066,22 @@ function scoreOption(ctx: ValueContext, profile: AiProfile, o: Option): void {
     add('curse', o.curse);
     add('mitigation', o.mitigation);
     add('cleanse', cleanseValue(ctx, profile, o));
-    add('burn', o.burn * BURN_WEIGHT);
+    add('burn', burnValue(ctx, o));
     add('tempo', o.tempo);
   }
   const gross = Object.values(t).reduce((a, b) => a + b, 0);
+  // Hard "uygun anı bekleme": yığın patlatan skill (Doom Mark) öldürmüyorsa ve hedefte yığın dolmaya 1 kala değilse değerinin yalnızca bir payı
+  // (bir sonraki turda Evil Eye / Withering Curse ile yığın büyüyünce patlatmak daha değerli)
+  const patience = ctx.diff.patience;
+  if (patience !== undefined && gross > 0 && o.kills.length === 0) {
+    const det = o.skill.effects.find((e) => e.type === 'detonate');
+    const target = o.targets[0];
+    if (det && det.type === 'detonate' && target) {
+      const max = battle.statusDef(det.status)?.maxStacks ?? 3;
+      const stacks = target.statuses.find((s) => s.kind === det.status)?.stacks ?? 0;
+      if (stacks < max - 1) add('patience', -gross * (1 - patience));
+    }
+  }
   add('cost', -o.cost);
   // Ultimate'a küçük bekleme bedeli (K5): brüt değer x cooldown x pay (aynı işi bedava skill de yapıyorsa o kazanır)
   const cd = battle.mode === 'turns' && !battle.noCooldowns ? (o.skill.cooldown ?? 0) : 0;
@@ -1081,7 +1125,14 @@ function reviveTerm(ctx: ValueContext, o: Option, add: (k: string, v: number) =>
   }
   o.reviveSlot = bestSlot;
   const fit = Math.max(0, bestFit);
-  add('revive', ctx.vc.reviveWeight * (ctx.turnValue(d) * ctx.turnsWithin(d, 0) * fit + ctx.vc.reviveHpShare * hp));
+  const future = ctx.turnValue(d) * ctx.turnsWithin(d, 0) * fit;
+  // Madde 258 (Ömer): diriltme savaşın galibini değiştirmeyecekse değeri 0 (savaş zaten kazanılmış ya da dirilenle bile kaybediliyor)
+  const decided = ctx.outcome({ dmg: future, hp });
+  if (decided) {
+    o.notes.push(decided === 'win' ? 'revive 0: battle already won within the horizon' : 'revive 0: battle lost within the horizon even with the revived ally');
+    return;
+  }
+  add('revive', ctx.vc.reviveWeight * (future + ctx.vc.reviveHpShare * hp));
 }
 
 /** Kontrol etkilerinin değeri (K8; can-eşdeğer): hedefin kaybettiği / dostun kazandığı tur payı x tur değeri, Wound: engellenen şifa, Fortify: önlenen hasar. */
@@ -1161,6 +1212,32 @@ function cleanseValue(ctx: ValueContext, profile: AiProfile, o: Option): number 
         else if (def?.speedMult !== undefined && def.speedMult < 1) v += (1 - def.speedMult) * own * ctx.turnValue(t);
         else v += st.turns * (profile.cleanseValuePerTurn ?? 0);
       }
+    }
+  }
+  return v;
+}
+
+/**
+ * Mana yakmanın değeri (madde 258, Faz 2: "engellenen hamle"; eski sabit "yakılan MP x 0,6" yerine): doğrudan yakılan MP (Drain Field, Mana Steal) için
+ * hedefin ufukta kaybedeceği MP'li hamlelerin değeri (ValueContext.manaDenial), vuruşa bağlıysa isabet şansıyla. Spell Ward kancası: korunan dosta
+ * bir sonraki turumuzdan önce saldıracağı tahmin edilen (büyü kalkanında: büyü vuran) her düşmanın, kanca kadar MP kaybıyla engellenen hamlesi.
+ */
+function burnValue(ctx: ValueContext, o: Option): number {
+  const battle = ctx.battle;
+  let v = 0;
+  for (const [uid, x] of Object.entries(o.burnBy)) {
+    const f = battle.get(uid);
+    if (!f || f.side === ctx.actor.side) continue;
+    v += ctx.manaDenial(f, x) * previewHitChance(o, f);
+  }
+  if (o.wardBurn) {
+    const covered = new Set([...Object.keys(o.shieldBy), ...Object.keys(o.magicShieldBy)]);
+    for (const i of ctx.intents) {
+      if (o.wardBurn.magic && !i.magic) continue;
+      const share = i.focus.filter((u) => covered.has(u)).length / Math.max(1, i.focus.length);
+      const f = battle.get(i.foe);
+      if (!f || share <= 0) continue;
+      v += ctx.manaDenial(f, Math.min(f.mp, o.wardBurn.amount)) * share;
     }
   }
   return v;
@@ -1257,7 +1334,7 @@ function restGain(battle: Battle, actor: Combatant, profile: AiProfile, g: AiGlo
     const cd = turnsMode ? (actor.cooldowns[id] ?? 0) : 0;
     const wait = Math.max(1, cd);
     if (wait > g.rest.lookaheadTurns) continue;
-    const need = Math.max(sk.cost.amount, Math.ceil((sk.ai?.requires?.minSelfMpRatio ?? 0) * actor.maxMp));
+    const need = mpNeedOf(sk, actor);
     if (need > actor.maxMp) continue;
     const without = Math.min(actor.maxMp, actor.mp - spend + regen * wait);
     const mid = Math.min(actor.maxMp, actor.mp + mpGain);
@@ -1330,7 +1407,7 @@ function bestMove(battle: Battle, actor: Combatant, g: AiGlobalConfig, vNow: num
   const wounded = ratio(actor) < g.move.retreatHpRatio;
   const meleeRows = battle.formulas.formation.meleeRows;
   const pickSlot = (slots: number[], adj: (slot: number) => number): number => {
-    // Bitişik dost sayısı (aura/komşuluk) çok olan, sonra öne yakın, sonra küçük yuva (ölü dost yuvaları freeTiles'ta zaten yok)
+    // Bitişik dost sayısı (aura/komşuluk) çok olan, sonra öne yakın, sonra küçük yuva (madde 258: ölü dostun ceset hücresi de aday)
     return [...slots].sort((a, b) => adj(b) - adj(a) || battle.rowOf(a) - battle.rowOf(b) || a - b)[0]!;
   };
   const neighbors = (slot: number) => battle.living(actor.side).filter((c) => c.uid !== actor.uid && c.board === actor.board && Math.abs(battle.rowOf(c.slot) - battle.rowOf(slot)) + Math.abs(battle.laneOf(c.slot) - battle.laneOf(slot)) <= 1).length;
@@ -1400,19 +1477,12 @@ function bestMove(battle: Battle, actor: Combatant, g: AiGlobalConfig, vNow: num
 
 /**
  * Global skill kararı (Rest / Skip Turn / Move Tile); null = class hamlesi (ya da pas) kalır.
- * Öldürücü ve işlevsel (şifa, çağrı, kalkan, taunt, guard, mana yakma) hamleler her zaman önce gelir.
+ * Madde 258 (Faz 3): sabit kapı yok; kazançlar class hamlesinin terazi puanıyla (öldürme, kurtarma, şifa terimleri dahil) kıyaslanır.
  * Tehlikede (can düşük ve gelen hasar büyük) dinlenme/bekleme denenmez; yalnızca geri çekilme (Move) olabilir.
  */
 function chooseGlobal(battle: Battle, actor: Combatant, profile: AiProfile, g: AiGlobalConfig, pick: { option: Option; reason: AiChoice['reason'] } | null, trace?: GlobalTrace): AiChoice | null {
-  const reason = pick?.reason;
-  if (reason === 'kill') {
-    if (trace) trace.gate = 'class move is a killing blow: global skills are not considered';
-    return null;
-  }
-  if (reason && !['damage', 'aoe', 'tactic', 'fallback'].includes(reason)) {
-    if (trace) trace.gate = `class move is functional (priority "${reason}"): global skills are not considered`;
-    return null; // işlevsel hamle
-  }
+  // Madde 258 (Faz 3): sabit kapı YOK (eskiden öldürücü/işlevsel class hamlesinde global hiç denenmezdi). Rest/Skip/Move aynı terazide: kazançları
+  // class hamlesinin puanıyla (vNow: öldürme, kurtarma, şifa... terimleri dahil) kıyaslanır; değerli hamle varken kendiliğinden kaybederler.
   const vNow = optionNet(pick?.option);
   const spend = pick && pick.option.skill.cost.resource === 'mp' && !battle.freeMp ? pick.option.skill.cost.amount : 0;
   const lowHp = ratio(actor) < g.rest.dangerHpRatio;
@@ -1464,7 +1534,7 @@ function chooseGlobal(battle: Battle, actor: Combatant, profile: AiProfile, g: A
     for (const id of actor.skills) {
       const sk = battle.skill(id);
       if (!sk || (actor.cooldowns[id] ?? 0) !== 1) continue;
-      const need = sk.cost.resource === 'mp' ? Math.max(sk.cost.amount, Math.ceil((sk.ai?.requires?.minSelfMpRatio ?? 0) * actor.maxMp)) : 0;
+      const need = sk.cost.resource === 'mp' ? mpNeedOf(sk, actor) : 0;
       if (sk.cost.resource === 'mp' && !battle.freeMp && Math.min(actor.maxMp, actor.mp + regen) < need) continue;
       if (sk.cost.resource === 'rage' && (actor.rage ?? 0) < sk.cost.amount) continue;
       const v = bestSkillValue(battle, actor, sk, profile, Math.min(actor.maxMp, actor.mp + regen)) * g.rest.futureValueShare;
@@ -1535,7 +1605,7 @@ export interface AiCandidate {
   /** Ceset tüketen çağrı adayında: tüketilecek ceset (tehlike puanı + gerekçe) ve seçilmeyen diğer cesetler. */
   corpse?: { unit: string; danger: number; why: string };
   otherCorpses?: Array<{ unit: string; danger: number }>;
-  /** Etiketler: summon, empowered (ceset tüketilecek), unfed (ceset yok), taunt, guard, selfBuff, hpCost (düşük can kuralına tabi; oranlı can bedeli (Wail) taşımaz), hint (skill'in ai bağlam ipucu var). */
+  /** Etiketler: summon, empowered (ceset tüketilecek), unfed (ceset yok), taunt, guard, selfBuff, hpCost (düşük can kuralına tabi; oranlı can bedeli (Wail) taşımaz), reserve (skill MP ayırır: ai.reserveMp). */
   tags: string[];
   /** Debuff silme değeri (Mana Barrier), Dark Bond değeri ve yarım turn tempo değeri (0 ise yazılmaz). */
   cleanse?: number;
@@ -1561,6 +1631,8 @@ export interface AiExplanation {
   uid: string;
   actor: string;
   profile: string;
+  /** Kararın zorluk seviyesi (madde 258; Medium = tam terazi). */
+  difficulty: AiDifficulty;
   priorities: string[];
   focusRule: string;
   /** Verilen karar (chooseAction ile birebir aynı); null = hiçbir şey yapılamadı (tur pas). */
@@ -1587,14 +1659,15 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
  * elenme nedenlerini ve global skill değerlendirmesini verir. Saf ve belirleyici; motora ve RNG'ye dokunmaz, seçimi etkilemez:
  * karar chooseAction ile hesaplanır, açıklama o hesabın izinden (AiTrace) okunur. Yeni karar kuralı/öncelik eklenince burası da güncellenir.
  */
-export function explainChoice(battle: Battle, actorUid: string, config: AiConfig): AiExplanation | null {
+export function explainChoice(battle: Battle, actorUid: string, config: AiConfig, opts?: { difficulty?: AiDifficulty }): AiExplanation | null {
   const actor = battle.get(actorUid);
   if (!actor || actor.hp <= 0) return null;
   const profileName = config.profiles[actor.ai ?? config.defaultProfile] ? (actor.ai ?? config.defaultProfile) : config.defaultProfile;
   const profile = config.profiles[profileName];
   if (!profile) return null;
   const trace: AiTrace = { options: [], reserves: [], steps: [] };
-  const choice = chooseAction(battle, actorUid, config, trace);
+  const difficulty = opts?.difficulty ?? 'medium';
+  const choice = chooseAction(battle, actorUid, config, trace, { difficulty });
   const pick = trace.classPick ?? null;
   const skillName = (id: string) => battle.skill(id)?.name ?? battle.globalDef(id)?.name ?? id;
   const termText = (t: Record<string, number>) => Object.entries(t).map(([k, v]) => `${k} ${r1(v)}`).join(' + ');
@@ -1645,7 +1718,7 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
       ...(o.summon ? { summonValue: r1(o.summonValue) } : {}),
       ...(o.summonSlot !== undefined ? { summonSlot: o.summonSlot } : {}),
       ...corpseInfo(battle, o),
-      tags: [o.summon && 'summon', o.empowered === true && 'empowered', o.empowered === false && 'unfed', o.taunt && 'taunt', o.guard && 'guard', o.pureBuff && 'selfBuff', o.hpCost && 'hpCost', o.skill.ai && 'hint'].filter((t): t is string => !!t),
+      tags: [o.summon && 'summon', o.empowered === true && 'empowered', o.empowered === false && 'unfed', o.taunt && 'taunt', o.guard && 'guard', o.pureBuff && 'selfBuff', o.hpCost && 'hpCost', o.skill.ai?.reserveMp && 'reserve'].filter((t): t is string => !!t),
       verdict: 'skipped',
     };
     if (pick && o === pick.option) c.verdict = 'chosen';
@@ -1681,17 +1754,19 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
     else if (trace.global?.outcome) why += ` Global skills: ${trace.global.outcome}.`;
   }
   const g = trace.global ?? { enabled: false };
-  const vc = { ...DEFAULT_VALUE, ...(config.value ?? {}) };
+  const rules = difficultyRules(config, difficulty);
+  const vc = { ...DEFAULT_VALUE, ...(config.value ?? {}), ...(rules.value ?? {}), ...(rules.horizon !== undefined ? { horizon: rules.horizon } : {}) };
   return {
     uid: actor.uid,
     actor: unitLabel(actor),
     profile: profileName,
+    difficulty,
     priorities: profile.priorities,
     focusRule: profile.focus,
     final,
     why,
     steps,
-    winnerRule: `value scale (horizon ${vc.horizon} turns): score = damage + pressure + kill + save + heal + shield + revive + control + protect + summon + bond + curse + mitigation + cleanse + burn + tempo (+ buff for self-buffs) - cost - cooldown; highest wins`,
+    winnerRule: `value scale (difficulty ${difficulty}, horizon ${vc.horizon} turns): score = damage + pressure + kill + save + heal + shield + revive + control + protect + summon + bond + curse + mitigation + cleanse + burn + tempo (+ buff for self-buffs) - overkill - patience - cost - cooldown; ${rules.pickTop && rules.pickTop > 1 ? `picks among the best ${rules.pickTop} (deterministic, seed + turn + unit)` : 'highest wins'}`,
     candidates,
     rejected,
     reserves: trace.reserves.map((r) => ({ skill: r.skill, needMp: r.need, inTurns: r.turns })),
@@ -1718,18 +1793,10 @@ function labelOf(battle: Battle, uid: string): string {
   return c ? unitLabel(c) : uid;
 }
 
-/** Bir seçeneğin neden "blocked" olduğu (bağlam ipucu sağlanmadı ya da MP ayrıldı). */
+/** Bir seçeneğin neden "blocked" olduğu (MP ayrıldı ve ayrılan skill daha değerli). */
 function blockedReason(battle: Battle, actor: Combatant, o: Option, reserves: Reserve[]): string {
-  const hint = o.skill.ai;
-  if (hint?.requires) {
-    const f = condFailure(hint.requires, battle, actor, o, undefined, true);
-    if (f !== null) return `ai hint requires: ${f}`;
-  }
-  if (hint?.anyOf?.length && !hint.anyOf.some((c) => condHolds(c, battle, actor, o))) {
-    return `ai hint anyOf: none holds (${hint.anyOf.map((c) => condFailure(c, battle, actor, o, undefined, true)).join(' | ')})`;
-  }
   const r = reserves.find((x) => actor.mp - o.skill.cost.amount + actor.stats.mpRegen * x.turns < x.need);
-  if (r) return `MP kept in reserve for ${battle.skill(r.skill)?.name ?? r.skill} (needs ${r.need} MP in ${r.turns} turn(s); would leave ${actor.mp - o.skill.cost.amount})`;
+  if (r) return `MP kept in reserve for ${battle.skill(r.skill)?.name ?? r.skill} (needs ${r.need} MP in ${r.turns} turn(s); would leave ${actor.mp - o.skill.cost.amount}; its value ${r1(r.value)} beats this attack)`;
   return 'blocked';
 }
 

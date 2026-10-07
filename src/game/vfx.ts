@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import layout from '../../data/battle-layout.json';
-import { content, type SkillDef } from '../engine';
+import { content, type BattleEvent, type SkillDef } from '../engine';
 import { shapeCells } from '../engine/area-shape';
 import type { VfxKind } from '../ui/vfx-kinds';
 import type { CombatantView } from './combatant-view';
+import type { SkillUsage } from './skill-usage';
 import { color, slow } from './combatant-view';
 import { playSfx } from './audio';
 import { ensureIcon } from './icons';
@@ -61,6 +62,16 @@ export interface VfxCtx {
   behind?: { x: number; y: number };
   /** Kullanıcının karşı tarafındaki canlı birimler (hedef olmasalar da efekt onlara işaret koyabilir: Taunt'un hedef işaretleri). */
   foes?: CombatantView[];
+  /**
+   * Bu kullanımın motor olay özeti (src/game/skill-usage.ts): silinen durumlar (`dispelledFrom(uid)`), şifalar (`healsOn(uid, cause?)`: can
+   * çalma, Dark Bond), tüketilen ceset (`corpseUid`), çağrı yuvası (`slot`), uygulanan durumlar, hasarlar, ölümler, ham `events`.
+   * Efekt sahnenin iç alanlarını (battle.log, views) okumak yerine bunu kullanır. Galeri/önizleme gibi olaysız oynatmada tanımsız olabilir.
+   */
+  usage?: SkillUsage;
+  /** uid -> birimin görünümü (ceset, bağlı dost gibi hedef listesinde olmayan birimler için; yoksa undefined). */
+  viewOf?: (uid: string) => CombatantView | undefined;
+  /** Yalnızca OLAY efektlerinde (src/game/event-fx.ts: çağrı doğuşu, ceset emme, Doom...): efekti tetikleyen motor olayı. */
+  event?: BattleEvent;
 }
 
 /** Aşamalı alan skill'inin bir aşaması (VfxCtx.stages). */

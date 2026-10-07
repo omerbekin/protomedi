@@ -4,6 +4,7 @@ import { debugState } from './debug-state';
 import { copyMatchData } from '../ui/match-copy';
 import { fitText, goldText, makeMenuButton, serif } from './menu-ui';
 import { GOLD, makePanel } from './ui-frame';
+import { tierStyle, unitName } from './unit-label';
 
 /**
  * Savaş sonu ekranı (VICTORY / DEFEAT): koyu vinyet, ortada plaket, altında iki takımın özet paneli, altta düğmeler.
@@ -193,7 +194,7 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
       row.add(fr);
       // İsim + MVP
       const nameX = ax + av / 2 + 14;
-      const nameText = fitText(serif(scene, nameX, compact ? ry : ry - 13, c.name, compact ? 19 : 24, alive ? '#f3e4c4' : '#8d8070').setOrigin(0, 0.5), compact ? 120 : 175);
+      const nameText = fitText(serif(scene, nameX, compact ? ry : ry - 13, unitName(c), compact ? 19 : 24, alive ? (tierStyle(c.tier)?.hex ?? '#f3e4c4') : '#8d8070').setOrigin(0, 0.5), compact ? 120 : 175);
       row.add(nameText);
       const tagX = compact ? nameX + nameText.displayWidth + 8 : nameX;
       const tagY = compact ? ry : ry + 15;

@@ -30,6 +30,18 @@ function drop(g: PxGrid, cx: number, cy: number, r: number, t: string): void {
 }
 
 export const ICONS: Record<string, V2SpriteEntry> = {
+  /** Rest: hilal ay ve içinde dolan mavi mana damlası (nefes al, MP topla). (src/gallery/catalog.ts global eylem ikonlarını saydığı için ICONS'ta.) */
+  rest: (g) => {
+    g.disc(14, 16, 12.5, 'y');
+    g.disc(19.5, 12.5, 10.5, '.');
+    g.disc(10, 22, 1.4, 'Y');
+    g.disc(6.5, 14, 1, 'Y');
+    drop(g, 22, 22, 5, 'u');
+    g.disc(22, 22.6, 3, 'c');
+    g.disc(20.6, 21, 1.1, 'w');
+    sparkle(g, 26, 5, 2.6, 'w');
+    sparkle(g, 18.5, 3.5, 1.6, 'w');
+  },
   /** Skip Turn: ahşap çerçeveli kum saati, üst hazne boşalıyor; yanda hız çizgileri (sıradaki tur yarı sürede). */
   hourglass: (g) => {
     // hız çizgileri
@@ -251,21 +263,4 @@ export const ICONS: Record<string, V2SpriteEntry> = {
   },
 };
 
-export const SPRITES: Record<string, V2SpriteEntry> = {
-  // NOT: Rest ikonu ICONS yerine burada bekliyor: src/gallery/catalog.ts > buildIcons global skill ikonlarını (rest) "kullanılıyor" saymadığı
-  // için v1 'rest' Legacy'de görünüyor ve tests/asset-versions.test.ts (v2 olan öğe legacy olamaz) kırılıyor. ui-dev catalog'a
-  // content.globalSkills ikonlarını ekleyince bu girdi ICONS'a taşınır (anahtar: rest).
-  /** Rest: hilal ay ve içinde dolan mavi mana damlası (nefes al, MP topla). */
-  rest: (g) => {
-    g.disc(14, 16, 12.5, 'y');
-    g.disc(19.5, 12.5, 10.5, '.');
-    g.disc(10, 22, 1.4, 'Y');
-    g.disc(6.5, 14, 1, 'Y');
-    drop(g, 22, 22, 5, 'u');
-    g.disc(22, 22.6, 3, 'c');
-    g.disc(20.6, 21, 1.1, 'w');
-    sparkle(g, 26, 5, 2.6, 'w');
-    sparkle(g, 18.5, 3.5, 1.6, 'w');
-  },
-
-};
+export const SPRITES: Record<string, V2SpriteEntry> = {};

@@ -8,6 +8,7 @@ import { type DamageTags, FLOAT_ICON_TINT, damageIconKind, floatStyle, floatTime
 import { ensureIcon } from './icons';
 import { SHARED_KEY } from './asset-versions';
 import { SERIF } from './ui-frame';
+import { tierStyle, unitName } from './unit-label';
 
 /** floatText seçenekleri: tür (tipografi) ve rakamın solundaki/sağındaki küçük ikon (piksel ikon adı). */
 export interface FloatOpts {
@@ -66,6 +67,7 @@ export class CombatantView {
   private readonly shieldFill: Phaser.GameObjects.Rectangle;
   private readonly magicShieldFill: Phaser.GameObjects.Rectangle;
   private readonly statusBox: Phaser.GameObjects.Container;
+  private readonly sealBox: Phaser.GameObjects.Container;
   private glowFx?: Phaser.FX.Glow;
   private glowKey = '';
   private readonly marker: Phaser.GameObjects.Triangle;
@@ -133,7 +135,17 @@ export class CombatantView {
     // Kalkan çubukları: can çubuğunun hemen üstünde ince çizgiler (genel: açık mavi, büyü: mor)
     this.shieldFill = scene.add.rectangle(-hpBar.width / 2, this.shieldY, 0, 6, color(colors.shield)).setOrigin(0, 0.5);
     this.magicShieldFill = scene.add.rectangle(-hpBar.width / 2, this.shieldY - 7, 0, 6, color(colors.magicShield)).setOrigin(0, 0.5);
-    const name = scene.add.text(0, this.hpY - hpBar.height - 4, combatant.name, { ...textStyle(30), fontFamily: SERIF }).setOrigin(0.5, 1);
+    // Ad plakası: sefer özel adı ('Bandit Chief') ya da class adı; elit altın, boss kızıl yazı + üstünde küçük rütbe rozeti
+    const tier = tierStyle(combatant.tier);
+    const name = scene.add.text(0, this.hpY - hpBar.height - 4, unitName(combatant), { ...textStyle(30, tier?.hex), fontFamily: SERIF }).setOrigin(0.5, 1);
+    const maxNameW = hpBar.width * 1.7; // uzun özel adlar ('Bandit Chief') komşu hücrenin adına taşmasın
+    if (name.width > maxNameW) name.setScale(maxNameW / name.width, 1);
+    const tierBadge: Phaser.GameObjects.GameObject[] = [];
+    if (tier) {
+      const label = scene.add.text(0, name.y - name.height - 2, tier.label, { ...textStyle(16, '#1a0f08'), fontStyle: 'bold', stroke: tier.hex, strokeThickness: 0 }).setOrigin(0.5, 1);
+      const bg = scene.add.rectangle(0, label.y - label.height / 2, label.width + 16, label.height + 2, color(tier.hex)).setStrokeStyle(2, 0x1a0f08);
+      tierBadge.push(bg, label);
+    }
     this.marker = scene.add
       .triangle(0, this.hpY - hpBar.height - 62, 0, 0, 40, 0, 20, 28, color(colors.targetHighlight))
       .setStrokeStyle(3, 0x000000)
@@ -143,6 +155,8 @@ export class CombatantView {
 
     // Durum ikonları (taunt, guard, regen) can çubuğunun solunda
     this.statusBox = scene.add.container(0, this.hpY);
+    // Yığılan durum (Omen) mühür yuvaları: can çubuğunun SOL ucunun hemen üstünde
+    this.sealBox = scene.add.container(-hpBar.width / 2, this.hpY - hpBar.height / 2 - 9);
 
     this.container = scene.add.container(x, y, [
       ...(shadow ? [shadow] : []),
@@ -154,7 +168,9 @@ export class CombatantView {
       this.shieldFill,
       this.magicShieldFill,
       this.statusBox,
+      this.sealBox,
       name,
+      ...tierBadge,
       this.marker,
       this.selFrame,
     ]);
@@ -292,7 +308,7 @@ export class CombatantView {
    * Can çubuğunun yanındaki rozetler: durumlar (buff/debuff), üzerinde durulan yer etkileri (zehir, yanan zemin, holy fire)
    * ve zırh aurası gibi etkilerden gelen zırh bonusu. Her rozet ikon + kalan tur / değer.
    */
-  setBadges(badges: Array<{ icon: string; color: string; text: string; debuff: boolean; turns: boolean }>): void {
+  setBadges(badges: Array<{ icon: string; owner?: string; color: string; text: string; debuff: boolean; turns: boolean }>): void {
     this.statusBox.removeAll(true);
     const size = layout.statusIcon.size;
     const hourglass = ensureIcon(this.scene, 'hourglass', '#d9c9a3', false);
@@ -304,12 +320,38 @@ export class CombatantView {
           const dir = debuff ? 1 : -1;
           const cx = dir * (hpBar.width / 2 + 8 + size / 2 + (i % 4) * (size + 6));
           const cy = Math.floor(i / 4) * (size + 4);
-          const icon = this.scene.add.image(cx, cy, ensureIcon(this.scene, bd.icon, bd.color, false, SHARED_KEY)).setDisplaySize(size, size); // durum/zemin rozeti: Shared sürümü
+          const icon = this.scene.add.image(cx, cy, ensureIcon(this.scene, bd.icon, bd.color, false, bd.owner ?? SHARED_KEY)).setDisplaySize(size, size); // durum/zemin rozeti: sahibi (sınıfa özgü durum) ya da Shared sürümü
           const label = this.scene.add.text(cx + size / 2, cy + size / 2, bd.text, textStyle(18, bd.color)).setOrigin(1, 0.5);
           this.statusBox.add([icon, label]);
           if (bd.turns) this.statusBox.add(this.scene.add.image(label.x - label.width - 8, label.y, hourglass).setDisplaySize(15, 15));
         });
     }
+  }
+
+  /**
+   * Yığılan durumun (Omen) mühür yuvaları: can çubuğunun sol ucunda `max` küçük elmas; dolu = durum renginde mühür + açık iç ışık, boş = sönük
+   * kemik konturu; yanında kalan tur (küçük rakam: süre dolunca patlar). null = gizli (yığın yok / Doom patladı). hexer.md bölüm 8.
+   */
+  setSeals(s: { stacks: number; max: number; turns: number; color: string } | null): void {
+    this.sealBox.removeAll(true);
+    if (!s || s.stacks <= 0) return;
+    const g = this.scene.add.graphics();
+    const r = 6;
+    const step = 15;
+    for (let i = 0; i < s.max; i++) {
+      const x = r + i * step;
+      const pts = [new Phaser.Math.Vector2(x, -r), new Phaser.Math.Vector2(x + r, 0), new Phaser.Math.Vector2(x, r), new Phaser.Math.Vector2(x - r, 0)];
+      if (i < s.stacks) {
+        g.fillStyle(color(s.color), 1).fillPoints(pts, true);
+        g.fillStyle(0xc9d27a, 0.9).fillRect(x - 1.5, -1.5, 3, 3);
+        g.lineStyle(2, 0x1a0a18, 1).strokePoints(pts, true);
+      } else {
+        g.fillStyle(0x000000, 0.45).fillPoints(pts, true);
+        g.lineStyle(2, 0xb8ad94, 0.8).strokePoints(pts, true);
+      }
+    }
+    const turns = this.scene.add.text(r + s.max * step - 2, 0, String(s.turns), textStyle(14, '#e9dfc4')).setOrigin(0, 0.5);
+    this.sealBox.add([g, turns]);
   }
 
   /**

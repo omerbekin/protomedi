@@ -117,6 +117,7 @@ function describeEventBody(battle: Battle, e: BattleEvent): string | null {
     case 'rage':
       return `${L(e.actor)} rage ${e.delta >= 0 ? '+' : ''}${e.delta} (now ${e.after}/${e.max})`;
     case 'damage':
+      if (e.luckyEscape) return `${L(e.source)} -> ${L(e.target)}: killing blow IGNORED (Lucky Escape), 0 dmg${e.redirected ? ' (guard redirect)' : ''}, hp ${e.hpAfter}${e.shieldAfter ? `, shield ${e.shieldAfter}` : ''}${e.magicShieldAfter ? `, mshield ${e.magicShieldAfter}` : ''}`;
       return `${L(e.source)} -> ${L(e.target)}: ${e.amount} dmg${e.absorbed ? ` (+${e.absorbed} absorbed)` : ''}${e.crit ? ' CRIT' : ''}${e.redirected ? ' (guard redirect)' : ''}${e.status === 'wither' ? ' [wither tick]' : e.status === 'omen' ? ' [DOOM]' : e.status ? ` [${e.status}]` : ''}, hp ${e.hpAfter}${e.shieldAfter ? `, shield ${e.shieldAfter}` : ''}${e.magicShieldAfter ? `, mshield ${e.magicShieldAfter}` : ''}`;
     case 'omen':
       return e.cause === 'transfer' ? `${L(e.target)} +omen ${e.delta} (Ill Omen) [${e.stacks}/${e.max}]` : `${L(e.source)} -> ${L(e.target)}: +omen ${e.delta}${e.crit ? ' (crit)' : ''} [${e.stacks}/${e.max}]`;
@@ -460,7 +461,7 @@ const MAX_CANDIDATES = 8;
 function formatAi(ai: AiExplanation | { none: true }, compact: boolean): string[] {
   if ('none' in ai) return ['ai: (no explanation available)'];
   const out: string[] = [];
-  out.push(`ai: profile ${ai.profile} | decision: single value scale (one score per candidate, highest wins) | foe focus model ${ai.focusRule}`);
+  out.push(`ai: profile ${ai.profile} | difficulty ${ai.difficulty ?? 'medium'} | decision: single value scale (one score per candidate, highest wins${ai.difficulty === 'easy' ? '; easy: deterministic pick among the best 3' : ''}) | foe focus model ${ai.focusRule}`);
   if (ai.winnerRule && !compact) out.push(`  rule: ${ai.winnerRule}`);
   out.push(`  WHY: ${ai.why}`);
   out.push(`  steps: ${ai.steps.map((s) => `${s.priority}=${s.result === 'picked' ? `PICKED ${s.detail}` : `none (${s.detail})`}`).join(' ; ')}`);

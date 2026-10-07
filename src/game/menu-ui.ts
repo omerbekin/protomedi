@@ -4,6 +4,8 @@ import { avatarTexture, characterTexture } from './assets';
 import { cornerOrnaments, frameRect, GOLD, makePanel, SERIF } from './ui-frame';
 import type { MiniShape } from '../ui/shape-diagram';
 import { drawMiniShape, miniShapeSize } from './shape-draw';
+import { ensureIcon } from './icons';
+import { ownerOfUnit } from './asset-versions';
 
 /**
  * Menü ekranları (takım seçimi) için ortak çizim yardımcıları: atmosferik arka plan, altın yazı, düğme, tooltip, kafa portresi.
@@ -247,6 +249,16 @@ export function classAvatar(scene: Phaser.Scene, def: CombatantDef, cx: number, 
   img.setScale(size / Math.max(cw, ch));
   if (flip) img.setFlipX(true);
   return img;
+}
+
+/**
+ * Class logosu madalyonu (koyu daire + class rengi kenar + logo): sefer kartlarında, takım şeridinde, kayıt kartlarında avatarın köşesinde.
+ * Logo seçili sanat sürümüyle (debug > Versions) çizilir ve sürüm değişince kendiliğinden yenilenir (icons.ts > refreshSceneIcons).
+ */
+export function classLogoBadge(scene: Phaser.Scene, def: CombatantDef, cx: number, cy: number, r: number): Phaser.GameObjects.GameObject[] {
+  const bg = scene.add.circle(cx, cy, r, 0x000000, 0.8).setStrokeStyle(2, Phaser.Display.Color.HexStringToColor(def.color).color);
+  const icon = scene.add.image(cx, cy, ensureIcon(scene, def.logo, def.color, false, ownerOfUnit(def.id))).setDisplaySize(r * 1.4, r * 1.4);
+  return [bg, icon];
 }
 
 // --- Düğme ---

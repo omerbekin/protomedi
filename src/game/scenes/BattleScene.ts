@@ -18,8 +18,13 @@ import { debugState, effectiveTimeScale, tweaksSummary } from '../debug-state';
 import { testMode, testModeSummary } from '../test-mode';
 import { LONG_PRESS_MS, LONG_PRESS_SLOP, UNIT_SELECT_EVENT, UnitSelection, isSelectModifier, pickUnitAt } from '../unit-select';
 import { corpseDrainFx, groundArea, meleeApproach, summonFx } from '../vfx';
-import { resolveSkillVfx, skillSfxAllowed } from '../vfx-versions';
-import { SHARED_KEY, ownerOfSkill, ownerOfUnit } from '../asset-versions';
+import { VFX_KIT, resolveSkillVfx, skillSfxAllowed } from '../vfx-versions';
+import { CODE_SFX, SHARED_KEY, onVersionsChange, ownerOfSkill, ownerOfUnit, statusOwner } from '../asset-versions';
+import { statusBadge } from '../art-registry';
+import { EVENT_FX, eventContextSkill, selectEventFx } from '../event-fx';
+import { UsageRecorder, type SkillUsage } from '../skill-usage';
+import type { VfxCtx } from '../vfx';
+import { unitName, tierStyle } from '../unit-label';
 import { skillMiniGrid } from '../../ui/shape-diagram';
 import type { MiniShape } from '../../ui/shape-diagram';
 import { drawCellTiles, drawMiniShape, miniShapeSize } from '../shape-draw';
@@ -61,6 +66,8 @@ export interface CampaignBattleHooks {
 
 /** Üç küçük global eylem düğmesinin (Rest / Skip Turn / Move) sütunu: 4 skill düğmesinin hemen sağında, tooltip plaketinin solunda. */
 const GLOBAL_BTN = { w: 64, h: 44, gap: 2 };
+/** Kalkan kancası tetiklenince çalan kilit sesi (yalnızca sahibinin v2 ses dosyasında tanımlıysa çalar: Anti-Mage / Mage v2). */
+const SHIELD_LOCK_SFX: Record<string, string> = { spell_ward: 'wardLock', mana_barrier: 'domeLock' };
 /** Global eylem düğmelerinin ikon rengi. */
 const GLOBAL_ACCENT: Record<string, string> = { rest: '#9cc4ff', skip: '#e8dcc0', move: '#e8c47e' };
 
@@ -126,6 +133,14 @@ export class BattleScene extends Phaser.Scene {
   private cellHover: { board: 'party' | 'enemy'; slot: number } | null = null;
   private groundViews = new Map<string, Phaser.GameObjects.Container>();
   private badgeKeys = new Map<string, string>();
+  /** Skill kullanımlarının olay özeti (VfxCtx.usage; src/game/skill-usage.ts): olaylar motor yayarken kaydedilir, efekt oynarken okunur. */
+  private usageRec = new UsageRecorder();
+  /** Oynayan skillUsed olayının kullanım özeti (efekt bağlamına verilir). */
+  private currentUsage: SkillUsage | undefined;
+  /** Son turnStart bir ek eylem miydi (actionsPerTurn > 1: sıra çubuğunda "2nd"). */
+  private extraAction = false;
+  /** Sıra çubuğunun son kuyruğu (sürüm değişince yeniden çizmek için). */
+  private lastQueue: string[] = [];
   private slotMarkers?: Phaser.GameObjects.Container;
   private hoverView?: CombatantView;
   /** Ctrl+sol tık (Mac Cmd, dokunmatik uzun basma) ile seçilen birimler: bilgi/inceleme ve debug Unit araçlarının hedefi. */
@@ -201,6 +216,9 @@ export class BattleScene extends Phaser.Scene {
     this.cellHover = null;
     this.groundViews = new Map();
     this.badgeKeys = new Map();
+    this.usageRec = new UsageRecorder();
+    this.currentUsage = undefined;
+    this.lastQueue = [];
     this.unitTipKey = '';
     this.eventQueue = Promise.resolve();
     this.lastAi = '-';
@@ -257,6 +275,9 @@ export class BattleScene extends Phaser.Scene {
 
     this.drawCommandPanel();
     this.settle(); // the first unit may be an enemy: let the AI start
+    // Sanat sürümü değişince (debug > Versions) ikonlar, logolar ve durum rozetleri hemen yeni sürümle çizilir
+    const offVersions = onVersionsChange(() => this.onVersionsChanged());
+    this.events.once('shutdown', offVersions);
   }
 
   /** Per-unit badge refresh (statuses, ground effects underfoot, armor from auras): cheap, only redraws when something changed. */
@@ -264,11 +285,17 @@ export class BattleScene extends Phaser.Scene {
     for (const view of this.views.values()) {
       const c = this.battle.get(view.combatant.uid);
       if (!c || c.hp <= 0) continue;
-      const list: Array<{ icon: string; color: string; text: string; debuff: boolean; turns: boolean }> = [];
+      const list: Array<{ icon: string; owner?: string; color: string; text: string; debuff: boolean; turns: boolean }> = [];
+      let seals: { stacks: number; max: number; turns: number; color: string } | null = null;
       for (const st of c.statuses) {
         const def = content.statuses[st.kind];
         const fallback = { taunt: ['finger', '#ff9f43'], guard: ['guardian', '#6ec1ff'], regen: ['leaf', '#7dff9b'] }[st.kind as 'taunt' | 'guard' | 'regen'] ?? ['roar', '#ffffff'];
-        list.push({ icon: def?.icon ?? fallback[0]!, color: def?.color ?? fallback[1]!, text: String(st.turns), debuff: def?.type === 'debuff', turns: true });
+        // Rozet sürümü: sınıfa özgü durum sahibinin v2 badge_<id> çizimini izler, ortak durum Shared (art-registry > statusBadge)
+        const art = statusBadge(st.kind, def?.icon ?? fallback[0]!);
+        const max = (def as { maxStacks?: number } | undefined)?.maxStacks ?? 0;
+        // Yığılan durum (Omen): rozet "x2"; kalan tur ve yığın can çubuğunun solundaki mühür yuvalarında (hexer.md bölüm 8)
+        if (max > 1 && st.stacks) seals = { stacks: st.stacks, max, turns: st.turns, color: def?.color ?? '#b04fa8' };
+        list.push({ icon: art.name, owner: art.owner, color: def?.color ?? fallback[1]!, text: max > 1 && st.stacks ? `x${st.stacks}` : String(st.turns), debuff: def?.type === 'debuff', turns: !(max > 1 && st.stacks) });
       }
       for (const g of this.battle.ground) {
         if (g.board !== c.board || !g.slots.includes(c.slot) || g.sourceSide === c.side) continue;
@@ -277,11 +304,66 @@ export class BattleScene extends Phaser.Scene {
       }
       const bonus = this.battle.effectiveStats(c).armor - c.stats.armor;
       if (Math.round(bonus) > 0) list.push({ icon: 'shield', color: '#c9d1dc', text: `+${Math.round(bonus)}`, debuff: false, turns: false });
-      const key = JSON.stringify(list);
+      const key = JSON.stringify([list, seals]);
       if (this.badgeKeys.get(c.uid) === key) continue;
       this.badgeKeys.set(c.uid, key);
       view.setBadges(list);
+      view.setSeals(seals);
     }
+  }
+
+  /** Sanat sürümü değişti (debug > Versions): rozetler, sıra çubuğu logoları ve alt çubuk (skill ikonları, pasif, logo) hemen yeniden çizilir. */
+  private onVersionsChanged(): void {
+    if (!this.battle || !this.scene.isActive()) return;
+    this.badgeKeys.clear();
+    if (this.lastQueue.length || this.battle.mode === 'test') this.renderTurnBar(this.lastQueue);
+    this.refreshCommands();
+  }
+
+  /**
+   * OLAY EFEKTİ (v2 kancası, src/game/event-fx.ts): sahibin v2'si seçili ve dosyasında `key` efekti varsa onu VfxCtx ile oynatır ve true döner;
+   * yoksa false (çağıran v1 efektini oynar). `actor` efektin çıkış birimi, `targets` etkilenenler; `at` yer noktası (ceset hücresi gibi).
+   * Efekt hata verirse uyarı basılır ve savaş sürer (true döner: v1 tekrar oynamaz).
+   */
+  private async runEventFx(owner: string | null, key: string, o: { actor: CombatantView | undefined; targets?: CombatantView[]; at?: { x: number; y: number }; event: BattleEvent; skillId?: string; unitId?: string; usage?: SkillUsage }): Promise<boolean> {
+    const fx = selectEventFx(owner, key);
+    const actor = o.actor ?? o.targets?.[0];
+    if (!fx || !owner || !actor) return false;
+    const skill = eventContextSkill(owner, { ...(o.skillId ? { skillId: o.skillId } : {}), ...(o.unitId ? { unitId: o.unitId } : {}) });
+    if (!skill) return false;
+    const targets = o.targets ?? [];
+    const ctx: VfxCtx = {
+      scene: this,
+      actor,
+      targets,
+      skill,
+      board: (targets[0] ?? actor).combatant.board,
+      ...(o.at ? { centerPos: o.at } : {}),
+      cells: o.at ? [o.at] : [],
+      slots: [],
+      releaseStage: () => undefined,
+      lunge: () => meleeApproach(this, actor, targets),
+      windUp: (hex, anim = 'cast') => actor.windUp(hex, anim),
+      sfx: (id) => {
+        if (skillSfxAllowed(skill, id, owner) || CODE_SFX[owner]?.includes(id)) playSfx(this, id, owner);
+      },
+      gate: () => undefined,
+      foes: [...this.views.values()].filter((v) => v.combatant.side !== actor.combatant.side && v.combatant.hp > 0),
+      ...(o.usage ? { usage: o.usage } : {}),
+      viewOf: (uid) => this.views.get(uid),
+      event: o.event,
+    };
+    try {
+      await fx(ctx, VFX_KIT);
+    } catch (err) {
+      console.warn(`[art-v2] ${owner}/${key} olay efekti hata verdi`, err);
+    }
+    return true;
+  }
+
+  /** Sahibine göre: olay efektinin sahibi (birimin class'ı / çağıranı). */
+  private ownerOfView(v: CombatantView | undefined): string | null {
+    return v ? ownerOfUnit(v.combatant.defId) : null;
   }
 
   /** SPEED bars under the mana bars: turn counter / threshold from the engine (read-only). Hidden in test mode. */
@@ -823,7 +905,7 @@ export class BattleScene extends Phaser.Scene {
   private showCorpseTip(uid: string, reviveBy?: string): void {
     const c = this.battle.get(uid);
     if (!c) return;
-    const tip = corpseTip(c.name, this.uiCorpses.get(uid) ?? 'revivable', !!reviveBy, reviveBy ? this.battle.reviveBlockReason(reviveBy, uid) : null);
+    const tip = corpseTip(unitName(c), this.uiCorpses.get(uid) ?? 'revivable', !!reviveBy, reviveBy ? this.battle.reviveBlockReason(reviveBy, uid) : null);
     const hex = { good: colors.heal, bad: colors.lethal, muted: colors.muted };
     this.hideInfoTip();
     this.unitTipKey = `corpse:${uid}`;
@@ -880,7 +962,7 @@ export class BattleScene extends Phaser.Scene {
   private raiseInputs(actor: string, skill: string): RaiseInputs {
     // Resurrection (madde 257): step 1 = a fallen ALLY (its cell may be taken), step 2 = an empty cell of your side
     if (this.battle.isReviveSkill(skill)) {
-      return { choices: this.battle.validTargets(actor, skill).map((c) => ({ uid: c.uid, slot: c.slot, name: c.name, danger: 0, why: '' })), slots: this.battle.reviveSlots(actor, skill) };
+      return { choices: this.battle.validTargets(actor, skill).map((c) => ({ uid: c.uid, slot: c.slot, name: unitName(c), danger: 0, why: '' })), slots: this.battle.reviveSlots(actor, skill) };
     }
     return { choices: this.battle.corpseChoices(actor, skill), slots: this.battle.summonSlots(actor, skill) };
   }
@@ -1487,7 +1569,7 @@ export class BattleScene extends Phaser.Scene {
     if (hasMelee) rows.push(this.battle.canMeleeFrom(actor.uid, slot) ? ['Melee skills usable from here', colors.heal] : ['Too far back for melee skills', colors.targetHighlight]);
     if (warn) {
       const fallenUnit = this.battle.combatants.find((c) => c.side === actor.side && c.board === c.side && c.hp <= 0 && !c.summoned && c.slot === slot);
-      rows.push([`${fallenUnit ? fallenUnit.name : 'A fallen ally'} fell here: the cell is reserved for their resurrection`, colors.lethal]);
+      rows.push([`${fallenUnit ? unitName(fallenUnit) : 'A fallen ally'} fell here: the cell is reserved for their resurrection`, colors.lethal]);
     }
     rows.push([warn ? 'You cannot move here' : 'Click to move here and end your turn', colors.muted]);
     this.placeInfoTip(this.makeInfo(warn ? 'Reserved cell' : 'Move here', warn ? colors.lethal : colors.selected, ensureIcon(this, warn ? 'skull' : 'boot', warn ? colors.lethal : colors.selected, true), rows, warn ? 'Reserved' : 'Empty cell'));
@@ -1504,7 +1586,6 @@ export class BattleScene extends Phaser.Scene {
     const reason = !can.ok ? can.reason : !this.playerCanAct ? 'Not your turn' : '';
     if (reason) rows.push([reason, colors.lethal]);
     else if (def.kind === 'move') rows.push(['Click, then pick an empty cell (Esc cancels)', colors.targetHighlight]);
-    if (def.kind === 'move' && this.battle.fallenSlots(actor.side).length > 0) rows.push(["A fallen ally's cell stays reserved for their resurrection", colors.muted]);
     this.placeInfoTip(this.makeInfo(info.name, colors.text, ensureIcon(this, def.icon, GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e', true, SHARED_KEY), rows, info.targetBadge, [{ text: info.cost, hex: colors.muted }]));
   }
 
@@ -1938,7 +2019,7 @@ export class BattleScene extends Phaser.Scene {
       await this.wait(layout.animation.aiThinkMs);
       if (battle !== this.battle || !this.scene.isActive()) return;
       if (idle) {
-        this.lastAi = `Enemy ${actor.name}: AI off, skipped`;
+        this.lastAi = `Enemy ${unitName(actor)}: AI off, skipped`;
         this.matchLog?.noteAi(null);
         this.battle.skipTurn();
         this.settle();
@@ -1949,14 +2030,16 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private runAi(actor: Combatant): void {
-    const choice = chooseAction(this.battle, actor.uid, content.aiConfig);
-    this.matchLog?.noteAi(explainChoice(this.battle, actor.uid, content.aiConfig)); // match record: why this move (does not change the decision)
-    const who = `${actor.side === 'enemy' ? 'Enemy ' : 'Player '}${actor.name}`;
+    // Difficulty (item 258): the campaign passes it in; quick battles default to Medium. Only the enemy side plays by it (an AI-driven party stays Medium).
+    const aiOpts = { difficulty: actor.side === 'enemy' ? (this.difficulty ?? 'medium') : 'medium' } as const;
+    const choice = chooseAction(this.battle, actor.uid, content.aiConfig, undefined, aiOpts);
+    this.matchLog?.noteAi(explainChoice(this.battle, actor.uid, content.aiConfig, aiOpts)); // match record: why this move (does not change the decision)
+    const who = `${actor.side === 'enemy' ? 'Enemy ' : 'Player '}${unitName(actor)}`;
     if (choice) {
       const skill = content.skills[choice.skillId];
       const globalName = this.battle.globalDef(choice.skillId)?.name;
       const target = choice.targetUid && !choice.targetUid.startsWith('tile:') ? this.battle.get(choice.targetUid) : undefined;
-      const targetName = target ? `${target.side === 'enemy' ? 'Enemy ' : 'Player '}${target.name}` : '';
+      const targetName = target ? `${target.side === 'enemy' ? 'Enemy ' : 'Player '}${unitName(target)}` : '';
       const where = choice.slot !== undefined ? ` to cell ${choice.slot + 1}` : '';
       this.lastAi = `${who}: ${skill?.name ?? globalName ?? choice.skillId}${target ? ` on ${targetName}` : ''}${where} (${choice.reason})`;
     } else {
@@ -1974,6 +2057,7 @@ export class BattleScene extends Phaser.Scene {
   private lastSkillUsed: object | null = null;
 
   private enqueue(e: BattleEvent): void {
+    this.usageRec.push(e);
     if (e.type === 'skillUsed') this.lastSkillUsed = e;
     else if (e.type === 'passive' && this.lastSkillUsed) {
       const r = this.skillResults.get(this.lastSkillUsed) ?? {};
@@ -1989,8 +2073,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** Extra damage tags for the floating number (engine fields, all optional): element, origin (skill/ground/status/self), ground type. */
   private damageTags(e: BattleEvent & { type: 'damage' }): DamageTags {
-    const x = e as { statusId?: string };
-    return { ...(e.element ? { element: e.element } : {}), ...(e.origin ? { origin: e.origin } : {}), ...(e.ground ? { ground: e.ground } : {}), ...(x.statusId ? { statusId: x.statusId } : {}) };
+    return { ...(e.element ? { element: e.element } : {}), ...(e.origin ? { origin: e.origin } : {}), ...(e.ground ? { ground: e.ground } : {}), ...(e.status ? { statusId: e.status } : {}) };
   }
 
   private async playEvent(e: BattleEvent): Promise<void> {
@@ -2003,7 +2086,8 @@ export class BattleScene extends Phaser.Scene {
         this.closeStageGate();
         const actor = this.battle.get(e.actor);
         const skill = content.skills[e.skill];
-        if (actor && skill) this.announce(`${actor.side === 'enemy' ? 'Enemy ' : ''}${actor.name} uses ${skill.name}`);
+        if (actor && skill) this.announce(`${actor.side === 'enemy' ? 'Enemy ' : ''}${unitName(actor)} uses ${skill.name}`);
+        this.currentUsage = this.usageRec.usageOf(e); // efekt bu kullanımda gerçekte ne olduğunu bilsin (VfxCtx.usage)
         // Backstab: the cell behind the target the vfx teleports into (visual only; the formation does not change)
         this.skillBehind = e.behindSlot !== undefined && e.behindBoard ? this.cellPos(e.behindBoard, e.behindSlot) : undefined;
         return this.playSkillMotion(e.actor, e.skill, e.targets, e.anchor ?? e.center, this.skillResults.get(e), e.cells, e.stages, e.board);
@@ -2017,10 +2101,26 @@ export class BattleScene extends Phaser.Scene {
       case 'damage': {
         await this.passHitGate();
         const target = this.views.get(e.target);
-        if (target) {
+        // Wither tiki (durum hasarı, taşıyanın tur başı): v2'de Hexer'ın 'withertick' efekti, v1'de ayak dibinde kısa çürük buharı; rakam küçük
+        const witherTick = e.origin === 'status' && e.status === 'wither';
+        if (target && witherTick) {
+          const owner = statusOwner('wither') ?? this.ownerOfView(this.views.get(e.source));
+          if (!(await this.runEventFx(owner, EVENT_FX.witherTick, { actor: this.views.get(e.source) ?? target, targets: [target], event: e })))
+            VFX_KIT.burst(this, target.container.x, target.container.y - 10, { colors: ['#9cab3c', '#6f7a2a', '#c9d27a'], n: 8, speed: [20, 70], angle: [-Math.PI, 0], gravity: -60, life: [400, 700], size: [6, 10] });
+        }
+        if (target && witherTick && e.amount > 0) {
+          const ratio = e.amount / target.combatant.maxHp;
+          target.hit(ratio * 0.5);
+          target.floatText(String(e.amount), content.statuses['wither']?.color ?? '#9cab3c', 38, false, { kind: 'damage', rightIcon: 'poison' });
+          target.setHp(e.hpAfter, true, ratio);
+          target.setShield(e.shieldAfter, e.magicShieldAfter);
+        } else if (target) {
           // The bigger the hit relative to max HP, the stronger the reaction (shake, flash, number size, bar drain)
           const ratio = e.amount / target.combatant.maxHp;
-          if (e.amount === 0 && e.absorbed > 0) {
+          if (e.luckyEscape) {
+            // Lucky Escape: the killing blow is ignored completely (no HP change); no "0" here, the passive event that follows names it
+            target.ring(colors.primaryGroup?.luck ?? '#2fcfa0');
+          } else if (e.amount === 0 && e.absorbed > 0) {
             target.ring(e.magicShieldAfter > 0 || e.shieldAfter === 0 ? colors.magicShield : colors.shield);
             target.floatText('Blocked', colors.shield, 46, false, { kind: 'shield' });
           } else {
@@ -2058,7 +2158,7 @@ export class BattleScene extends Phaser.Scene {
         const view = this.views.get(e.actor);
         const def = this.battle.globalDef(e.id);
         if (actor && def) {
-          const who = `${actor.side === 'enemy' ? 'Enemy ' : ''}${actor.name}`;
+          const who = `${actor.side === 'enemy' ? 'Enemy ' : ''}${unitName(actor)}`;
           this.announce(def.kind === 'rest' ? `${who} uses Rest` : def.kind === 'skip' ? `${who} skips the turn` : `${who} moves`);
         }
         if (def?.kind === 'rest') {
@@ -2118,6 +2218,70 @@ export class BattleScene extends Phaser.Scene {
           this.views.get(e.target)?.setVineWrap(true);
           this.views.get(e.target)?.floatText('Rooted', '#8bd06a', 36);
         } else if (e.type === 'statusEnd' && e.status === 'stun') this.views.get(e.target)?.setVineWrap(false);
+        // Dispel (Mana Barrier dostun debuff'ını, Spell Ward saldıranın buff'ını sildi): kısa parlama + "Dispelled: Haste"
+        if (e.type === 'statusEnd' && e.dispelled) {
+          const v = this.views.get(e.target);
+          const def = content.statuses[e.status];
+          v?.floatText(`Dispelled: ${def?.name ?? e.status}`, def?.color ?? colors.targetHighlight, 34, false, { kind: 'resource' });
+          v?.ring('#fff0a0', 0.7);
+          await this.wait(slow(80));
+        }
+        return;
+      }
+      case 'omen': {
+        // Hexer: Omen yığını; "+1 Omen" (kritikte "+2 Omen!"), Ill Omen geçişinde alıcıda "Omen x2 (Ill Omen)"
+        const v = this.views.get(e.target);
+        const hex = content.statuses['omen']?.color ?? '#b04fa8';
+        if (e.cause === 'transfer') v?.floatText(`Omen x${e.stacks} (Ill Omen)`, hex, 34, false, { kind: 'resource' });
+        else if (e.delta > 0) v?.floatText(`+${e.delta} Omen${e.crit ? '!' : ''}`, e.crit ? colors.crit : hex, e.crit ? 42 : 34, e.crit, { kind: 'resource' });
+        await this.wait(slow(60));
+        return;
+      }
+      case 'doom': {
+        // Doom patlaması (ardından normal hasar olayı gelir): büyük "DOOM"; otomatik Doom'da (yığın doldu / süre bitti) v2 Hexer 'doomburst',
+        // v1'de basit kara-mor çöküş. Doom Mark (detonate) kendi skill efektinin içinde patlar: yalnızca yazı.
+        const v = this.views.get(e.target);
+        v?.setSeals(null); // mühürler çatladı: yuvalar boşalır (rozet bir sonraki tazelemede gelir/gider)
+        v?.floatText('DOOM', '#e9dfc4', 72, true, { kind: 'crit' });
+        if (v && e.cause !== 'detonate') {
+          const source = this.views.get(e.source);
+          const owner = statusOwner('omen') ?? this.ownerOfView(source);
+          if (!(await this.runEventFx(owner, EVENT_FX.doom, { actor: source ?? v, targets: [v], event: e }))) {
+            const f = { x: v.container.x, y: v.container.y };
+            void VFX_KIT.ring(this, f.x, f.y - 4, { r: 120, flat: 0.34, n: 26, colors: ['#b04fa8', '#6a2f5f', '#e9dfc4'], dur: 420, size: 10 });
+            VFX_KIT.burst(this, f.x, f.y - v.h * 0.55, { colors: ['#b04fa8', '#6a2f5f', '#e3b8de', '#1c0a1a'], n: 14, speed: [80, 260], gravity: 300, life: [360, 640], size: [6, 10] });
+            VFX_KIT.shake(this, 160, 0.005);
+            await this.wait(slow(220));
+          }
+        } else await this.wait(slow(120));
+        return;
+      }
+      case 'omenTransfer': {
+        // Ill Omen: ölen birimin Omen'leri en yakın dostuna geçer; v2 Hexer 'omentransfer' (eflatun iplik), v1'de kısa mor iz
+        const from = this.views.get(e.from);
+        const to = this.views.get(e.to);
+        if (!from || !to) return;
+        const owner = statusOwner('omen') ?? this.ownerOfView(this.views.get(e.source));
+        if (!(await this.runEventFx(owner, EVENT_FX.omenTransfer, { actor: from, targets: [to], event: e }))) {
+          const w = VFX_KIT.sprite(this, 'wisp', '#b04fa8', from.container.x, from.container.y - from.h * 0.55, 40, VFX_KIT.DEPTH + 30);
+          await VFX_KIT.travel(this, w, { x: to.container.x, y: to.container.y - to.h - 10 }, 420, { arc: 90, ease: 'in' });
+          w.destroy();
+          to.ring('#b04fa8', 0.8);
+        }
+        return;
+      }
+      case 'shieldTrigger': {
+        // Kalkan kancası (Spell Ward / Mana Barrier) bir darbeyi emdi: taşıyanda kısa parlama + kalkanın kilit sesi (v2 seçiliyse Anti-Mage
+        // 'wardLock' / Mage 'domeLock'). Yazılar ardından gelen manaBurn ('-8 MP'), statusEnd ('Dispelled: Haste'), mpRegen ('+3 MP') olaylarında.
+        const bearer = this.views.get(e.bearer);
+        const owner = ownerOfSkill(e.skill);
+        const magic = content.skills[e.skill]?.effects.some((ef) => ef.type === 'shield' && ef.shieldType === 'magic');
+        const hex = magic ? colors.magicShield : colors.shield;
+        bearer?.ring(hex, 1);
+        if (bearer) VFX_KIT.burst(this, bearer.container.x, bearer.container.y - bearer.h * 0.55, { colors: [hex, '#ffffff'], n: 8, speed: [60, 180], gravity: 0, life: [220, 380], size: [5, 8] });
+        const lock = SHIELD_LOCK_SFX[e.skill];
+        if (lock && owner && skillSfxAllowed(content.skills[e.skill] ?? { id: e.skill }, lock, owner)) playSfx(this, lock, owner);
+        await this.wait(slow(90));
         return;
       }
       case 'summon': {
@@ -2128,7 +2292,13 @@ export class BattleScene extends Phaser.Scene {
           view.container.setAlpha(0);
           // Raise Dead: fed (corpse consumed) = purple birth + lasting aura; unfed = pale birth
           const caster = this.views.get(e.actor);
-          await summonFx(this, e.combatant.defId, view, { ...(e.empowered !== undefined ? { empowered: e.empowered } : {}), ...(caster ? { caster } : {}) });
+          // v2 kancası: sahibin (Undead/Druid) v2 dosyasında 'summon_<çağrı>' varsa o; yoksa v1 summonFx. v2 efekt birimi görünür yapmalı.
+          const owner = ownerOfUnit(e.combatant.defId);
+          const used = await this.runEventFx(owner, EVENT_FX.summon(e.combatant.defId), { actor: caster ?? view, targets: [view], event: e, unitId: e.combatant.defId, ...(this.currentUsage ? { usage: this.currentUsage } : {}) });
+          if (used) {
+            if (e.empowered) view.setEmpowered(true);
+            if (view.container.alpha < 1) this.tweens.add({ targets: view.container, alpha: 1, duration: slow(200) }); // efekt unuttuysa birim yine görünür
+          } else await summonFx(this, e.combatant.defId, view, { ...(e.empowered !== undefined ? { empowered: e.empowered } : {}), ...(caster ? { caster } : {}) });
         }
         return;
       }
@@ -2146,6 +2316,11 @@ export class BattleScene extends Phaser.Scene {
         this.refreshCommands();
         return;
       case 'despawn': {
+        {
+          // Süresi dolan çağrı: v2 kancası 'summonvanish_<çağrı>' (sahibin dosyasında varsa) üstte oynar, ardından birim solar
+          const v = this.views.get(e.target);
+          if (v) await this.runEventFx(ownerOfUnit(v.combatant.defId), EVENT_FX.summonVanish(v.combatant.defId), { actor: v, targets: [v], event: e, unitId: v.combatant.defId });
+        }
         await this.views.get(e.target)?.vanish();
         const gone = this.battle.get(e.target);
         if (gone) this.uiOccupied.delete(cellKey(gone.board, gone.slot));
@@ -2155,7 +2330,9 @@ export class BattleScene extends Phaser.Scene {
       }
       case 'corpseConsumed':
         // Raise Dead: bone dust at the corpse and a purple soul rope into the Undead (vfx), then the mark fades
-        await corpseDrainFx(this, this.cellPos(e.side, e.slot), this.views.get(e.by));
+        // v2 kancası: Undead v2 dosyasında 'corpsedrain' varsa o (c.centerPos = ceset hücresi, c.actor = Undead, c.event.uid = ceset); yoksa v1
+        if (!(await this.runEventFx(this.ownerOfView(this.views.get(e.by)), EVENT_FX.corpseDrain, { actor: this.views.get(e.by), targets: [], at: this.cellPos(e.side, e.slot), event: e, ...(this.currentUsage ? { usage: this.currentUsage } : {}) })))
+          await corpseDrainFx(this, this.cellPos(e.side, e.slot), this.views.get(e.by));
         this.uiCorpses.set(e.uid, 'consumed'); // devoured: the mark fades and the cell looks empty (the effect itself is the vfx's job)
         this.refreshCorpseMarks();
         return;
@@ -2183,6 +2360,7 @@ export class BattleScene extends Phaser.Scene {
       case 'turnStart':
         this.abortHitGate();
         this.closeStageGate();
+        this.extraAction = !!e.extra;
         if (this.uiActor && this.uiActor !== e.actor) this.playedUids.push(this.uiActor);
         this.uiActor = e.actor;
         this.renderTurnBar(e.queue);
@@ -2196,11 +2374,16 @@ export class BattleScene extends Phaser.Scene {
           await this.wait(slow(320)); // chosen skip: already announced by globalUsed
           return;
         }
-        if (actor) this.announce(`${actor.side === 'enemy' ? 'Enemy ' : ''}${actor.name} ${e.stunned ? 'is stunned and loses the turn' : 'has nothing to cast and skips the turn'}`);
+        if (actor) this.announce(`${actor.side === 'enemy' ? 'Enemy ' : ''}${unitName(actor)} ${e.stunned ? 'is stunned and loses the turn' : 'has nothing to cast and skips the turn'}`);
         await this.wait(500);
         return;
       }
       case 'death': {
+        {
+          // Çağrının ölümü: v2 kancası 'summondeath_<çağrı>' (sahibin dosyasında varsa) üstte oynar, ardından birim düşer
+          const v = this.views.get(e.target);
+          if (v?.combatant.summoned) await this.runEventFx(ownerOfUnit(v.combatant.defId), EVENT_FX.summonDeath(v.combatant.defId), { actor: v, targets: [v], event: e, unitId: v.combatant.defId });
+        }
         await this.views.get(e.target)?.die();
         // The corpse mark appears once the death animation is over; a summon leaves none (and frees its cell for a corpse beneath it)
         const dead = this.battle.get(e.target);
@@ -2338,6 +2521,8 @@ export class BattleScene extends Phaser.Scene {
         ...(result ? { result } : {}),
         ...(this.skillBehind ? { behind: this.skillBehind } : {}),
         foes: [...this.views.values()].filter((v) => v.combatant.side !== actor.combatant.side && v.combatant.hp > 0),
+        ...(this.currentUsage && this.currentUsage.used.actor === actorUid && this.currentUsage.used.skill === skillId ? { usage: this.currentUsage } : {}),
+        viewOf: (uid) => this.views.get(uid),
         lunge: () => meleeApproach(this, actor, targets, area ? this.cellPos(board, center!) : undefined),
         windUp: (hex, anim = 'cast') => actor.windUp(hex, anim),
         sfx: (id) => {
@@ -2693,6 +2878,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** Turn order bar: the current unit first, then the next ones (mini portraits). */
   private renderTurnBar(queue: string[]): void {
+    this.lastQueue = queue;
     this.turnBarLayer?.destroy();
     const { y, cellSize, gap } = layout.turnBar;
     const pastCells = layout.turnBar.pastCells;
@@ -2737,11 +2923,18 @@ export class BattleScene extends Phaser.Scene {
           }
           items.push(head, ...badge);
         }
-        // Frame on top of the portrait: bronze edge; the inner line shows the side (blue ally, red enemy), gold for the current unit
+        // Frame on top of the portrait: bronze edge; the inner line shows the side (blue ally, red enemy), gold for the current unit.
+        // Elite / boss (sefer): the inner line is the rank color (gold / crimson) with a small rank tag on the top edge.
+        const tier = tierStyle(unit?.tier);
         const fr = this.add.graphics();
         if (isNow) glowRect(fr, cx, y, cellSize, cellSize, GOLD.bright, 0.8, 7);
-        frameRect(fr, cx, y, cellSize, cellSize, { edge: isNow ? GOLD.bright : GOLD.dark, light: color(border), bevel: 3, shadow: 0.3, alpha: isPast ? 0.5 : 1 });
+        frameRect(fr, cx, y, cellSize, cellSize, { edge: isNow ? GOLD.bright : GOLD.dark, light: color(tier ? tier.hex : border), bevel: 3, shadow: 0.3, alpha: isPast ? 0.5 : 1 });
+        if (tier && !isPast) fr.lineStyle(3, color(tier.hex), 0.95).strokeRect(cx + 5, y + 5, cellSize - 10, cellSize - 10);
         items.push(fr);
+        if (unit && tier) items.push(...this.miniTag(cx + cellSize / 2, y + 2, tier.label, tier.hex, isPast));
+        // Tur başına birden çok eylem (actionsPerTurn): sol altta "x2"; şu an ek eylemindeyse ortadaki hücrede "2nd"
+        const actions = unit?.actionsPerTurn ?? 1;
+        if (unit && actions > 1) items.push(...this.miniTag(cx + 18, y + cellSize - 14, isNow && this.extraAction ? '2nd' : `x${actions}`, '#ffe29a', isPast));
         if (isNow && unit) {
           // Small gold arrow under the current unit, pointing up at it
           const ax = cx + cellSize / 2;
@@ -2751,6 +2944,14 @@ export class BattleScene extends Phaser.Scene {
       }
     }
     this.turnBarLayer = this.add.container(0, 0, items).setDepth(4000);
+  }
+
+  /** Small pill label on the turn bar (rank tag, extra actions). */
+  private miniTag(cx: number, cy: number, text: string, hex: string, faded = false): Phaser.GameObjects.GameObject[] {
+    const label = this.add.text(cx, cy, text, { fontFamily: layout.fontFamily, fontSize: '13px', fontStyle: 'bold', color: '#1a0f08' }).setOrigin(0.5);
+    const bg = this.add.rectangle(cx, cy, label.width + 10, label.height + 2, color(hex)).setStrokeStyle(2, 0x1a0f08);
+    if (faded) for (const o of [label, bg]) o.setAlpha(0.5);
+    return [bg, label];
   }
 
   /** A short banner under the turn bar: who used what. */
@@ -2916,7 +3117,7 @@ export class BattleScene extends Phaser.Scene {
 
       const nameY = avY + 11;
       const logo = this.add.image(avX + 11, nameY, ensureIcon(this, actor.logo, actor.color, false, ownerOfUnit(actor.defId))).setDisplaySize(15, 15);
-      const nameText = this.add.text(avX + 22, nameY, actor.name, { fontFamily: SERIF, fontSize: '15px', fontStyle: 'bold', color: enemy ? colors.hpFillEnemy : '#f6e7c4', stroke: '#0c0805', strokeThickness: 3 }).setOrigin(0, 0.5);
+      const nameText = this.add.text(avX + 22, nameY, unitName(actor), { fontFamily: SERIF, fontSize: '15px', fontStyle: 'bold', color: tierStyle(actor.tier)?.hex ?? (enemy ? colors.hpFillEnemy : '#f6e7c4'), stroke: '#0c0805', strokeThickness: 3 }).setOrigin(0, 0.5);
       if (nameText.width > av - 28) nameText.setScale((av - 28) / nameText.width);
       items.push(logo, nameText);
 
@@ -2945,7 +3146,7 @@ export class BattleScene extends Phaser.Scene {
 
       const nameY = avY + 17;
       const logo = this.add.image(avX + 18, nameY, ensureIcon(this, actor.logo, actor.color, false, ownerOfUnit(actor.defId))).setDisplaySize(24, 24);
-      const nameText = this.add.text(avX + 34, nameY, actor.name, { fontFamily: SERIF, fontSize: '22px', fontStyle: 'bold', color: enemy ? colors.hpFillEnemy : '#f6e7c4', stroke: '#0c0805', strokeThickness: 4 }).setOrigin(0, 0.5);
+      const nameText = this.add.text(avX + 34, nameY, unitName(actor), { fontFamily: SERIF, fontSize: '22px', fontStyle: 'bold', color: tierStyle(actor.tier)?.hex ?? (enemy ? colors.hpFillEnemy : '#f6e7c4'), stroke: '#0c0805', strokeThickness: 4 }).setOrigin(0, 0.5);
       if (nameText.width > av - 40) nameText.setScale((av - 40) / nameText.width);
       items.push(logo, nameText);
 

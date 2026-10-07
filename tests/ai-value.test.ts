@@ -23,17 +23,18 @@ const cand = (b: Battle, uid: string, skill: string, cfg: AiConfig = ai) => expl
 const top = (list: Array<{ score?: number }>) => Math.max(...list.map((c) => c.score ?? -Infinity));
 
 describe('terazi: ayarlar ve genel kurallar', () => {
-  it('ayarlar veride (ai.json > value), ufuk Ömer kararıyla 3 tur; zorluk seviyeleri tanımlı (şimdilik etkisiz)', () => {
+  it('ayarlar veride (ai.json > value), ufuk Ömer kararıyla 3 tur; zorluk seviyeleri tanımlı (madde 258: davranış farkı tests/ai-difficulty.test.ts)', () => {
     expect(content.aiConfig.value).toBeDefined();
     expect(content.aiConfig.value!.horizon).toBe(3);
     for (const k of Object.keys(DEFAULT_VALUE)) expect(content.aiConfig.value, k).toHaveProperty(k);
     expect(Object.keys(content.aiConfig.difficulty ?? {}).sort()).toEqual(['easy', 'hard', 'medium']);
   });
 
-  it('zorluk girdisi (easy/medium/hard) şimdilik kararı değiştirmez (Medium = tam terazi; Faz 5)', () => {
+  it('zorluk girdisi verilmezse Medium (tam terazi); açık seçik en iyi hamlede üç seviye de aynı hamleyi seçer', () => {
     const b = mk({ 0: 'mage', 1: 'warrior' }, { 0: 'warrior', 1: 'warrior', 3: 'warrior' });
     const base = chooseAction(b, 'party-0', ai);
-    for (const difficulty of ['easy', 'medium', 'hard'] as const) expect(chooseAction(b, 'party-0', ai, undefined, { difficulty })).toEqual(base);
+    expect(chooseAction(b, 'party-0', ai, undefined, { difficulty: 'medium' })).toEqual(base);
+    for (const difficulty of ['easy', 'hard'] as const) expect(chooseAction(b, 'party-0', ai, undefined, { difficulty })?.skillId).toBeDefined();
   });
 
   it('seçilen aday her zaman en yüksek puanlıdır; puan terimlerin toplamıdır (açıklama ile karar aynı)', () => {
@@ -145,7 +146,10 @@ describe('en kötü 5 karar (ai-priorities.md 3. bölüm) düzeldi', () => {
     u.skills = u.skills.filter((s) => s !== 'raise_dead');
     const bond = cand(b, u.uid, 'dark_bond')[0]!;
     const ratio = (content.skills.dark_bond!.effects.find((e) => e.type === 'bond') as { ratio: number }).ratio;
-    const cap = (u.maxHp - u.hp + u.maxHp * content.aiConfig.profiles.darkmage!.bondSelfFloor!) * ratio + 0.5;
+    // madde 258: bağ süresince Undead'in yiyeceği beklenen hasar (en çok canı kadar) da çalınabilir pay açar
+    const round = new ValueContext(b, u, { ...DEFAULT_VALUE, ...content.aiConfig.value }, (c) => content.aiConfig.profiles[c.ai ?? 'aggressive']!.focus).round.get(u.uid) ?? 0;
+    const room = Math.min(u.hp, round * 3);
+    const cap = (u.maxHp - u.hp + room + u.maxHp * content.aiConfig.profiles.darkmage!.bondSelfFloor!) * ratio + 0.5;
     expect(bond.bond ?? 0).toBeLessThanOrEqual(cap);
     expect(chooseAction(b, u.uid, ai)!.skillId).toBe('wail_of_the_dead');
   });

@@ -1,4 +1,4 @@
-import { iconUrl } from '../../ui/dom-icons';
+import { bindIcon, iconUrl } from '../../ui/dom-icons';
 import { ownerOfUnit } from '../../game/asset-versions';
 import { variantLabel } from '../../game/sprite-variants';
 import { STAT_COLOR, STAT_ICON, STAT_LABEL } from '../../ui/stat-icons';
@@ -43,13 +43,13 @@ export function mountCharacters(cat: Catalog): SectionApi {
     });
     const stats = STAT_ROWS.map(([k, label]) => h('span', { class: 'stat', title: label }, h('span', { class: 'muted', text: `${label} ` }), num(c.stats[k] * (k === 'critChance' || k === 'accuracy' || k === 'evasion' ? 100 : 1)) + (k === 'critChance' || k === 'accuracy' || k === 'evasion' ? '%' : '')));
     const passive = c.passive
-      ? h('div', { class: 'passive' }, h('img', { class: 'icon32 pixelated', attrs: { src: iconUrl(c.passive.icon, c.color, ownerOfUnit(c.id)), alt: '' } }), h('div', {}, h('b', { text: c.passive.name }), h('div', { class: 'muted small', text: c.passive.text })))
+      ? h('div', { class: 'passive' }, bindIcon(h('img', { class: 'icon32 pixelated', attrs: { alt: '' } }), c.passive.icon, c.color, ownerOfUnit(c.id)), h('div', {}, h('b', { text: c.passive.name }), h('div', { class: 'muted small', text: c.passive.text })))
       : h('div', { class: 'muted small', text: 'No passive' });
     return searchable(
       h(
         'article',
         { class: 'card char' },
-        h('div', { class: 'char-art' }, img(c.idleUrl, `${c.name} sprite (assets/sprites/${c.spriteId}/idle.png)`, 'sprite'), h('div', { class: 'avatar-col' }, img(c.avatarUrl, `${c.name} avatar (assets/avatars/${c.spriteId}.png)`, 'avatar'), h('div', { class: 'muted small', text: 'avatar' }), h('img', { class: 'icon48 pixelated', attrs: { src: iconUrl(c.logo, c.color), alt: c.logo }, title: `logo: ${c.logo}` }), h('div', { class: 'muted small', text: 'logo' }), ...c.variants.flatMap((v) => [img(v.avatarUrl ?? v.idleUrl, `${c.name} alternative look "${variantLabel(c.spriteId, v.variant)}" (assets/sprites/${c.spriteId}/idle-${v.variant}.png)`, 'avatar'), h('div', { class: 'muted small', text: variantLabel(c.spriteId, v.variant), title: 'Alternative look: pick it in Debug > Characters' })]))),
+        h('div', { class: 'char-art' }, img(c.idleUrl, `${c.name} sprite (assets/sprites/${c.spriteId}/idle.png)`, 'sprite'), h('div', { class: 'avatar-col' }, img(c.avatarUrl, `${c.name} avatar (assets/avatars/${c.spriteId}.png)`, 'avatar'), h('div', { class: 'muted small', text: 'avatar' }), bindIcon(h('img', { class: 'icon48 pixelated', attrs: { alt: c.logo }, title: `logo: ${c.logo}` }), c.logo, c.color, ownerOfUnit(c.id)), h('div', { class: 'muted small', text: 'logo' }), ...c.variants.flatMap((v) => [img(v.avatarUrl ?? v.idleUrl, `${c.name} alternative look "${variantLabel(c.spriteId, v.variant)}" (assets/sprites/${c.spriteId}/idle-${v.variant}.png)`, 'avatar'), h('div', { class: 'muted small', text: variantLabel(c.spriteId, v.variant), title: 'Alternative look: pick it in Debug > Characters' })]))),
         h('div', { class: 'char-info' },
           h('div', { class: 'row' },
             h('h3', { class: 'char-name', text: c.name, style: { color: c.color } }),
@@ -61,7 +61,7 @@ export function mountCharacters(cat: Catalog): SectionApi {
           h('div', { class: 'small row' }, h('span', { class: 'swatch', style: { background: c.color } }), h('span', { class: 'mono', text: c.color }), h('span', { class: 'muted', text: `primary: ${c.primary ? STAT_LABEL[c.primary as keyof typeof STAT_LABEL] : 'none'} - id: ${c.id}` })),
           h('div', { class: 'attrs' }, ...bars),
           h('div', { class: 'stats' }, ...stats),
-          h('div', { class: 'skillrow' }, ...c.skills.map((s) => h('span', { class: 'skillchip', title: s.name }, h('img', { class: 'icon32 pixelated', attrs: { src: iconUrl(s.icon, c.color, ownerOfUnit(c.id)), alt: '' } }), h('span', { class: 'small', text: s.name })))),
+          h('div', { class: 'skillrow' }, ...c.skills.map((s) => h('span', { class: 'skillchip', title: s.name }, bindIcon(h('img', { class: 'icon32 pixelated', attrs: { alt: '' } }), s.icon, c.color, ownerOfUnit(c.id)), h('span', { class: 'small', text: s.name })))),
           passive)),
       `${c.id} ${c.name} ${c.kind} ${c.primary ?? ''} ${c.skills.map((s) => s.name).join(' ')} ${c.passive?.name ?? ''} ${c.tags.join(' ')} ${c.hidden ? 'hidden developer' : ''}`,
       c.kind,

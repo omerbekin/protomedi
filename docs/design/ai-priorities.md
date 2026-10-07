@@ -1,6 +1,6 @@
 # Yapay zekanın tercih sıralaması (balans öncesi çalışma)
 
-Durum: **v3 (2026-10-08): Faz 1-3 ve Faz 4 UYGULANDI (engine-dev, madde 257).** Ömer'in yeni kararları (K11-K13) 0. bölümün sonunda; uygulama durumu 7. bölümde. v2 (2026-10-07): kararlar işlendi, ölçüm balance-tester. Kalan açık sorular 8. bölümde ve `open-questions.md` madde 252 / 254 / 257.
+Durum: **v4 (2026-10-08): Faz 1-5 UYGULANDI (engine-dev, madde 257 + 258).** Madde 258: Faz 2 artığı (mana yakma "engellenen hamle", Dark Bond düzeltmesi), Faz 3 artığı (Rest/Skip/Move sabit kapısız terazide), Faz 5 zorluk seviyeleri, K14 (savaş belliyse diriltme 0), eski skill ipucu koşulları silindi. Ömer'in kararları (K11-K14) 0. bölümün sonunda; uygulama durumu 7. bölümde. v3: Faz 1-4 (madde 257). v2 (2026-10-07): kararlar işlendi, ölçüm balance-tester. Kalan açık sorular 8. bölümde ve `open-questions.md` madde 252 / 254 / 257.
 
 ## 0. Ömer kararları (2026-10-07) ve sonucu
 
@@ -23,7 +23,8 @@ Durum: **v3 (2026-10-08): Faz 1-3 ve Faz 4 UYGULANDI (engine-dev, madde 257).** 
 |---|---|---|---|
 | K11 | Paladin / destek ölçütleri (Soru P'nin yerine) | Değerlendirme ufku **3 TUR**; diriltilecek kişinin (ör.) Archer'ın vuracağı kişiye göre katacağı değer, dirilenin tur barının 0 doğması ve yaşayan kişinin tur barının ne kadar dolu olduğu değerlendirilsin | `ai.json > value.horizon = 3` (kullanıcının kendi turu). "Kalan katkı" = birimin tur başı değeri x ufukta oynayacağı tur sayısı (hız + tur sayacı: dolu sayaçlı dost yakında oynar, dirilen 0 sayaçla başlar). Düşmanın sıradaki hamlesi tahmin edilir (her düşman kendi odak kuralıyla kime vuracak); dost bir sonraki turumuzdan önce ölecekse kurtaran hamleye kurtarma değeri. Diriltme, şifa, kalkan, öldürme aynı terazide. Ek alt soru (savaş bitmek üzereyken diriltme) açık: 8. bölüm |
 | K12 | Resurrection işlevi (Soru S'nin yerine) | Diriltme skill'i önce diriltilecek dostu seçsin, sonra seçtiği BOŞ ALANA diriltsin; cesedin üstünde dost olup olmamasından bağımsız | İki adımlı hedefleme (motor + arayüz + YZ). Skeleton cesedin üstündeyken de diriltilebilir: dost başka boş hücreye gelir. Soru S kapandı |
-| K13 | Zorluk | Easy / Medium / Hard; sefer başında seçilir, sonra değişmez (kayıtta) | `chooseAction(..., { difficulty })` girdisi ve `ai.json > difficulty` tanımlı; ŞİMDİLİK ETKİSİZ (hepsi Medium = tam terazi). Davranış farkı Faz 5 |
+| K13 | Zorluk | Easy / Medium / Hard; sefer başında seçilir, sonra değişmez (kayıtta) | UYGULANDI (madde 258): `chooseAction(..., { difficulty })`, `ai.json > difficulty`; sefer BattleScene'e `difficulty` iletir, düşman tarafı onunla oynar; hızlı savaş Medium. Ayrıntı 6.7 |
+| K14 | Diriltme savaş bitmek üzereyken (Soru P alt sorusu) | "Diriltme savaşın galibini değiştirmeyecekse değeri 0 olsun" (2026-10-08) | UYGULANDI (madde 258): `ValueContext.outcome` sezgiseli (iki tarafın ufuk içi bitirme süresi); kazanılmış ya da dirilenle bile kaybedilen savaşta `revive` terimi 0 |
 
 Amaç (Ömer): "Tüm karakterlerin skillerini ve olası takım kompozisyonlarını düşünerek, balans öncesinde yapay zekanın tercih sıralaması." Önce yapay zeka (YZ) doğru oynasın, sonra genel balans: yanlış oynayan bir class'ın kazanma oranı balans sorunu gibi görünür ama AI sorunudur.
 
@@ -286,6 +287,21 @@ Kural: YZ belirleyici kalır (CLAUDE.md). "Hata" rastgelelik değil, savaş seed
 
 Ayar: J (`ai.json > difficulty.easy|medium|hard`: ufuk, seçim payı, aç/kapa anahtarları) + K (seçim katmanı, takım odağı). Sim ve denge ölçümü **Medium** ile yapılır.
 
+**Uygulanan (madde 258):**
+
+| Kural | Easy | Medium | Hard |
+|---|---|---|---|
+| Ufuk | 1 tur | 3 tur (value.horizon) | 3 tur |
+| Seçim | puanı en iyinin en az %50'si olan en iyi 3 aday arasından %65 / %23 / %12 (belirleyici: savaş seed'i + oynanan tur + birim; motor RNG'si kullanılmaz) | en iyisi | en iyisi |
+| Kurtarma (save) / kontrol (Stun, Slow, Wound...) | 0 (`value.saveWeight 0`, `controlWeight 0`) | var | var |
+| Öldürme terimi | yalnızca öldürme ihtimali >= %90 (`killMinChance`) | ihtimal x katkı | ihtimal x katkı |
+| Odak ateşi | yok | can oranı (düşman tahmini) | + dostlarımızın da yöneleceği hedefe baskı x (1 + 0,3 x dost sayısı) (`focusFire`) |
+| Fazla vurmama | yok | yok | zaten ölecek hedef (tur başı Wither/zemin tiki ya da ondan önce oynayacak dostlarımızın tahmini vuruşları canını bitiriyor): hasar/öldürme/baskı değerinin %20'si (`overkillShare`, terim `overkill`) |
+| Uygun anı bekleme | yok | yok | Doom Mark (detonate) öldürmüyorsa ve hedefte 2+ Omen yoksa değerinin %50'si (`patience`) |
+| Rest/Skip/Move | yalnızca yapacak hamle yokken Rest | terazi | terazi |
+
+Ölçüm (düşman tarafı seviyeyle, oyuncu Medium; düşman kazanma oranı): Easy %29 (600 savaş), Medium %46-50, Hard Medium'dan yalnızca +1-2 puan (800 savaşta %52,0 vs %49,8; 600 savaşta fark gürültü içinde). Hard'ın davranış farkı gerçek ama küçük: büyük zorluk farkı için seferin stat/sayı ayarları (UnitSetup modifiers) gerekir (balance-tester; PENDING_BALANCE).
+
 ### 6.8 Diğer ortak kurallar
 
 | # | Kural | Ayar |
@@ -318,8 +334,15 @@ Uygulamaya HAZIR: K1, K2, K4-K10 net. Soru P (Paladin ölçütleri) yalnızca a�
 - Faz 1 YAPILDI: tek terazi (`src/engine/ai-value.ts` + `ai.ts > scoreOption`), öldürme ihtimali (isabet x hasar zarı, kritik dalı), tehlike modeli + kurtarma (K2), alan skill'i vurulan toplamı, ultimate cooldown bedeli (`cooldownCostShare`), explainChoice / match-log tek sayı + terim dökümü. Profil `priorities` yalnızca etiket; skill `ai` ipuçlarının requires/anyOf koşulları seçimi engellemiyor (yalnızca `reserveMp` sürüyor). Geçici veri yamaları (Whirlwind minTargets, Taunt/Guard can kapısı) hiç uygulanmamıştı; gerek kalmadı.
 - Faz 2 YAPILDI (ilk sürüm): kontrol (Stun, Slow, Haste, Wound, Fortify; Blinded/Shrouded/Jinxed eskisi gibi mitigation), Taunt/Guard (yönlenen hasar + kurtarma - Defender riski; fedakârlık mümkün), kalkan = emilmesi beklenen, Mana Barrier temizleme = kaybedilecek tur değeri, diriltme (ufuk 3, tur sayacı 0, hücre seçimi), Dark Bond (tek hedef saldırının lifesteal'i, `bondSelfFloor 0.05`, `bondHpFloor 0.1`), çağrı (ufuktaki katkı x yuvada vurabilirlik + saldırı çekme + Verdant Blessing). Mana yakma değeri hâlâ eski basit hesap (yakılan MP x 0,6): "engellenen hamle" modeli sonraki iş.
 - Faz 3 KISMEN: Rest/Skip/Move teraziyle aynı puanı kullanıyor; "kırılgan" tanımı can eksikken (tam canla geri çekilme yok); geri çekilme kendini kurtarıyorsa kurtarma değeri ekleniyor. Global kurallar (eşikler) ai.json'da aynen.
-- Faz 4 YAPILDI: Skeleton (ve tüm çağrılar) ölü dostun ceset hücresine çağrılabilir; Resurrection iki adımlı (K12). Move hâlâ ceset hücresine giremez (madde 257 sorusu).
-- Faz 5 (zorluk) ve Faz 6 (balans ölçümü/ayarı) YAPILMADI.
+- Faz 4 YAPILDI: Skeleton (ve tüm çağrılar) ölü dostun ceset hücresine çağrılabilir; Resurrection iki adımlı (K12). Madde 258: Move da ceset hücresine girebilir.
+- **Madde 258 (2026-10-08):**
+  - Faz 2 artığı: mana yakma = "engellenen hamle" (`ValueContext.manaDenial`: hedefin ufuk x `manaHorizonMult` (2) turunda MP yüzünden yapamayacağı MP'li hamlelerin bedelsiz hamlesine göre fazladan değeri; tam sayılı kullanım planı, tur + MP + cooldown kısıtı). Drain Field, Mana Steal ve Spell Ward kancası (korunan dosta saldıracak büyücüler) bunu kullanır. Sonuç: MP'si bol ya da ucuz skill'le yetinebilen hedefte (Mage: Fire Bolt 5 MP, yenilenme 6/tur) yakma neredeyse değersiz; Drain Field kullanımı %2 (balans sorusu: PENDING_BALANCE). Dark Bond düzeltmesi: bağ süresince ikisinin de yiyeceği beklenen hasar çalınabilir/iyileşebilir pay açar (eskiden yalnızca şu anki eksik can; tam canlı Undead'in bağı ~0). Ölçüm (150 savaş, 519 aday): tahmin ort 10,7, gerçekleşebilir (sonraki 3 Undead turunda çaldığı can, dostun eksik canıyla sınırlı) ort 14,7; Dark Bond puanı ort 19 (bağ + tempo), seçilen hamle ort 49: düşük kullanım (%1) GERÇEKÇİ (bağ ~15 can, Wail/Bone Throw daha değerli). Jinx: puan ort 30, Evil Eye 40 (aynı Omen, 2 kat hasar, bedelsiz): %2 kullanım gerçekçi; Jinxed değeri doğru hesaplanıyor (hata bulunmadı).
+  - Faz 3 artığı: Rest/Skip/Move'un sabit kapısı (öldürücü/işlevsel class hamlesinde hiç denenmeme) kalktı; kazançları her zaman class hamlesinin terazi puanıyla kıyaslanır.
+  - Faz 5: zorluk seviyeleri (6.7 'Uygulanan' tablosu).
+  - K14: savaş belliyse diriltme 0 (`ValueContext.outcome`: tUs = düşmanın can+kalkanı / bizim tur başı beklenen hasarımız, tThem tersi; 'win' = tUs <= ufuk ve tUs <= 0,5 x tThem (dirilen HESABA KATILMADAN); 'loss' = aynısı ters yönde, dirilenin ufuk katkısı ve canı bize eklenmişken de; `value.decidedMargin` 0,5).
+  - Skill `ai` ipuçlarından eski requires/anyOf koşulları ve incomingShare/opportunityShare veriden SİLİNDİ; kalan: `reserveMp` (Meteor, Aimed Shot, Void Strike, Fist Crush, All In, Doom Mark) ve `reserveMinMpRatio` (All In 0,6). MP ayırma artık değerle: ayrılan skill'in puanı x `reserveValueShare` (0,85) bu saldırıdan büyükse ertelenir.
+  - Lucky Escape: ölüm ihtimali (1 - şans); Move ölü dostun ceset hücresine girebilir (madde 257 sorusu 1 kapandı).
+- Faz 6 (balans ölçümü/ayarı) YAPILMADI (balance-tester).
 
 Toplam: engine-dev için 3-4 ayrı görev (Faz 1, Faz 2+3, Faz 4, Faz 5); en riskli ve en büyük Faz 1. Önerim: Faz 1 ve 2'yi arka arkaya, her birinden sonra sim ile ölç (davranış büyük ölçüde değişeceği için sınıf oranları oynayacak; balans Faz 6'da).
 
@@ -349,7 +372,7 @@ Seçenekler:
 - **(a) Kısa ufuk (2 tur):** dirilen/kurtarılan birimin yalnızca önümüzdeki 2 turu sayılır. Sonuç: A'da Radiance, B'de Radiance, C'de öldürme, D'de Resurrection ile Judgment başa baş (Gambler'ın 2 turu ~ Judgment).
 - **(b) Kalan savaş ufku:** savaşın tahmini kalan uzunluğu kadar (savaş başında uzun, sona doğru kısa). Sonuç: A ve D'de Resurrection (başlarda), B'de Radiance, C'de öldürme.
 - **(c) (a) + sizin ayarlayacağınız "diriltme ağırlığı"** (ör. 1,0 = nötr, 1,5 = Paladin diriltmeyi sever): Paladin kimliğini bir sayıyla ayarlarsınız; koşullar değişince yalnızca bu sayı değişir.
-- Ek alt soru: savaş bitmek üzereyken (C) diriltmenin değeri sıfır mı sayılsın (sefer kuralı ölüleri zaten %20 canla kaldırıyor)?
+- Ek alt soru: savaş bitmek üzereyken (C) diriltmenin değeri sıfır mı sayılsın? **KAPANDI (K14, madde 258): evet, diriltme savaşın galibini değiştirmeyecekse 0.**
 
 **Önerim: (b) + (c)**: ufuk savaşın kalan uzunluğuna göre (erken diriltme değerli, geç diriltme değersiz; C'de öldürme), üstüne ayarlanabilir ağırlık (başlangıç 1,0). Aynı ölçütler Druid (Rejuvenate), Mage (Mana Barrier) ve Anti-Mage (Spell Ward) için de kullanılır.
 

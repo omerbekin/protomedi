@@ -449,24 +449,28 @@ const barrier: V2Vfx = async (c, k) => {
       sigil(c, k, fp.x, fp.y - 2, Math.max(150, t.w * 1.3), 0.3, { open: 240, hold: 700, spin: 120, depth: k.FLOOR_FX + 3 });
       await k.wait(c.scene, k.slow(200));
       c.actor.play('idle');
-      // ARINMA: yükselen halka + kopan lanet kırıkları
-      c.sfx('cleanseSweep');
-      const band = c.scene.add.ellipse(fp.x, fp.y, t.w * 1.05, 26).setStrokeStyle(5, 0xfff0a0, 0.95).setDepth(t.container.depth + 2).setBlendMode(k.Phaser.BlendModes.ADD);
-      const bandGlow = glow(c, k, fp.x, fp.y, t.w * 1.1, 0xfff0a0, 0.35, t.container.depth + 1);
-      bandGlow.setDisplaySize(t.w * 1.2, 40);
-      await k.counter(c.scene, k.slow(300), (u) => {
-        const y = fp.y - t.h * 1.02 * u;
-        band.setPosition(fp.x, y).setScale(1 - 0.25 * u, 1);
-        bandGlow.setPosition(fp.x, y);
-        if (Math.random() < 0.5) k.burst(c.scene, fp.x + k.rnd(-t.w * 0.4, t.w * 0.4), y, { colors: ['#ffffff', '#fff0a0'], n: 1, speed: [20, 70], gravity: -40, life: [300, 500], size: [4, 6] });
-      }, 'Sine.easeInOut');
-      fade(c, k, band, 0, 160);
-      fade(c, k, bandGlow, 0, 160);
-      for (let i = 0; i < 5; i++) {
-        const s = k.v2Sprite(c, 'hexshard', '#5a2a9c', mid.x + k.rnd(-t.w * 0.25, t.w * 0.25), mid.y + k.rnd(-t.h * 0.35, t.h * 0.3), k.rnd(18, 28), k.DEPTH + 35);
-        const a = k.rnd(-Math.PI, 0);
-        c.scene.tweens.add({ targets: s, x: s.x + Math.cos(a) * k.rnd(70, 130), y: s.y + Math.sin(a) * k.rnd(50, 110), rotation: k.rnd(-4, 4), duration: k.slow(360), ease: 'Quad.easeOut' });
-        c.scene.tweens.add({ targets: s, alpha: 0, displayWidth: 4, displayHeight: 4, delay: k.slow(240), duration: k.slow(140), onComplete: () => { k.burst(c.scene, s.x, s.y, { colors: ['#ffffff', '#fff0a0'], n: 3, speed: [40, 120], gravity: 0, life: [200, 360], size: [4, 6] }); s.destroy(); } });
+      // ARINMA: yalnızca bu dostun debuff'ı GERÇEKTEN silindiyse (c.usage: motor olayları; olaysız önizlemede hep oynar)
+      const cleansed = !c.usage || c.usage.dispelledFrom(t.combatant.uid).length > 0;
+      if (cleansed) {
+        // ARINMA: yükselen halka + kopan lanet kırıkları
+        c.sfx('cleanseSweep');
+        const band = c.scene.add.ellipse(fp.x, fp.y, t.w * 1.05, 26).setStrokeStyle(5, 0xfff0a0, 0.95).setDepth(t.container.depth + 2).setBlendMode(k.Phaser.BlendModes.ADD);
+        const bandGlow = glow(c, k, fp.x, fp.y, t.w * 1.1, 0xfff0a0, 0.35, t.container.depth + 1);
+        bandGlow.setDisplaySize(t.w * 1.2, 40);
+        await k.counter(c.scene, k.slow(300), (u) => {
+          const y = fp.y - t.h * 1.02 * u;
+          band.setPosition(fp.x, y).setScale(1 - 0.25 * u, 1);
+          bandGlow.setPosition(fp.x, y);
+          if (Math.random() < 0.5) k.burst(c.scene, fp.x + k.rnd(-t.w * 0.4, t.w * 0.4), y, { colors: ['#ffffff', '#fff0a0'], n: 1, speed: [20, 70], gravity: -40, life: [300, 500], size: [4, 6] });
+        }, 'Sine.easeInOut');
+        fade(c, k, band, 0, 160);
+        fade(c, k, bandGlow, 0, 160);
+        for (let i = 0; i < 5; i++) {
+          const s = k.v2Sprite(c, 'hexshard', '#5a2a9c', mid.x + k.rnd(-t.w * 0.25, t.w * 0.25), mid.y + k.rnd(-t.h * 0.35, t.h * 0.3), k.rnd(18, 28), k.DEPTH + 35);
+          const a = k.rnd(-Math.PI, 0);
+          c.scene.tweens.add({ targets: s, x: s.x + Math.cos(a) * k.rnd(70, 130), y: s.y + Math.sin(a) * k.rnd(50, 110), rotation: k.rnd(-4, 4), duration: k.slow(360), ease: 'Quad.easeOut' });
+          c.scene.tweens.add({ targets: s, alpha: 0, displayWidth: 4, displayHeight: 4, delay: k.slow(240), duration: k.slow(140), onComplete: () => { k.burst(c.scene, s.x, s.y, { colors: ['#ffffff', '#fff0a0'], n: 3, speed: [40, 120], gravity: 0, life: [200, 360], size: [4, 6] }); s.destroy(); } });
+        }
       }
       // KUBBE: altıgen fasetler uçup kilitlenir
       const R = Math.max(t.w, t.h) * 0.55;

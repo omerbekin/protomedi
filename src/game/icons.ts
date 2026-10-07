@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import type { SkillDef } from '../engine';
 import { GRID, INTERNAL_TOKEN_VALUES, shadeColor } from './pixel-art';
 import { resolveSprite } from './art-registry';
-import { ownerOfSkill } from './asset-versions';
+import { onVersionsChange, ownerOfSkill } from './asset-versions';
 
 /**
  * Piksel art ikon dokuları. Çizimler src/game/pixel-art.ts motoruyla ızgaralara çizilir (otomatik kontur + ışık/gölge);
@@ -25,6 +25,10 @@ const css = (v: number) => `#${v.toString(16).padStart(6, '0')}`;
 export function ensureIcon(scene: Phaser.Scene, kind: string, hex: string, framed = true, owner?: string | null): string {
   const art = resolveSprite(kind, owner);
   const key = iconKey(art.key, hex, framed);
+  if (owner) {
+    versioned.set(key, { kind, hex, framed, owner });
+    watch(scene.game);
+  }
   if (scene.textures.exists(key)) return key;
   const S = art.size;
   const q = S / GRID;
@@ -67,6 +71,54 @@ export function ensureIcon(scene: Phaser.Scene, kind: string, hex: string, frame
   tex.refresh();
   tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
   return key;
+}
+
+// ---------------------------------------------------------------- canlı sürüm değişimi
+
+/** Sahipli (sürüm farkında) üretilen doku anahtarı -> üretim girdisi: sürüm değişince aynı ikon yeni sürümle yeniden üretilir. */
+const versioned = new Map<string, { kind: string; hex: string; framed: boolean; owner: string }>();
+let watchedGame: Phaser.Game | null = null;
+
+function watch(game: Phaser.Game | undefined): void {
+  if (!game || watchedGame === game) return;
+  const first = watchedGame === null;
+  watchedGame = game;
+  if (first) onVersionsChange(() => refreshAllSceneIcons());
+}
+
+/**
+ * Sahnedeki (kapların içi dahil) sahipli ikon resimlerini seçili sürüme göre yeniden dokular; ekrandaki boyut korunur. Debug > Versions'ta
+ * seçim değişince tüm etkin sahnelerde (takım seçimi kartları, sefer haritası, savaş) kendiliğinden çağrılır. Değişen resim sayısını döner.
+ */
+export function refreshSceneIcons(scene: Phaser.Scene): number {
+  let n = 0;
+  const visit = (list: Phaser.GameObjects.GameObject[]): void => {
+    for (const o of list) {
+      if (o instanceof Phaser.GameObjects.Container) visit(o.list);
+      else if (o instanceof Phaser.GameObjects.Image) {
+        const meta = versioned.get(o.texture.key);
+        if (!meta) continue;
+        const key = ensureIcon(scene, meta.kind, meta.hex, meta.framed, meta.owner);
+        if (key === o.texture.key) continue;
+        const w = o.displayWidth;
+        const h = o.displayHeight;
+        o.setTexture(key).setDisplaySize(w, h);
+        n++;
+      }
+    }
+  };
+  visit(scene.children.list);
+  return n;
+}
+
+function refreshAllSceneIcons(): void {
+  for (const s of watchedGame?.scene.getScenes(true) ?? []) {
+    try {
+      refreshSceneIcons(s);
+    } catch (err) {
+      console.warn('[art-v2] ikonlar yenilenemedi', err);
+    }
+  }
 }
 
 /** Skill ikonu: skill'in `fx` renginde, çerçeveli; sahibinin (class / çağıran class) seçili sürümüyle. */

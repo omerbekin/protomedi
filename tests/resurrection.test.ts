@@ -149,6 +149,7 @@ describe('Resurrection: yapay zeka (terazi, madde 257)', () => {
     b.debugKill('party-0', false);
     b.debugKill('enemy-1', false);
     b.useSkill('party-2', 'raise_dead', undefined, 0, undefined, 'enemy-1'); // Warrior'ın ceset hücresinde Skeleton var
+    b.get('enemy-0')!.maxHp = b.get('enemy-0')!.hp = 3000; // savaş belli olmasın (madde 258: kazanılmış savaşta diriltme değeri 0)
     const ex = explainChoice(b, 'party-1', ai)!;
     const c = ex.candidates.find((x) => x.skill === 'resurrection' && x.target === 'P0:Warrior')!;
     expect(c.reviveSlot).toBeDefined();

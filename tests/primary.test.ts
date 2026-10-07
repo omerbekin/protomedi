@@ -510,7 +510,7 @@ describe('Luck primary: Lucky Escape (ölümcül vuruştan kurtulma) savaşta', 
     return { b, attacker, victim };
   };
 
-  it('şans 1: ilk ölümcül vuruşta 1 canla kalır, ikinci ölümcül vuruşta (hak bitti) ölür', () => {
+  it('şans 1: ilk ölümcül vuruş yok sayılır, ikinci ölümcül vuruşta (hak bitti) ölür', () => {
     const { b, attacker, victim } = setup(1, 1);
     const r = b.useSkill(attacker.uid, 'melee_attack', victim.uid); // iki vuruş
     expect(r.ok).toBe(true);
@@ -519,7 +519,46 @@ describe('Luck primary: Lucky Escape (ölümcül vuruştan kurtulma) savaşta', 
     expect(victim.hp).toBe(0);
   });
 
-  it('şans 1: tek ölümcül vuruş 1 can bırakır', () => {
+  it('madde 258: ölümcül vuruş TAMAMEN yok sayılır (can 35, 40 hasar -> can 35 kalır); olay amount 0 + luckyEscape; kalkan harcanmaz', () => {
+    const { b, attacker, victim } = setup(1, 1);
+    victim.hp = 35;
+    victim.shield = 4;
+    b.debug.damageMult = 1000; // kesin ölümcül
+    const r = b.useSkill(attacker.uid, 'charge', victim.uid);
+    expect(r.ok).toBe(true);
+    expect(victim.hp).toBe(35);
+    expect(victim.shield).toBe(4);
+    const dmg = r.ok ? r.events.filter((e) => e.type === 'damage' && e.target === victim.uid) : [];
+    expect(dmg).toHaveLength(1);
+    expect(dmg[0]).toMatchObject({ amount: 0, absorbed: 0, hpAfter: 35, shieldAfter: 4, luckyEscape: true });
+    // Vuruşa bağlı durum (Charge'ın Stun'ı) yok sayılan vuruşla uygulanmaz
+    expect(victim.statuses.some((s) => s.kind === 'stun')).toBe(false);
+    expect(r.ok && r.events.some((e) => e.type === 'death' && e.target === victim.uid)).toBe(false);
+  });
+
+  it('madde 258: yok sayılan vuruşta lifesteal yok, taunt sayacı işlemez', () => {
+    const s = content.battleSetup('first-battle', 1, 'test', teams);
+    const steal = { ...content.skills.charge!, id: 'steal_test', effects: content.skills.charge!.effects.map((e) => (e.type === 'damage' ? { ...e, lifesteal: 1 } : e)) };
+    s.skills = { ...s.skills, steal_test: steal };
+    const b = new Battle(s);
+    for (const c of b.combatants) Object.assign(c.stats, { critChance: 0, accuracy: 10, evasion: 0 });
+    const attacker = b.combatants.find((c) => c.side === 'party' && c.defId === 'warrior')!;
+    const victim = b.combatants.find((c) => c.side === 'enemy' && c.defId === 'warrior')!;
+    victim.stats.surviveChance = 1;
+    victim.hp = 10;
+    attacker.hp = Math.round(attacker.maxHp / 2);
+    const before = attacker.hp;
+    victim.statuses.push({ kind: 'taunt', turns: 3, source: victim.uid, breakAt: 5, taken: 0 });
+    b.debug.damageMult = 1000;
+    attacker.skills = [...attacker.skills, 'steal_test'];
+    const r = b.useSkill(attacker.uid, 'steal_test', victim.uid);
+    expect(r.ok).toBe(true);
+    expect(victim.hp).toBe(10);
+    expect(attacker.hp).toBe(before);
+    expect(victim.statuses.find((s) => s.kind === 'taunt')?.taken ?? 0).toBe(0);
+  });
+
+  it('şans 1: tek ölümcül vuruşta can değişmez', () => {
     const { b, attacker, victim } = setup(1, 1);
     // ilk vuruştan sonra durmak için tek vuruşluk skill: Double Strike yerine Charge
     const r = b.useSkill(attacker.uid, 'charge', victim.uid);
@@ -619,10 +658,14 @@ describe('Lucky Escape: şans %30, diriltme hakkı geri vermez', () => {
         const { b, attacker, victim } = make(seed, 1, mode);
         victim.hp = 1;
         if (mode === 'turns') for (let i = 0; i < 400 && b.currentUid !== attacker.uid; i++) b.skipTurn();
-        b.useSkill(attacker.uid, 'charge', victim.uid);
-        return victim.hp;
+        const hpBefore = victim.hp; // (turns modunda tur başı yenilenme canı artırmış olabilir)
+        b.debug.damageMult = 1000;
+        const r = b.useSkill(attacker.uid, 'charge', victim.uid);
+        // madde 258: ölümcül vuruş yok sayılır, can değişmez (turns modunda sonraki tur başı yenilenmesi canı sonradan artırabilir: olaydan okunur)
+        const hit = r.ok ? r.events.find((e) => e.type === 'damage' && e.target === victim.uid) : undefined;
+        return hit && hit.type === 'damage' && hit.luckyEscape ? hit.hpAfter - hpBefore : -1;
       };
-      expect(run(3), mode).toBe(1);
+      expect(run(3), mode).toBe(0);
       expect(run(3), mode).toBe(run(3));
     }
   });

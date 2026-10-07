@@ -487,7 +487,8 @@ describe('yapay zeka (madde 240)', () => {
     expect(cand.turnCost).toBe(0.5);
     expect(cand.bond).toBeGreaterThan(0);
     expect(cand.tempo).toBeGreaterThan(0);
-    expect(cand.bond).toBeGreaterThan(fullValue);
+    // madde 258: bağ süresince yenecek hasar da çalınabilir pay açar; yaralıyken değer tam candakinden az olamaz
+    expect(cand.bond).toBeGreaterThanOrEqual(fullValue);
     // test modunda (cooldown yok): bağ kurulduktan sonra değeri 0 -> yeniden seçilmez
     const t = mk({ 0: 'warrior', 1: 'undead' }, { 0: 'defender' });
     const tu = at(t, 'party', 1);
@@ -500,9 +501,9 @@ describe('yapay zeka (madde 240)', () => {
     expect(chooseAction(t, tu.uid, ai)?.skillId).not.toBe('dark_bond');
   });
 
-  it('Anti-Mage: canı eşiğin (veri: maxTargetHpRatio, madde 241 ölçümüyle 0,45) altındaki dosta Spell Ward atar; eşiğin üstündeki dosta atmaz', () => {
-    const limit = S.spell_ward!.ai!.requires!.maxTargetHpRatio!;
-    expect(limit).toBeLessThanOrEqual(content.aiConfig.profiles.antimage!.shieldBelowRatio);
+  it('Anti-Mage: yaralı dosta Spell Ward atar; sağlam dosta atmaz (terazi; madde 258: eski maxTargetHpRatio ipucu silindi)', () => {
+    expect(S.spell_ward!.ai).toBeUndefined();
+    const limit = 0.45;
     const run = (ratio: number) => {
       const b = mk({ 0: 'warrior', 1: 'antimage' }, { 0: 'mage' });
       const w = at(b, 'party', 0);

@@ -159,6 +159,7 @@
   },
   "fontFamily": "\"Trebuchet MS\", system-ui, sans-serif",
   "colors": {
+    "tier": { "elite": "#f0c24a", "boss": "#e0413c" },
     "fallbackBackground": "#2b2d42",
     "partySlot": "#4fa3ff",
     "enemySlot": "#ff5a5a",

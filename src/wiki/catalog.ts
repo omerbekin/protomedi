@@ -527,7 +527,7 @@ export function buildMechanics(): WikiArticle[] {
     article('corpses', 'Special rules', 'Corpses', 'skull', [
       p('When a unit of a team falls, it leaves a corpse on its cell. Summoned units leave no corpse, not even when they fall together with their summoner.'),
       list(
-        'Revivable: the corpse can be brought back with a revive skill. Allies cannot move onto its cell, but a summon (a Skeleton, a Treant) can appear on it: the corpse can still be revived, onto another empty cell.',
+        'Revivable: the corpse can be brought back with a revive skill. Its cell counts as empty: allies can move onto it and a summon (a Skeleton, a Treant) can appear on it. The corpse stays where it is and can still be revived, onto another empty cell.',
         'Consumed: the corpse was devoured and can never be revived. Its cell is free again for moving and summoning.',
       ),
       p(`Skills that consume corpses: ${skillsWith((e) => e.type === 'summon' && !!e.consumeCorpse).join(', ') || 'none yet'}. Choose a fallen foe to consume, then choose where the summon rises on your own side: the consumed corpse can never be revived and the summon comes empowered. While a fallen foe lies on the field you must consume one (you decide which); with no fallen foe you only choose the cell and the summon comes weaker (unfed). The AI consumes the most dangerous foe: the one worth the most to its team if revived (its threat and best skill, its max HP, more if it can revive others itself or if a living reviver could bring it back).`),
@@ -540,7 +540,7 @@ export function buildMechanics(): WikiArticle[] {
     ]),
     article('revive', 'Special rules', 'Resurrection', 'ankh', [
       p('A revive skill is aimed in two steps: first choose the fallen ally, then choose an empty cell on your own side where it rises, with a share of its max HP and MP. It does not matter whether something now stands on its corpse (for example a summon): any empty cell will do. With no empty cell on your side the skill cannot be used. It cannot target living units, and it cannot target an ally whose corpse was consumed (see Corpses). The revived ally starts with an empty turn bar.'),
-      p('The AI weighs a resurrection like any other move: what the revived ally will do over the next turns (its first turn comes later because its turn bar starts empty), against healing a living ally whose turn is close or hitting the foe who is about to strike. It picks the cell where the ally is most useful and safest (a melee fighter in front, a caster or archer at the back).'),
+      p('The AI weighs a resurrection like any other move: what the revived ally will do over the next turns (its first turn comes later because its turn bar starts empty), against healing a living ally whose turn is close or hitting the foe who is about to strike. It picks the cell where the ally is most useful and safest (a melee fighter in front, a caster or archer at the back). When the fight is already decided, it does not waste a turn on a resurrection: if the remaining foes are expected to fall within the next few turns anyway, or if the battle is lost and the revived ally would not change that, the resurrection is worth nothing to it.'),
       list(...Object.values(content.skills).flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'revive' }> => e.type === 'revive').map((e) => `${s.name}: revives at ${pct(e.hpRatio)} HP and ${pct(e.mpRatio)} MP${e.regen ? `; then regenerates ${pct(e.regen.ratio)} of its max HP at the start of each of its next ${e.regen.turns} turns` : ''}.`))),
       p(`Skills that revive: ${skillsWith((e) => e.type === 'revive').join(', ') || 'none yet'}.`),
     ]),
@@ -569,7 +569,7 @@ export function buildMechanics(): WikiArticle[] {
       p(`Remove debuffs: ${skillsWith((e) => e.type === 'dispel' && e.status === 'debuff').join(', ') || 'none'}. Remove an attacker's buff: ${skillsWith((e) => e.type === 'shield' && !!e.onAbsorb?.dispelChance).join(', ') || 'none'}.`),
       p('Removing a Stun from a taunting unit does not bring its taunt back: a Stun ends the taunt the moment it lands.'),
     ], '#6ec1ff'),
-    article('dark-bond', 'Special rules', 'Dark Bond and life steal', 'soul', [
+    article('dark-bond', 'Special rules', 'Dark Bond and life steal', 'darkbond', [
       p('Life steal heals the attacker for part of the damage it deals (a passive such as Vampiric Bite, or a skill that says so). Damage dealt by a summon counts for its owner.'),
       p('A dark bond links the caster to one other ally for a number of the caster\'s own turns. While it lasts, every time the caster heals from life steal, the bonded ally is healed the same amount too; the caster\'s own healing is not reduced. Only what the caster really heals is shared: at full HP the caster steals no life, so the ally gets nothing; the ally is never healed above its maximum.'),
       list(

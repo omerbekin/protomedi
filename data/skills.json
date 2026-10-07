@@ -118,14 +118,7 @@
     "sfx": [
       "lightSwell",
       "choirAh"
-    ],
-    "ai": {
-      "requires": {
-        "minTargets": 1,
-        "minWoundedAllies": 1,
-        "woundedBelowRatio": 0.7
-      }
-    }
+    ]
   },
   "judgment": {
     "id": "judgment",
@@ -158,17 +151,7 @@
       "hammerWhoosh",
       "hammerSlam",
       "fireCrackle"
-    ],
-    "ai": {
-      "anyOf": [
-        {
-          "minTargets": 2
-        },
-        {
-          "kill": true
-        }
-      ]
-    }
+    ]
   },
   "fire_bolt": {
     "id": "fire_bolt",
@@ -273,14 +256,6 @@
       "fireCrackle"
     ],
     "ai": {
-      "anyOf": [
-        {
-          "minTargets": 2
-        },
-        {
-          "kill": true
-        }
-      ],
       "reserveMp": 2
     }
   },
@@ -320,7 +295,7 @@
     "id": "dark_bond",
     "name": "Dark Bond",
     "_not": "Madde 240 (Ömer): Blood Rite'ın yerine. Kendisi hariç tek dosta 3 tur (Undead'in kendi turları) karanlık bağ: Undead'in her lifesteal kazancının aynısı (ratio 1; madde 241: yalnızca Undead'in GERÇEKTEN iyileştiği miktar, canı doluyken 0) bağlı dosta da şifa olur. Aynı anda tek bağ; biri ölünce kopar. Yarım turn (turnCost 0,5). Hasar yok (damage-scale kuralı dışı değil: ölçekli etki yok). İkon/vfx/ses YER TUTUCU (soul ikon, guardlink vfx, chainTether + darkChant). Sayılar PROVİZYON.",
-    "icon": "soul",
+    "icon": "darkbond",
     "target": "single_ally",
     "excludeSelf": true,
     "cost": {
@@ -338,11 +313,6 @@
         "ratio": 1
       }
     ],
-    "ai": {
-      "requires": {
-        "minLivingAllies": 2
-      }
-    },
     "vfx": "guardlink",
     "sfx": [
       "darkChant",
@@ -516,17 +486,6 @@
       "arrowThunk"
     ],
     "ai": {
-      "anyOf": [
-        {
-          "kill": true
-        },
-        {
-          "minTargetArmorReduction": 0.3
-        },
-        {
-          "minTargetHpToDamage": 2
-        }
-      ],
       "reserveMp": 2
     },
     "initialCooldown": 2
@@ -804,14 +763,6 @@
       "implode"
     ],
     "ai": {
-      "anyOf": [
-        {
-          "kill": true
-        },
-        {
-          "minMissingManaShare": 0.25
-        }
-      ],
       "reserveMp": 2
     }
   },
@@ -841,11 +792,6 @@
         }
       }
     ],
-    "ai": {
-      "requires": {
-        "maxTargetHpRatio": 0.45
-      }
-    },
     "vfx": "spellward",
     "sfx": [
       "wardHum"
@@ -913,11 +859,6 @@
         "cause": "vines"
       }
     ],
-    "ai": {
-      "requires": {
-        "minTargets": 2
-      }
-    },
     "vfx": "vinesnare",
     "sfx": [
       "woodCreak",
@@ -1069,16 +1010,7 @@
     "vfx": "warcry",
     "sfx": [
       "scream"
-    ],
-    "ai": {
-      "requires": {
-        "minSelfHpRatioAfter": 0.35,
-        "minLivingEnemies": 2,
-        "minLivingAllies": 2
-      },
-      "incomingShare": 0.5,
-      "opportunityShare": 0.4
-    }
+    ]
   },
   "bone_throw": {
     "id": "bone_throw",
@@ -1176,9 +1108,6 @@
       "gauntletCrush"
     ],
     "ai": {
-      "requires": {
-        "minTargets": 3
-      },
       "reserveMp": 2
     }
   },
@@ -1355,18 +1284,8 @@
       "coinSpill"
     ],
     "ai": {
-      "requires": {
-        "minSelfMpRatio": 0.6
-      },
-      "anyOf": [
-        {
-          "kill": true
-        },
-        {
-          "minBattleTurns": 10
-        }
-      ],
-      "reserveMp": 2
+      "reserveMp": 2,
+      "reserveMinMpRatio": 0.6
     }
   },
   "shape_row": {
@@ -1556,11 +1475,6 @@
         "power": 0.9
       }
     ],
-    "ai": {
-      "requires": {
-        "minTargets": 2
-      }
-    },
     "vfx": "saltire",
     "sfx": [
       "shadowStep",
@@ -1601,16 +1515,6 @@
         "side": "allies"
       }
     ],
-    "ai": {
-      "anyOf": [
-        {
-          "minTargets": 2
-        },
-        {
-          "minAllyTargets": 2
-        }
-      ]
-    },
     "vfx": "smokebomb",
     "sfx": [
       "fistWhoosh",
@@ -1643,19 +1547,6 @@
         "guaranteedCrit": true
       }
     ],
-    "ai": {
-      "anyOf": [
-        {
-          "kill": true
-        },
-        {
-          "minTargetMaxHpShare": 0.5
-        },
-        {
-          "targetBehindFront": true
-        }
-      ]
-    },
     "vfx": "backstab",
     "sfx": [
       "shadowStep",
@@ -1736,11 +1627,6 @@
         "critStacks": 2
       }
     ],
-    "ai": {
-      "requires": {
-        "minTargets": 2
-      }
-    },
     "vfx": "wail",
     "sfx": [
       "graveMoan",
@@ -1779,16 +1665,6 @@
         "critStacks": 2
       }
     ],
-    "ai": {
-      "anyOf": [
-        {
-          "kill": true
-        },
-        {
-          "minStatusMitigation": 6
-        }
-      ]
-    },
     "vfx": "bonethrow",
     "sfx": [
       "chainTether",
@@ -1829,17 +1705,6 @@
       }
     ],
     "ai": {
-      "anyOf": [
-        {
-          "kill": true
-        },
-        {
-          "minTargetStacks": {
-            "status": "omen",
-            "count": 2
-          }
-        }
-      ],
       "reserveMp": 2
     },
     "vfx": "voidstrike",

@@ -25,6 +25,8 @@ export interface TargetPreview {
     hpLossMax: number;
     /** sure: en düşük hasar bile öldürür; maybe: yalnızca yüksek zarda öldürür; null: öldürmez. */
     lethal: 'sure' | 'maybe' | null;
+    /** Madde 258: vuruş ölümcülse hedefin onu Lucky Escape ile tamamen yok sayma şansı (Luck primary, savaşta henüz kullanılmadıysa); yoksa tanımsız. */
+    luckyEscape?: number;
     critChance: number;
     critMax: number;
     /** İsabet şansı (0-1): saldırganın accuracy'si - hedefin evasion'ı. min/max/avg ve hpLoss değerleri İSABET ETTİĞİNDE geçerlidir; beklenen hasar = avg x hitChance. */
@@ -271,6 +273,12 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
     const target = battle.get(e.uid);
     if (!target) continue;
     e.damage.lethal = e.damage.hpLossMin >= target.hp ? 'sure' : e.damage.hpLossMax >= target.hp ? 'maybe' : null;
+    // Madde 258: hedefin kullanılmamış Lucky Escape hakkı varsa ölümcül vuruş o şansla yok sayılır: 'sure' -> 'maybe'
+    const lucky = battle.luckyEscapeChance(target.uid);
+    if (lucky > 0 && e.damage.lethal) {
+      e.damage.luckyEscape = lucky;
+      if (e.damage.lethal === 'sure') e.damage.lethal = 'maybe';
+    }
   }
   return [...out.values()];
 }

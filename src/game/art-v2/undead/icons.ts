@@ -6,9 +6,10 @@
  * turkuaz gözler. v2 görsel dili: "turkuaz ruh ateşi + mezar moru + kemik". Palette turkuaz jeton yok: 'c' (buz mavisi) ile 'g'
  * (yeşil) dama deseniyle karıştırılır (uzaktan nane-turkuaz okunur).
  *
- * Bu class'ın v1 ikon adları (ICONS anahtarları): skull, soul, bonethrow, wail, raise, bone, boneslash
+ * Bu class'ın v1 ikon adları (ICONS anahtarları): skull, soul, darkbond, bonethrow, wail, raise, bone, boneslash
  *  - skull: Undead logosu + Skeleton logosu (kukuletalı lich kafatası)
- *  - soul: Vampiric Bite pasifi + Dark Bond skill'i (veride ikisi aynı adı kullanıyor): ısıran dişler + kan kalbi + içinde ruh
+ *  - soul: Vampiric Bite pasifi: ısıran dişler + kan kalbi + içinde ruh
+ *  - darkbond: Dark Bond skill'i (+ dark_bond durum rozeti, o shared'dan çözülür): iki kalp arasında kemik zincir
  *  - bonethrow, wail, raise: Undead skill'leri; bone (Bone Strike), boneslash (Bone Slash): Skeleton skill'leri
  *
  * SPRITES: v2 efektlerinin (vfx.ts) kullandığı ek çizimler; efektte k.v2Sprite(c, 'ad', renk, x, y, boyut) ile çizilir.
@@ -99,6 +100,39 @@ function skullFace(g: PxGrid, cx: number, cy: number, s: number, glow = true): v
   for (let i = -2; i <= 2; i++) g.line(cx + i * 1.3 * s, cy + 6.1 * s, cx + i * 1.3 * s, cy + 7.7 * s, 'n', 0.25);
 }
 
+/** Kalp: iki lob + uç; (cx, cy) lobların ortası, s ölçek (1 = ~23 birim genişlik). */
+function heartShape(g: PxGrid, cx: number, cy: number, s: number, t: string, grow = 0): void {
+  const r = 6.4 * s + grow;
+  g.disc(cx - 5 * s, cy, r, t).disc(cx + 5 * s, cy, r, t);
+  g.poly([cx - 11.2 * s - grow, cy + 1.4 * s, cx + 11.2 * s + grow, cy + 1.4 * s, cx, cy + 13 * s + grow * 1.4], t);
+}
+
+/** Omur boncuğu (zincir halkası), (x, y) merkez, `ang` zincir yönü, `len` uzunluk: iki eklem topuzu + bel + dikey çıkıntı + kan noktası. */
+function vertebraBead(g: PxGrid, x: number, y: number, ang: number, len: number): void {
+  const ux = Math.cos(ang);
+  const uy = Math.sin(ang);
+  const nx = -uy;
+  const ny = ux;
+  const h = len / 2;
+  const w = len * 0.42;
+  // gövde (bel)
+  g.line(x - ux * h * 0.7, y - uy * h * 0.7, x + ux * h * 0.7, y + uy * h * 0.7, 'e', w * 1.25);
+  // uçlarda çift eklem topuzu
+  for (const sgn of [-1, 1]) {
+    const ex = x + ux * h * sgn;
+    const ey = y + uy * h * sgn;
+    g.disc(ex + nx * w * 0.42, ey + ny * w * 0.42, w * 0.52, 'e');
+    g.disc(ex - nx * w * 0.42, ey - ny * w * 0.42, w * 0.52, 'e');
+  }
+  // dikey dikenler (üst/alt)
+  g.poly([x - ux * w * 0.5, y - uy * w * 0.5, x + nx * w * 1.25, y + ny * w * 1.25, x + ux * w * 0.5, y + uy * w * 0.5], 'e');
+  g.poly([x - ux * w * 0.5, y - uy * w * 0.5, x - nx * w * 1.25, y - ny * w * 1.25, x + ux * w * 0.5, y + uy * w * 0.5], 'e');
+  // alt gölge + parlama + ortadaki kan-ruh deliği
+  g.line(x - ux * h * 0.8 + nx * w * 0.42, y - uy * h * 0.8 + ny * w * 0.42, x + ux * h * 0.8 + nx * w * 0.42, y + uy * h * 0.8 + ny * w * 0.42, 'n', 0.5);
+  g.line(x - ux * h * 0.6 - nx * w * 0.36, y - uy * h * 0.6 - ny * w * 0.36, x + ux * h * 0.5 - nx * w * 0.36, y + uy * h * 0.5 - ny * w * 0.36, 'w', 0.25);
+  g.disc(x, y, w * 0.3, 'R');
+}
+
 // ---------------------------------------------------------------------------------------------------------------- ikonlar
 
 export const ICONS: Record<string, V2SpriteEntry> = {
@@ -115,10 +149,7 @@ export const ICONS: Record<string, V2SpriteEntry> = {
     skullFace(g, 16, 14.5, 1);
   },
 
-  /**
-   * Vampiric Bite + Dark Bond: kemik çene kan kalbine diş geçirir; kalbin içinde turkuaz ruh yanar, uçtan kan damlar.
-   * (Lifesteal = ısırıp ruh/can çekmek; Dark Bond = o ruhun bir dosta da aktığı bağ.)
-   */
+  /** Vampiric Bite: kemik çene kan kalbine diş geçirir; kalbin içinde turkuaz ruh yanar, uçtan kan damlar (ısırıp ruh/can çekmek). */
   soul: (g) => {
     // kalp
     g.disc(11.2, 15.5, 6.4, 'R').disc(20.8, 15.5, 6.4, 'R');
@@ -138,6 +169,53 @@ export const ICONS: Record<string, V2SpriteEntry> = {
     g.disc(10.7, 15.6, 0.9, 'R').disc(21.3, 15.6, 0.9, 'R');
     g.poly([16, 28.5, 17.6, 31, 14.4, 31], 'R');
     g.disc(16, 31, 1.4, 'R');
+  },
+
+  /**
+   * Dark Bond: iki kalp arasında sarkan kemik zincir (animasyondaki omur boncukları + kan ipliği). Solda Undead'in mor kalbi
+   * (içinde turkuaz ruh ateşi), sağda dostun kan kalbi; zincirin ortasından kan-ruh damlası akar (lifesteal'ın paylaşıldığı yol).
+   */
+  darkbond: (g) => {
+    // zincir yolu: Undead kalbinin ucundan dost kalbinin ucuna, aşağı sarkan yay (önce çizilir: kalpler üstüne biner)
+    const p0 = { x: 7.4, y: 13.6 };
+    const p1 = { x: 24.6, y: 13.6 };
+    const sag = 13.4;
+    const at = (u: number) => ({ x: p0.x + (p1.x - p0.x) * u, y: p0.y + (p1.y - p0.y) * u + Math.sin(u * Math.PI) * sag });
+    // kan ipliği
+    for (let i = 0; i < 30; i++) {
+      const a = at(i / 30);
+      const b = at((i + 1) / 30);
+      g.line(a.x, a.y, b.x, b.y, 'R', 0.9);
+    }
+    // omur boncukları (zincir yönünde döndürülmüş; aralarda kan ipliği görünür)
+    // (yay uzunluğuna göre eşit aralık: dipte sıkışmasınlar)
+    const pts = Array.from({ length: 121 }, (_, i) => at(i / 120));
+    const acc = [0];
+    for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1]! + Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y));
+    const total = acc[acc.length - 1]!;
+    for (const f of [0.17, 0.335, 0.5, 0.665, 0.83]) {
+      const i = Math.max(1, acc.findIndex((v) => v >= f * total));
+      const p = pts[i]!;
+      const q = pts[Math.min(pts.length - 1, i + 1)]!;
+      const o = pts[i - 1]!;
+      vertebraBead(g, p.x, p.y, Math.atan2(q.y - o.y, q.x - o.x), 3.0);
+    }
+    // ortada nabız: kan-ruh damlası zincirden akar
+    const m = at(0.5);
+    g.disc(m.x, m.y + 2.6, 1.1, 'r');
+    g.poly([m.x - 0.9, m.y + 2.4, m.x + 0.9, m.y + 2.4, m.x, m.y + 4.6], 'r');
+    // kalpler: Undead (sol, mor + turkuaz ruh ateşi) ve dost (sağ, kan); ikisi de zincire doğru hafif eğik
+    heartShape(g, 7.4, 6.4, 0.5, 'P');
+    heartShape(g, 7.4, 6.4, 0.5, 'p', -0.8);
+    soulFlame(g, 7.4, 11.4, 6.6, 2.4);
+    g.disc(5, 5, 0.9, 'w');
+    heartShape(g, 24.6, 6.4, 0.5, 'R');
+    heartShape(g, 24.6, 6.4, 0.5, 'r', -0.8);
+    g.disc(22.2, 5, 0.9, 'w');
+    g.line(21.6, 8.6, 23.6, 10.6, 'R', 0.5);
+    // bağın uçları: zincir kalplerin ucuna kemik halkayla takılı
+    g.disc(p0.x, p0.y + 0.4, 1.1, 'e').disc(p1.x, p1.y + 0.4, 1.1, 'e');
+    sparkle(g, 16, 3.6, 2.4, 'c');
   },
 
   /** Bone Throw: turkuaz ruh ateşine sarılı, dönerek uçan femur kemiği; arkasında dönüş izleri. */

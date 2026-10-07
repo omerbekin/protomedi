@@ -13,7 +13,8 @@
  *   card_trick (Card Trick)   -> 'cardfan'    : elde üç kart yelpaze açılır, iki kart dönerek iki hedefe kenarıyla saplanır,
  *                                               kart çevrilip yüzü görünür ve kâğıt kırıntısına dağılır (rastgele durum).
  *   all_in (All In)           -> 'allin'      : ekran kararır, kalp atışı; tüm manası mavi kıvılcımlar halinde başının üstünde altın zara
- *                                               dönüşür, zar atılır, yuvarlanır: jackpot = 6 + ışık sütunu + altın yağmuru; kayıp = tek göz, çatlar, tozlanır.
+ *                                               dönüşür, zar atılır, yuvarlanır: jackpot = 6 + ışık sütunu + altın yağmuru; kayıp = tek göz,
+ *                                               zar çatlayıp parçalanır, Gambler kararıp sendeler, mana söner, paralar kül olur.
  */
 import type Phaser from 'phaser';
 import type { V2Vfx } from '../types';
@@ -290,11 +291,155 @@ const pillarTex = (c: VfxCtx, k: VfxKit) =>
     return { c: u < 0.3 ? '#ffffff' : u < 0.62 ? '#fff2b0' : '#ffd23f', a: body * top };
   });
 
+/** Renk karışımı (0xRRGGBB, u 0..1). */
+const mixHex = (a: number, b: number, u: number): number => {
+  const ch = (s: number) => Math.round(((a >> s) & 255) + (((b >> s) & 255) - ((a >> s) & 255)) * u);
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+};
+
+/**
+ * All In KAYBI (Ömer: 'çok kaybediyormuş gibi değil'): zar hedefin önüne boğuk düşer, tek göz gelir, altını solar, çatlar ve ikiye
+ * ayrılır; parçalardan biri hedefe güçsüzce yuvarlanıp değer (vuruş: zayıf, gri toz). Ardından (vuruştan sonra) Gambler'ın üstüne
+ * kararma ve sendeleme (geri yalpalar), bedeninden çıkan mavi mana kıvılcımları titreyip griye döner ve söner (MP boşa gitti), başının
+ * üstünde beliren bahis paraları kararır, ufalanıp kül tozu olarak yere dökülür. Ses: allInLose (boğuk düşüş + çatlama + para dökülmesi +
+ * iç çekiş). Vuruş parçanın değdiği an (zar düştükten ~0,65 sn sonra); kuyruk ~1,4 sn.
+ */
+async function allinLost(c: VfxCtx, k: VfxKit, die: Img, dim: Phaser.GameObjects.Rectangle, land: Pt, t: CombatantView, d: number): Promise<void> {
+  const view = c.actor;
+  const a = view.container;
+  c.sfx('allInLose');
+  // ekran soğuk griye çöker (kazancın sıcak kararmasının tersi)
+  dim.setFillStyle(0x0a0d18, 1);
+  c.scene.tweens.add({ targets: dim, alpha: 0.42, duration: k.slow(260) });
+  // 1) boğuk düşüş: altın ışık yok, yalnızca gri toz; zar kayarak durur, sallanır, altını solar
+  k.burst(c.scene, land.x, land.y + 22, { colors: ['#5b6579', '#6b6558', '#98a2b4'], n: 8, speed: [40, 150], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 500, life: [260, 460], size: [7, 11] });
+  k.dustCloud(c.scene, land.x, land.y + 26, { n: 2, spread: 40, rise: 18, size: [34, 54], tint: 0x6b6558, life: 700 });
+  const x0 = die.x;
+  await k.counter(c.scene, k.slow(260), (u) => {
+    const e = 1 - (1 - u) ** 2;
+    die.setPosition(x0 + d * 22 * e, land.y - Math.abs(Math.sin(u * Math.PI * 2)) * 6 * (1 - u)).setRotation(Math.sin(u * Math.PI * 3) * 0.3 * (1 - u));
+    die.setTint(mixHex(0xffffff, 0x625c50, u));
+  });
+  die.setRotation(0);
+  // 2) çatlak büyür (zig-zag), altın kıymıklar
+  const s = die.displayWidth;
+  const crack = c.scene.add.graphics().setDepth(die.depth + 1);
+  const pts: Array<[number, number]> = [[-0.1, -0.42], [0.04, -0.2], [-0.07, -0.02], [0.08, 0.14], [-0.02, 0.28], [0.06, 0.42]];
+  await k.counter(c.scene, k.slow(150), (u) => {
+    crack.clear().lineStyle(Math.max(3, s * 0.05), 0x15101c, 1).beginPath();
+    const n = Math.max(1, Math.round(u * (pts.length - 1)));
+    crack.moveTo(die.x + pts[0]![0] * s, die.y + pts[0]![1] * s);
+    for (let i = 1; i <= n; i++) crack.lineTo(die.x + pts[i]![0] * s, die.y + pts[i]![1] * s);
+    crack.strokePath();
+    if (u > 0.5) crack.lineStyle(2, 0x15101c, 1).lineBetween(die.x - 0.07 * s, die.y - 0.02 * s, die.x - 0.26 * s, die.y + 0.06 * s);
+  });
+  k.burst(c.scene, die.x, die.y, { colors: ['#c4821a', '#8a7f6a', '#fdfaf2'], n: 6, speed: [60, 180], gravity: 700, life: [240, 420], size: [5, 8] });
+  // 3) ikiye ayrılır: sol yarım geriye düşer, sağ yarım hedefe güçsüzce yuvarlanır
+  const key = die.texture.key;
+  const fw = die.frame.width;
+  const fh = die.frame.height;
+  const half = (left: boolean): Img =>
+    c.scene.add.image(die.x, die.y, key).setDisplaySize(die.displayWidth, die.displayHeight).setDepth(die.depth).setTint(0x625c50).setCrop(left ? 0 : fw / 2, 0, fw / 2, fh);
+  const L = half(true);
+  const R = half(false);
+  die.destroy();
+  c.scene.tweens.add({ targets: crack, alpha: 0, duration: k.slow(120), onComplete: () => crack.destroy() });
+  k.dustCloud(c.scene, L.x, L.y + 10, { n: 2, spread: 26, rise: 30, size: [26, 40], tint: 0x5f5a50, life: 620 });
+  void arcTo(c, k, L, { x: L.x - d * 46, y: land.y + 22 }, 300, 30, -0.45 * d, 'in').then(() => {
+    k.burst(c.scene, L.x, L.y + 10, { colors: ['#5b6579', '#6b6558'], n: 4, speed: [30, 90], angle: [-Math.PI * 0.9, -Math.PI * 0.1], gravity: 400, life: [200, 340], size: [6, 9] });
+    c.scene.tweens.add({ targets: L, alpha: 0, delay: k.slow(500), duration: k.slow(400), onComplete: () => L.destroy() });
+  });
+  const f = feetOf(t);
+  const p = { x: f.x - d * t.w * 0.32, y: f.y - 22 };
+  await arcTo(c, k, R, p, 260, 18, 0.6 * d, 'out');
+  // VURUŞ: zayıf, boğuk; gri toz
+  k.hit(c.scene, p.x, p.y, ['#98a2b4', '#5b6579', '#6b6558'], 0.6);
+  k.burst(c.scene, p.x, p.y, { colors: ['#5b6579', '#6b6558', '#8a7f6a'], n: 6, speed: [40, 140], gravity: 600, life: [240, 420], size: [6, 9] });
+  c.scene.tweens.add({ targets: t.container, x: t.container.x + d * 6, duration: k.slow(70), yoyo: true });
+  c.scene.tweens.add({ targets: R, alpha: 0, y: R.y + 10, delay: k.slow(260), duration: k.slow(380), onComplete: () => R.destroy() });
+
+  // 4) KUYRUK (vuruştan sonra, arka planda): Gambler sendeler ve kararır, mana söner, paralar kül olur
+  void (async () => {
+    const body = { x: a.x, y: a.y - view.h * 0.55 };
+    const top = { x: a.x, y: a.y - view.h - 120 };
+    // a) bahis paraları başının üstünde belirir (kısa altın an)
+    const coins = Array.from({ length: 9 }, (_, i) => {
+      const u = i / 8 - 0.5;
+      const cn = k.v2Sprite(c, 'coin', '#ffd23f', top.x + u * 230, top.y - Math.cos(u * Math.PI) * 40 + k.rnd(-8, 8), k.rnd(38, 46), k.DEPTH + 52).setAlpha(0);
+      return { cn, y0: cn.y, sx: cn.scaleX, sy: cn.scaleY, ph: k.rnd(0, Math.PI * 2), drop: k.rnd(70, 120) };
+    });
+    // b) mana kıvılcımları bedenden çıkar
+    const sparks = Array.from({ length: 24 }, () => {
+      const r = c.scene.add.rectangle(body.x + k.rnd(-view.w * 0.4, view.w * 0.4), body.y + k.rnd(-view.h * 0.35, view.h * 0.4), 8, 8, 0x4aa3ff).setDepth(k.DEPTH + 45).setAlpha(0);
+      return { r, x: r.x, y: r.y, dy: k.rnd(16, 40), fall: k.rnd(30, 70), d0: k.rnd(0, 0.25) };
+    });
+    // c) sendeleme: geri yalpalar, iki kez sallanır, toparlanır; üstüne kararma
+    view.play('hit');
+    const ax = a.x;
+    const ay = a.y;
+    const sp = view.sprite;
+    const stagger = k.counter(c.scene, k.slow(1100), (u) => {
+      const back = u < 0.2 ? u / 0.2 : u < 0.55 ? 1 : 1 - (u - 0.55) / 0.45;
+      const wob = u > 0.18 && u < 0.62 ? Math.sin(((u - 0.18) / 0.44) * Math.PI * 3) * 0.035 : 0;
+      a.setPosition(ax - d * 14 * back, ay + 5 * back).setRotation(-d * (0.075 * back + wob));
+      const dark = u < 0.15 ? u / 0.15 : u < 0.6 ? 1 : 1 - (u - 0.6) / 0.4;
+      sp.setTint(mixHex(0xffffff, 0x4c4660, dark * 0.85));
+    });
+    const fizzle = k.counter(c.scene, k.slow(900), (u) => {
+      for (const s2 of sparks) {
+        const v = Math.max(0, Math.min(1, (u - s2.d0) / 0.75));
+        if (v <= 0) continue;
+        if (v < 0.4) {
+          // yükselir, parlar
+          const w = v / 0.4;
+          s2.r.setPosition(Math.round(s2.x), Math.round(s2.y - s2.dy * w)).setFillStyle(w > 0.5 ? 0xa8ebff : 0x4aa3ff).setAlpha(1);
+        } else {
+          // titrer, griye döner, düşerek küçülür ve söner
+          const w = (v - 0.4) / 0.6;
+          const flick = Math.sin(w * 40 + s2.x) > 0.2 ? 1 : 0.35;
+          s2.r.setPosition(Math.round(s2.x + Math.sin(w * 9) * 3), Math.round(s2.y - s2.dy + s2.fall * w * w)).setFillStyle(mixHex(0x4aa3ff, 0x3a4050, Math.min(1, w * 1.6))).setAlpha((1 - w) * flick).setScale(1 - w * 0.7);
+        }
+      }
+    });
+    // paralar: belirir (0-0,15), kararır (0,15-0,5), ufalanıp düşer (0,5-1)
+    let crumbled = false;
+    const coinRun = k.counter(c.scene, k.slow(1200), (u) => {
+      for (const o of coins) {
+        const spin = Math.max(0.15, Math.abs(Math.cos(u * 6 + o.ph)));
+        if (u < 0.15) o.cn.setAlpha(u / 0.15).setScale(o.sx * spin, o.sy);
+        else if (u < 0.5) {
+          const w = (u - 0.15) / 0.35;
+          o.cn.setAlpha(1).setScale(o.sx * spin, o.sy).setTint(mixHex(0xffffff, 0x3a3428, w)).setY(o.y0 + w * 6);
+        } else {
+          const w = (u - 0.5) / 0.5;
+          o.cn.setScale(o.sx * spin * (1 - w * 0.6), o.sy * (1 - w)).setAlpha(1 - w).setY(o.y0 + 6 + o.drop * w * w);
+        }
+      }
+      if (u >= 0.5 && !crumbled) {
+        crumbled = true;
+        for (const o of coins) {
+          swap(c, k, o.cn, 'coindark', '#98a2b4');
+          o.cn.setTint(0x6b6558);
+          k.burst(c.scene, o.cn.x, o.cn.y, { colors: ['#9a9284', '#6b6558', '#5b6579', '#3a3428'], n: 10, speed: [10, 80], angle: [Math.PI * 0.15, Math.PI * 0.85], gravity: 520, life: [620, 980], size: [6, 10] });
+        }
+        void k.wait(c.scene, k.slow(420)).then(() => k.dustCloud(c.scene, a.x, a.y - 4, { n: 3, spread: 90, rise: 16, size: [40, 64], tint: 0x5f5a50, life: 800 }));
+      }
+    });
+    await Promise.all([stagger, fizzle, coinRun]);
+    for (const o of coins) o.cn.destroy();
+    for (const s2 of sparks) s2.r.destroy();
+    a.setPosition(ax, ay).setRotation(0);
+    sp.clearTint();
+    view.play('idle');
+    c.scene.tweens.add({ targets: dim, alpha: 0, duration: k.slow(420), onComplete: () => dim.destroy() });
+  })();
+}
+
 /**
  * All In (tüm MP bahis, %75 jackpot): ekran kararır, kalp atışı hızlanır; Gambler'ın bedeninden mavi mana kıvılcımları sarmal çizerek
  * başının üstüne toplanır ve altın zara dönüşür (bütün mana ortada); zar nabız gibi şişer. Atış: yüksek yay, hedefin önüne düşer,
- * yuvarlanıp hedefe çarpar (vuruş). Jackpot: üst yüz 6, yumuşak altın ışık sütunu iner, altın yağmuru ve paralar; kayıp: tek göz gelir,
- * zar kararır, çatlar ve tozlanır, darbe zayıf. Vuruş ~2,1 sn (x1,2; v1 ~2,6 sn).
+ * yuvarlanıp hedefe çarpar (vuruş). Jackpot: üst yüz 6, yumuşak altın ışık sütunu iner, altın yağmuru ve paralar; kayıp: bkz. allinLost
+ * (tek göz, zar çatlayıp parçalanır; Gambler kararıp sendeler, mana söner, paralar kül olur). Vuruş ~2,1 sn (x1,2; v1 ~2,6 sn).
  */
 const allin: V2Vfx = async (c, k) => {
   const t = c.targets[0];
@@ -345,26 +490,23 @@ const allin: V2Vfx = async (c, k) => {
   const f = feetOf(t);
   const land = { x: f.x - d * (t.w * 0.5 + 60), y: f.y - 26 };
   await arcTo(c, k, die, land, 430, 220, 2.5 * d, 'lin');
+  if (lost) {
+    stopSpin();
+    swap(c, k, die, 'gdie_one', '#ffd166');
+    await allinLost(c, k, die, dim, land, t, d);
+    return;
+  }
   c.sfx('diceRoll');
   void k.ring(c.scene, land.x, land.y + 26, { r: 60, flat: 0.32, n: 16, colors: GOLD, dur: 280, size: 8 });
   k.burst(c.scene, land.x, land.y + 20, { colors: ['#98a2b4', '#5b6579', '#e3b983'], n: 6, speed: [60, 200], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 400, life: [240, 420], size: [8, 12] });
   const p = chest(t);
   await arcTo(c, k, die, { x: p.x - d * 20, y: p.y + 16 }, 220, 50, 1.2 * d, 'in');
   stopSpin();
-  swap(c, k, die, lost ? 'gdie_one' : 'gdie_six', '#ffd166');
+  swap(c, k, die, 'gdie_six', '#ffd166');
   die.setRotation(0);
   c.sfx('allInSlam');
   c.scene.tweens.add({ targets: dim, alpha: 0, duration: k.slow(480), onComplete: () => dim.destroy() });
-  c.scene.tweens.add({ targets: t.container, x: t.container.x + d * (lost ? 10 : 24), duration: k.slow(70), yoyo: true });
-  if (lost) {
-    die.setTint(0x7a7060);
-    k.hit(c.scene, p.x, p.y, ['#98a2b4', '#5b6579', '#c4821a'], 0.9);
-    k.dustCloud(c.scene, die.x, die.y + 20, { n: 3, spread: 30, rise: 40, size: [24, 40], tint: 0x6b6558, life: 640 });
-    const g = c.scene.add.graphics().setDepth(k.DEPTH + 41);
-    g.lineStyle(3, 0x15101c, 1).beginPath().moveTo(die.x - 10, die.y - 22).lineTo(die.x + 2, die.y - 4).lineTo(die.x - 4, die.y + 6).lineTo(die.x + 8, die.y + 22).strokePath();
-    c.scene.tweens.add({ targets: [die, g], alpha: 0, delay: k.slow(300), duration: k.slow(380), onComplete: () => { die.destroy(); g.destroy(); } });
-    return;
-  }
+  c.scene.tweens.add({ targets: t.container, x: t.container.x + d * 24, duration: k.slow(70), yoyo: true });
   k.hit(c.scene, p.x, p.y, GOLD, won ? 2.1 : 1.5);
   k.shake(c.scene, won ? 300 : 180, won ? 0.011 : 0.006);
   k.burst(c.scene, p.x, p.y, { colors: GOLD, n: won ? 34 : 18, speed: [160, 560], angle: [-Math.PI, 0], gravity: 800, life: [460, 860], size: [7, 14] });

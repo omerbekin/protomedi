@@ -164,6 +164,8 @@ export class Battle {
   private readonly announcedDead = new Set<string>();
   /** Luck-primary "Lucky Escape" hakkını kullanmış birimler. */
   private readonly luckySaved = new Set<string>();
+  /** Son applyHit çağrısı Lucky Escape ile yok sayıldı mı (strike'ın Rage / Mana Overflow yan etkileri için). */
+  private lastHitLucky = false;
   private summonCount = 0;
   /** Birim başına üst üste Skip Turn sayısı (başka bir eylem sıfırlar) ve son eylem türü. */
   private readonly skipStreak = new Map<string, number>();
@@ -596,6 +598,13 @@ export class Battle {
     const c = this.get(uid);
     if (this.mode !== 'turns' || !c || c.hp <= 0) return null;
     return turnProgress(c.turnCounter, this.setup.formulas.turn.threshold);
+  }
+
+  /** Madde 258: birimin bir sonraki ölümcül vuruşu Lucky Escape ile tamamen yok sayma şansı (Luck primary; savaşta hakkı kullanıldıysa 0). */
+  luckyEscapeChance(uid: string): number {
+    const c = this.get(uid);
+    if (!c || this.luckySaved.has(uid)) return 0;
+    return Math.max(0, Math.min(1, c.stats.surviveChance ?? 0));
   }
 
   skill(skillId: string): SkillDef | undefined {
@@ -1148,17 +1157,19 @@ export class Battle {
 
   /**
    * Birimin Move Tile için seçebileceği boş yuvalar (kendi tarafında, ÜZERİNDE CANLI BİRİM OLMAYAN yuvalar; küçükten büyüğe).
-   * Kural (Ömer): ölü bir dostun yuvasına geçiş YASAK (diriltme için ayrılmıştır); bu yuvalar `fallenSlots` ile ayrıca verilir
-   * (UI soluk "reserved" hücre gösterebilir). Çağrılar için freeSlots değişmedi. Düşman tahtasına sızmış birim hareket edemez.
+   * Madde 258 (Ömer): ölü dostun ceset hücresine de geçilebilir (ceset orada kalır; diriltme hücreye bağlı değil: Resurrection boş bir hücre seçer,
+   * çağrılar da cesedin üstüne gelebilir). Düşman tahtasına sızmış birim hareket edemez.
    */
   freeTiles(actorUid: string): number[] {
     const actor = this.get(actorUid);
     if (!actor || actor.hp <= 0 || actor.board !== actor.side) return [];
-    const reserved = new Set(this.fallenSlots(actor.side));
-    return this.freeSlots(actor.side).filter((s) => !reserved.has(s));
+    return this.freeSlots(actor.side);
   }
 
-  /** Bir tarafın tahtasında diriltilmeyi bekleyen (düşmüş, çağrı olmayan, cesedi TÜKETİLMEMİŞ) dostların boş yuvaları; tüketilmiş cesedin yuvası rezerve değildir. */
+  /**
+   * Bir tarafın tahtasında diriltilmeyi bekleyen (düşmüş, çağrı olmayan, cesedi TÜKETİLMEMİŞ) dostların boş yuvaları (bilgi amaçlı; madde 258'den beri
+   * hiçbir kuralı kısıtlamaz: Move ve çağrılar bu hücrelere girebilir).
+   */
   fallenSlots(side: Side): number[] {
     return this.combatants
       .filter((c) => c.side === side && c.board === side && c.hp <= 0 && !c.summoned && this.corpseState.get(c.uid) !== 'consumed' && !this.combatants.some((o) => o.hp > 0 && o.board === side && o.slot === c.slot))
@@ -1208,7 +1219,6 @@ export class Battle {
       if (actor.board !== actor.side) return { ok: false, reason: 'Cannot move here' };
       const free = this.freeTiles(actorUid);
       if (free.length === 0) return { ok: false, reason: 'No empty cell' };
-      if (slot !== undefined && this.fallenSlots(actor.side).includes(slot)) return { ok: false, reason: 'That cell is reserved for a fallen ally' };
       if (slot !== undefined && !free.includes(slot)) return { ok: false, reason: 'Invalid cell' };
     }
     return { ok: true };
@@ -2156,15 +2166,25 @@ export class Battle {
     const guardian = guard ? this.get(guard.source) : undefined;
     let hpLoss: number;
     const meta: HitMeta = { origin: 'skill', element: effect.element ?? 'physical', damageType: effect.damageType };
+    let lucky: boolean;
     if (guard && guardian && guardian !== target && guardian.hp > 0) {
       const redirected = Math.round(total * (guard.share ?? 0.5));
       hpLoss = this.applyHit(actor, target, total - redirected, effect.damageType, crit, emit, false, meta);
+      lucky = this.lastHitLucky;
+      // Guard payı korumacıya ayrı bir vuruştur: hedefin Lucky Escape'i onu iptal etmez (madde 258)
       if (redirected > 0) this.applyHit(actor, guardian, redirected, effect.damageType, crit, emit, true, meta);
     } else {
       hpLoss = this.applyHit(actor, target, total, effect.damageType, crit, emit, false, meta);
+      lucky = this.lastHitLucky;
     }
 
     // Rage: isabet eden hasar vuruşu, vurulan hasarın hedefin maks canına yüzdesine göre kazanç (hedef başına toplanır; formulas.json > rage)
+    // Lucky Escape ile yok sayılan vuruş hiç olmamış sayılır: Rage, lifesteal, Soul Drain, Mana Overflow yok ve "isabet etti" sayılmaz
+    // (vuruşa bağlı durumlar: Stun, Wound, Omen... bu hedefe uygulanmaz). Guard payı korumacıya normal işlemiştir.
+    if (lucky) {
+      if (guardian) this.announceIfDead(guardian, emit);
+      return { landed: false };
+    }
     if (this.rageTally && actor.maxRage !== undefined) {
       const r = f.rage;
       const gain = Math.min(r.perHitCap, r.hitBase + r.perHpPercent * ((total / Math.max(1, target.maxHp)) * 100));
@@ -2208,6 +2228,35 @@ export class Battle {
 
   /** Hasarı kalkana (büyüyse önce büyü kalkanına) ve cana uygular; canı düşüren miktarı döndürür. */
   private applyHit(actor: Combatant, target: Combatant, amount: number, type: 'physical' | 'magic', crit: boolean, emit: Emit, redirected: boolean, meta: HitMeta): number {
+    this.lastHitLucky = false;
+    // Luck-primary Lucky Escape (madde 258): kalkanlardan sonra kalan hasar canı bitirecekse, savaş başına bir kez şansla vuruş TAMAMEN
+    // yok sayılır: can ve kalkan değişmez, kalkan kancaları/taunt sayacı/lifesteal gibi yan etkiler işlemez (seed'li RNG; zar yalnızca ölümcülse atılır).
+    const wouldAbsorb = Math.min(type === 'magic' ? target.magicShield : 0, amount);
+    const wouldRest = amount - wouldAbsorb - Math.min(target.shield, amount - wouldAbsorb);
+    if (wouldRest >= target.hp && target.hp > 0 && (target.stats.surviveChance ?? 0) > 0 && !this.luckySaved.has(target.uid) && this.rng.next() < target.stats.surviveChance) {
+      this.luckySaved.add(target.uid);
+      this.lastHitLucky = true;
+      emit({
+        type: 'damage',
+        source: actor.uid,
+        target: target.uid,
+        amount: 0,
+        absorbed: 0,
+        hpAfter: target.hp,
+        shieldAfter: target.shield,
+        magicShieldAfter: target.magicShield,
+        crit,
+        ...(redirected ? { redirected: true } : {}),
+        origin: meta.origin,
+        ...(meta.element ? { element: meta.element } : {}),
+        ...(meta.damageType ? { damageType: meta.damageType } : {}),
+        ...(meta.ground ? { ground: meta.ground, groundId: meta.groundId } : {}),
+        ...(meta.status ? { status: meta.status } : {}),
+        luckyEscape: true,
+      });
+      emit({ type: 'passive', actor: target.uid, passive: 'primary_luck', name: 'Lucky Escape' });
+      return 0;
+    }
     let rest = amount;
     let absorbed = 0;
     let pendingBreak = false;
@@ -2227,13 +2276,6 @@ export class Battle {
     absorbed += b;
     this.drainHooks(target, false, b, hooked);
     if (hooked.length > 0) this.trimShieldHooks(target);
-    // Luck-primary: ölümcül vuruşta şansla 1 canla kurtulur (savaş başına bir kez, seed'li RNG)
-    let luckySaved = false;
-    if (rest >= target.hp && (target.stats.surviveChance ?? 0) > 0 && !this.luckySaved.has(target.uid) && this.rng.next() < target.stats.surviveChance) {
-      this.luckySaved.add(target.uid);
-      rest = target.hp - 1;
-      luckySaved = true;
-    }
     target.hp = Math.max(0, target.hp - rest);
     const taunt = target.statuses.find((s) => s.kind === 'taunt' && s.breakAt !== undefined);
     if (taunt && rest > 0) {
@@ -2260,7 +2302,6 @@ export class Battle {
       ...(meta.ground ? { ground: meta.ground, groundId: meta.groundId } : {}),
       ...(meta.status ? { status: meta.status } : {}),
     });
-    if (luckySaved) emit({ type: 'passive', actor: target.uid, passive: 'primary_luck', name: 'Lucky Escape' });
     if (pendingBreak) emit({ type: 'statusEnd', target: target.uid, status: 'taunt', broken: true });
     // Kalkan kancaları yalnızca DOĞRUDAN bir saldırganın skill vuruşunda (yer etkisi tiki / kendine hasar tetiklemez)
     if (meta.origin === 'skill' && actor.side !== target.side) for (const { hook, part } of hooked) this.absorbTrigger(hook, target, actor, part, emit);

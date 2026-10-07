@@ -288,23 +288,21 @@ describe('YZ Move Tile: kırılgan birimi geri çek, yakın dövüşçüyü öne
     expect(choice?.skillId === 'move_tile' && b.rowOf(choice.slot!) > b.rowOf(0)).toBe(false);
   });
 
-  it('ölü dostun yuvasını ASLA seçmez (yasak; diriltme için ayrılır)', () => {
+  it('madde 258: ölü dostun ceset hücresi de Move adayıdır; seçilen hücre her zaman geçerli', () => {
     const b = until(mk({ 0: 'archer', 3: 'paladin', 6: 'warrior' }, { 0: 'warrior' }), 'party-0');
     b.get('enemy-0')!.cooldowns = { charge: 3 };
-    b.debugKill('party-2', false); // arka sıradaki Warrior düştü: yuvası (6) ölü dost yuvası
+    b.debugKill('party-2', false); // arka sıradaki Warrior düştü: yuvası (6) ceset hücresi
     b.get('party-0')!.hp = Math.round(b.get('party-0')!.maxHp * 0.5);
+    expect(b.freeTiles('party-0')).toContain(6);
     const choice = pick(b, 'party-0');
     expect(choice).toMatchObject({ skillId: 'move_tile' });
-    expect(b.fallenSlots('party')).toEqual([6]);
-    expect(choice!.slot).not.toBe(6);
     expect(b.canUseGlobal('party-0', 'move_tile', choice!.slot).ok).toBe(true);
-    // tüm tam arka yuvalar yalnızca ölü dost yuvasıysa: Move seçilmez
     for (let seed = 1; seed <= 40; seed++) {
       const r = new Battle(content.battleSetup('random-battle', seed, 'turns'));
       for (let i = 0; i < 400 && !r.winner; i++) {
         const u = r.currentUid!;
         const c = pick(r, u);
-        if (c?.skillId === 'move_tile') expect(r.fallenSlots(r.get(u)!.side)).not.toContain(c.slot);
+        if (c?.skillId === 'move_tile') expect(r.canUseGlobal(u, 'move_tile', c.slot).ok).toBe(true);
         r.applyChoice(u, c);
       }
     }

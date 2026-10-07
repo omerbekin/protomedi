@@ -232,7 +232,7 @@ Parantez içi: Luck 14 ile ham değer.
 
 - Açıklama: *"Brand one enemy with the seal of doom: 100% Luck dark magic damage, adds 1 Bad Omen (2 on a critical hit), then Doom strikes at once with every Omen on it, 50% stronger."*
 - MP 14, cooldown 4, **initialCooldown 2** (üst sınır 3'e uyar): ilk iki turda alamet biriktirilir, üçüncü turda ultimate hazır → doğal ritim.
-- AI ipucu: `anyOf: [{ kill: true }, { minTargetStacks: { status: "omen", count: 2 } }]`, `reserveMp: 2`.
+- AI ipucu: `reserveMp: 2` (madde 258: anyOf koşulu silindi; seçim terazide, Hard'da 2 Omen'siz Doom Mark'a `patience` bedeli).
 - Neden 4. yuva: oyunun tüm mekaniğini (birikim → patlatma) tek tuşta zirveye çıkarır; "ultimate hissi" büyük mühür + ekranı karartan Doom anı. Erken basmak (0 Omen) cezalı değil ama verimsiz (26,6 ≈ iki Evil Eye): oyuncuya "bekle" öğretir.
 - Risk: 2 Omen'li kırılgan hedefe (Mage/Archer 38-56 can) tek atış öldürme. Kasıtlı; ama Withering Curse'ün kritikleri 2 Omen'i kolay ürettiği için sık olursa güç 1,0 → 0,8 düşürülür.
 

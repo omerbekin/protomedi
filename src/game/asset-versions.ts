@@ -68,6 +68,50 @@ export function ownerOfSkill(skillId: string | null | undefined): string | null 
   return null;
 }
 
+const logoMemo = new Map<string, string | null>();
+/**
+ * Class logosunun (ya da çağrı logosunun) sürüm sahibi: adı yalnızca TEK bir sahibin logosuysa o sahip, yoksa null. Sahipsiz çağrılan
+ * DOM ikonları (debug düğmeleri, takım listeleri) logoyu bu sayede seçili sürümle çizer.
+ */
+export function ownerOfLogo(icon: string | null | undefined): string | null {
+  if (!icon) return null;
+  if (logoMemo.size === 0) {
+    const seen = new Map<string, Set<string>>();
+    for (const u of [...Object.values(content.classes), ...Object.values(content.summons)]) {
+      const owner = ownerOfUnit(u.id);
+      if (owner) seen.set(u.logo, new Set([...(seen.get(u.logo) ?? []), owner]));
+    }
+    for (const [name, owners] of seen) logoMemo.set(name, owners.size === 1 ? [...owners][0]! : null);
+  }
+  return logoMemo.get(icon) ?? null;
+}
+
+const statusOwnerMemo = new Map<string, string | null>();
+/**
+ * Durumun "sahibi" (rozet sürümü için): durumu yalnızca TEK bir class'ın (ve çağrılarının) skill'leri uyguluyorsa o class (ör. Omen, Wither,
+ * Jinxed -> Hexer; Dark Bond -> Undead); birden çok class'ın uyguladığı ortak durumlarda (Stun, Slow...) ve hiç uygulanmayanda null (= Shared).
+ */
+export function statusOwner(statusId: string): string | null {
+  if (statusOwnerMemo.size === 0) {
+    const users = new Map<string, Set<string>>();
+    for (const s of Object.values(content.skills)) {
+      const owner = ownerOfSkill(s.id);
+      if (!owner) continue;
+      for (const ef of s.effects) {
+        const e = ef as { type: string; status?: string; options?: Array<{ status: string }> };
+        const ids =
+          e.type === 'status' || e.type === 'dot' || e.type === 'detonate' ? [e.status] : e.type === 'omen' ? [e.status ?? 'omen'] : e.type === 'bond' ? [e.status ?? 'dark_bond'] : e.type === 'randomStatus' ? (e.options ?? []).map((o) => o.status) : [];
+        for (const id of ids) if (id) users.set(id, new Set([...(users.get(id) ?? []), owner]));
+      }
+    }
+    for (const id of Object.keys(content.statuses)) {
+      const set = users.get(id);
+      statusOwnerMemo.set(id, set && set.size === 1 ? [...set][0]! : null);
+    }
+  }
+  return statusOwnerMemo.get(statusId) ?? null;
+}
+
 /** Bir sahibin (class ya da shared) sürümlenen öğeleri. vfx anahtarı = skill'in `vfx` adı (vfx'siz skill'de skill id'si). */
 export interface OwnedArt {
   icons: string[];

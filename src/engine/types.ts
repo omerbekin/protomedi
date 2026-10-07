@@ -462,63 +462,15 @@ export type SkillMotion = 'melee' | 'ranged' | 'cast' | 'sky' | 'ground' | 'whip
 /** 'sky' hareketinde yukarıdan düşen şeyin türü. */
 export type SkyFx = 'arrows' | 'shards' | 'meteor' | 'void' | 'light' | 'fist';
 
-/** Yapay zeka bağlam koşulu: içindeki tüm alanlar birlikte sağlanmalı (src/engine/ai.ts değerlendirir). */
-export interface SkillAiCond {
-  /** Seçenek en az bir düşmanı öldürüyor. */
-  kill?: boolean;
-  /** Seçenek en az bu kadar düşmana vuruyor (alan/rastgele skill'lerde hedef havuzu). */
-  minTargets?: number;
-  /** Sahada en az bu kadar canlı düşman var. */
-  minLivingEnemies?: number;
-  /** Sahada (kullanıcı dahil) en az bu kadar canlı dost var. */
-  minLivingAllies?: number;
-  /** Kullanıcının can oranı (şimdi) en az bu. */
-  minSelfHpRatio?: number;
-  /** Kullanıcının can oranı, skill'in can bedeli/kendine hasarı ödendikten SONRA en az bu. */
-  minSelfHpRatioAfter?: number;
-  /** Kullanıcının MP oranı (bedel ödenmeden) en az bu. */
-  minSelfMpRatio?: number;
-  /** Kullanıcının Rage'i (bedel ödenmeden) en az bu kadar (Rage'siz birimde sağlanmaz). */
-  minSelfRage?: number;
-  /** Savaşta oynanan toplam tur (tüm birimler) en az bu. */
-  minBattleTurns?: number;
-  /** Canı `woundedBelowRatio` altındaki en az bu kadar dost var. */
-  minWoundedAllies?: number;
-  woundedBelowRatio?: number;
-  /** Ana hedefin fiziksel zırh azaltması (0-1) en az bu (ignoreDefense'in değer kattığı zırhlı hedef). */
-  minTargetArmorReduction?: number;
-  /** Ana hedefin (can + kalkan) / skill'in ortalama hasarı en az bu (yüksek canlı hedef). */
-  minTargetHpToDamage?: number;
-  /** Ana hedefe eksik mana ekinin ham hasar içindeki payı en az bu (bonusPerMissingMana). */
-  minMissingManaShare?: number;
-  /** Seçenek (area_any) en az bu kadar DOSTU kapsıyor (kendi tahtasına atılan alan). */
-  minAllyTargets?: number;
-  /** Ana hedefe beklenen hasar (isabet dahil) / hedefin maks canı en az bu (tek vuruşta canının büyük kısmı gider). */
-  minTargetMaxHpShare?: number;
-  /** Ana hedef, normal yakın dövüşün erişemediği bir sırada (ön sıranın gerisinde, korunan arka saf). */
-  targetBehindFront?: boolean;
-  /** Dost hedefli skill: hedef dostun can oranı en çok bu (tehdit altındaki / yaralı dost). */
-  maxTargetHpRatio?: number;
-  /** Düşman takımında büyü hasarı skill'i olan ve MP'si en az bu kadar olan canlı bir birim var. */
-  minFoeMagicMp?: number;
-  /** Düşman takımında silinebilir (dispellable) bir buff taşıyan en az bu kadar canlı birim var. */
-  minFoeBuffs?: number;
-  /** Ana hedefin (hamleden ÖNCE) `status` yığını en az `count` (Doom Mark: Omen 2+). */
-  minTargetStacks?: { status: StatusKind; count: number };
-  /** Seçeneğin durum koruma değeri (Option.mitigation: isabet/kritik cezası ya da kaçınma bonusuyla önlenen beklenen hasar) en az bu (Jinx). */
-  minStatusMitigation?: number;
-}
-
-/** Skill'in YZ bağlamı: `requires` hepsi, `anyOf` (doluysa) en az biri sağlanmalı; sağlanmazsa skill yalnızca öldürücü vuruşta seçilebilir. */
+/**
+ * Skill'in YZ ipucu (madde 258: eski requires/anyOf bağlam koşulları ve self-buff payları SİLİNDİ; seçim tek değer terazisinde, src/engine/ai-value.ts).
+ * Kalan tek iş MP ayırma: güçlü skill yakında hazır olacaksa onu yetersiz bırakacak saldırılar, ancak ayrılan skill'in değeri daha büyükse ertelenir.
+ */
 export interface SkillAiHint {
-  requires?: SkillAiCond;
-  anyOf?: SkillAiCond[];
-  /** Saf self-buff skill'inde: düşman takımının kullanıcıya vurma payı (0-1), savunma değeri hesabında. Varsayılan 0,4. */
-  incomingShare?: number;
-  /** Saf self-buff skill'inde: buff turu yerine yapılabilecek en iyi saldırının değerinin, buff'ın bedeline eklenecek payı (0-1). Varsayılan 0,5. */
-  opportunityShare?: number;
-  /** N: bu skill en geç N tur sonra hazır olacaksa ve MP'si yetebilecekse, ona yetecek MP'yi tüketecek saldırı skill'leri ertelenir (MP ayırma; yoksa ayırma yok). */
+  /** N: bu skill en geç N tur sonra hazır olacaksa ve MP'si yetebilecekse, ona yetecek MP'yi tüketecek (ve değeri ondan düşük) saldırılar ertelenir. */
   reserveMp?: number;
+  /** MP ayırmada (ve Rest/Skip hesabında) skill için gereken en az MP oranı (All In: MP bahsi büyük olsun diye maks MP'nin bu payı). Yoksa yalnızca bedel. */
+  reserveMinMpRatio?: number;
 }
 
 /** data/skills.json girdisi. */
@@ -542,7 +494,7 @@ export interface SkillDef {
    * Üst sınır: formulas.json > cooldown.maxInitial (3).
    */
   initialCooldown?: number;
-  /** Yapay zeka bağlam ipucu: skill ne zaman EFEKTİF kullanılır (bkz. SkillAiHint). Yoksa yalnızca beklenen değere göre seçilir. */
+  /** Yapay zeka ipucu: yalnızca MP ayırma (bkz. SkillAiHint). Seçim her zaman beklenen değere göredir. */
   ai?: SkillAiHint;
   /** true (target 'single_ally'): kullanıcı KENDİNİ hedefleyemez (Guard: 'Cannot guard yourself'). */
   excludeSelf?: boolean;
@@ -943,6 +895,11 @@ type BattleEventBody =
       groundId?: string;
       /** Durum kaynaklı hasar: 'wither' (DoT tiki, origin 'status') ya da 'omen' (Doom patlaması; süre bitiminde origin 'status', skill içinde origin 'skill'). */
       status?: StatusKind;
+      /**
+       * Madde 258: Lucky Escape (Luck primary) bu ölümcül vuruşu TAMAMEN yok saydı: amount 0, absorbed 0, can ve kalkan değişmedi;
+       * ardından 'passive' (Lucky Escape) olayı gelir. Vuruşa bağlı yan etkiler (lifesteal, Soul Drain, Rage, kalkan kancaları, taunt kırılması, Mana Overflow) işlemez.
+       */
+      luckyEscape?: true;
     }
   /**
    * İska (tek zardan ayrıştırılır): 'dodge' = hedefin KAÇINMASI yüzünden vurulamadı (UI: hedefin üstünde "Dodge");

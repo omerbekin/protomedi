@@ -138,10 +138,10 @@ describe('explainChoice: gerekçe', () => {
     }
   });
 
-  it('bağlam ipucu (ai hint) yüzünden elenen aday, hangi koşulun sağlanmadığını söyler', () => {
+  it('MP ayırma yüzünden elenen aday (varsa) nedenini söyler (madde 258: bağlam ipucu koşulları yok)', () => {
     const blocked = all.flatMap((e) => e.candidates).filter((c) => c.verdict === 'blocked');
-    expect(blocked.length).toBeGreaterThan(0);
-    expect(blocked.some((c) => /ai hint|MP kept in reserve/.test(c.note ?? ''))).toBe(true);
+    for (const c of blocked) expect(c.note ?? '').toMatch(/MP kept in reserve/);
+    expect(all.flatMap((e) => e.candidates).every((c) => !/ai hint/.test(c.note ?? ''))).toBe(true);
   });
 });
 

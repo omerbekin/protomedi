@@ -5,7 +5,7 @@
  * (registerPanel: birim araçları, skill cast, seed, test takımı...) bulunur. Her yeni ekran/özellik buraya bir giriş koyar ki arayüzden test edilebilsin.
  */
 import { DEFAULT_ACTION_ICON, DOCK_GROUPS, DOCK_HINT, DOCK_KEYS, QUICK_TAB, SECTION_ICONS, TAB_ICONS, dockBadge, dockTooltip, labelBadge, labelBase, type DockBadge, type DockGroup } from './debug-layout';
-import { iconUrl } from './dom-icons';
+import { bindIcon } from './dom-icons';
 
 /** Sekme çubuğundaki kısa etiketler (dar ızgara hücresine sığsın; tam ad düğmenin ipucunda). */
 const TAB_LABELS: Record<string, string> = { 'Speed & View': 'View', 'Test Mode': 'Test', Characters: 'Chars', Versions: 'Ver' };
@@ -69,7 +69,7 @@ export interface ButtonOpts {
 function iconImg(name: string, cls: string, accent?: string): HTMLImageElement {
   const img = document.createElement('img');
   img.className = cls;
-  img.src = iconUrl(name, accent);
+  bindIcon(img, name, accent ?? '#ffffff'); // class logoları seçili sürümle (debug > Versions) ve canlı
   img.alt = '';
   return img;
 }

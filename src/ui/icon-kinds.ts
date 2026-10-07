@@ -28,6 +28,8 @@ export const ICON_KINDS = [
   'wail',
   'raise',
   'soul',
+  /** Undead - Dark Bond (skill + dark_bond durum rozeti): iki kalp arasında kemik zincir. */
+  'darkbond',
   'bone',
   'boneslash',
   'arrow',

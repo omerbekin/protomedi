@@ -319,6 +319,8 @@ export function buildIcons(): IconEntry[] {
     const owner = skillOwner(s.id);
     add(s.icon, 'skill', `${s.name} (${owner.name})`, s.fx || colorOf(owner));
   }
+  // Global eylemler (Rest / Skip Turn / Move: data/global-skills.json) savaşta düğme olarak çizilir: ikonları da kullanılıyor
+  for (const g of Object.values(content.globalSkills)) if (g.icon) add(g.icon, 'skill', `${g.name} (global action)`, UI_COLOR);
   for (const def of [...Object.values(content.classes), ...Object.values(content.summons)]) {
     add(def.logo, 'logo', `${def.name} logo`, def.color);
     if (def.passive) add(def.passive.icon, 'passive', `${def.name}: ${def.passive.name}`, def.color);

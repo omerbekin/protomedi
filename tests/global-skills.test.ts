@@ -342,32 +342,34 @@ describe('Move Tile', () => {
     expect(u.canUseGlobal(skeleton.uid, 'move_tile')).toEqual({ ok: false, reason: 'Summoned units cannot use this' });
   });
 
-  it('ölü dostun yuvasına geçiş YASAK: freeTiles içermez, fallenSlots (UI için) ayrı verir; hata mesajı; diriltme korunur', () => {
+  it('madde 258: Move ölü dostun ceset hücresine GİREBİLİR; ceset orada kalır, dost diriltilebilir (boş bir hücreye)', () => {
     const b = mk({ 0: 'warrior', 1: 'paladin', 3: 'archer' }, { 0: 'mage' }, 'test');
     b.debugKill('party-0', false);
-    expect(b.fallenSlots('party')).toEqual([0]);
-    expect(b.freeTiles('party-2')).not.toContain(0);
-    expect(b.freeTiles('party-2')).toContain(2); // gerçekten boş hücreler duruyor
-    expect(b.freeSlots('party')).toContain(0); // çağrı yerleşimi kuralı değişmedi
-    const reason = 'That cell is reserved for a fallen ally';
-    expect(b.canUseGlobal('party-2', 'move_tile', 0)).toEqual({ ok: false, reason });
-    expect(b.useGlobal('party-2', 'move_tile', 0)).toEqual({ ok: false, reason });
-    expect(b.act('party-2', { kind: 'global', id: 'move_tile', slot: 0 })).toEqual({ ok: false, reason });
-    expect(b.useSkill('party-2', 'move_tile', tileUid(0))).toEqual({ ok: false, reason });
-    expect(b.get('party-2')!.slot).toBe(3);
-    expect(b.listActions('party-2').find((a) => a.id === 'move_tile')!.slots).not.toContain(0);
+    expect(b.fallenSlots('party')).toEqual([0]); // bilgi amaçlı
+    expect(b.freeTiles('party-2')).toContain(0);
+    expect(b.freeTiles('party-2')).toEqual(b.freeSlots('party'));
+    expect(b.canUseGlobal('party-2', 'move_tile', 0)).toEqual({ ok: true });
+    expect(b.listActions('party-2').find((a) => a.id === 'move_tile')!.slots).toContain(0);
+    expect(b.useGlobal('party-2', 'move_tile', 0).ok).toBe(true);
+    expect(b.get('party-2')!.slot).toBe(0);
+    expect(b.corpseOf('party-0')?.state).toBe('revivable'); // ceset yerinde
     expect(b.validTargets('party-1', 'resurrection').map((c) => c.uid)).toEqual(['party-0']); // diriltilebilir kalır
+    expect(b.reviveSlots('party-1', 'resurrection')).not.toContain(0); // dolu hücre değil, boş hücreye dirilir
+    const ev = b.useSkill('party-1', 'resurrection', 'party-0');
+    expect(ev.ok).toBe(true);
+    expect(b.get('party-0')!.hp).toBeGreaterThan(0);
+    expect(b.get('party-0')!.slot).not.toBe(0);
   });
 
-  it('tüm boş yuvalar ölü dost yuvasıysa Move "No empty cell" verir', () => {
-    const b = mk({ 0: 'warrior', 1: 'paladin' }, { 0: 'mage' }, 'test');
+  it('hiç boş hücre yoksa Move "No empty cell" verir; ölü dost hücreleri boş sayılır', () => {
     const all: Record<number, string> = {};
     for (let i = 0; i < 12; i++) all[i] = i === 0 ? 'warrior' : i === 1 ? 'paladin' : 'archer';
+    const full = mk(all, { 0: 'mage' }, 'test');
+    expect(full.freeTiles('party-0')).toEqual([]);
+    expect(full.canUseGlobal('party-0', 'move_tile')).toEqual({ ok: false, reason: 'No empty cell' });
     const f = mk(all, { 0: 'mage' }, 'test');
     for (let i = 2; i < 12; i++) f.debugKill(`party-${i}`, false);
-    expect(f.freeTiles('party-0')).toEqual([]);
-    expect(f.canUseGlobal('party-0', 'move_tile')).toEqual({ ok: false, reason: 'No empty cell' });
-    expect(b.freeTiles('party-0').length).toBeGreaterThan(0);
+    expect(f.freeTiles('party-0')).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   });
 
   it('yakın dövüş ön sıra kuralı yeni yuvaya göre: geri çekilen yakın dövüşçü melee yapamaz, öne dönünce yapar', () => {

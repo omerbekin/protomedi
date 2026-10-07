@@ -42,7 +42,7 @@ import { characterTexture, preloadAssets } from '../assets';
 import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
 import { H, W, classCard, crown, hpBar, openModal, parchmentPlate, type Modal } from '../campaign-ui';
 import { MENU_SCENE, current, markJourneyStart, save, session, setState, startCampaignBattle, storage } from '../campaign-session';
-import { classAvatar, ensureGlow, goldText, makeMenuButton, serif } from '../menu-ui';
+import { classAvatar, classLogoBadge, ensureGlow, goldText, makeMenuButton, serif } from '../menu-ui';
 import { GOLD, SERIF, makePanel } from '../ui-frame';
 import { sortByPrimary } from '../class-order';
 
@@ -619,6 +619,7 @@ export class CampaignMapScene extends Phaser.Scene {
       const def = content.classes[h.class]!;
       const x = x0 + i * cw;
       L.add(classAvatar(this, def, x, 62, 62));
+      L.add(classLogoBadge(this, def, x - 26, 84, 12)); // class logosu (seçili sanat sürümüyle)
       L.add(hpBar(this, x - 34, 98, 68, 10, h.hpRatio));
       L.add(serif(this, x, 122, session.showHp ? `${Math.round(h.hpRatio * 100)}%` : def.name, 13, '#d8c49a', { bold: false, stroke: 2 }).setOrigin(0.5));
       if (lead?.id === h.id) L.add(crown(this, x + 26, 34, 0.75));
@@ -1056,6 +1057,7 @@ export class CampaignMapScene extends Phaser.Scene {
       const def = content.classes[h.class]!;
       const x = W / 2 + (i - (team.length - 1) / 2) * 120;
       this.modal!.root.add(classAvatar(this, def, x, this.modal!.area.y + 70, 96));
+      this.modal!.root.add(classLogoBadge(this, def, x - 36, this.modal!.area.y + 106, 14));
     });
   }
 
@@ -1152,6 +1154,7 @@ export class CampaignMapScene extends Phaser.Scene {
           const h = id ? heroById(s, id) : undefined;
           if (h) {
             layer.add(classAvatar(this, content.classes[h.class]!, x + cell / 2, y + cell / 2 - 8, 76));
+            layer.add(classLogoBadge(this, content.classes[h.class]!, x + 24, y + cell - 44, 14));
             layer.add(hpBar(this, x + 16, y + cell - 24, cell - 32, 8, h.hpRatio));
             if (h.leader) layer.add(crown(this, x + cell - 24, y + 22, 0.7));
           }

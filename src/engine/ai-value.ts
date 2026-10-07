@@ -38,6 +38,41 @@ export interface AiValueConfig {
   cooldownCostShare: number;
   /** Kontrol (durum) terimlerinin çarpanı. */
   controlWeight: number;
+  /**
+   * Madde 258: "savaş belli" sezgiseli (ValueContext.outcome) güvenlik payı: kazanan taraf rakibini ufuk içinde VE rakibin onu bitireceği sürenin en çok
+   * bu payı kadar zamanda bitirmeli (0,5: en az iki kat hızlı). Savaş belliyse diriltme değeri 0.
+   */
+  decidedMargin: number;
+  /** MP ayırma (reserveMp): ayrılan skill'in beklenen değeri = şu anki en iyi puanı x bu pay (bekleme iskontosu); değeri bunu geçen saldırı ertelenmez. */
+  reserveValueShare: number;
+  /** Mana yakmanın "engellenen hamle" değerinde ufuk çarpanı (MP kaybı yenilenene kadar sürer: birimin ufuktaki turu x bu). */
+  manaHorizonMult: number;
+}
+
+/**
+ * Zorluk seviyesi kuralları (madde 258, Faz 5; data/ai.json > difficulty.<seviye>; ai-priorities.md 6.7). Medium = tam terazi (boş kural). Hepsi belirleyici:
+ * Easy'nin "hatası" savaş seed'i + tur + birimden türeyen sabit sayıdır (motorun RNG'sine dokunmaz).
+ */
+export interface AiDifficultyConfig {
+  /** Değerlendirme ufku (kendi turu); yoksa value.horizon. */
+  horizon?: number;
+  /** Terazi ayarlarının bu seviyedeki üzerine yazılanları (Easy: saveWeight 0 = kurtarma yok, controlWeight 0 = kontrol değeri yok). */
+  value?: Partial<AiValueConfig>;
+  /** Öldürme (ve öldürmeyle kurtarma) terimi yalnızca öldürme ihtimali bu ve üstündeyse (Easy: yalnızca kesin öldürme). */
+  killMinChance?: number;
+  /** Seçim katmanı: puanı pozitif en iyi `pickTop` aday (puanı en iyinin en az `pickWithin` payı olanlar) arasından `pickWeights` ağırlıklı belirleyici seçim. */
+  pickTop?: number;
+  pickWeights?: number[];
+  pickWithin?: number;
+  /** Global eylemler: 'all' (terazi) ya da 'restWhenIdle' (yalnızca yapacak hamle yokken Rest; Move/Skip yok). */
+  globals?: 'all' | 'restWhenIdle';
+  /** Takım odak ateşi: aynı düşmana yönelmesi tahmin edilen her dost için baskı (pressure) terimine bu pay eklenir. */
+  focusFire?: number;
+  /** Fazla vurmama: zaten ölecek hedefe (tur başı DoT/zemin tiki ya da ondan önce oynayacak dostlarımızın tahmini vuruşları) hasar/öldürme/baskı değerinin kalan payı. */
+  overkillShare?: number;
+  /** Uygun anı bekleme: yığın patlatan (detonate) skill'i, öldürmeden ve yığın dolmaya 1 kala değilken kullanmanın değer payı. */
+  patience?: number;
+  note?: string;
 }
 
 /** Varsayılan (ai.json'da value bloğu yoksa; testlerde de aynısı ai.json'da durur). */
@@ -53,6 +88,9 @@ export const DEFAULT_VALUE: AiValueConfig = {
   protectShare: 0.5,
   cooldownCostShare: 0.03,
   controlWeight: 1,
+  decidedMargin: 0.5,
+  reserveValueShare: 0.85,
+  manaHorizonMult: 2,
 };
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -106,12 +144,14 @@ export class ValueContext {
   readonly roundMagic = new Map<string, number>();
   readonly before = new Map<string, number>();
   private readonly ticks: number;
+  /** Zorluk kuralları (chooseAction doldurur; Medium = boş). */
+  diff: AiDifficultyConfig = {};
 
   constructor(
     readonly battle: Battle,
     readonly actor: Combatant,
     readonly vc: AiValueConfig,
-    focusOf: (c: Combatant) => 'lowest_hp' | 'lowest_ratio',
+    readonly focusOf: (c: Combatant) => 'lowest_hp' | 'lowest_ratio',
   ) {
     const thr = battle.formulas.turn.threshold;
     this.ticks = (vc.horizon * thr) / Math.max(1, battle.speedOf(actor));
@@ -179,9 +219,128 @@ export class ValueContext {
     return t > 0 && t >= a.hp + a.shield + a.magicShield;
   }
 
-  /** Kurtarma değeri: dostun kalan katkısı + canı (x saveWeight). */
+  /** Kurtarma değeri: dostun kalan katkısı + canı (x saveWeight), dostun ölüm ihtimaliyle (Lucky Escape hakkı varsa x (1 - şans); madde 258). */
   save(a: Combatant): number {
-    return this.vc.saveWeight * (this.contribution(a) + a.hp);
+    return this.vc.saveWeight * (this.contribution(a) + a.hp) * (1 - this.battle.luckyEscapeChance(a.uid));
+  }
+
+  /**
+   * Savaşın sonucu ufuk içinde belli mi (madde 258, Ömer: "diriltme savaşın galibini değiştirmeyecekse değeri 0")? Basit sezgisel: iki tarafın
+   * "bitirme süresi" (tur):
+   *  - hız = her canlı birimin tahmini hamlesi (düşman tahminiyle aynı model: odak kuralı + en iyi beklenen vuruş, isabet dahil) x ufukta oynayacağı
+   *    tur / ufuk; can = canlı birimlerin can + kalkan toplamı. tUs = düşmanın canı / bizim hız, tThem = bizim can / düşmanın hızı.
+   *  - 'win': tUs <= ufuk VE tUs <= decidedMargin x tThem (kalan düşmanlar ufukta ölüyor ve biz onları, onların bizi bitireceğinden en az 1/margin kat
+   *    hızlı bitiriyoruz). Ek birim HESABA KATILMAZ (dirilenle ancak kesinleşiyorsa diriltme sonucu değiştiriyordur).
+   *  - 'loss': aynısı ters yönde, `extra` (ör. dirilecek birimin ufuk katkısı ve canı) BİZE EKLENMİŞKEN de geçerliyse (dirilen bunu değiştirmiyor).
+   *  - aksi halde null (savaş açık). Şifa, ölümle azalan hız ve sıra ayrıntısı yok sayılır (kaba ama belirleyici; güvenlik payı decidedMargin).
+   */
+  outcome(extra?: { dmg: number; hp: number }): 'win' | 'loss' | null {
+    const m = this.vc.decidedMargin;
+    const H = Math.max(1, this.vc.horizon);
+    const pool = (side: Combatant['side']) => sum(this.battle.living(side).map((c) => c.hp + c.shield + c.magicShield));
+    const ourHp = pool(this.actor.side);
+    const foeHp = pool(foeSideOf(this.actor));
+    if (foeHp <= 0) return 'win';
+    // Tur başına (bir kendi turumuz kadar zamanda) beklenen hasar: her birimin tahmini vuruşu x ufukta oynayacağı tur / ufuk
+    const foeRate = sum(this.intents.map((i) => i.hit * this.turnsWithin(this.battle.get(i.foe)!))) / H;
+    const ourRate = sum(this.ownIntents().map((i) => i.hit * this.turnsWithin(this.battle.get(i.foe)!))) / H;
+    // Bitirme süreleri (tur): biz onları / onlar bizi
+    const tUs = ourRate > 0 ? foeHp / ourRate : Infinity;
+    const tThem = foeRate > 0 ? ourHp / foeRate : Infinity;
+    // Kazanç ek birim OLMADAN da kesinse 'win' (ek birim kazancı kesinleştiriyorsa sonucu değiştiriyordur: null)
+    if (ourHp > 0 && tUs <= H && tUs <= m * tThem) return 'win';
+    // Kayıp ek birimle BİRLİKTE de kesinse 'loss'
+    const ourHpX = ourHp + (extra?.hp ?? 0);
+    const ourRateX = ourRate + (extra?.dmg ?? 0) / H;
+    const tUsX = ourRateX > 0 ? foeHp / ourRateX : Infinity;
+    const tThemX = foeRate > 0 ? ourHpX / foeRate : Infinity;
+    if (ourHpX <= 0 || (tThemX <= H && tThemX <= m * tUsX)) return 'loss';
+    return null;
+  }
+
+  /**
+   * Mana yakmanın "engellenen hamle" değeri (madde 258, Faz 2; Drain Field, Mana Steal, Spell Ward kancası): düşman `f`'nin `amount` MP'si giderse ufukta
+   * kaç MP'li skill kullanımı kaybeder x o skill'in bedelsiz (ya da MP'siz) en iyi hamlesine göre fazladan değeri. Ufuktaki MP havuzu = MP + yenilenme x tur;
+   * kullanım sayısı turla ve cooldown'la sınırlı; sürekli (kesirli) sayım. MP'li skill'leri arasında en çok değer kaybettireni alınır. MP'siz birimde 0.
+   */
+  manaDenial(f: Combatant, amount: number): number {
+    if (amount <= 0 || f.hp <= 0 || f.maxMp <= 0) return 0;
+    // Skill'in tek kullanımlık değeri: ham değer + zemin etkisi (güç x tur x 0,7), alan skill'inde x vurabileceği hedef (en çok 3; karşı tarafın canlı sayısı)
+    const opp = Math.min(3, this.battle.living(f.side === 'party' ? 'enemy' : 'party').length);
+    const raw = (sk: SkillDef) => {
+      let v = skillRawValue(this.battle, f.stats, sk);
+      for (const e of sk.effects) if (e.type === 'ground') v += attributePower(f.stats, e.scale, this.battle.formulas) * e.power * e.turns * 0.7;
+      return v * (this.battle.isAreaSkill(sk.id) && ATTACK_TARGETS.includes(sk.target) ? Math.max(1, opp) : 1);
+    };
+    const skills = f.skills.map((id) => this.battle.skill(id)).filter((sk): sk is SkillDef => !!sk);
+    const free = Math.max(0, ...skills.filter((sk) => sk.cost.resource !== 'mp' || sk.cost.amount <= 0).map(raw));
+    // MP etkisi kalıcıdır (yenilenene kadar): mana ufku = birimin ufuktaki turu x manaHorizonMult (tam tur)
+    const T = Math.max(1, Math.round(this.turnsWithin(f) * this.vc.manaHorizonMult));
+    const pool = f.mp + (this.battle.mode === 'turns' ? f.stats.mpRegen * T : 0);
+    // MP'li her skill: bedelsiz en iyi hamleye göre fazladan değeri, en çok kullanım (tur ve cooldown); en iyi kullanım planı tam sayılı arama ile
+    // (tur ve MP iki kısıt; skill başına birkaç kullanım: küçük arama). Yakılan MP'nin değeri = planın değer kaybı.
+    const uses = skills
+      .filter((sk) => sk.cost.resource === 'mp' && sk.cost.amount > 0)
+      .map((sk) => {
+        const cd = this.battle.mode === 'turns' ? (sk.cooldown ?? 0) : 0;
+        return { cost: sk.cost.amount, delta: (raw(sk) - free) * this.vc.contributionShare, cap: cd > 0 ? Math.ceil(T / (cd + 1)) : T };
+      })
+      .filter((u) => u.delta > 0);
+    const worth = (mp: number): number => {
+      let best = 0;
+      const rec = (i: number, turns: number, left: number, v: number) => {
+        if (i === uses.length) {
+          best = Math.max(best, v);
+          return;
+        }
+        const u = uses[i]!;
+        const max = Math.floor(Math.min(u.cap, turns, left / u.cost) + 1e-9);
+        for (let n = 0; n <= max; n++) rec(i + 1, turns - n, left - n * u.cost, v + n * u.delta);
+      };
+      rec(0, T, Math.max(0, mp), 0);
+      return best;
+    };
+    return Math.max(0, worth(pool) - worth(pool - amount));
+  }
+
+  private readonly dying = new Map<string, boolean>();
+  /**
+   * Hard "fazla vurmama": düşman `f` bizim müdahalemiz olmadan bir sonraki turunun başında ya da önce ölecek mi? Tur başı DoT (Wither) ve üstünde durduğu
+   * düşman zemin etkisi (zehir/yanma/holy fire) tikleri + (turns modunda) sıra çubuğunda ondan ÖNCE oynayacak dostlarımızın (bizden başka) ona yönelmesi
+   * tahmin edilen vuruşları, canını + kalkanını geçiyorsa evet.
+   */
+  dyingAnyway(f: Combatant): boolean {
+    let v = this.dying.get(f.uid);
+    if (v !== undefined) return v;
+    const b = this.battle;
+    let dmg = 0;
+    for (const st of f.statuses) if (b.statusDef(st.kind)?.dot) dmg += b.dotTickDamage(st.kind, st.amount ?? 0, f);
+    for (const g of b.ground) if (g.board === f.board && g.slots.includes(f.slot) && g.sourceSide !== f.side) dmg += b.groundTickDamage(g.ground, g.amount, f);
+    if (b.mode === 'turns') {
+      const q = b.turnQueue();
+      const start = q[0] === this.actor.uid ? 1 : 0;
+      const at = q.indexOf(f.uid, start);
+      const first = new Set(q.slice(start, at < 0 ? q.length : at).filter((u) => u !== this.actor.uid));
+      for (const i of this.ownIntents()) if (first.has(i.foe) && i.focus.includes(f.uid)) dmg += i.hit / i.focus.length;
+    }
+    v = dmg >= f.hp + f.shield + f.magicShield;
+    this.dying.set(f.uid, v);
+    return v;
+  }
+
+  /** Hard odak ateşi: `f`'ye yönelmesi tahmin edilen dostlarımızın (bizden başka) sayısı (eşitlikte bölünmüş pay). */
+  alliesOn(f: Combatant): number {
+    return sum(this.ownIntents().filter((i) => i.foe !== this.actor.uid && i.focus.includes(f.uid)).map((i) => 1 / i.focus.length));
+  }
+
+  private own?: FoeIntent[];
+  /** Bizim tarafın tahmini hamleleri (predictFoes'un ayna kullanımı: düşman gözünden "düşmanları" biziz). */
+  ownIntents(): FoeIntent[] {
+    if (!this.own) {
+      const foe = this.battle.living(foeSideOf(this.actor))[0];
+      this.own = foe ? predictFoes(this.battle, foe, this.focusOf) : [];
+    }
+    return this.own;
   }
 
   /** `extra` ek can/kalkanla (ya da `less` kadar az tehditle) dost tehlikeden çıkıyor mu? */
