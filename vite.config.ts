@@ -22,7 +22,7 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 2000,
-    // Çok sayfalı derleme: oyun (index.html) + Asset Gallery (gallery.html -> dist/gallery.html)
+    // Çok sayfalı derleme: oyun (index.html) + gömülü animasyon sahnesi ve yönlendirme kabuğu (gallery.html -> dist/gallery.html; wiki iframe'i ?embed=1 ile yükler)
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),

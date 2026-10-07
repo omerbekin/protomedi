@@ -76,9 +76,9 @@ describe('şekil hücre kümeleri (saf)', () => {
     }
   });
 
-  it('plus = eski radius 1 ile aynı hücreler (şekil modeline taşındı)', () => {
-    const b = arena([['aoe_tester', 0]], WAR(0), { old_r1: { ...content.skills.shape_plus!, id: 'old_r1', area: { radius: 1 } } });
-    for (let s = 0; s < 12; s++) expect(shapeCells(area('plus'), s, 'enemy', fm)).toEqual(b.areaCells('old_r1', s));
+  it('plus = eski radius 1 ile aynı hücreler (eski kural burada referans olarak hesaplanır)', () => {
+    const oldR1 = (c: number) => Array.from({ length: 12 }, (_, i) => i).filter((i) => Math.abs(Math.floor(i / 3) - Math.floor(c / 3)) + Math.abs((i % 3) - (c % 3)) <= 1);
+    for (let s = 0; s < 12; s++) expect(shapeCells(area('plus'), s, 'enemy', fm)).toEqual(oldR1(s));
   });
 
   it('rect 2x3 (2 sıra x 3 şerit), düşman tarafı: anchor sol-alt; ekranda sol = ön sıra', () => {
@@ -145,7 +145,7 @@ describe('Geometer (aoe_tester) test karakteri', () => {
   it('testOnly: rastgele havuzda ve random-battle havuzunda yok; seçilebilir listede ve classes\'ta var', () => {
     expect(content.randomPool).not.toContain('aoe_tester');
     expect(content.battles['random-battle']!.random!.pool).not.toContain('aoe_tester');
-    expect(content.selectableClasses).toContain('aoe_tester');
+    expect(content.selectableClasses).not.toContain('aoe_tester'); // gizli (hidden): takım seçiminde görünmez; debug/galeri erişir
     expect(content.classes.aoe_tester).toBeDefined();
     for (let seed = 1; seed <= 60; seed++) {
       const t = content.rollTeams('random-battle', seed, { partySize: 12, enemySize: 12 });
@@ -162,7 +162,8 @@ describe('Geometer (aoe_tester) test karakteri', () => {
     expect(info('shape_plus').targetBadge).toBe('Cross');
     expect(info('shape_row').target).toBe('Hits the whole row of the target');
     expect(info('shape_column').target).toBe('Hits the whole column');
-    expect(info('shape_rect').target).toBe('Hits a 2x3 block; your cursor cell is its bottom-left corner');
+    // 2 sıra x 3 şerit: şerit ekseni (3) merkezli, sıra ekseni (2) sol-alt kuralı (madde 226 rect anchor kuralı)
+    expect(info('shape_rect').target).toBe('Hits a 2x3 block, starting at your cursor cell on the left and centered top to bottom (near an edge it starts at your cell or slides inside)');
     expect(info('shape_plus').target).toBe('Hits a cross: the target and the 4 cells next to it');
   });
 });
@@ -286,11 +287,17 @@ describe('savaşta şekiller: vurulanlar, boş hücre anchor, olaylar, önizleme
     expect(b.shapePreviewCells('party-0', 'shape_row', 4).targets).toHaveLength(3);
   });
 
-  it('eski radius ve column_enemies skill\'leri DEĞİŞMEDEN: Blizzard artı şekli, Arrow Rain/şerit', () => {
+  it('tüm alan skill\'leri şekilli: eski radius / column_enemies yok; isAreaSkill = isShapeSkill', () => {
     const b = arena([['mage', 0]], WAR(1, 3, 4, 5, 7, 0, 9));
-    expect(b.isShapeSkill('blizzard')).toBe(false);
-    expect(b.areaCells('blizzard', 4)).toEqual([1, 3, 4, 5, 7]);
-    expect(b.areaWindowAt('party-0', 'blizzard', 4).map((c) => c.slot)).toEqual([1, 3, 4, 5, 7]);
+    for (const s of Object.values(content.skills)) {
+      expect(s.target, s.id).not.toBe('column_enemies');
+      expect(s.area ? 'radius' in s.area : false, s.id).toBe(false);
+      if (s.target === 'area_enemies') {
+        expect(b.isShapeSkill(s.id), s.id).toBe(true);
+        expect(b.isAreaSkill(s.id), s.id).toBe(true);
+      }
+    }
+    expect(b.areaCells('meteor', 4)).toEqual([1, 3, 4, 5, 7]);
   });
 
   it('turns modunda da çalışır; test modunda da: cooldown sayacı ve sıra kuralı bozulmaz', () => {

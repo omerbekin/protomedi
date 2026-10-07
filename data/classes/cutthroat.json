@@ -1,0 +1,36 @@
+{
+  "id": "cutthroat",
+  "name": "Cutthroat",
+  "spriteId": "archer",
+  "color": "#5b4a6b",
+  "logo": "cutthroatlogo",
+  "role": "Assassin",
+  "frontPriority": 3,
+  "attributes": {
+    "str": 5,
+    "int": 5,
+    "dex": 15,
+    "luck": 5
+  },
+  "primary": "dex",
+  "armor": 4,
+  "magicArmor": 0,
+  "ai": "assassin",
+  "skills": [
+    "venom_edge",
+    "x_cut",
+    "smoke_bomb",
+    "backstab"
+  ],
+  "passive": {
+    "id": "opportunist",
+    "name": "Opportunist",
+    "icon": "opportunist",
+    "text": "",
+    "effect": {
+      "type": "bonusVsStatus",
+      "statuses": ["wound", "slow", "stun"],
+      "bonus": 0.25
+    }
+  }
+}

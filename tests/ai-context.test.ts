@@ -121,15 +121,16 @@ describe('YZ bağlam: Druid - Summon Treant, Undead - Raise Dead (çağrı)', ()
     expect(choose(b)?.skillId).not.toBe('summon_treant');
   });
 
-  it('Undead: iskelet yokken düşman tahtasında boş yer varsa Raise Dead; iskelet varken ya da boş yer yokken değil', () => {
-    const b = mk({ 0: 'undead', 1: 'warrior' }, { 0: 'warrior', 1: 'mage' });
+  it('Undead: iskelet yokken, tüketilecek düşman cesedi ve kendi tahtasında boş yer varsa Raise Dead; iskelet varken ya da boş yer yokken değil (madde 222)', () => {
+    const b = mk({ 0: 'undead', 1: 'warrior' }, { 0: 'warrior', 1: 'mage', 2: 'archer' });
+    b.debugKill('enemy-2', false); // tüketilebilir düşman cesedi -> beslenmiş çağrı
     expect(choose(b)).toMatchObject({ skillId: 'raise_dead', reason: 'summon' });
     expect(b.useSkill('party-0', 'raise_dead').ok).toBe(true);
     b.get('party-0')!.mp = b.get('party-0')!.maxMp;
     expect(choose(b)?.skillId).not.toBe('raise_dead');
-    // Düşman tahtası dolu: iskelet açılamaz
-    const full = mk({ 0: 'undead', 1: 'warrior' }, Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, 'warrior'])));
-    expect(full.canUse('party-0', 'raise_dead').ok).toBe(false);
+    // Kendi tahtası dolu: iskelet açılamaz (artık kendi tarafına çağrılıyor)
+    const full = mk(Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, i === 0 ? 'undead' : 'warrior'])), { 0: 'warrior', 1: 'mage' });
+    expect(full.canUse('party-0', 'raise_dead')).toEqual({ ok: false, reason: 'No free slot' });
     expect(choose(full)?.skillId).not.toBe('raise_dead');
   });
 });

@@ -12,7 +12,7 @@ const SCALE_EXCEPTIONS: { skill: string; effect: string; reason: string }[] = [
 ];
 
 // Ölçek alanı taşıması gereken hasar türü etkiler; ölçeksiz hasar benzerleri istisna listesinde olmalı.
-const DAMAGE_LIKE = new Set(['damage', 'ground', 'selfDamage', 'manaBurn', 'thorns']); // thorns: yansıyan hasar da skill statının (Str) yüzdesidir
+const DAMAGE_LIKE = new Set(['damage', 'ground', 'selfDamage', 'manaBurn']);
 const isException = (skill: string, type: string) => SCALE_EXCEPTIONS.some((x) => x.skill === skill && x.effect === type);
 const scaleOf = (e: unknown): Attribute | undefined => (e as { scale?: Attribute }).scale;
 

@@ -12,7 +12,7 @@ export interface Pt {
   y: number;
 }
 
-/** Hücre zemininin ayak noktasına göre dikey kayması (mevcut alan göstergeleriyle aynı: y - 4). */
+/** Hücre zemininin ayak noktasına göre dikey kayması (pozitif = yukarı). Ön şeridin plakası komut paneline (y=920) taşmasın diye 4 px; daha aşağı kaydırmak plakayı paneldeki kesmeye sokar. */
 export const FLOOR_LIFT = 4;
 
 /** Hücre zemininin merkezi (ayak noktasının biraz üstü). */

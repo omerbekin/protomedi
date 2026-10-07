@@ -41,7 +41,8 @@ export const ICON_KINDS = [
   'rejuvenate',
   'treant',
   'roots',
-  'thornshield',
+  /** Treant - Vine Snare: 2x2 karodan yükselen kök-sarmaşık kapanı. */
+  'vinesnare',
   'leaf',
   'leaves',
   'guard',
@@ -61,6 +62,8 @@ export const ICON_KINDS = [
   'dice',
   'robot',
   'gear',
+  'fullscreen',
+  'exitfullscreen',
   'speaker',
   'next',
   'freemp',
@@ -105,6 +108,15 @@ export const ICON_KINDS = [
   'columnspear',
   'blockslam',
   'crossburst',
+  /** Cutthroat: logo, pasif (Opportunist), 4 skill ve Smoke Bomb durumları (Blinded, Shrouded). */
+  'cutthroatlogo',
+  'opportunist',
+  'venomedge',
+  'saltire',
+  'smokebomb',
+  'backstab',
+  'blinded',
+  'shrouded',
 ] as const;
 
 export type IconKind = (typeof ICON_KINDS)[number];

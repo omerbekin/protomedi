@@ -15,6 +15,10 @@ const sturdy = (b: Battle): Battle => {
 };
 const testBattle = (seed = 1) => sturdy(new Battle(content.battleSetup('first-battle', seed, 'test')));
 
+/** Seçimin gerçekte vuracağı birimler (alan skill'inde anchor hücre ya da birim; tek hedefte hedef). */
+const hitsOf = (b: Battle, actor: string, pick: { skillId: string; targetUid?: string; slot?: number }): string[] =>
+  b.isAreaSkill(pick.skillId) ? b.areaWindowAt(actor, pick.skillId, pick.slot ?? b.get(pick.targetUid!)!.slot).map((c) => c.uid) : [pick.targetUid!];
+
 const E_WARRIOR = 'enemy-0';
 const E_ARCHER = 'enemy-1';
 const E_MAGE = 'enemy-2';
@@ -135,9 +139,15 @@ describe('yapay zeka: hasar tercihleri', () => {
     const b = testBattle();
     b.get(WARRIOR)!.hp = 0;
     b.get(PALADIN)!.hp = 0; // 2 düşman kaldı (eşik 3)
-    const choice = chooseAction(b, E_MAGE, ai);
-    expect(choice?.reason).toBe('damage');
-    expect(choice?.targetUid).toBeDefined();
+    const choice = chooseAction(b, E_MAGE, ai)!;
+    // AoE önceliği (eşik 3) çalışmaz; Meteor'un bağlamı (>= 2 hedef) boş hücre anchor'la (iki düşmanın ortak komşusu) sağlanabilir: o zaman 'tactic'
+    expect(choice.reason).not.toBe('aoe');
+    if (choice.reason === 'tactic') {
+      expect(choice.skillId).toBe('meteor');
+      expect(hitsOf(b, E_MAGE, choice)).toHaveLength(2);
+    } else {
+      expect(choice.reason).toBe('damage');
+    }
   });
 
   it('tek hedefte en yaralı (can oranı en düşük) kişiye odaklanır', () => {
@@ -147,8 +157,7 @@ describe('yapay zeka: hasar tercihleri', () => {
     b.get(MAGE)!.hp = 60; // 60/70
     b.get(UNDEAD)!.hp = 50; // 50/80 -> daha düşük oran
     const pick = chooseAction(b, E_MAGE, ai)!;
-    const hit = b.skill(pick.skillId)!.target === 'area_enemies' ? b.areaWindow(E_MAGE, pick.skillId, pick.targetUid!).map((c) => c.uid) : [pick.targetUid];
-    expect(hit).toContain(UNDEAD); // en yaralı kişi vurulanlar arasında
+    expect(hitsOf(b, E_MAGE, pick)).toContain(UNDEAD); // en yaralı kişi vurulanlar arasında
   });
 
   it('Archer (sniper) en az canlıya (mutlak can) odaklanır', () => {
@@ -158,7 +167,10 @@ describe('yapay zeka: hasar tercihleri', () => {
     b.get(MAGE)!.hp = 60; // oran 0.86, mutlak 60
     b.get(UNDEAD)!.hp = 79; // oran 0.99, mutlak 79
     b.get(E_ARCHER)!.mp = 9; // Aimed Shot (10 MP; yüksek canlı hedefi bağlamsal seçerdi) kapalı: yalnızca odak kuralı sınanır
-    expect(chooseAction(b, E_ARCHER, ai)?.targetUid).toBe(MAGE);
+    const pick = chooseAction(b, E_ARCHER, ai)!;
+    const hits = hitsOf(b, E_ARCHER, pick);
+    expect(hits[0]).toBe(MAGE); // odak (ilk/ana vuruş) en az canlı; alan skill'iyse (Piercing Arrow şeridi) yalnızca ona
+    expect(hits).not.toContain(UNDEAD);
   });
 
   it('Undead canı azken can ödeyen skill\'i (Blood Rite) hasar için kullanmaz', () => {
@@ -366,7 +378,7 @@ describe('yapay zeka: 4. (güçlü) skill ve mana yakma hedefi', () => {
     const am = actFirst(b, 'antimage');
     const choice = chooseAction(b, am, ai);
     if (choice?.skillId === 'drain_field') {
-      const covered = b.areaWindow(am, 'drain_field', choice.targetUid!).map((c) => c.defId);
+      const covered = hitsOf(b, am, choice).map((u) => b.get(u)!.defId);
       expect(covered.some((d) => d === 'mage' || d === 'druid')).toBe(true); // büyücüler alanda
     }
     expect(choice).toBeDefined();

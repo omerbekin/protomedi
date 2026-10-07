@@ -140,6 +140,8 @@ export interface AnimEntry {
   motion: string;
   skyFx: string | null;
   sfx: string[];
+  /** Sahibi gizli (hidden) bir class: oyuncu listesinde görünmez; yalnızca geliştirici referansı. */
+  hidden: boolean;
   target: string;
   targetText: string;
   area: boolean;
@@ -163,9 +165,10 @@ export function buildAnimations(): AnimEntry[] {
     motion: s.motion,
     skyFx: s.skyFx ?? null,
     sfx: s.sfx ?? [],
+    hidden: !!content.classes[skillOwner(s.id).id]?.hidden,
     target: s.target,
     targetText: TARGET_TEXT[s.target],
-    area: s.target === 'area_enemies' || s.target === 'column_enemies',
+    area: s.target === 'area_enemies',
   }));
 }
 
@@ -225,6 +228,8 @@ export interface CharacterEntry {
   tags: string[];
   /** Test class'ı (ör. Geometer): rastgele takımlara girmez; galeride 'TEST' rozeti. */
   testOnly: boolean;
+  /** Gizli class (ör. Geometer): oyuncu seçiminde ve wiki class listesinde yok; Assets'te 'Hidden' etiketiyle görünür. */
+  hidden: boolean;
   skills: SkillRef[];
   passive: PassiveDef | null;
   /** Gerçek sprite anim dosyaları (idle, ...); boşsa oyunda placeholder çizilir. */
@@ -254,6 +259,7 @@ const toEntry = (kind: CharacterEntry['kind'], def: CombatantDef, files: AssetFi
     stats: { hp: st.hp, mp: st.mp, spd: st.spd, evasion: st.evasion, accuracy: st.accuracy, critChance: st.critChance, armor: st.armor, magicArmor: st.magicArmor, mpRegen: st.mpRegen, hpRegen: st.hpRegen },
     tags: def.tags ?? [],
     testOnly: !!def.testOnly,
+    hidden: !!def.hidden,
     skills: def.skills.flatMap((id) => (content.skills[id] ? [skillRef({ ...content.skills[id]!, id })] : [])),
     passive: def.passive ?? null,
     sprites,

@@ -81,7 +81,8 @@ export function openLightbox(src: string, caption: string, pixelated = false): v
     }
   };
   window.addEventListener('keydown', onKey);
-  document.body.append(box);
+  // Oyunda #ui-root içine (döndürülmüş sahneyle birlikte döner); galeri sayfasında body
+  (document.getElementById('ui-root') ?? document.body).append(box);
 }
 
 export const fmtSec = (s: number): string => `${s.toFixed(2)}s`;
@@ -96,4 +97,6 @@ export interface SectionApi {
   /** Arama metni değişince çağrılır; görünen öğe sayısını döndürür. */
   setQuery: (q: string) => number;
   root: HTMLElement;
+  /** Bölüm ekrana gelince (wiki'de sekme açılınca) bir kez çağrılır: ağır parçaları tembel yükler. */
+  onShow?: () => void;
 }

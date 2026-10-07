@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Battle, armorReduction, attributePower, chooseAction, content, describePassive, describeSkill, previewSkill } from '../src/engine';
 import type { BattleEvent, BattleMode, Combatant } from '../src/engine';
 import { installLegacySkills } from './legacy-skills';
+import { shapeCells } from '../src/engine/area-shape';
 
 installLegacySkills();
 
@@ -226,31 +227,43 @@ describe('dizilim ve menzil', () => {
     expect(b.validTargets(unit(b, 'enemy', 'warrior').uid, 'melee_attack').map((c) => c.defId)).toEqual(['defender', 'warrior']);
   });
 
-  it('alan (artı) yarıçap 1: merkez + önü, arkası, sağı, solu; çaprazlar vurulmaz', () => {
+  it('artı (Meteor, plus): merkez + önü, arkası, sağı, solu; çaprazlar vurulmaz (eski radius 1 ile aynı hücreler)', () => {
     const b = grid(full(), full());
-    const hit = b.areaWindow('party-0', 'blizzard', 'enemy-4').map((c) => c.slot).sort((x, y) => x - y);
+    expect(content.skills.meteor!.area).toMatchObject({ shape: 'plus' });
+    const hit = b.areaWindow('party-0', 'meteor', 'enemy-4').map((c) => c.slot).sort((x, y) => x - y);
     expect(hit).toEqual([1, 3, 4, 5, 7]);
   });
 
-  it('alan yarıçap 2: 2 öne/arkaya/sağa/sola + çaprazlara 1\'er', () => {
+  it('dolu tahtada her alan skill\'i şeklinin TÜM hücrelerine vurur (her anchor; şekil veriden)', () => {
     const b = grid(full(), full());
-    const hit = (slot: number) => b.areaWindow('party-0', 'arrow_rain', `enemy-${slot}`).map((c) => c.slot).sort((x, y) => x - y);
-    expect(hit(4)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 10]); // şerit 1'de sıra 0..3, sıra 1'in 3 şeridi, sıra 0 ve 2'nin çaprazları
-    expect(hit(0)).toEqual([0, 1, 2, 3, 4, 6]); // köşe: şerit 0'da 2 arkaya, sırada 2 yana, bir çapraz
+    const fm = content.formulas.formation;
+    for (const s of Object.values(content.skills).filter((x) => x.target === 'area_enemies' && x.motion !== 'melee')) {
+      for (let slot = 0; slot < 12; slot++) {
+        const hit = b.areaWindow('party-0', s.id, `enemy-${slot}`).map((c) => c.slot).sort((x, y) => x - y);
+        expect(hit, `${s.id} @${slot}`).toEqual(shapeCells(s.area!, slot, 'enemy', fm));
+      }
+    }
+    // Arrow Rain 3x3 (eski radius 2'ye en yakın kapsam): her anchor'da 9 hücre
+    expect(content.skills.arrow_rain!.area).toMatchObject({ shape: 'rect', rows: 3, cols: 3 });
+    expect(b.areaWindow('party-0', 'arrow_rain', 'enemy-4')).toHaveLength(9);
   });
 
-  it('alanda boşluk (ölü/boş hücre) uzaktakilere ulaşmaz', () => {
+  it('ölü/boş hücre şekli doldurmaz; şeklin dışındaki uzak birim vurulmaz', () => {
     const b = grid(full(), full());
     eAt(b, 3).hp = 0; // merkez 0'ın arkası öldü
-    expect(b.areaWindow('party-0', 'blizzard', 'enemy-0').map((c) => c.slot)).toEqual([0, 1]); // arkadaki 6'ya ulaşmaz
+    expect(b.areaWindow('party-0', 'meteor', 'enemy-0').map((c) => c.slot)).toEqual([0, 1]);
     const e = grid(cells({ 0: 'warrior' }), cells({ 0: 'mage', 6: 'archer' }));
-    expect(e.areaWindow('party-0', 'blizzard', 'enemy-0').map((c) => c.slot)).toEqual([0]); // 6, 2 sıra uzakta
+    expect(e.areaWindow('party-0', 'meteor', 'enemy-0').map((c) => c.slot)).toEqual([0]); // 6, 2 sıra uzakta: artının dışında
   });
 
-  it('alan skill\'i seçilen merkezin çevresine vurur; ölü ve boş yuvalar boşluktur', () => {
+  it('alan skill\'i şeklin hücrelerindeki canlılara vurur (Blizzard, veriden şekil); ölü ve boş yuvalar boşluktur', () => {
     const b = grid(cells({ 0: 'mage' }), full('mage'));
+    eAt(b, 7).hp = 0;
+    const cells4 = b.areaCells('blizzard', 4);
+    const want = b.living('enemy').filter((c) => cells4.includes(c.slot)).map((c) => c.uid).sort();
     const dmg = ofType(act(b, 'party-0', 'blizzard', 'enemy-4'), 'damage').map((e) => e.target).sort();
-    expect(dmg).toEqual(['enemy-1', 'enemy-3', 'enemy-4', 'enemy-5', 'enemy-7']);
+    expect(dmg).toEqual(want);
+    expect(dmg).not.toContain(eAt(b, 7).uid);
   });
 
   it('Piercing Arrow seçilen şeritteki herkese vurur; her yeni hedef bir öncekinden %30 az hasar alır', () => {
@@ -655,7 +668,7 @@ describe('class verisi: yeni sınıflar ve dizilim', () => {
   });
 
   it('Archer: Piercing Arrow seçilen şeride vurur, her yeni hedef %30 az', () => {
-    expect(content.skills.piercing_arrow!.target).toBe('column_enemies');
+    expect(content.skills.piercing_arrow!).toMatchObject({ target: 'area_enemies', area: { shape: 'column', stages: 'row' } });
     expect(content.skills.piercing_arrow!.effects[0]).toMatchObject({ type: 'damage', falloff: 0.7 });
   });
 
@@ -675,7 +688,7 @@ describe('class verisi: yeni sınıflar ve dizilim', () => {
     const all = content.arrangeTeam(Object.keys(content.classes));
     const melee = all.filter((id) => content.isMeleeClass(id));
     expect(all.slice(0, melee.length)).toEqual(melee); // melee grubu en önde
-    expect(new Set(melee)).toEqual(new Set(['defender', 'warrior', 'antimage']));
+    expect(new Set(melee)).toEqual(new Set(['defender', 'warrior', 'antimage', 'cutthroat'])); // Cutthroat: Venom Edge yakın dövüş
     // Defender (en yüksek zırh) en önde, Mage en arkada
     expect(content.classes[all[0]!]!.stats.armor).toBeGreaterThan(content.classes[all.at(-1)!]!.stats.armor);
   });
@@ -739,7 +752,7 @@ describe('Çağrı yeri seçimi ve hücre listesi', () => {
     expect(b.useSkill(unit(b, 'party', 'archer').uid, 'piercing_arrow').ok).toBe(false);
   });
 
-  it('çağrı: oyuncu boş hücreyi seçer; dolu hücre reddedilir; yapay zeka yakın dövüşçü çağrıyı en öndeki boş hücreye koyar', () => {
+  it('çağrı: oyuncu boş hücreyi seçer; dolu hücre reddedilir; yapay zeka menzilli çağrıyı (Treant, madde 222) en arkadaki boş hücreye koyar', () => {
     const b = make({ party: ['defender', 'warrior', 'archer', 'mage', 'druid'], enemies: ['defender', 'paladin', 'undead', 'antimage', 'archer'] });
     const druid = unit(b, 'party', 'druid');
     expect(b.freeSlots('party')).toEqual([1, 4, 7, 8, 9, 10, 11]);
@@ -748,7 +761,7 @@ describe('Çağrı yeri seçimi ve hücre listesi', () => {
     expect(ev.combatant.slot).toBe(7);
     const d2 = unit(b, 'party', 'druid');
     d2.mp = d2.maxMp; // ikinci çağrı için MP tazelenir
-    expect(ofType(act(b, d2.uid, 'summon_treant'), 'summon')[0]!.combatant.slot).toBe(1);
+    expect(ofType(act(b, d2.uid, 'summon_treant'), 'summon')[0]!.combatant.slot).toBe(11);
   });
 
   it('seçim ekranı hücre listesi (arrange=false) olduğu gibi yerleşir; boş hücreler kalır', () => {
@@ -761,15 +774,14 @@ describe('Çağrı yeri seçimi ve hücre listesi', () => {
 describe('Boş hücreye alan atışı ve Shield Bash', () => {
   it('alan skill\'i boş bir hücreye atılabilir; yalnızca şekildeki birimlere vurur', () => {
     const b = grid(cells({ 0: 'mage' }), cells({ 3: 'warrior', 5: 'archer', 6: 'druid' }));
-    // merkez 4 (boş, sıra 1 şerit 1): artı şekli = 1, 3, 5, 7 -> yalnızca 3 ve 5 dolu
-    const events = act(b, 'party-0', 'blizzard', undefined, 4);
+    // Meteor merkez 4 (boş, sıra 1 şerit 1): artı şekli = 1, 3, 4, 5, 7 -> yalnızca 3 ve 5 dolu
+    const events = act(b, 'party-0', 'meteor', undefined, 4);
     expect(ofType(events, 'damage').map((e) => e.target).sort()).toEqual(['enemy-0', 'enemy-1']);
-    // hiçbir birime değmeyen boş atış da geçerli (bedel ödenir)
+    // hiçbir birime değmeyen atış REDDEDİLİR (şekil kuralı: en az bir vurulabilir düşman) ve bedel düşmez
     const empty = grid(cells({ 0: 'mage' }), cells({ 6: 'warrior' }));
     const mp = empty.get('party-0')!.mp;
-    expect(ofType(act(empty, 'party-0', 'blizzard', undefined, 11), 'damage')).toHaveLength(0);
-    const bc = content.skills.blizzard!.cost.amount;
-    expect(empty.get('party-0')!.mp).toBe(mp - bc); // iade yok: yalnızca bedel düşer
+    expect(empty.useSkill('party-0', 'meteor', undefined, 11)).toEqual({ ok: false, reason: 'No target in the area' });
+    expect(empty.get('party-0')!.mp).toBe(mp);
   });
 
   it('geçersiz hücre ya da hedefsiz alan atışı reddedilir', () => {
@@ -781,7 +793,8 @@ describe('Boş hücreye alan atışı ve Shield Bash', () => {
 
   it('alan hücreleri boş olanları da içerir (gösterim için)', () => {
     const b = grid(cells({ 0: 'mage' }), cells({ 3: 'warrior' }));
-    expect(b.areaCells('blizzard', 4).sort((x, y) => x - y)).toEqual([1, 3, 4, 5, 7]);
+    expect(b.areaCells('meteor', 4)).toEqual([1, 3, 4, 5, 7]);
+    expect(b.areaCells('blizzard', 4)).toEqual(shapeCells(content.skills.blizzard!.area!, 4, 'enemy', content.formulas.formation));
     expect(b.areaCells('piercing_arrow', 4).sort((x, y) => x - y)).toEqual([1, 4, 7, 10]); // şerit 1, tüm sıralar
   });
 
@@ -907,17 +920,20 @@ describe('Yakın dövüş yalnızca ön sıradan yapılır', () => {
     expect(b.get('enemy-1')!.statuses.some((st) => st.kind === 'stun')).toBe(true);
   });
 
-  it('melee çağrı ön sıraya konur', () => {
-    const b = grid(cells({ 0: 'druid', 2: 'warrior' }), cells({ 0: 'mage' }));
-    const ev = ofType(act(b, 'party-0', 'summon_treant'), 'summon')[0]!;
+  it('melee çağrı (Skeleton) ön sıraya konur', () => {
+    const b = grid(cells({ 0: 'undead', 2: 'warrior' }), cells({ 0: 'mage' }));
+    const ev = ofType(act(b, 'party-0', 'raise_dead'), 'summon')[0]!;
     expect(b.rowOf(ev.combatant.slot)).toBe(0);
     expect(ev.combatant.slot).toBe(1);
   });
 
-  it('Treant (ev tahtası) ön sıra kuralına tabidir: arka sıradaysa vuramaz', () => {
+  it('Treant uzak menzilli (madde 222): arka sıradan da vurur; Skeleton (melee) arka sıradaysa vuramaz', () => {
     const b = grid(cells({ 0: 'druid', 2: 'warrior' }), cells({ 0: 'mage' }));
     const sk = ofType(act(b, 'party-0', 'summon_treant', undefined, 7), 'summon')[0]!.combatant.uid;
-    expect(b.canUse(sk, 'root_smash')).toEqual({ ok: false, reason: 'Melee: front row only' });
+    expect(b.canUse(sk, 'root_smash').ok).toBe(true);
+    const u = grid(cells({ 0: 'undead', 2: 'warrior' }), cells({ 0: 'mage' }));
+    const skel = ofType(act(u, 'party-0', 'raise_dead', undefined, 7), 'summon')[0]!.combatant.uid;
+    expect(u.canUse(skel, 'skeleton_strike')).toEqual({ ok: false, reason: 'Melee: front row only' });
   });
 });
 
@@ -933,7 +949,7 @@ describe('Pasif skill\'ler', () => {
       expect(def.passive, id).toBeDefined();
       expect(def.passive!.name.length, id).toBeGreaterThan(0);
       expect(describePassive(def.passive!, def.stats, content.formulas).length, id).toBeGreaterThan(20); // açıklama değerleri de yazar
-      expect(['rage', 'divineLight', 'spellEcho', 'longshot', 'verdantBlessing', 'soulDrain', 'manaOverflow', 'armorAura'], id).toContain(def.passive!.effect.type);
+      expect(['rage', 'divineLight', 'spellEcho', 'longshot', 'verdantBlessing', 'soulDrain', 'manaOverflow', 'armorAura', 'bonusVsStatus'], id).toContain(def.passive!.effect.type);
     }
   });
 
@@ -1085,28 +1101,23 @@ describe('Pasif skill\'ler', () => {
   });
 });
 
-describe('Raise Dead: düşman tahtasına çağrı (Dark Mage)', () => {
-  it('iskeleti düşmanın tahtasındaki boş bir hücreye çağırır; sahibi çağıranın tarafı', () => {
+describe('Raise Dead: kendi tahtasına çağrı (Dark Mage, madde 222)', () => {
+  it('iskeleti KENDİ tahtasındaki boş bir hücreye çağırır; sahibi çağıranın tarafı', () => {
     const b = grid(cells({ 0: 'undead' }), cells({ 0: 'warrior', 2: 'mage' }));
-    expect(b.summonBoard('party-0', 'raise_dead')).toBe('enemy');
-    expect(b.freeSlots('enemy')).not.toContain(0);
+    expect(b.summonBoard('party-0', 'raise_dead')).toBe('party');
+    expect(b.freeSlots('party')).not.toContain(0);
     const ev = ofType(act(b, 'party-0', 'raise_dead', undefined, 1), 'summon')[0]!;
-    expect(ev.combatant).toMatchObject({ side: 'party', board: 'enemy', slot: 1, name: 'Skeleton', summoned: true });
+    expect(ev.combatant).toMatchObject({ side: 'party', board: 'party', slot: 1, name: 'Skeleton', summoned: true });
     expect(b.useSkill('party-0', 'raise_dead', undefined, 0).ok).toBe(false);
   });
 
-  it('iskelet yalnızca 1 birim yarıçapındaki (artı) düşmana vurur; düşman ona vurabilir; alan skill\'leri onu kapsamaz', () => {
-    const b = grid(cells({ 0: 'undead', 1: 'mage' }), cells({ 0: 'warrior', 3: 'mage' }));
-    const sk = ofType(act(b, 'party-0', 'raise_dead', undefined, 1), 'summon')[0]!.combatant.uid; // düşman tahtası, ön sıra orta şerit
+  it('ön sıradaki iskelet düşmanın ön sırasına vurur; düşman ona tek hedefli ve alan skill\'leriyle vurabilir', () => {
+    const b = grid(cells({ 0: 'undead', 3: 'mage' }), cells({ 0: 'warrior', 3: 'mage' }));
+    const sk = ofType(act(b, 'party-0', 'raise_dead', undefined, 1), 'summon')[0]!.combatant.uid;
     expect(b.canUse(sk, 'skeleton_strike').ok).toBe(true);
-    expect(b.validTargets(sk, 'skeleton_strike').map((c) => c.uid)).toEqual(['enemy-0']); // yanındaki Warrior; çapraz arkadaki Mage değil
-    // uzağa çağrılan iskelet kimseye ulaşamaz
-    const far = ofType(act(b, 'party-0', 'raise_dead', undefined, 11), 'summon')[0]!.combatant.uid;
-    expect(b.canUse(far, 'skeleton_strike')).toEqual({ ok: false, reason: 'No target in reach' });
-    // düşman iskelete tek hedefli skill atabilir
+    expect(b.validTargets(sk, 'skeleton_strike').map((c) => c.uid)).toEqual(['enemy-0']); // ön sıra; arkadaki Mage değil
     expect(b.validTargets('enemy-1', 'fire_bolt').map((c) => c.uid)).toContain(sk);
-    // oyuncunun alan skill'i düşman tahtasını hedefler ama kendi iskeletini kapsamaz
-    expect(b.areaWindowAt('party-1', 'blizzard', 1).map((c) => c.uid)).not.toContain(sk);
+    expect(b.areaWindowAt('enemy-1', 'blizzard', 1).map((c) => c.uid)).toContain(sk);
   });
 });
 
@@ -1201,24 +1212,25 @@ describe('Çağıran ölünce çağrılan da ölür', () => {
   });
 });
 
-describe('Treant menzili +1 (reach)', () => {
+describe('Treant uzak menzilli (madde 222; eski reach +1 kalktı)', () => {
   const mk = (treantSlot: number) => {
     const b = grid(cells({ 0: 'druid', 2: 'warrior' }), cells({ 0: 'warrior', 3: 'mage', 6: 'archer' }));
     const sk = ofType(act(b, 'party-0', 'summon_treant', undefined, treantSlot), 'summon')[0]!.combatant.uid;
     return { b, sk };
   };
 
-  it('Root Smash reach +1: düşmanın ilk 2 sırasına ulaşır (3. sıraya ulaşmaz)', () => {
-    expect(content.skills.root_smash!.reach).toBe(1);
+  it('Root Smash melee değil, reach yok: düşmanın tüm sıralarına ulaşır', () => {
+    expect(content.skills.root_smash!.reach).toBeUndefined();
+    expect(content.skills.root_smash!.motion).not.toBe('melee');
     const { b, sk } = mk(1);
-    expect(b.validTargets(sk, 'root_smash').map((c) => c.slot).sort((x, y) => x - y)).toEqual([0, 3]);
+    expect(b.validTargets(sk, 'root_smash').map((c) => c.slot).sort((x, y) => x - y)).toEqual([0, 3, 6]);
   });
 
-  it('ön sıranın bir gerisinden vurabilir, iki gerisinden vuramaz', () => {
-    const mid = mk(4);
-    expect(mid.b.canUse(mid.sk, 'root_smash').ok).toBe(true);
-    const back = mk(7);
-    expect(back.b.canUse(back.sk, 'root_smash')).toEqual({ ok: false, reason: 'Melee: front row only' });
+  it('Treant hangi sırada olursa olsun vurabilir', () => {
+    for (const slot of [1, 4, 7, 10]) {
+      const m = mk(slot);
+      expect(m.b.canUse(m.sk, 'root_smash').ok, String(slot)).toBe(true);
+    }
   });
 
   it('diğer yakın dövüş skill\'lerinin menzili değişmez (yalnızca ön sıra)', () => {

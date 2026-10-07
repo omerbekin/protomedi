@@ -1,4 +1,5 @@
 import { iconUrl } from './dom-icons';
+import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from './fullscreen';
 
 /**
  * Oyun içi ayarlar: sağ üstte dişli düğmesi; şimdilik yalnızca ses seviyesi kaydırıcısı (0-10). Değer tarayıcıda saklanır.
@@ -80,6 +81,32 @@ export class SettingsMenu {
     row.append(icon, name, slider, value);
 
     this.panel.append(title, row);
+
+    // Tam ekran satırı (Fullscreen API yoksa gizli; iPhone'da ipucu gösterir)
+    const support = currentSupport();
+    if (support !== 'none' && !isStandalone()) {
+      const fsRow = document.createElement('div');
+      fsRow.className = 'settings-row';
+      const fsIcon = document.createElement('img');
+      fsIcon.alt = '';
+      const fsName = document.createElement('span');
+      fsName.textContent = 'Fullscreen';
+      const fsBtn = document.createElement('button');
+      fsBtn.type = 'button';
+      fsBtn.className = 'settings-btn';
+      const note = document.createElement('span');
+      note.className = 'settings-note';
+      fsBtn.addEventListener('click', () => {
+        if (support === 'ios') note.textContent = IOS_HINT;
+        else void toggleFullscreen();
+      });
+      onFullscreenChange((on) => {
+        fsIcon.src = iconUrl(on ? 'exitfullscreen' : 'fullscreen');
+        fsBtn.textContent = on ? 'Exit' : 'Enter';
+      });
+      fsRow.append(fsIcon, fsName, fsBtn);
+      this.panel.append(fsRow, note);
+    }
     root.append(toggle, this.panel);
     hooks.onVolume(Number(slider.value));
   }

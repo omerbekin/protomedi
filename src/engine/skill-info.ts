@@ -1,6 +1,6 @@
-import { isShapeArea, shapeBadge } from './area-shape';
+import { isShapeArea, RECT_CENTER_MIN, shapeBadge } from './area-shape';
 import { betMultipliers, betStake } from './gamble';
-import { attributePower } from './stats';
+import { applySummonVariant, attributePower } from './stats';
 import type { AreaDef, Attribute, CombatantDef, Element, Formulas, GlobalSkillDef, GroundDef, PassiveDef, SkillDef, SkillTarget, Stats, StatusDef } from './types';
 
 /** Skill'in oyuncuya gösterilen genel bilgileri (tooltip). Metinler İngilizce (oyun içi arayüz). */
@@ -23,7 +23,7 @@ export const TARGET_TEXT: Record<SkillTarget, string> = {
   single_enemy: 'One enemy',
   all_enemies: 'All enemies',
   area_enemies: 'Area',
-  column_enemies: 'Column',
+  area_any: 'Area (either side)',
   single_ally: 'One ally',
   dead_ally: 'One fallen ally',
   all_allies: 'All allies',
@@ -38,7 +38,7 @@ export const TARGET_BADGE: Record<SkillTarget, string> = {
   single_enemy: 'Single Target',
   all_enemies: 'All Enemies',
   area_enemies: 'AoE',
-  column_enemies: 'Column',
+  area_any: 'AoE (any side)',
   single_ally: 'Single Ally',
   dead_ally: 'Dead Ally',
   all_allies: 'All Allies',
@@ -48,10 +48,9 @@ export const TARGET_BADGE: Record<SkillTarget, string> = {
   empty_tile: 'Empty Cell',
 };
 
-/** Rozet metni: alan skill'inde yarıçap ("AoE · r1"), rastgele skill'de hedef sayısı ("Random · 3") rozette yazar, açıklamada değil. */
+/** Rozet metni: alan skill'inde şekil ("Row", "Column", "Block 2x3", "Cross"), rastgele skill'de hedef sayısı ("Random · 3") rozette yazar, açıklamada değil. */
 export function targetBadge(skill: SkillDef): string {
-  if (skill.target === 'area_enemies' && isShapeArea(skill.area)) return shapeBadge(skill.area);
-  if (skill.target === 'area_enemies') return `${TARGET_BADGE.area_enemies} · r${skill.area?.radius ?? 1}`;
+  if ((skill.target === 'area_enemies' || skill.target === 'area_any') && isShapeArea(skill.area)) return shapeBadge(skill.area);
   if (skill.target === 'random_enemies') return `${TARGET_BADGE.random_enemies} · ${skill.count ?? 3}`;
   return TARGET_BADGE[skill.target];
 }
@@ -65,8 +64,31 @@ function shapeText(area: AreaDef): string {
       return 'Hits the whole column';
     case 'plus':
       return 'Hits a cross: the target and the 4 cells next to it';
-    default:
-      return `Hits a ${area.rows ?? 1}x${area.cols ?? 1} block; your cursor cell is its bottom-left corner`;
+    case 'x':
+      return `Hits an X: the target cell and the 4 diagonal cells around it${(area.hitsAtCenter ?? 1) > 1 ? `; the center is struck ${area.hitsAtCenter} times` : ''}`;
+    default: {
+      // Rect anchor kuralı (area-shape.ts > rectAxisStart): boyutu 3+ olan eksende fare hücresi ortada, diğerlerinde sol-alt köşe
+      const h = area.rows ?? 1; // ekranda yatay (sıra sayısı)
+      const v = area.cols ?? 1; // ekranda dikey (şerit sayısı)
+      const size = `Hits a ${h}x${v} block`;
+      if (h < RECT_CENTER_MIN && v < RECT_CENTER_MIN) return `${size}; your cursor cell is its bottom-left corner`;
+      const across = h >= RECT_CENTER_MIN ? 'centered left to right on your cursor cell' : 'starting at your cursor cell on the left';
+      const up = v >= RECT_CENTER_MIN ? 'centered top to bottom' : 'with your cursor cell at the bottom';
+      return `${size}, ${across} and ${up} (near an edge it starts at your cell or slides inside)`;
+    }
+  }
+}
+
+/** Aşamalı vuruşun sade açıklaması (etki satırı): 'Sweeps row by row, front row first'. Aşamasızsa boş. */
+export function stageText(area: AreaDef | undefined): string {
+  if (!area?.stages) return '';
+  switch (area.stages) {
+    case 'row':
+      return `Sweeps row by row, ${area.reverse ? 'back row first' : 'front row first'}`;
+    case 'column':
+      return `Sweeps lane by lane, ${area.reverse ? 'bottom lane first' : 'top lane first'}`;
+    case 'distance':
+      return area.reverse ? 'Closes in wave by wave, outer cells first, the anchor cell last' : 'Spreads wave by wave from the anchor cell outward';
   }
 }
 
@@ -101,6 +123,11 @@ export function describePassive(passive: PassiveDef, stats: Stats, formulas: For
       return `Magic damage blocked by your magic armor builds up; every ${e.threshold} blocked, your whole team gains ${e.mana} MP.`;
     case 'armorAura':
       return `You and the allies right next to you (front, back, left, right) gain bonus armor equal to ${pct(e.pct)} of your own armor (+${Math.round(stats.armor * e.pct)} now). A unit benefits from at most ${e.maxStacks} such auras.`;
+    case 'bonusVsStatus': {
+      const names = e.statuses.map((s) => s.charAt(0).toUpperCase() + s.slice(1));
+      const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : (names[0] ?? '');
+      return `Deal +${pct(e.bonus)} damage to targets suffering from ${list} (every hit, crits included).`;
+    }
   }
 }
 
@@ -181,7 +208,7 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
     else effects.push({ e, times: 1 });
   }
   for (const { e, times } of effects) {
-    const who = skill.target === 'everyone' ? ((e.side ?? (e.type === 'heal' || e.type === 'hot' || e.type === 'shield' || e.type === 'guard' ? 'allies' : 'enemies')) === 'allies' ? ' (allies)' : ' (enemies)') : '';
+    const who = skill.target === 'area_any' ? (e.side === 'allies' ? ' (on your side: allies)' : e.side === 'enemies' ? ' (on the enemy side: enemies)' : '') : skill.target === 'everyone' ? ((e.side ?? (e.type === 'heal' || e.type === 'hot' || e.type === 'shield' || e.type === 'guard' ? 'allies' : 'enemies')) === 'allies' ? ' (allies)' : ' (enemies)') : '';
     const raw = (scale: Attribute, power: number) => Math.round(attributePower(stats, scale, formulas) * power);
     if (e.type === 'damage') {
       const element = e.element ?? 'physical';
@@ -215,7 +242,17 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
     } else if (e.type === 'summon') {
       const unit = units[e.unit];
       const life = e.lifespan ? ` for ${e.lifespan} turns` : '';
-      add(unit ? `Summons ${unit.name} (HP ${unit.stats.hp})${life}` : `Summons ${e.unit}${life}`);
+      if (e.consumeCorpse && unit) {
+        // Ceset tüketen çağrı (Raise Dead): iki hâlin can ve hasar statı veriden (applySummonVariant)
+        const fed = applySummonVariant(unit, 'fed');
+        const unfed = applySummonVariant(unit, 'unfed');
+        const statOf = (d: CombatantDef) => (d.stats.int > d.stats.str ? `INT ${d.stats.int}` : `STR ${d.stats.str}`);
+        const boost = unfed.stats.hp > 0 ? Math.round(((fed.stats.hp / unfed.stats.hp - 1) * 100) / 5) * 5 : 0;
+        add(`Raises a ${unit.name} on your side${life}. If a fallen foe lies on the field, consumes the corpse: the ${unit.name} is empowered (+${boost}%) and the corpse can no longer be revived.`);
+        add(`Empowered: HP ${fed.stats.hp}, ${statOf(fed)} · Without a corpse: HP ${unfed.stats.hp}, ${statOf(unfed)}`);
+      } else {
+        add(unit ? `Summons ${unit.name} (HP ${unit.stats.hp})${life}` : `Summons ${e.unit}${life}`);
+      }
       add(`Summons take x${formulas.summon.damageTakenMultiplier} damage`);
     } else if (e.type === 'manaBurn') {
       add(e.gainRatio ? `Steals ${e.amount} MP: you gain ${pct(e.gainRatio)} of it` : `Burns ${e.amount} MP`);
@@ -226,28 +263,35 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       if (e.allyDamageMult !== undefined) add(`Your allies take ${pct(1 - e.allyDamageMult)} less damage while it lasts`);
     } else if (e.type === 'status') {
       const def = defs.statuses?.[e.status];
-      add(`${e.self ? 'You gain' : 'Applies'} ${def?.name ?? e.status} for ${e.turns} turn${e.turns > 1 ? 's' : ''}${def ? `: ${def.text}` : ''}`, undefined);
+      const how = e.cause === 'vines' ? ' (rooted by vines)' : '';
+      if (e.chance !== undefined && e.chance < 1) add(`${pct(e.chance)} chance per target hit (rolled separately) to apply ${def?.name ?? e.status} for ${e.turns} turn${e.turns > 1 ? 's' : ''}${how}${def ? `: ${def.text}` : ''}`, undefined);
+      else add(`${e.self ? 'You gain' : 'Applies'} ${def?.name ?? e.status}${skill.target === 'area_any' ? who : ''} for ${e.turns} turn${e.turns > 1 ? 's' : ''}${how}${def ? `: ${def.text}` : ''}`, undefined);
     } else if (e.type === 'randomStatus') {
       const total = e.options.reduce((a, o) => a + o.weight, 0);
       add(`Random effect on each target hit: ${e.options.map((o) => `${defs.statuses?.[o.status]?.name ?? o.status} ${o.turns} turn${o.turns > 1 ? 's' : ''} (${pct(o.weight / total)})`).join(', ')}`);
     } else if (e.type === 'ground') {
       const g = defs.grounds?.[e.ground];
       add(`Leaves ${g?.name ?? e.ground} on the area for ${e.turns} turns: ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)}) damage at the start of each enemy turn there`, g?.element);
-    } else if (e.type === 'thorns') {
-      add(`Thorns ${e.turns} turns: melee attackers take ${raw(e.scale, e.power)} (${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]}) damage back (armor applies, never misses; reflected damage is not reflected again)`, 'physical');
     } else if (e.type === 'selfDamage') {
       add(`Costs you ${pct(e.ratio)} of your max HP`);
     } else if (e.type === 'guard') {
       add(`Guard ${e.turns} turns: take ${pct(e.share)} of the damage ally takes`);
     }
   }
+  const waves = skill.target === 'area_enemies' || skill.target === 'area_any' ? stageText(skill.area) : '';
+  if (waves) add(waves);
   if (skill.splash && skill.target === 'single_enemy') add(`Also hits the units beside the target (the neighbors above and below it on screen) for ${pct(skill.splash.mult ?? 1)} damage`, 'physical');
-  if (skill.motion === 'melee' && skill.target !== 'self') add(skill.ignoreReach ? 'Charges at any enemy' : skill.reach ? `Melee: front ${skill.reach + 1} rows only (reach +${skill.reach})` : 'Melee: front row only');
+  if ((skill.target === 'area_enemies' || skill.target === 'area_any') && (skill.area?.hitsAtCenter ?? 1) > 1 && skill.area?.shape !== 'x') add(`The unit on the anchor cell is hit ${skill.area!.hitsAtCenter} times (each hit rolls on its own)`);
+  if (skill.area?.shape === 'x' && (skill.area.hitsAtCenter ?? 1) > 1) add(`The blade crosses the center twice: the unit on the anchor cell is hit ${skill.area.hitsAtCenter} times, each hit rolls on its own`);
+  if (skill.target === 'area_any') add('Throw it on the enemy side or on your own side: only the units on that side of the cloud are affected');
+  if (skill.effects.some((e) => e.type === 'damage' && e.guaranteedCrit)) add(`Always a critical hit (x${formulas.attributes.critMult}); it can still miss`, 'physical');
+  if (skill.requiresOpenBehind) add('Only targets with an empty cell right behind them (a living unit there blocks it; a corpse does not); never a unit in the back row');
+  if (skill.motion === 'melee' && skill.target !== 'self') add(skill.requiresOpenBehind ? 'Slips behind any enemy, strikes, and returns' : skill.ignoreReach ? 'Charges at any enemy' : skill.reach ? `Melee: front ${skill.reach + 1} rows only (reach +${skill.reach})` : 'Melee: front row only');
   const { resource, amount } = skill.cost;
   const initialTurns = Math.min(formulas.cooldown?.maxInitial ?? 0, Math.floor(skill.initialCooldown ?? 0));
   return {
     name: skill.name,
-    target: skill.target === 'area_enemies' && isShapeArea(skill.area) ? shapeText(skill.area) : skill.target === 'area_enemies' ? `Area (radius ${skill.area?.radius ?? 1})` : skill.target === 'random_enemies' ? `${skill.count ?? 3} random enemies` : TARGET_TEXT[skill.target],
+    target: (skill.target === 'area_enemies' || skill.target === 'area_any') && isShapeArea(skill.area) ? shapeText(skill.area) : skill.target === 'random_enemies' ? `${skill.count ?? 3} random enemies` : TARGET_TEXT[skill.target],
     targetBadge: targetBadge(skill),
     cost: amount > 0 ? `${amount} ${resource.toUpperCase()}` : 'Free',
     cooldown: (skill.cooldown ?? 0) > 0 ? `${skill.cooldown} turns` : 'None',

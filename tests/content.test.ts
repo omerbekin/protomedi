@@ -3,18 +3,21 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import layout from '../data/battle-layout.json';
 import { attributePower, content } from '../src/engine';
-import type { StatKind } from '../src/engine';
+import { areaDefProblem, skillAreaProblem } from '../src/engine/area-shape';
+import type { SkillDef, StatKind } from '../src/engine';
 import { ICON_KINDS, isIconKind } from '../src/ui/icon-kinds';
 import { BACKUP_VFX, VFX_KINDS } from '../src/ui/vfx-kinds';
 import { UI_ICONS } from '../src/ui/dom-icons';
 import { STAT_COLOR, STAT_ICON, UI_ICON, STAT_LABEL } from '../src/ui/stat-icons';
 
 // Şema doğrulama: data/ altına eklenen her içerik burada denetlenir.
-const SKILL_TARGETS = ['single_enemy', 'all_enemies', 'area_enemies', 'column_enemies', 'everyone', 'random_enemies', 'single_ally', 'dead_ally', 'all_allies', 'self'];
+const SKILL_TARGETS = ['single_enemy', 'all_enemies', 'area_enemies', 'area_any', 'everyone', 'random_enemies', 'single_ally', 'dead_ally', 'all_allies', 'self'];
 const MOTIONS = ['melee', 'ranged', 'cast', 'sky', 'ground', 'whip'];
 const ATTRIBUTES = ['str', 'int', 'dex', 'luck'];
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const PLACEHOLDER_SPRITE_CLASSES: string[] = [];
+/** Kendi görseli henüz çizilmemiş, başka bir class'ın sprite'ını GEÇİCİ kullanan class'lar (class id -> ödünç spriteId). Görsel gelince listeden çıkar. */
+const BORROWED_SPRITE_CLASSES: Record<string, string> = { cutthroat: 'archer' };
 const everyone = { ...content.classes, ...content.summons };
 
 describe('skill verisi', () => {
@@ -86,6 +89,15 @@ describe('skill verisi', () => {
           case 'summon':
             expect(content.summons[e.unit] ?? content.classes[e.unit], `${key} -> ${e.unit}`).toBeDefined();
             if (e.lifespan !== undefined) expect(e.lifespan).toBeGreaterThan(0);
+            expect((e as Record<string, unknown>).onEnemyBoard, `${key}: onEnemyBoard kaldırıldı (madde 222)`).toBeUndefined();
+            // Ceset tüketen çağrının birimi iki varyant taşımalı (fed / unfed)
+            if (e.consumeCorpse) {
+              const v = content.summons[e.unit]!.variants;
+              expect(v, `${key} -> ${e.unit} variants`).toBeDefined();
+              expect(v!.fed.mult).toBeGreaterThan(0);
+              expect(v!.unfed.mult).toBeGreaterThan(0);
+              expect(v!.unfed.mult).toBeLessThan(v!.fed.mult);
+            }
             break;
           case 'manaBurn':
             expect(e.amount).toBeGreaterThan(0);
@@ -96,19 +108,16 @@ describe('skill verisi', () => {
           case 'status':
             expect(content.statuses[e.status], `${key} -> status ${e.status}`).toBeDefined();
             expect(e.turns).toBeGreaterThan(0);
+            if (e.chance !== undefined) {
+              expect(e.chance, `${key} chance`).toBeGreaterThan(0);
+              expect(e.chance, `${key} chance`).toBeLessThanOrEqual(1);
+            }
             break;
           case 'ground':
             expect(content.grounds[e.ground], `${key} -> ground ${e.ground}`).toBeDefined();
             expect(e.turns).toBeGreaterThan(0);
             expect(ATTRIBUTES).toContain(e.scale);
             expect(e.power).toBeGreaterThan(0);
-            break;
-          case 'thorns':
-            expect(ATTRIBUTES, `${key} scale`).toContain(e.scale);
-            expect(e.power).toBeGreaterThan(0);
-            expect(e.turns).toBeGreaterThan(0);
-            expect(s.target, key).toBe('self');
-            expect(content.statuses.thorns, key).toBeDefined();
             break;
           case 'selfDamage':
             expect(e.ratio).toBeGreaterThan(0);
@@ -133,11 +142,40 @@ describe('skill verisi', () => {
     });
   }
 
+  it('alan tanımı geçerli: area_enemies şekilli (row/column/plus/rect 1..4 x 1..3), başka türde area yok, aşamalı skill yalnızca hedef başı etkiler', () => {
+    const fm = content.formulas.formation;
+    for (const [key, s] of all) expect(skillAreaProblem(s, fm), key).toBeNull();
+  });
+
+  it('alan doğrulaması tahtayı aşan / bozuk tanımı reddeder (veri hatası; çalışma zamanında yine tahtaya kısılır)', () => {
+    const fm = content.formulas.formation;
+    for (let r = 1; r <= fm.rows; r++) for (let c = 1; c <= fm.lanes; c++) expect(areaDefProblem({ shape: 'rect', rows: r, cols: c, anchor: 'bottom_left' }, fm), `${r}x${c}`).toBeNull();
+    for (const bad of [
+      { shape: 'rect', rows: fm.rows + 1, cols: 1 },
+      { shape: 'rect', rows: 1, cols: fm.lanes + 1 },
+      { shape: 'rect', rows: 0, cols: 2 },
+      { shape: 'rect', rows: 1.5, cols: 2 },
+      { shape: 'rect', rows: 2 },
+      { shape: 'rect', rows: 2, cols: 2, anchor: 'center' },
+      { radius: 1 },
+      { shape: 'circle' },
+      { shape: 'row', rows: 2 },
+      { shape: 'plus', stages: 'spiral' },
+      { shape: 'plus', reverse: true },
+    ]) expect(areaDefProblem(bad, fm), JSON.stringify(bad)).not.toBeNull();
+    const base = content.skills.natures_wrath!;
+    expect(skillAreaProblem({ ...base, target: 'column_enemies' as unknown as SkillDef['target'] }, fm)).not.toBeNull(); // eski tür (artık tür listesinde yok) veride kalırsa reddedilir
+    expect(skillAreaProblem({ ...base, area: undefined }, fm)).not.toBeNull();
+    expect(skillAreaProblem({ ...base, target: 'single_enemy' }, fm)).not.toBeNull(); // area yalnızca alan skill'inde
+    expect(skillAreaProblem({ ...base, effects: [...base.effects, { type: 'manaBurn', amount: 5, gainRatio: 0.5 }] }, fm)).not.toBeNull(); // aşamalıda yasak etki
+    expect(skillAreaProblem({ ...base, area: { ...base.area!, stages: undefined }, effects: [...base.effects, { type: 'manaBurn', amount: 5 }] }, fm)).toBeNull();
+  });
+
   it('saldırı ve mana yakma düşmanı, şifa/kalkan/koruma dostu (veya kendini) hedefler', () => {
     for (const [key, s] of all) {
       const hurts = s.effects.some((e) => e.type === 'damage' || e.type === 'manaBurn');
       const helps = s.effects.some((e) => e.type === 'heal' || e.type === 'hot' || (e.type === 'shield' && !e.self) || e.type === 'guard' || e.type === 'taunt');
-      if (hurts) expect(['single_enemy', 'all_enemies', 'area_enemies', 'column_enemies', 'everyone', 'random_enemies'], key).toContain(s.target);
+      if (hurts) expect(['single_enemy', 'all_enemies', 'area_enemies', 'everyone', 'random_enemies'], key).toContain(s.target);
       if (helps) expect(['single_ally', 'all_allies', 'self', 'everyone'], key).toContain(s.target);
     }
   });
@@ -204,7 +242,15 @@ describe('hız (SPD) ve yapay zeka verisi', () => {
     expect(content.formulas.turn.queueLength).toBeGreaterThanOrEqual(1);
   });
 
-  const PRIORITIES = ['kill', 'heal', 'tactic', 'summon', 'shield', 'aoe', 'damage', 'taunt', 'guard', 'burn', 'thorns'];
+  const PRIORITIES = ['kill', 'heal', 'tactic', 'summon', 'shield', 'aoe', 'damage', 'taunt', 'guard', 'burn'];
+
+  it('thorns tamamen kaldırıldı (madde 222): skill, durum, YZ önceliği/profili yok', () => {
+    expect(content.skills.thorn_shield).toBeUndefined();
+    expect(content.statuses.thorns).toBeUndefined();
+    expect(content.aiConfig.profiles.thorny).toBeUndefined();
+    for (const [id, s] of Object.entries(content.skills)) for (const e of s.effects) expect((e as { type: string }).type, id).not.toBe('thorns');
+    for (const [name, p] of Object.entries(content.aiConfig.profiles)) expect(p.priorities as string[], name).not.toContain('thorns');
+  });
 
   it('varsayılan YZ profili tanımlı', () => {
     expect(content.aiConfig.profiles[content.aiConfig.defaultProfile]).toBeDefined();
@@ -256,7 +302,7 @@ describe('class havuzu', () => {
     const files = readdirSync(join(__dirname, '..', 'data', 'classes')).filter((f) => f.endsWith('.json')).map((f) => f.replace(/\.json$/, ''));
     expect(Object.keys(content.classes).sort()).toEqual(files.sort());
     expect([...content.battles['random-battle']!.random!.pool].sort()).toEqual(content.randomPool.slice().sort()); // havuz = testOnly olmayan class'lar
-    expect(content.selectableClasses.sort()).toEqual(Object.keys(content.classes).sort());
+    expect(content.selectableClasses.slice().sort()).toEqual(Object.keys(content.classes).filter((id) => !content.classes[id]!.hidden).sort()); // hidden class'lar seçilemez
     expect(content.classes.aoe_tester!.testOnly).toBe(true);
     expect(content.randomPool).not.toContain('aoe_tester');
     expect(Object.keys(content.classes)).toContain('gambler');
@@ -266,7 +312,7 @@ describe('class havuzu', () => {
   it('class id, sprite id ve görsel dosyası birbirine bağlı (görsel class\'a aittir, taraf fark etmez)', () => {
     for (const [id, def] of Object.entries(content.classes)) {
       expect(def.id).toBe(id);
-      if (def.testOnly) { expect(existsSync(join(__dirname, '..', 'assets', 'sprites', def.spriteId, 'idle.png')), id).toBe(true); continue; } // test class'ı başka class'ın görselini geçici kullanır
+      if (def.testOnly || BORROWED_SPRITE_CLASSES[id]) { if (BORROWED_SPRITE_CLASSES[id]) expect(def.spriteId, id).toBe(BORROWED_SPRITE_CLASSES[id]); expect(existsSync(join(__dirname, '..', 'assets', 'sprites', def.spriteId, 'idle.png')), id).toBe(true); continue; } // test class'ı başka class'ın görselini geçici kullanır
       expect(def.spriteId, id).toBe(id);
       // Sprite'ı henüz çizilmemiş class'lar placeholder (class rengine boyalı blok) kullanır; sprite gelince listeden çıkarılır.
       if (!PLACEHOLDER_SPRITE_CLASSES.includes(id)) expect(existsSync(join(__dirname, '..', 'assets', 'sprites', id, 'idle.png')), `assets/sprites/${id}/idle.png`).toBe(true);
@@ -294,7 +340,7 @@ describe('güç sınırları (kalkan ve çağrı çok güçlü olmasın)', () =>
         for (const def of Object.values(content.classes)) {
           if (!def.skills.includes(id)) continue;
           const amount = attributePower(def.stats, e.scale, content.formulas) * e.power;
-          expect(amount, `${def.id} ${id}`).toBeLessThanOrEqual(avgHp * 0.4); // Mana Barrier INT ile ölçeklenir; ortalama class canının %40'ını aşmasın (stat 30 kuralı sonrası gevşetildi, bkz. open-questions 175)
+          expect(amount, `${def.id} ${id}`).toBeLessThanOrEqual(avgHp * 0.42); // Mana Barrier INT ile ölçeklenir; ortalama class canının %42'sini aşmasın (stat 30 kuralı sonrası gevşetildi, bkz. open-questions 175; kırılgan Cutthroat (can 50) ortalamayı düşürdüğü için %40 -> %42, madde 225)
         }
       }
     }
@@ -408,7 +454,7 @@ describe('görsel veri: skill ikonları, class logoları, stat ikonları, hareke
 
   it("yukarıdan düşen skill'lerin hepsinin düşen şey türü var", () => {
     const sky = Object.values(content.skills).filter((s) => s.motion === 'sky');
-    expect(sky.map((s) => s.id).sort()).toEqual(['arrow_rain', 'blizzard', 'drain_field', 'fist_crush', 'holy_strike', 'judgment', 'meteor', 'radiance']);
+    expect(sky.map((s) => s.id).sort()).toEqual(['arrow_rain', 'blizzard', 'drain_field', 'fist_crush', 'holy_strike', 'judgment', 'meteor', 'radiance', 'root_smash']);
     for (const s of sky) expect(['arrows', 'shards', 'meteor', 'void', 'light', 'fist'], s.id).toContain(s.skyFx);
     for (const s of Object.values(content.skills)) if (s.motion !== 'sky') expect(s.skyFx, s.id).toBeUndefined();
   });

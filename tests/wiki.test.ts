@@ -27,7 +27,7 @@ describe('Wiki kataloğu (sağ üst kitap simgesi)', () => {
   });
 
   it('tüm class ve çağrılar kartlarıyla, sprite/avatar/logo/skill/pasifleriyle yer alır', () => {
-    expect(wiki.classes.map((c) => c.id).sort()).toEqual(Object.keys(content.classes).sort());
+    expect(wiki.classes.map((c) => c.id).sort()).toEqual(Object.keys(content.classes).filter((id) => !content.classes[id]!.hidden).sort());
     expect(wiki.summons.map((c) => c.id).sort()).toEqual(Object.keys(content.summons).sort());
     for (const u of [...wiki.classes, ...wiki.summons]) {
       const def = content.classes[u.id] ?? content.summons[u.id]!;
@@ -79,7 +79,7 @@ describe('Wiki kataloğu (sağ üst kitap simgesi)', () => {
     const ids = wiki.mechanics.map((a) => a.id);
     for (const k of ['str', 'int', 'dex', 'luck', 'hp', 'mp', 'spd', 'critChance', 'accuracy', 'evasion', 'armor', 'magicArmor']) expect(ids, k).toContain(`stat-${k}`);
     for (const k of ['str', 'dex', 'int', 'luck']) expect(ids).toContain(`bonus-${k}`);
-    for (const k of ['damage-formula', 'hit-chance', 'ground', 'gamble', 'thorns', 'summons', 'revive', 'rage', 'actions', 'area-shapes']) expect(ids, k).toContain(k);
+    for (const k of ['damage-formula', 'hit-chance', 'ground', 'gamble', 'corpses', 'summons', 'revive', 'rage', 'actions', 'area-shapes']) expect(ids, k).toContain(k);
     for (const name of ['Resilience', "Hunter's Mark", 'Mana Echo', 'Lucky Escape']) expect(wiki.mechanics.some((a) => a.title === name), name).toBe(true);
     for (const a of [...wiki.mechanics, ...wiki.gettingStarted]) {
       expect(a.blocks.length, a.id).toBeGreaterThan(0);
@@ -144,10 +144,9 @@ describe('Wiki kataloğu (sağ üst kitap simgesi)', () => {
 
 describe('Wiki: test class\'ı ve alan şekilleri', () => {
   it('testOnly class (Geometer) wiki\'de görünür ve testOnly işaretlidir; diğerleri değil', () => {
-    const t = wiki.classes.find((c) => c.id === 'aoe_tester')!;
-    expect(t.testOnly).toBe(true);
-    expect(t.skills.map((s) => s.id)).toEqual(['shape_row', 'shape_column', 'shape_rect', 'shape_plus']);
-    for (const c of wiki.classes.filter((x) => x.id !== 'aoe_tester')) expect(c.testOnly, c.id).toBe(false);
+    // Geometer şimdilik gizli (hidden): wiki'de görünmez; diğer class'lar testOnly değildir
+    expect(wiki.classes.find((c) => c.id === 'aoe_tester')).toBeUndefined();
+    for (const c of wiki.classes) expect(c.testOnly, c.id).toBe(false);
   });
 
   it('Mechanics: "Area shapes" makalesi row/column/block/cross kurallarını anlatır', () => {

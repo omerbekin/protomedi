@@ -26,6 +26,8 @@ import { BattleScene } from '../game/scenes/BattleScene';
 import { newSeed } from '../game/seed';
 import { debugButton, debugSection, type DebugMenu } from './debug-menu';
 import { copyMatchData } from './match-copy';
+import { isFullscreen, toggleFullscreen } from './fullscreen';
+import { getRotateMode, setRotateMode } from './viewport';
 
 /** Sekme sırası (menü bu sırayla gösterir). */
 export const DEBUG_TABS = ['Battle', 'Unit', 'Skills', 'Sounds', 'Tweaks', 'Info'];
@@ -33,11 +35,12 @@ export const DEBUG_TABS = ['Battle', 'Unit', 'Skills', 'Sounds', 'Tweaks', 'Info
 interface Ctx {
   game: Phaser.Game;
   debug: DebugMenu;
+  /** Wiki'yi verilen bölümde açar (varsayılan: Assets). Asset Gallery artık Wiki > Assets içindedir. */
+  openAssets: (section?: string) => void;
 }
 
 let fps: HTMLDivElement | null = null;
 let fpsTimer = 0;
-let forcePortrait = false;
 /** Seed giriş kutusunun taslağı (menü yenilense de kaybolmasın). */
 let seedDraft = '';
 let hpDraft = '';
@@ -45,11 +48,6 @@ let mpDraft = '';
 let rageDraft = '';
 
 const FORCE_LABEL = { auto: 'Normal', always: 'Always', never: 'Never' } as const;
-
-/** Opens the asset gallery page in a new tab (relative URL: works on the dev server and in the build). */
-function openAssetGallery(): void {
-  window.open('./gallery.html', '_blank', 'noopener');
-}
 
 /** Panellerin üstünde kısa bilgi/hata satırı (bir sonraki işleme kadar kalır). */
 const notes = new Map<string, string>();
@@ -75,7 +73,8 @@ const row = (...children: HTMLElement[]): HTMLElement => {
   return el;
 };
 
-export function registerDebugTools({ game, debug }: Ctx): void {
+export function registerDebugTools({ game, debug, openAssets }: Ctx): void {
+  const openAssetGallery = (): void => openAssets('assets');
   /** The battle scene, only while a battle is actually running (not on the team selection screen). */
   const battle = (): BattleScene | null => (game.scene.isActive(BattleScene.KEY) ? (game.scene.getScene(BattleScene.KEY) as BattleScene) : null);
   const applyFlags = (): void => {
@@ -135,6 +134,29 @@ export function registerDebugTools({ game, debug }: Ctx): void {
         enemySize: 5,
       };
       // from the battle: restart it; from team select (or anywhere else): start the battle scene
+      const b = battle();
+      if (b) b.scene.restart(data);
+      else game.scene.getScenes(true)[0]?.scene.start(BattleScene.KEY, data);
+    },
+  });
+  // Cutthroat + Undead + Paladin test battle: Smoke Bomb on both boards, Backstab targets, corpse marks, Raise Dead preview, Resurrection (test mode: no turn order, no cooldowns)
+  debug.register({
+    id: 'battle.test-cutthroat',
+    tab: 'Battle',
+    section: 'Battle',
+    dock: { group: 'Battle flow', order: 10, icon: 'skull', short: 'Test Cutthroat corpses' },
+    label: 'Test Cutthroat corpses',
+    hint: 'Start a test battle with a Cutthroat (Smoke Bomb on either side, Backstab), an Undead and a Paladin on your team against 5 random enemies; kill enemies (Units tools) to see corpse marks, then try Raise Dead and Resurrection',
+    run: () => {
+      const seed = newSeed();
+      const mates = content.randomTeam(seed, 2);
+      const data = {
+        seed,
+        mode: 'test' as const,
+        teams: { party: content.randomCells(content.arrangeTeam(['cutthroat', 'undead', 'paladin', ...mates]), seed), enemies: content.randomCells(content.randomTeam(seed + 7, 5), seed + 7) },
+        partySize: 5,
+        enemySize: 5,
+      };
       const b = battle();
       if (b) b.scene.restart(data);
       else game.scene.getScenes(true)[0]?.scene.start(BattleScene.KEY, data);
@@ -567,12 +589,12 @@ export function registerDebugTools({ game, debug }: Ctx): void {
 
   // ===== Sounds =====
   debug.registerPanel({
-    id: 'panel.asset-gallery-link',
+    id: 'panel.assets-wiki-link',
     tab: 'Sounds',
     render: (el) => {
       el.append(
-        ...debugSection('Asset gallery', debugButton('Open Asset Gallery', openAssetGallery, { icon: 'frame', title: 'Open the asset gallery (sounds, icons and more) in a new browser tab' })),
-        noteLineText('The full sound list is also in the asset gallery. These buttons play the same sounds.'),
+        ...debugSection('Assets (wiki)', debugButton('Open assets (wiki)', openAssetGallery, { icon: 'frame', title: 'Open the wiki at Assets: sounds, animations, icons, character art, palette and legacy' })),
+        noteLineText('The full sound list is also in the wiki, under Assets > Sounds. These buttons play the same sounds.'),
       );
     },
   });
@@ -690,7 +712,7 @@ export function registerDebugTools({ game, debug }: Ctx): void {
       }
       const el = document.createElement('div');
       el.className = 'fps-counter';
-      document.body.append(el);
+      (document.getElementById('ui-root') ?? document.body).append(el);
       fps = el;
       const tick = (): void => {
         el.textContent = `${Math.round(game.loop.actualFps)} FPS`;
@@ -699,18 +721,16 @@ export function registerDebugTools({ game, debug }: Ctx): void {
       fpsTimer = window.setInterval(tick, 500);
     },
   });
+  // Rotate view (portrait phones): auto = rotate only on touch devices held upright; on/off force it (for testing on a desktop window)
   debug.register({
     id: 'screen.portrait',
     tab: 'Tweaks',
     section: 'Display',
-    dock: { group: 'View', order: 5, icon: 'swap', short: 'Force portrait', on: () => forcePortrait },
-    label: () => (forcePortrait ? 'Force portrait: on' : 'Force portrait: off'),
-    on: () => forcePortrait,
-    hint: 'Show the "rotate your phone" notice as if the screen were upright',
-    run: () => {
-      forcePortrait = !forcePortrait;
-      document.body.classList.toggle('force-portrait', forcePortrait);
-    },
+    dock: { group: 'View', order: 5, icon: 'swap', short: 'Rotate view', on: () => getRotateMode() !== 'auto', state: () => getRotateMode().toUpperCase() },
+    label: () => `Rotate view: ${getRotateMode()}`,
+    on: () => getRotateMode() !== 'auto',
+    hint: 'Turn the game 90 degrees so it fills a phone held upright: auto (touch devices only), on, off. Pointer input and all panels follow the rotation',
+    run: () => setRotateMode(getRotateMode() === 'auto' ? 'on' : getRotateMode() === 'on' ? 'off' : 'auto'),
   });
   for (const m of DAMAGE_MULTS) {
     debug.register({
@@ -824,13 +844,13 @@ export function registerDebugTools({ game, debug }: Ctx): void {
   shortcut('tools.skills', 0, 'wand', 'Skill preview', 'Skills', 'Open the Skills tab: play any skill animation and sound on a target without spending a turn');
   shortcut('tools.sounds', 1, 'speaker', 'Sounds', 'Sounds', 'Open the Sounds tab: listen to every sound effect');
   debug.register({
-    id: 'tools.asset-gallery',
+    id: 'tools.assets-wiki',
     dockOnly: true,
     tab: 'Sounds',
     section: 'Tools',
-    dock: { group: 'Tools', order: 2, icon: 'frame', short: 'Asset gallery' },
-    label: 'Asset gallery',
-    hint: 'Open the asset gallery page (sounds, icons and more) in a new browser tab',
+    dock: { group: 'Tools', order: 2, icon: 'frame', short: 'Open assets (wiki)' },
+    label: 'Open assets (wiki)',
+    hint: 'Open the wiki at Assets (sounds, animations, icons, character art, palette, legacy)',
     run: openAssetGallery,
   });
   for (const [id, victory, order, icon, short] of [['tools.result-victory', true, 5, 'sword', 'Preview victory'], ['tools.result-defeat', false, 6, 'skull', 'Preview defeat']] as const) {
@@ -855,6 +875,16 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     label: 'Copy match data',
     hint: 'Copy the match record to the clipboard: every move so far with the state before it, the result, and for AI moves all candidates with their scores and why one was chosen. Works mid-battle and in test mode',
     run: () => void copyMatchData({ get: () => battle()?.matchLogData() ?? null }),
+  });
+  debug.register({
+    id: 'tools.fullscreen',
+    dockOnly: true,
+    tab: 'Tweaks',
+    section: 'Tools',
+    dock: { group: 'Tools', order: 8, icon: 'fullscreen', short: 'Fullscreen', on: () => isFullscreen() },
+    label: 'Fullscreen',
+    hint: 'Toggle full screen (hides the browser address bar; landscape is locked where the browser allows it)',
+    run: () => void toggleFullscreen(),
   });
   shortcut('tools.seed', 3, 'clover', 'Seed & link', 'Battle', 'Open the Battle tab: copy this battle\'s seed or link, or restart with a typed seed');
   shortcut('tools.info', 4, 'info', 'Info', 'Info', 'Open the Info tab: live stats, turn queue and AI decisions');

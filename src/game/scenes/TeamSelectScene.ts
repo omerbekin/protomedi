@@ -10,6 +10,7 @@ import { buildBackdrop, buildTip, classAvatar, ensureGlow, fitText, fx, goldText
 import type { MenuButton, TipContent } from '../menu-ui';
 import { archetypeOf, clampSize, freeCellFor, isTeamFull, isTestClass, missingMessage, pipLayout, randomizePool, rangeOf, rosterIds, rosterLayout, sizeSummary, stepSize, teamCount, trimToSize } from '../team-select-model';
 import { skillMiniGrid } from '../../ui/shape-diagram';
+import { drawQuadTile } from '../shape-draw';
 import type { SideSizes } from '../team-select-model';
 import { cornerOrnaments, frameRect, glowRect, GOLD, makePanel } from '../ui-frame';
 
@@ -45,6 +46,9 @@ const SIDE_HEX: Record<Side, string> = { party: colors.partySlot, enemies: color
 const SIDE_TITLE: Record<Side, string> = { party: 'PLAYER', enemies: 'ENEMY' };
 const SIDE_NAME: Record<Side, string> = { party: 'Player', enemies: 'Enemy' };
 const ATTRS: Array<'str' | 'dex' | 'int' | 'luck'> = ['str', 'dex', 'int', 'luck'];
+
+/** Axis-aligned rectangle as a quad (corners clockwise) for the common cell plate. */
+const rectQuad = (x: number, y: number, w: number, h: number) => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
 
 interface SlotRect {
   side: Side;
@@ -831,8 +835,7 @@ export class TeamSelectScene extends Phaser.Scene {
         if (!def && full) body.setAlpha(0.4); // team is full: free cells cannot take a new champion
         layer.add(body);
         const hot = this.add.graphics();
-        glowRect(hot, cx - SLOT_W / 2, cy - SLOT_H / 2, SLOT_W, SLOT_H, GOLD.bright, fx(1), 4);
-        frameRect(hot, cx - SLOT_W / 2, cy - SLOT_H / 2, SLOT_W, SLOT_H, { bevel: 4, edge: GOLD.light, light: GOLD.bright });
+        drawQuadTile(hot, rectQuad(cx - SLOT_W / 2, cy - SLOT_H / 2, SLOT_W, SLOT_H), 'anchor', 'neutral'); // drop target: same plate as the battle floor's anchor
         hot.setVisible(false);
         layer.add(hot);
         this.slotRects.push({ side, i, x: cx - SLOT_W / 2, y: cy - SLOT_H / 2, w: SLOT_W, h: SLOT_H, hot, body });
@@ -855,11 +858,9 @@ export class TeamSelectScene extends Phaser.Scene {
     const g = this.add.graphics();
     const body = this.add.container(cx, cy, [g]);
     if (!def) {
-      g.fillStyle(0x070403, 0.62).fillRect(-hw, -hh, SLOT_W, SLOT_H);
-      g.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.55, 0.55, 0, 0).fillRect(-hw + 2, -hh + 2, SLOT_W - 4, 22);
-      frameRect(g, -hw, -hh, SLOT_W, SLOT_H, { bevel: 3, edge: 0x4a3a22, light: 0x6b5632, alpha: 0.7, shadow: 0.2 });
-      g.lineStyle(2, GOLD.edge, 0.22).strokePoints([{ x: 0, y: -14 }, { x: 14, y: 0 }, { x: 0, y: 14 }, { x: -14, y: 0 }], true);
-      g.lineStyle(2, GOLD.edge, 0.22).lineBetween(-6, 0, 6, 0).lineBetween(0, -6, 0, 6);
+      // Empty cell: the common cell plate ('selectable', toned by side), same look as the battle floor
+      g.fillStyle(0x070403, 0.5).fillRect(-hw, -hh, SLOT_W, SLOT_H);
+      drawQuadTile(g, rectQuad(-hw, -hh, SLOT_W, SLOT_H), 'selectable', side === 'party' ? 'ally' : 'enemy');
       return body;
     }
     const col = hexNum(def.color);
@@ -896,7 +897,7 @@ export class TeamSelectScene extends Phaser.Scene {
     body.add(this.add.image(colX, hh - 26, ensureIcon(this, def.logo, def.color, false)).setDisplaySize(22, 22));
     // Hover glow + remove mark
     const hov = this.add.graphics().setAlpha(0);
-    glowRect(hov, -hw, -hh, SLOT_W, SLOT_H, GOLD.bright, fx(0.9), 4);
+    drawQuadTile(hov, rectQuad(-hw, -hh, SLOT_W, SLOT_H), 'hover', side === 'party' ? 'ally' : 'enemy');
     const x = this.add.graphics().setAlpha(0);
     x.fillStyle(0x120c07, 0.95).fillCircle(hw - 14, -hh + 14, 11);
     x.lineStyle(2, GOLD.edge, 1).strokeCircle(hw - 14, -hh + 14, 11);

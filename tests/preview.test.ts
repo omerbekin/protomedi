@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Battle, attributePower, content, describeClass, describeSkill, describeStat, previewSkill } from '../src/engine';
-import type { BattleEvent, StatKind } from '../src/engine';
+import type { BattleEvent, SkillDef, StatKind } from '../src/engine';
 import { installLegacySkills } from './legacy-skills';
 
 installLegacySkills();
@@ -67,12 +67,14 @@ describe('önizleme: hasar', () => {
     expect(d.critMax).toBe(Math.round(d.max * 3));
   });
 
-  it('menzildeki tüm düşmanlar için önizleme döner (Whirlwind: ön sıra; Arrow Rain: artı + çaprazlar)', () => {
+  it('menzildeki tüm düşmanlar için önizleme döner (Whirlwind: ön sıra; Arrow Rain: şeklindeki herkes)', () => {
     const w = previewSkill(testBattle(), WARRIOR, 'whirlwind');
     expect(w.map((x) => x.uid).sort()).toEqual([E_WARRIOR, E_DRUID].sort());
     for (const x of w) expect(x.damage?.avg).toBeGreaterThan(0);
-    const rain = previewSkill(testBattle(), E_ARCHER, 'arrow_rain', PALADIN);
-    expect(rain).toHaveLength(3); // yarıçap 2: aynı sıradaki Warrior + şeritteki Mage; çapraz (Undead) değil
+    const b = testBattle();
+    const rain = previewSkill(b, E_ARCHER, 'arrow_rain', PALADIN);
+    const cells = b.areaCells('arrow_rain', b.get(PALADIN)!.slot, 'party'); // şekil veriden (3x3)
+    expect(rain.map((x) => x.uid).sort()).toEqual(b.living('party').filter((c) => cells.includes(c.slot)).map((c) => c.uid).sort());
   });
 
   it('tek hedefli skill yalnızca seçilen hedef için önizleme döndürür; menzil dışı/geçersiz hedefte boş', () => {
@@ -391,11 +393,13 @@ describe('skill rozeti ve primary bonus adı (UI)', () => {
   const f = content.formulas;
   const st = content.classes.warrior!.stats;
 
-  it('AoE rozeti yarıçapı, Random rozeti sayıyı taşır; açıklama satırlarında tekrarlanmaz', () => {
-    const area = Object.values(content.skills).find((s) => s.target === 'area_enemies')!;
-    const info = describeSkill(area, st, f);
-    expect(info.targetBadge).toBe(`AoE · r${area.area?.radius ?? 1}`);
-    expect(info.lines.join('\n')).not.toMatch(/radius/i);
+  it('alan rozeti şekli (Row / Column / Block RxC / Cross), Random rozeti sayıyı taşır; açıklama satırlarında tekrarlanmaz', () => {
+    const badge = (a: NonNullable<SkillDef['area']>) => (a.shape === 'rect' ? `Block ${a.rows}x${a.cols}` : { row: 'Row', column: 'Column', plus: 'Cross', x: 'X' }[a.shape]);
+    for (const area of Object.values(content.skills).filter((s) => s.target === 'area_enemies' || s.target === 'area_any')) {
+      const info = describeSkill(area, st, f);
+      expect(info.targetBadge, area.id).toBe(badge(area.area!));
+      expect(info.lines.join('\n')).not.toMatch(/radius|Block \d/i);
+    }
     const rnd = Object.values(content.skills).find((s) => s.target === 'random_enemies')!;
     const info2 = describeSkill(rnd, st, f);
     expect(info2.targetBadge).toBe(`Random · ${rnd.count ?? 3}`);

@@ -1,11 +1,10 @@
 {
-  "_not": "Yapay zeka profilleri. priorities soldan sağa denenir; ilk uygun olan seçilir. kill: öldürebileceği biri varsa. heal: dostlardan biri healBelowRatio altındaysa. summon: yeterince çağrılmış birim yoksa. shield: kalkansız ve canı shieldBelowRatio altındaki dosta/kendine. aoe: en az aoeMinTargets düşman varsa herkese vuran skill. tactic: skill'in `ai` bağlam ipucu sağlanan (data/skills.json) seçenekler arasında en değerlisi: 4. skill'ler gibi güçlü skill'ler yalnızca doğru bağlamda (ör. Meteor en az 2 düşmana, Abyssal Cry yeterli canda ve tehdit varken) seçilir; saf self-buff'ın net değeri (savunma + hasar artışı - can/MP bedeli - kaçırılan saldırı) pozitif olmalı. damage: odak hedefe en verimli hasar. Skill'lerin `ai` ipuçları (data/skills.json) hangi bağlamda seçilebileceğini belirler; bağlam sağlanmıyorsa yalnızca öldürücü vuruşta seçilir. focus: lowest_hp (en az canlıya) veya lowest_ratio (can oranı en düşüğe). mpCostWeight/hpCostWeight: bedelin skora etkisi. minHpRatioForHpCost: can ödeyen skill'ler için kullanıcının en az can oranı (öldürücü vuruş hariç). taunt: kendinde taunt yoksa ve kullanılabiliyorsa taunt çek. guard: canı guardBelowRatio altındaki, korumasız dostu koru. thorns: kendinde thorns yoksa ve en az thornsMinMelee yakın dövüşçü düşman varsa dikenli kalkan aç. burn: en az burnMinTargets düşmanın yakılabilir manası varsa mana yak. GLOBAL SKILL'LER (global bloğu; src/engine/ai.ts chooseGlobal): Rest, Skip Turn ve Move Tile yalnızca TAKTİK DEĞER hesabıyla seçilir (değer = beklenen hasar/şifa/kalkan - bedel; 'şimdiki hamle' = global olmadan seçilecek hamle). Öldürücü ve işlevsel hamleler (şifa, çağrı, kalkan, taunt, guard, thorns, mana yakma) her zaman önce gelir; çağrılan birimler kullanmaz. REST: skill MP yüzünden yapılamıyorsa (MP oranı rest.mpBelowRatio altında) ya da en geç rest.lookaheadTurns tur sonra hazır olacak güçlü skill'e yetecek MP biriktirmek için; ertelenen skill değeri x futureValueShare, şimdiki hamleden en az minGainShare payı kadar fazla olmalı; tehlikede (can dangerHpRatio altında ve gelen hasar canın dangerIncomingShare katından fazla) denenmez. SKIP TURN: yapılacak değerli hamle yoksa ya da 1 tur sonra hazır olacak güçlü skill'e kıyasla şimdiki hamle değersizse (değer < skip.worthlessShare x skill değeri); üst üste sınırı global-skills.json'da. MOVE TILE: (1) kırılgan/menzilli (yakın dövüş skill'i olmayan) ya da yaralı (retreatHpRatio altı) birim yakın dövüşe açıkken engellenen hasar canın move.minAvoidShare payını geçiyorsa erişim dışındaki boş yuvaya; (2) yakın dövüşçü ön sırada olmadığı için melee yapamıyor ve öne boş yuva varsa; (3) zırh aurası taşıyan birim daha çok dostun bitişiğine geçerek beklenen hasarı minAuraGain kadar azaltacaksa. Üst üste Move yok; ölü dostun yuvasından kaçınılır.",
+  "_not": "Yapay zeka profilleri. priorities soldan sağa denenir; ilk uygun olan seçilir. kill: öldürebileceği biri varsa. heal: dostlardan biri healBelowRatio altındaysa. summon: yeterince çağrılmış birim yoksa. shield: kalkansız ve canı shieldBelowRatio altındaki dosta/kendine. aoe: en az aoeMinTargets düşman varsa herkese vuran skill. tactic: skill'in `ai` bağlam ipucu sağlanan (data/skills.json) seçenekler arasında en değerlisi: 4. skill'ler gibi güçlü skill'ler yalnızca doğru bağlamda (ör. Meteor en az 2 düşmana, Abyssal Cry yeterli canda ve tehdit varken) seçilir; saf self-buff'ın net değeri (savunma + hasar artışı - can/MP bedeli - kaçırılan saldırı) pozitif olmalı. damage: odak hedefe en verimli hasar. Skill'lerin `ai` ipuçları (data/skills.json) hangi bağlamda seçilebileceğini belirler; bağlam sağlanmıyorsa yalnızca öldürücü vuruşta seçilir. focus: lowest_hp (en az canlıya) veya lowest_ratio (can oranı en düşüğe). mpCostWeight/hpCostWeight: bedelin skora etkisi. minHpRatioForHpCost: can ödeyen skill'ler için kullanıcının en az can oranı (öldürücü vuruş hariç). taunt: kendinde taunt yoksa ve kullanılabiliyorsa taunt çek. guard: canı guardBelowRatio altındaki, korumasız dostu koru. vinewarden (Treant): uzak menzilli alan kontrolcüsü; Vine Snare skill ipucuyla (minTargets 2) tactic önceliğinde en az 2 düşmana değince, aksi halde Root Smash normal odak hedefe. summonValueShare: ceset tüketen çağrıda (Raise Dead) ceset YOKSA çağrı beslenmemiş gelir ve yalnızca tahmini değeri (birimin en iyi ham hasarı x ömür x summonValueShare) - bedel, bu turun en iyi başka hamlesinden düşük değilse çağrılır; ceset varsa (beslenmiş) hemen çağrılır. burn: en az burnMinTargets düşmanın yakılabilir manası varsa mana yak. GLOBAL SKILL'LER (global bloğu; src/engine/ai.ts chooseGlobal): Rest, Skip Turn ve Move Tile yalnızca TAKTİK DEĞER hesabıyla seçilir (değer = beklenen hasar/şifa/kalkan - bedel; 'şimdiki hamle' = global olmadan seçilecek hamle). Öldürücü ve işlevsel hamleler (şifa, çağrı, kalkan, taunt, guard, mana yakma) her zaman önce gelir; çağrılan birimler kullanmaz. REST: skill MP yüzünden yapılamıyorsa (MP oranı rest.mpBelowRatio altında) ya da en geç rest.lookaheadTurns tur sonra hazır olacak güçlü skill'e yetecek MP biriktirmek için; ertelenen skill değeri x futureValueShare, şimdiki hamleden en az minGainShare payı kadar fazla olmalı; tehlikede (can dangerHpRatio altında ve gelen hasar canın dangerIncomingShare katından fazla) denenmez. SKIP TURN: yapılacak değerli hamle yoksa ya da 1 tur sonra hazır olacak güçlü skill'e kıyasla şimdiki hamle değersizse (değer < skip.worthlessShare x skill değeri); üst üste sınırı global-skills.json'da. MOVE TILE: (1) kırılgan/menzilli (yakın dövüş skill'i olmayan) ya da yaralı (retreatHpRatio altı) birim yakın dövüşe açıkken engellenen hasar canın move.minAvoidShare payını geçiyorsa erişim dışındaki boş yuvaya; (2) yakın dövüşçü ön sırada olmadığı için melee yapamıyor ve öne boş yuva varsa; (3) zırh aurası taşıyan birim daha çok dostun bitişiğine geçerek beklenen hasarı minAuraGain kadar azaltacaksa. Üst üste Move yok; ölü dostun yuvasından kaçınılır. ASSASSIN (Cutthroat): kill > tactic > damage, focus lowest_ratio (yaralı hedef). Arka sıra/yaralı tercihi YAPAY AĞIRLIKLA değil skill ipuçlarıyla: Backstab (anyOf kill | minTargetMaxHpShare 0,5 | targetBehindFront: normal melee erişemeyen arka saf), Saltire Cut (minTargets 2), Smoke Bomb (anyOf minTargets 2 | minAllyTargets 2; değeri = Blinded/Shrouded ile önlenen beklenen hasar, ai.ts statusMitigation). Venom Edge ipuçsuz ana saldırı (damage).",
   "defaultProfile": "aggressive",
   "profiles": {
-    "thorny": {
+    "vinewarden": {
       "priorities": [
         "kill",
-        "thorns",
         "tactic",
         "aoe",
         "damage"
@@ -17,8 +16,7 @@
       "maxSummons": 0,
       "mpCostWeight": 0.5,
       "hpCostWeight": 1,
-      "minHpRatioForHpCost": 0.5,
-      "thornsMinMelee": 1
+      "minHpRatioForHpCost": 0.5
     },
     "aggressive": {
       "priorities": [
@@ -170,9 +168,25 @@
       "maxSummons": 1,
       "mpCostWeight": 0.5,
       "hpCostWeight": 1,
-      "minHpRatioForHpCost": 0.5
+      "minHpRatioForHpCost": 0.5,
+      "summonValueShare": 0.75
     },
     "gambler": {
+      "priorities": [
+        "kill",
+        "tactic",
+        "damage"
+      ],
+      "focus": "lowest_ratio",
+      "aoeMinTargets": 3,
+      "healBelowRatio": 0,
+      "shieldBelowRatio": 0,
+      "maxSummons": 0,
+      "mpCostWeight": 0.4,
+      "hpCostWeight": 1,
+      "minHpRatioForHpCost": 0.5
+    },
+    "assassin": {
       "priorities": [
         "kill",
         "tactic",

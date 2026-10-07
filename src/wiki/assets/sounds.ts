@@ -1,7 +1,7 @@
-import { audioSettings, playSfxOn, synthSfx } from '../game/audio';
-import { iconUrl } from '../ui/dom-icons';
-import { MASTER_GAIN, type Catalog, type SoundEntry } from './catalog';
-import { applyFilter, chipBar, fmtSec, h, isolateKeys, searchable, type SectionApi } from './dom';
+import { audioSettings, playSfxOn, synthSfx } from '../../game/audio';
+import { iconUrl } from '../../ui/dom-icons';
+import { MASTER_GAIN, type Catalog, type SoundEntry } from '../../gallery/catalog';
+import { applyFilter, chipBar, fmtSec, h, isolateKeys, searchable, type SectionApi } from '../../gallery/dom';
 
 /** Galerinin tek AudioContext'i: ilk tıklamada başlar (tarayıcı kilidi). */
 let ctx: AudioContext | null = null;

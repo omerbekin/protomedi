@@ -9,6 +9,7 @@ import randomBattle from '../../data/battles/random-battle.json';
 import aoeTester from '../../data/classes/aoe_tester.json';
 import antimage from '../../data/classes/antimage.json';
 import archer from '../../data/classes/archer.json';
+import cutthroat from '../../data/classes/cutthroat.json';
 import defender from '../../data/classes/defender.json';
 import druid from '../../data/classes/druid.json';
 import gambler from '../../data/classes/gambler.json';
@@ -49,6 +50,7 @@ const classData: Record<string, CombatantData> = {
   defender,
   antimage,
   gambler,
+  cutthroat,
   aoe_tester: aoeTester,
 } as unknown as Record<string, CombatantData>;
 
@@ -62,8 +64,8 @@ export const classes: Record<string, CombatantDef> = Object.fromEntries(
  * `selectableClasses`ta durur (takım seçimi, debug, wiki, galeri) ama rastgele takımlara ve sim'e girmez.
  */
 export const randomPool: string[] = Object.keys(classes).filter((id) => !classes[id]!.testOnly);
-/** Oyuncunun takım seçiminde seçebileceği tüm class id'leri (test class'ları dahil). */
-export const selectableClasses: string[] = Object.keys(classes);
+/** Oyuncunun takım seçiminde seçebileceği class id'leri (test class'ları dahil; `hidden` olanlar hariç). */
+export const selectableClasses: string[] = Object.keys(classes).filter((id) => !classes[id]!.hidden);
 
 /** Class olmayan, yalnızca skill ile çağrılan birimler. */
 export const summons: Record<string, CombatantDef> = {

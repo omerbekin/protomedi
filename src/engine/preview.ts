@@ -2,8 +2,9 @@ import type { Battle } from './battle';
 import { damageRange, healRange } from './formulas';
 import { betMultipliers, betStake } from './gamble';
 import { damageSpecFor, type DamageEffect } from './spec';
+import { slotOfTileUid } from './battle';
 import { attributePower, hitChance } from './stats';
-import type { Combatant } from './types';
+import type { Combatant, Side } from './types';
 
 /**
  * Bir skill'in bir hedefe tahmini etkisi. Kalkan önce emer; değerler ortalama ve [min, max] aralığıdır
@@ -37,8 +38,11 @@ export interface TargetPreview {
   /** Tur bazlı şifa: tur başına miktar, tur sayısı, toplam (eksik canla sınırlı). */
   hot?: { perTurn: number; turns: number; total: number };
   shield?: { amount: number; magic: boolean };
-  /** Dikenli durum: yansıyan sabit hasar (zırhtan önce) ve tur sayısı (kullanıcının girdisinde). */
-  thorns?: { amount: number; turns: number };
+  /**
+   * Çağrı (kullanıcının girdisinde): çağrılacak birim, maks canı ve (ceset tüketen çağrıda) beslenmiş mi + tüketilecek ceset (yoksa null).
+   * `empowered` yalnızca Raise Dead gibi ceset tüketen çağrılarda tanımlı (UI mor parıltı / "Empowered" yazısı).
+   */
+  summon?: { unit: string; name: string; hp: number; empowered?: boolean; corpse?: string | null };
   /** Yer etkisi: tik başına büyü hasarı (hedefin büyü zırhı ve element zayıflığı dahil), tur sayısı, toplam. */
   ground?: { perTick: number; turns: number; total: number };
   /** Yakılacak mana. */
@@ -48,27 +52,38 @@ export interface TargetPreview {
 }
 
 /** Hedef(ler) için etki önizlemesi. Tek hedefli skill'de `targetUid` verilmelidir. */
-export function previewSkill(battle: Battle, actorUid: string, skillId: string, targetUid?: string, slot?: number): TargetPreview[] {
+export function previewSkill(battle: Battle, actorUid: string, skillId: string, targetUid?: string, slot?: number, board?: Side): TargetPreview[] {
   const actor = battle.get(actorUid);
   if (!actor || !battle.skill(skillId)) return [];
   let targets = battle.validTargets(actorUid, skillId);
   if (battle.skill(skillId)?.target === 'random_enemies') return []; // hedefler rastgele: önizleme yok
+  let centerUid: string | undefined;
   if (battle.isAreaSkill(skillId)) {
-    // Şekil skill'inde anchor birimi erişim dışında (arkada) da olabilir: anchor yalnızca hücreyi belirler
-    const anchored = targetUid ? battle.get(targetUid) : undefined;
-    const unit = targetUid ? (battle.isShapeSkill(skillId) ? (anchored && anchored.hp > 0 && anchored.board !== actor.side ? anchored : undefined) : targets.find((t) => t.uid === targetUid)) : undefined;
-    const center = unit ? unit.slot : slot;
-    targets = center === undefined ? [] : battle.areaWindowAt(actorUid, skillId, center);
+    // Anchor birimi erişim dışında (arkada) da olabilir: anchor yalnızca hücreyi belirler. Hedef sırası gerçek vuruşla aynı (aşamalıda aşama sırası;
+    // falloff bu sırayla), toplam hasar aşamalı/aşamasız aynı hesaplanır. area_any: tahta = anchor biriminin tahtası / `tile:<yuva>` kendi tahtası / `board`.
+    const anyBoard = battle.isAnyBoardArea(skillId);
+    const tileSlot = anyBoard ? slotOfTileUid(targetUid) : undefined;
+    const anchored = targetUid && tileSlot === undefined ? battle.get(targetUid) : undefined;
+    const b: Side = anyBoard ? (tileSlot !== undefined ? actor.side : anchored && anchored.hp > 0 ? anchored.board : (board ?? foe(actor.side))) : foe(actor.side);
+    const unit = anchored && anchored.hp > 0 && anchored.board === b ? anchored : undefined;
+    const center = unit ? unit.slot : (tileSlot ?? slot);
+    targets = center === undefined ? [] : battle.areaWindowAt(actorUid, skillId, center, b);
+    centerUid = center === undefined ? undefined : targets.find((t) => t.board === b && t.slot === center)?.uid;
   } else if (battle.needsTargetChoice(skillId)) {
     targets = targets.filter((t) => t.uid === targetUid);
     // Yan vuruşlu skill: seçilen hedefin yanındaki hücreler de vurulur (ilk giriş seçilen hedef)
     if (targets[0]) targets = [targets[0], ...battle.splashTargets(skillId, targets[0])];
   }
-  return previewForTargets(battle, actor, skillId, targets);
+  return previewForTargets(battle, actor, skillId, targets, centerUid);
 }
 
-/** Verilen hedef listesi için etkiyi hesaplar; arkaya sıçrayan hasar ayrı bir giriş olarak döner. */
-export function previewForTargets(battle: Battle, actor: Combatant, skillId: string, targets: Combatant[]): TargetPreview[] {
+const foe = (side: Side): Side => (side === 'party' ? 'enemy' : 'party');
+
+/**
+ * Verilen hedef listesi için etkiyi hesaplar; arkaya sıçrayan hasar ayrı bir giriş olarak döner.
+ * `centerUid`: alan skill'inde anchor hücredeki birim (area.hitsAtCenter > 1 ise hasar etkileri ona o kadar kez uygulanır: X şekli).
+ */
+export function previewForTargets(battle: Battle, actor: Combatant, skillId: string, targets: Combatant[], centerUid?: string): TargetPreview[] {
   const skill = battle.skill(skillId);
   if (!skill) return [];
   const f = battle.formulas;
@@ -102,8 +117,11 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
       ex = m.expected;
     }
     const again = effect.repeatChance ?? 0;
-    const r = { min: lo <= 0 ? 0 : range(lo).min, max: range(hi).max * (again > 0 ? 2 : 1), avg: Math.round(range(ex).avg * (1 + again)) };
-    const hit = hitChance(actor.stats, target.stats, f);
+    // Garantili kritik (Backstab): her vuruş kritik; aralık kritik çarpanıyla verilir (critChance 1)
+    const sure = effect.guaranteedCrit ? actor.stats.critMult : 1;
+    const r = { min: lo <= 0 ? 0 : Math.round(range(lo).min * sure), max: Math.round(range(hi).max * sure) * (again > 0 ? 2 : 1), avg: Math.round(range(ex).avg * sure * (1 + again)) };
+    // İsabet: durum ekleri (Blinded/Shrouded) dahil geçerli stat'lar, gerçek vuruşla aynı
+    const hit = hitChance(battle.effectiveStats(actor), stats, f);
     const p = pool(target);
     // Bu hasarı emebilecek havuz: büyü hasarını iki kalkan da, fizikseli yalnızca genel kalkan emer
     const soak = effect.damageType === 'magic' ? p.magicShield + p.shield : p.shield;
@@ -121,8 +139,8 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
       hpLossMin: (prev?.hpLossMin ?? 0) + loss(r.min),
       hpLossMax: (prev?.hpLossMax ?? 0) + loss(r.max),
       lethal: null,
-      critChance: actor.stats.critChance,
-      critMax: (prev?.critMax ?? 0) + Math.round(r.max * actor.stats.critMult),
+      critChance: effect.guaranteedCrit ? 1 : actor.stats.critChance,
+      critMax: (prev?.critMax ?? 0) + (effect.guaranteedCrit ? r.max : Math.round(r.max * actor.stats.critMult)),
       hitChance: hit,
       expected: (prev?.expected ?? 0) + r.avg * hit,
       splash: prev ? prev.splash && splash : splash,
@@ -148,12 +166,14 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         if (effect.self) continue;
         const def = battle.statusDef(effect.status);
         const e = entry(target.uid);
-        e.statuses = [...(e.statuses ?? []), `${def?.name ?? effect.status} ${effect.turns} turns`];
+        const chance = effect.chance !== undefined && effect.chance < 1 ? ` (${Math.round(effect.chance * 100)}% chance)` : '';
+        e.statuses = [...(e.statuses ?? []), `${def?.name ?? effect.status} ${effect.turns} turns${chance}`];
       } else if (effect.type === 'damage') {
-        // Çok hedefli (şerit) vuruşta her yeni hedef bir öncekinin falloff katı hasar alır
+        // Çok hedefli (alan) vuruşta her yeni hedef bir öncekinin falloff katı hasar alır (hedef sırası = vuruş sırası)
         const idx = effect.falloff || skill.splash ? targets.indexOf(target) : 0;
         const side = !!skill.splash && idx > 0; // yan vuruş: ana hedefin yanındaki hücre
-        addDamage(target, effect, (effect.falloff ? Math.pow(effect.falloff, idx) : 1) * (side ? skill.splash!.mult ?? 1 : 1), idx > 0);
+        const times = centerUid !== undefined && target.uid === centerUid ? Math.max(1, skill.area?.hitsAtCenter ?? 1) : 1; // X şekli: merkez çift vuruş
+        for (let k = 0; k < times; k++) addDamage(target, effect, (effect.falloff ? Math.pow(effect.falloff, idx) : 1) * (side ? skill.splash!.mult ?? 1 : 1), idx > 0 || k > 0);
       } else if (effect.type === 'randomStatus') {
         const e = entry(target.uid);
         e.statuses = [...(e.statuses ?? []), `Random: ${effect.options.map((o) => battle.statusDef(o.status)?.name ?? o.status).join(' / ')}`];
@@ -186,8 +206,9 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         const mpLeft = skill.cost.resource === 'mp' ? actor.mp - skill.cost.amount : actor.mp;
         const amount = Math.round(attributePower(actor.stats, effect.scale, f) * effect.power) + Math.round((effect.bonusPerMana ?? 0) * mpLeft);
         entry(recipient.uid).shield = { amount, magic: effect.shieldType === 'magic' };
-      } else if (effect.type === 'thorns') {
-        entry(actor.uid).thorns = { amount: Math.round(attributePower(actor.stats, effect.scale, f) * effect.power), turns: effect.turns };
+      } else if (effect.type === 'summon') {
+        const sp = battle.summonPreview(actor.uid, skill.id);
+        if (sp.unit) entry(actor.uid).summon = { unit: sp.unit.id, name: sp.unit.name, hp: sp.unit.stats.hp, ...(sp.empowered !== undefined ? { empowered: sp.empowered, corpse: sp.corpse?.uid ?? null } : {}) };
       } else if (effect.type === 'ground') {
         const perTick = battle.groundTickDamage(effect.ground, Math.round(attributePower(actor.stats, effect.scale, f) * effect.power), target);
         const e = entry(target.uid);

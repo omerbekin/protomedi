@@ -1,5 +1,5 @@
-import type { Catalog, Swatch } from './catalog';
-import { applyFilter, h, searchable, type SectionApi } from './dom';
+import type { Catalog, Swatch } from '../../gallery/catalog';
+import { applyFilter, h, searchable, type SectionApi } from '../../gallery/dom';
 
 /** UI / PALETTE: oyunda kullanılan renkler ve yazı tipleri. Altın tonları ve serif font ui-frame.ts'den (Phaser) tembel yüklenir. */
 export function mountPalette(cat: Catalog): SectionApi {
@@ -28,13 +28,13 @@ export function mountPalette(cat: Catalog): SectionApi {
     goldBlock,
     h('div', { class: 'group' }, h('div', { class: 'group-head' }, h('h3', { text: 'Fonts' })), fontHost),
   );
-  root.append(h('div', { class: 'section-head' }, h('h2', { text: 'UI / Palette' }), countEl, h('span', { class: 'muted small', text: 'Click a swatch to copy its hex' })), body);
+  root.append(h('div', { class: 'section-head' }, h('h2', { text: 'Palette & UI' }), countEl, h('span', { class: 'muted small', text: 'Click a swatch to copy its hex' })), body);
 
   // Gold tones and serif font: loaded lazily when the section comes close (pulls in the Phaser chunk)
   new IntersectionObserver((entries, obs) => {
     if (!entries.some((e) => e.isIntersecting)) return;
     obs.disconnect();
-    void import('../game/ui-frame').then(({ GOLD, SERIF }) => {
+    void import('../../game/ui-frame').then(({ GOLD, SERIF }) => {
       const hex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
       goldHost.append(...Object.entries(GOLD).map(([name, v]) => sw({ name, hex: hex(v) }, 'gold frame')));
       fontHost.append(
@@ -52,7 +52,7 @@ export function mountPalette(cat: Catalog): SectionApi {
   };
   return {
     id: 'palette',
-    title: 'UI / Palette',
+    title: 'Palette & UI',
     total: cat.palette.ui.length + cat.palette.element.length + cat.palette.stat.length + cat.palette.classes.length,
     root,
     setQuery: (q) => {

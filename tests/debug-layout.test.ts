@@ -25,7 +25,8 @@ const fakeMenu = {
   refresh: () => undefined,
 };
 const fakeGame = { scene: { isActive: () => false, getScene: () => null } };
-registerDebugTools({ game: fakeGame as never, debug: fakeMenu as never });
+const openedSections: string[] = [];
+registerDebugTools({ game: fakeGame as never, debug: fakeMenu as never, openAssets: (section) => openedSections.push(section ?? 'assets') });
 
 const text = (v: string | (() => string)): string => (typeof v === 'function' ? v() : v);
 
@@ -101,10 +102,19 @@ describe('debug menüsü: bölümlü yapı', () => {
     expect(wordCount(a.dock!.short)).toBeLessThanOrEqual(SHORT_MAX_WORDS);
   });
 
-  it('Sounds sekmesinde başta "Open Asset Gallery" paneli var', () => {
+  it('Sounds sekmesinde başta "Open assets (wiki)" paneli var', () => {
     const soundPanels = panels.filter((p) => p.tab === 'Sounds');
     expect(soundPanels.length).toBeGreaterThanOrEqual(2);
-    expect(soundPanels[0]!.id).toBe('panel.asset-gallery-link');
+    expect(soundPanels[0]!.id).toBe('panel.assets-wiki-link');
+  });
+
+  it('Tools bölümündeki "Open assets (wiki)" düğmesi wikiyi Assets bölümünde açar (ayrı galeri sayfası yok)', () => {
+    const a = actions.find((x) => x.id === 'tools.assets-wiki')!;
+    expect(a).toBeTruthy();
+    expect(a.dock).toMatchObject({ group: 'Tools', icon: 'frame', short: 'Open assets (wiki)' });
+    expect(wordCount(a.dock!.short)).toBeLessThanOrEqual(SHORT_MAX_WORDS);
+    a.run();
+    expect(openedSections).toEqual(['assets']);
   });
 
   it('eylem etiketi ve dock kısayolları ikon listesiyle tutarlı (yeni ikonlar kayıtlı)', () => {

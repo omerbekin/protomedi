@@ -324,7 +324,7 @@ describe('Move Tile', () => {
     expect(t.turnsTaken).toBe(before + 1);
   });
 
-  it('geçersiz yuva reddedilir: dolu, aralık dışı, tam sayı değil, yuva seçilmemiş; düşman tahtasına sızmış birim hareket edemez', () => {
+  it('geçersiz yuva reddedilir: dolu, aralık dışı, tam sayı değil, yuva seçilmemiş; çağrılan birim hareket edemez', () => {
     const b = mk({ 0: 'warrior', 3: 'archer' }, { 0: 'mage' }, 'test');
     expect(b.canUseGlobal('party-1', 'move_tile', 0)).toEqual({ ok: false, reason: 'Invalid cell' }); // dolu
     expect(b.canUseGlobal('party-1', 'move_tile', 3)).toEqual({ ok: false, reason: 'Invalid cell' }); // kendi yuvası dolu sayılır
@@ -333,13 +333,13 @@ describe('Move Tile', () => {
     expect(b.canUseGlobal('party-1', 'move_tile', 1.5).ok).toBe(false);
     expect(b.useGlobal('party-1', 'move_tile')).toEqual({ ok: false, reason: 'Pick an empty cell' });
     expect(b.get('party-1')!.slot).toBe(3);
-    // Raise Dead iskeleti düşman tahtasına çağrılır: orada hareket yok
+    // Raise Dead iskeleti artık kendi tahtasına çağrılır (madde 222); çağrılan birimler yine hareket edemez
     const u = mk({ 0: 'undead' }, { 0: 'warrior' }, 'test');
     u.get('party-0')!.mp = 1000;
     expect(u.useSkill('party-0', 'raise_dead', undefined, 4).ok).toBe(true);
-    const skeleton = u.combatants.find((c) => c.summoned && c.board !== c.side)!;
-    expect(skeleton).toBeDefined();
-    expect(u.canUseGlobal(skeleton.uid, 'move_tile').ok).toBe(false); // çağrı + düşman tahtası: hareket yok
+    const skeleton = u.combatants.find((c) => c.summoned)!;
+    expect(skeleton).toMatchObject({ board: 'party', slot: 4 });
+    expect(u.canUseGlobal(skeleton.uid, 'move_tile')).toEqual({ ok: false, reason: 'Summoned units cannot use this' });
   });
 
   it('ölü dostun yuvasına geçiş YASAK: freeTiles içermez, fallenSlots (UI için) ayrı verir; hata mesajı; diriltme korunur', () => {

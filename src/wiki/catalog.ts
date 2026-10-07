@@ -6,7 +6,7 @@
  * Mechanics bölümündeki ilgili metin güncel mi kontrol edilmelidir (CLAUDE.md kuralı).
  */
 import layout from '../../data/battle-layout.json';
-import { content, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, TARGET_TEXT } from '../engine';
+import { applySummonVariant, content, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, TARGET_TEXT } from '../engine';
 import { TARGET_BADGE } from '../engine/skill-info';
 import type { Attribute, CombatantDef, Element, Formulas, SkillDef, StatKind, Stats } from '../engine';
 import { primaryBonusInfo, primaryBonusLines } from '../engine/stat-info';
@@ -155,7 +155,6 @@ export function skillElements(skill: SkillDef): Element[] {
   for (const e of skill.effects) {
     if (e.type === 'damage') out.push(e.element ?? 'physical');
     else if (e.type === 'ground') out.push(content.grounds[e.ground]?.element as Element);
-    else if (e.type === 'thorns') out.push('physical');
   }
   if (skill.splash) out.push('physical');
   return [...new Set(out.filter(Boolean))];
@@ -181,7 +180,7 @@ export function buildSkill(skill: SkillDef): WikiSkill {
     initialCooldown: info.initialCooldown,
     lines: info.lines,
     kinds: info.kinds,
-    ...(skillMiniGrid(skill, f.formation) ? { shape: skillMiniGrid(skill, f.formation)! } : {}),
+    ...(wikiMiniGrid(skill) ? { shape: wikiMiniGrid(skill)! } : {}),
     search: searchText(skill.name, owner.name, info.targetBadge, info.target, info.cost, ...info.lines, ...elements, TARGET_BADGE[skill.target], TARGET_TEXT[skill.target]),
   };
 }
@@ -205,8 +204,12 @@ function buildUnit(kind: WikiUnit['kind'], def: CombatantDef, files: WikiFiles):
     color: key === 'mpRegen' ? STAT_COLOR.mp : key === 'hpRegen' ? STAT_COLOR.hp : STAT_COLOR[key],
     value,
   });
+  // Ceset tüketen çağrının iki hâli (Skeleton): beslenmiş (taban) ve beslenmemiş can/STR (stats.ts > applySummonVariant)
+  const unfed = def.variants ? applySummonVariant(def, 'unfed').stats : null;
+  const fed = def.variants ? applySummonVariant(def, 'fed').stats : null;
   const derived: WikiStatRow[] = [
-    row('hp', 'HP', String(st.hp)),
+    row('hp', 'HP', fed && unfed ? `${fed.hp} empowered / ${unfed.hp} unfed` : String(st.hp)),
+    ...(fed && unfed ? [row('str', 'STR (empowered / unfed)', `${num(fed.str)} / ${num(unfed.str)}`)] : []),
     row('mp', 'MP', String(st.mp)),
     row('spd', 'SPD', String(st.spd)),
     row('evasion', 'Evasion', pct(st.evasion)),
@@ -244,7 +247,7 @@ function buildUnit(kind: WikiUnit['kind'], def: CombatantDef, files: WikiFiles):
 }
 
 export function buildClasses(files: WikiFiles): WikiUnit[] {
-  return Object.values(content.classes).map((d) => buildUnit('class', d, files));
+  return Object.values(content.classes).filter((d) => !d.hidden).map((d) => buildUnit('class', d, files));
 }
 
 export function buildSummons(files: WikiFiles): WikiUnit[] {
@@ -263,6 +266,25 @@ function article(id: string, group: string, title: string, icon: string, blocks:
 }
 
 /** Veride kullanılan her şekil için bir örnek şema (aynı rozetli skill'ler tek kez): etiket = rozet (Row, Column, Block 2x3, Cross). */
+/** Area shapes makalesi: hangi skill hangi şekli kullanıyor (veriden; test class'ları hariç). */
+/** Wiki şeması: alan skill'leri (area_enemies ve iki tahtaya atılabilen area_any / Smoke Bomb) şekil şeması taşır. */
+function wikiMiniGrid(skill: SkillDef): MiniShape | null {
+  return skillMiniGrid(skill, f.formation); // area_enemies and area_any (either side note)
+}
+
+function areaSkillTable(): { head: string[]; rows: string[][] } {
+  const waves: Record<string, string> = { row: 'row by row', column: 'lane by lane', distance: 'outward from the anchor' };
+  const rows = allSkills()
+    .filter((s) => (s.target === 'area_enemies' || s.target === 'area_any') && s.area && !content.classes[skillOwner(s.id).id]?.testOnly)
+    .map((s) => {
+      const info = describeSkill(s, statsFor(s), f, unitDefs(), effectDefs());
+      const w = s.area!.stages ? `${waves[s.area!.stages]}${s.area!.reverse ? ' (reversed)' : ''}` : '-';
+      return [s.name, skillOwner(s.id).name, info.targetBadge, w];
+    })
+    .sort((a, b) => a[1]!.localeCompare(b[1]!) || a[0]!.localeCompare(b[0]!));
+  return { head: ['Skill', 'Class', 'Shape', 'Waves'], rows };
+}
+
 function shapeExamples(): NonNullable<WikiArticle['shapes']> {
   const seen = new Map<string, MiniShape>();
   for (const s of allSkills()) {
@@ -296,7 +318,7 @@ export function buildGettingStarted(): WikiArticle[] {
       p(`Each side stands on a ${rows} x ${lanes} grid: ${rows} rows deep and ${lanes} lanes wide (${rows * lanes} cells). A normal team of ${teamSize()} leaves cells empty; a side of ${rows * lanes} fills the whole grid. Empty cells matter: a unit can step onto one with the Move action (see Actions in the Mechanics section).`),
       p(`Melee skills can only reach the first ${f.formation.meleeRows === 1 ? 'occupied row' : `${f.formation.meleeRows} occupied rows`} of the enemy team, so the units in front shield the ones behind them. Ranged and magic skills reach anyone. Some melee skills say they charge or reach further; their description tells you.`),
       p('Melee classes are placed in front. A melee unit only stands in a back row once the rows before it are full, so fighters in front, archers and mages behind is the normal picture.'),
-      p('Area skills hit a group of cells around the cell you pick, in a fixed shape (a whole row, a whole column, a block or a cross; see Area shapes in the Mechanics section). You can pick an empty cell too, as long as the shape still covers an enemy. Older area skills hit the chosen unit and its neighbours in a plus shape; column skills hit the whole lane of the chosen unit.'),
+      p('Area skills hit a group of cells around the cell you pick, in a fixed shape (a whole row, a whole column, a block or a cross; see Area shapes in the Mechanics section). You can pick an empty cell too, as long as the shape still covers an enemy.'),
     ]),
     article('mana', 'Basics', 'MP and cooldowns', 'droplet', [
       p(`Skills cost MP. Every unit has ${a.mpBase} base MP (the same for all classes) plus ${a.mpPerInt} per point of Intelligence. At the start of its own turn, every unit regains MP equal to Intelligence x ${num(a.mpRegenPerInt)} (rounded; 0 Intelligence regains nothing) and HP equal to Strength x ${num(a.hpRegenPerStr)}. The Rest action restores extra MP on demand.`),
@@ -307,7 +329,7 @@ export function buildGettingStarted(): WikiArticle[] {
       list(
         'Hover a unit to see its stats; hover a skill to see its description and cost.',
         'Keys 1-4 pick the acting unit\'s skills.',
-        'The settings button (gear) controls the volume; this wiki (book) pauses the battle while it is open.',
+        'The settings button (gear) controls the volume; this wiki (book) pauses the battle while it is open. On a phone, the corner-arrows button switches to full screen (on iPhone use Add to Home Screen); held upright, the game turns sideways to fill the screen.',
       ),
     ]),
   ];
@@ -400,6 +422,7 @@ export function buildMechanics(): WikiArticle[] {
         'Miss: the attacker\'s own accuracy was not enough, no matter the evasion. "MISS" shows above the attacker.',
         'A dodged or missed hit deals no damage and applies none of the skill\'s effects.',
         'Heals, shields, buffs, effects on yourself and ground effects (poison, fire on the ground) never miss.',
+        ...Object.values(content.statuses).filter((d) => d.accuracyDelta || d.evasionDelta).map((d) => `${d.name} (${d.type}): ${d.accuracyDelta ? `accuracy ${d.accuracyDelta > 0 ? '+' : '-'}${pct(Math.abs(d.accuracyDelta))}` : `evasion ${d.evasionDelta! > 0 ? '+' : '-'}${pct(Math.abs(d.evasionDelta!))}`} while it lasts. The hit chance still stays between 0% and ${pct(f.hit.max)}.`),
       ),
     ]),
     article('ground', 'Damage', 'Ground effects', 'flame', [
@@ -424,10 +447,15 @@ export function buildMechanics(): WikiArticle[] {
       list(
         'Row: the whole row of the anchor cell.',
         'Column: the whole lane of the anchor cell, across every row.',
-        'Block (for example 2x3): that many rows by that many lanes. The anchor cell is the bottom-left corner of the block as seen on screen, so the block extends to the right and upwards. If it would stick out of the grid it slides back inside (its size never shrinks), so every cell is a valid anchor. Your side and the enemy side are mirrored, so "left" is the front row on the enemy side and the back row on your side.',
+        `Block RxC (from 1x1 up to ${f.formation.rows}x${f.formation.lanes}, for example 2x3): R rows deep by C lanes wide.`,
+        'On screen a block is drawn sideways: its rows run left to right and its lanes top to bottom. Each direction is placed on its own. In a direction where the block is 3 or more cells long, your cursor cell is its middle (for 4 cells: the second cell from the left); if the block cannot be centered there because of the edge, it starts at your cursor cell instead. In a direction where the block is only 1 or 2 cells long, your cursor cell is its bottom-left corner, so the block extends to the right and upwards. If it would still stick out of the grid it slides back inside (its size never shrinks), so every cell is a valid anchor. Your side and the enemy side are mirrored, so "left" is the front row on the enemy side and the back row on your side.',
         'Cross: the anchor cell and the 4 cells next to it (one row in front or behind, one lane above or below). Cells outside the grid are skipped.',
+        'X: the anchor cell and the 4 diagonal cells around it (one row in front or behind AND one lane above or below). Cells outside the grid are skipped, so a corner keeps only one diagonal. Some X skills cross the center twice: the unit on the anchor cell is then hit twice, each hit rolling its own hit, damage and crit.',
+        `Either side: a few area skills (${allSkills().filter((s) => s.target === 'area_any').map((s) => s.name).join(', ') || 'none yet'}) can be thrown on the enemy side or on your own side. Each of their effects names who it touches: on the enemy side only enemies are affected, on your side only allies.`,
       ),
+      p('Some area skills strike in waves: the shape is split into stages that land one after another. Row by row starts at the front row (closest to the attacker) and moves back; lane by lane starts at the top lane; outward waves start at the anchor cell and spread to its neighbours. Waves change only the order, never the damage: every enemy in the shape is still hit once.'),
       p('Melee skills with a shape only hit enemies that melee can reach (the front rows); enemies in the shape but out of reach are not hit. A shape is valid only if it covers at least one enemy that can be hit. Shape skills ignore taunt. Test classes such as the Geometer carry one skill per shape; they never appear in random teams.'),
+      { kind: 'table', ...areaSkillTable() },
     ], '#c9a0ff', shapeExamples()),
     article('actions', 'Special rules', 'Actions: Rest, Skip Turn and Move', 'boot', [
       p('Besides its four skills, every unit can use three global actions. They cost nothing and each ends the turn.'),
@@ -437,19 +465,34 @@ export function buildMechanics(): WikiArticle[] {
       })),
       p('The enemy team uses these actions too: it rests when a strong skill is out of MP, waits when nothing useful can be done, and moves fragile units out of melee reach.'),
     ], '#9ec5e8'),
+    article('backstab', 'Special rules', 'Strikes from behind and sure crits', 'backstab', [
+      p('Some assassin skills slip behind the target, stab it in the back and return. They ignore the melee row rules (any row can be targeted), but only a target with an empty cell right behind it can be chosen: the next row back, same lane, must hold no living unit. A corpse or a cell kept for a fallen ally does not block it; a target in the back row can never be chosen ("No room behind the target"), and one with a living unit behind it is "shielded from behind". Moving units (or a unit falling) can open the way. The caster is drawn there only for the strike: the formation does not change.'),
+      p(`Some hits are always critical: no crit roll is made and the crit multiplier (x${num(a.critMult)}) always applies. The hit roll still happens, so they can still miss or be dodged.`),
+      p(`Skills that strike from behind: ${allSkills().filter((s) => s.requiresOpenBehind).map((s) => s.name).join(', ') || 'none yet'}. Always critical: ${allSkills().filter((s) => s.effects.some((e) => e.type === 'damage' && e.guaranteedCrit)).map((s) => s.name).join(', ') || 'none yet'}.`),
+    ], '#c0203a'),
+    article('status-bonus', 'Special rules', 'Bonus damage against weakened targets', 'opportunist', [
+      p('Some passives deal extra damage to a target that already suffers from certain statuses. The bonus multiplies every hit (a crit multiplies on top of it) and shows in the damage preview.'),
+      list(...Object.values(content.classes).filter((c) => c.passive?.effect.type === 'bonusVsStatus').map((c) => `${c.name}, ${c.passive!.name}: ${describePassive(c.passive!, c.stats, f)}`)),
+    ], '#c9a227'),
     article('echo', 'Special rules', 'Ready again immediately', 'echo', [
       p('Some passives let a damaging skill with a cooldown be ready again right after it is cast, with a set chance. Classes with such a passive: ' + Object.values(content.classes).filter((c) => c.passive?.effect.type === 'spellEcho').map((c) => `${c.name} (${c.passive!.name})`).join(', ') + '.'),
     ]),
-    article('thorns', 'Special rules', 'Thorns and reflected damage', 'thornshield', [
-      p('A thorns effect returns a fixed amount of damage to every melee attacker for a few turns. Armor applies, it never misses, and reflected damage is not reflected again.'),
-      p(`Skills with thorns: ${skillsWith((e) => e.type === 'thorns').join(', ') || 'none yet'}.`),
-    ]),
+    article('corpses', 'Special rules', 'Corpses', 'skull', [
+      p('When a unit of a team falls, it leaves a corpse on its cell. Summoned units leave no corpse, not even when they fall together with their summoner.'),
+      list(
+        'Revivable: the corpse can be brought back with a revive skill. Its cell stays reserved for it (allies cannot move onto it).',
+        'Consumed: the corpse was devoured and can never be revived. Its cell is free again for moving and summoning.',
+      ),
+      p(`Skills that consume corpses: ${skillsWith((e) => e.type === 'summon' && !!e.consumeCorpse).join(', ') || 'none yet'}. They summon on your own side; if a fallen enemy lies on the field, the most recently fallen enemy corpse is consumed first and the summon comes empowered. Without a corpse the summon comes weaker (unfed).`),
+      p(`A revive skill (${skillsWith((e) => e.type === 'revive').join(', ') || 'none yet'}) cannot target a consumed corpse.`),
+      p('On the battlefield a revivable corpse shows as a small ankh and skull on its cell (hover it to read who fell). When the corpse is consumed the mark fades and the cell looks empty again.'),
+    ], '#b36bff'),
     article('summons', 'Special rules', 'Summons', 'treant', [
-      p(`Summoned units fight on your side but are not part of the chosen team. They take x${num(f.summon.damageTakenMultiplier)} damage, may only exist for a number of turns, and fall as soon as their summoner falls.`),
+      p(`Summoned units fight on your side and stand on your own side of the board, but are not part of the chosen team. They take x${num(f.summon.damageTakenMultiplier)} damage, may only exist for a number of turns, and fall as soon as their summoner falls.`),
       p(`Skills that summon: ${skillsWith((e) => e.type === 'summon').join(', ') || 'none yet'}. Damage dealt by a summon still counts for its owner's passives.`),
     ]),
     article('revive', 'Special rules', 'Resurrection', 'ankh', [
-      p('A revive skill brings a fallen ally back on the cell where it fell, with a share of its max HP and MP. It cannot target living units.'),
+      p('A revive skill brings a fallen ally back on the cell where it fell, with a share of its max HP and MP. It cannot target living units, and it cannot target an ally whose corpse was consumed (see Corpses).'),
       p(`Skills that revive: ${skillsWith((e) => e.type === 'revive').join(', ') || 'none yet'}.`),
     ]),
     article('shields', 'Special rules', 'Shields', 'shield', [

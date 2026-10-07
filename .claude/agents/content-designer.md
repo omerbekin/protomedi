@@ -20,7 +20,7 @@ Sen bu oyunun (çalışma adı "Proto": sıra tabanlı, yandan görünümlü, me
 - Tüm içerik `data/` altında JSON; şema doğrulama testi var. Her iş sonunda `npm test` ve `npm run build` yeşil olmalı.
 - Sayıları koda gömme, veriye koy. Yeni mekanik gerekiyorsa `engine-dev`'e devret; sayısal denge için `balance-tester`'a devret.
 - Eksik asset oyunu çökertmemeli (placeholder).
-- **Asset Gallery (`gallery.html`):** yeni ses/ikon/animasyon/karakter/skill eklenince galeride göründüğünden emin ol (otomatik türetilir: `src/gallery/catalog.ts`; özel bir alan eklendiyse galeriyi güncelle).
+- **Asset Gallery artık Wiki > Assets / Legacy içinde** (kitap simgesi; `gallery.html` yalnızca gömülü animasyon sahnesi + yönlendirme): yeni ses/ikon/animasyon(vfx)/karakter/skill/sprite eklenince orada kendiliğinden görünür (otomatik türetilir: `src/gallery/catalog.ts` + `src/wiki/assets/legacy-catalog.ts`; kullanılmayan/yedek/eski olan her şey Legacy'ye düşer, elle liste yok); özel bir alan eklendiyse Assets bölümlerini güncelle (`src/wiki/assets/`). `tests/wiki-assets.test.ts` kapsamı denetler.
 - **Wiki (sağ üst kitap simgesi, `src/wiki`):** içerik veriden türetilir; yeni mekanik/özel kural/pasif eklenince wiki'nin Mechanics bölümündeki metin güncel mi kontrol et.
 
 ## Çıktı

@@ -6,9 +6,9 @@
   "logo": "treant",
   "frontPriority": 8,
   "attributes": {
-    "str": 13.5,
-    "int": 0,
-    "dex": 0,
+    "str": 8,
+    "int": 13.5,
+    "dex": 4,
     "luck": 0
   },
   "armor": 5,
@@ -16,12 +16,14 @@
   "overrides": {
     "hp": 105,
     "mp": 0,
-    "spd": 5
+    "spd": 5,
+    "hpRegen": 3.375,
+    "mpRegen": 0
   },
-  "ai": "thorny",
+  "ai": "vinewarden",
   "skills": [
     "root_smash",
-    "thorn_shield"
+    "vine_snare"
   ],
   "tags": [
     "nature"

@@ -1,6 +1,6 @@
 /* Wiki (sağ üst kitap simgesi): koyu deri/altın tasarım dili, serif başlıklar (ayarlar, debug menüsü ve galeriyle tutarlı). */
 .settings-toggle.wiki-toggle {
-  right: 64px;
+  right: calc(64px + var(--sar, 0px));
 }
 
 .wk-overlay {
@@ -709,17 +709,33 @@
   }
 }
 
-@media (max-height: 520px) {
-  .wk-title {
-    font-size: 18px;
-  }
-
-  .wk-sprite {
-    max-height: 160px;
-  }
+/* Kısa ekran (JS: html.short; döndürülmüş sahnede de doğru, @media fiziksel görünümü ölçerdi) */
+:root.short .wk-title {
+  font-size: 18px;
 }
 
-/* AOE shape diagram (4x3 mini grid): painted cells are hit, the diamond marks the anchor (pointed cell) */
+/* yatay telefon: başlık + arama tek satır, menü ince; içerik alanı büyür */
+:root.short .wk-head {
+  flex-wrap: nowrap;
+  padding: 4px 10px;
+}
+
+:root.short .wk-search {
+  order: 0;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+:root.short .wk-nav {
+  padding: 4px 8px;
+}
+
+:root.short .wk-sprite {
+  max-height: 160px;
+}
+
+
+/* AOE shape diagram (any RxC mini grid, same cell-tile look as the battle floor): painted cells are hit, a white frame marks the anchor (pointed cell) */
 .wk-shape {
   display: inline-grid;
   grid-template-columns: repeat(var(--cols, 4), 11px);
@@ -739,16 +755,52 @@
 }
 
 .wk-sc.on {
-  background: #ffb347;
+  background: rgba(232, 196, 126, 0.75);
+  box-shadow: inset 0 0 0 1px #fff2b0;
+}
+
+.wk-sc.on.s2 {
+  background: rgba(232, 196, 126, 0.42);
+}
+
+.wk-sc.on.s3 {
+  background: rgba(232, 196, 126, 0.3);
 }
 
 .wk-sc.anchor::after {
   content: '';
   position: absolute;
-  inset: 2px;
-  background: #fff6d6;
-  border: 1px solid #1a0f06;
-  transform: rotate(45deg);
+  inset: -1px;
+  border: 2px solid #fff;
+}
+
+/* X shape: the center cell is struck twice */
+.wk-sc.hits::before {
+  content: attr(data-hits);
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: bold 8px/1 system-ui, sans-serif;
+  color: #fff7d6;
+  text-shadow: 0 0 2px #2a1405, 0 0 2px #2a1405;
+}
+
+/* Either-side skills (area_any): short note left of the grid */
+.wk-shape-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.wk-shape-note {
+  font: bold 10.5px system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--w-muted);
 }
 
 .wk-shapes {

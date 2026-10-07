@@ -81,8 +81,11 @@ describe('hasar skill\'leri', () => {
 
   it('menzilli tüm-düşman skill\'i (Arrow Rain) arkadakilere de ulaşır', () => {
     const b = newBattle();
+    const cells = b.areaCells('arrow_rain', b.get(PALADIN)!.slot, 'party'); // şekil veriden (data/skills.json > arrow_rain.area)
+    const inShape = b.living('party').filter((c) => cells.includes(c.slot)).map((c) => c.uid).sort();
+    expect(inShape.some((u) => b.rowRank(u) > 0)).toBe(true); // şekil arka sıradakileri de kapsıyor (menzilli: ön sıra kuralı yok)
     const events = act(b, E_ARCHER, 'arrow_rain', PALADIN);
-    expect(ofType(events, 'damage').map((e) => e.target).sort()).toEqual([WARRIOR, PALADIN, MAGE].sort()); // yarıçap 2: aynı sıradaki Warrior + şeritteki arkadaki Mage; çapraz (Undead) değil
+    expect(ofType(events, 'damage').map((e) => e.target).sort()).toEqual(inShape);
   });
 
   it('tek hedefli skill hedef istiyor, geçersiz hedefi reddediyor', () => {
@@ -277,7 +280,11 @@ describe('çağrı (Druid)', () => {
     const b = newBattle();
     const events = act(b, E_DRUID, 'summon_treant');
     const summon = ofType(events, 'summon')[0]!;
-    expect(summon.combatant).toMatchObject({ name: 'Treant', side: 'enemy', slot: 1, summoned: true }); // varsayılan: yakın dövüşçü çağrı en öndeki boş hücreye (ön sırada işe yarar)
+    // varsayılan: menzilli çağrı (madde 222: Treant artık uzak menzilli) en arkadaki boş hücreye
+    const free = b.freeSlots('enemy');
+    expect(summon.combatant).toMatchObject({ name: 'Treant', side: 'enemy', board: 'enemy', summoned: true });
+    expect(free).not.toContain(summon.combatant.slot);
+    expect(Math.max(...free, summon.combatant.slot)).toBe(summon.combatant.slot);
     expect(b.living('enemy')).toHaveLength(5);
     expect(b.get(summon.combatant.uid)).toBeDefined();
   });
@@ -286,7 +293,10 @@ describe('çağrı (Druid)', () => {
     const b = newBattle();
     const uid = ofType(act(b, E_DRUID, 'summon_treant'), 'summon')[0]!.combatant.uid;
     expect(ofType(act(b, uid, 'root_smash', WARRIOR), 'damage')).toHaveLength(1);
-    expect(ofType(act(b, MAGE, 'blizzard', E_ARCHER), 'damage').map((e) => e.target).sort()).toEqual([E_ARCHER, E_DRUID].sort()); // artı şekli: önündeki Druid dahil; çapraz/uzak ve yan komşu olmayanlar değil
+    const cells = b.areaCells('blizzard', b.get(uid)!.slot); // anchor = çağrılanın hücresi; şekil veriden
+    const inShape = b.living('enemy').filter((c) => cells.includes(c.slot)).map((c) => c.uid).sort();
+    expect(inShape).toContain(uid);
+    expect(ofType(act(b, MAGE, 'blizzard', uid), 'damage').map((e) => e.target).sort()).toEqual(inShape);
   });
 
   it('boş yuva yoksa çağrı reddedilir ve MP harcanmaz', () => {

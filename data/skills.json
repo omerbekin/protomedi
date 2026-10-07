@@ -1,5 +1,5 @@
 {
-  "_not": "Etkiler: damage (damageType physical|magic, element physical|fire|ice|holy|dark|nature|arcane (yalnızca renk/yazı), scale str|int|dex|luck, power; opsiyonel ignoreDefense, lifesteal, bonusVsTag, others (column_enemies'te şeritteki diğerlerine hasarın bu kadarı), bonusPerMissingMana, bonusFromShield {ratio, consume}), heal, hot (tur bazlı şifa: turns), shield (shieldType 'magic' ise yalnızca büyü hasarını emer), summon (lifespan: kendi tur sayısı), manaBurn, taunt (turns, breakRatio: taunt'lı bu oranda can kaybedince biter), guard (turns, share). scale: etkinin hangi temel özelliğe (str/int/dex/luck) bağlı olduğu. motion melee olan skill'ler yalnızca düşmanın en öndeki 2 canlı birimine vurabilir. cooldown: kullanıcının kendi tur sayısıyla bekleme. motion/fx/icon yalnızca görsel. Sayılar GEÇİCİDİR. Çağrı skill'inde oyuncu boş yuvayı seçer. HEDEF BİÇİMLERİ: area_enemies + area {radius 1|2}: oyuncu merkez düşmanı seçer; radius 1 = merkez + önü/arkası/sağı/solu (artı, çapraz yok), radius 2 = öne/arkaya/sağa/sola 2'şer + çaprazlara 1'er. column_enemies: seçilen düşmanın şeridindeki herkes (seçilene tam, diğerlerine others kadar). Dizilim: sıra (derinlik) x şerit; motion melee olanlar yalnızca en öndeki dolu sıraya vurur. Çağrı skill'inde oyuncu boş yuvayı seçer. shield efektinde self: true ise kalkan hedefe değil kullanıcıya gider (Shield Bash). Alan/şerit skill'leri boş hücreye de atılabilir (useSkill'in slot parametresi). summon efektinde onEnemyBoard: true ise birim düşmanın tahtasına çağrılır (sahibi yine çağıranın tarafı). Skill'de ignoreFrontRow: true ise yakın dövüş 'yalnızca ön sıradan' kuralından muaf (dash/charge/sızan çağrılar). BUFF/DEBUFF: {type:'status', status, turns, self?} (data/statuses.json: slow, haste, wound, stun, fortify, blessed...). YER ETKİSİ: {type:'ground', ground, turns, scale, power} (data/grounds.json: poison, burning); skill'in kapsadığı hücrelere bırakılır. {type:'selfDamage', ratio}: kullanıcıya maks canının ratio'su kadar hasar. target 'everyone': herkese gider, her etki 'side' (allies|enemies) ile ya da varsayılanla (hasar/durum düşmana, şifa/kalkan dosta) taraf seçer. Hasar etkisinde falloff: çok hedefli vuruşta her yeni hedef bir öncekinin falloff katı hasar alır. Skill'de ignoreReach: melee olsa da menzil/ön sıra sınırı yok (charge). target 'random_enemies' + count: rastgele (seed'li) farklı count düşmana gider. skyCenter: yukarıdan düşen etki seçilen alanın merkezine tek büyük olarak düşer. skyStagger: hedeflere sırayla (rastgele sıra, ms arayla) başlar. motion 'ground' (yerden çıkan etki: Blood Rite ağzı), 'whip' (kırbaç). taunt etkisinde allyDamageMult: taunt sürerken taunt'lı olmayan dostlar bu çarpanla hasar alır. reach: yakın dövüş menzili bonusu (satır); kullanıcı ön sıranın reach kadar gerisinden vurabilir ve düşmanın meleeRows+reach ön sırasına ulaşır. revive/dead_ally: düşmüş dostu olduğu yerde maks can/mana oranıyla diriltir. sfx: skill'in animasyonunun çaldığı ses adları (data/audio.json). vfx bunlardan yalnızca listede olanları çalar. KUMAR (Gambler): hasar etkisinde repeatChance (0-1): her hedefe vuruştan sonra bu ihtimalle aynı vuruş bir kez daha (çifte vuruş). Hasar etkisinde bet {resource hp|mp, ratio, winChance, winMult, loseMult (varsayılan 1, 0 = iska), perStake}: skill başına bir zar; bahis hp ise maks canın ratio'su (canı en fazla 1'e indirir), mp ise bedel düşüldükten sonra KALAN MP'nin ratio'su; kazanırsa hasar winMult + perStake x bahis katı ve bahis geri kalır, kaybederse loseMult katı ve bahis kaybedilir. {type:'randomStatus', options:[{status, turns, weight}]}: vurulan her hedefe ağırlıklı zarla tek bir durum. cooldown: kullanıldıktan sonra kaç tur beklenir. initialCooldown: savaş başında (yalnızca turns modu, çağrılan birimler hariç) bu skill zaten bu kadar tur bekleme sayacıyla başlar; sayaç mevcut cooldown sayacıyla aynıdır (kullanıcının kendi turlarında azalır), üst sınır data/formulas.json > cooldown.maxInitial (3). ai: yapay zeka bağlam ipucu (src/engine/ai.ts): requires = hepsi sağlanmalı, anyOf = en az biri sağlanmalı; sağlanmayınca skill yalnızca öldürücü vuruş önceliğinde seçilebilir. Koşullar: kill, minTargets (vurulan düşman sayısı), minLivingEnemies, minLivingAllies, minSelfHpRatio, minSelfHpRatioAfter (can bedeli sonrası), minSelfMpRatio, minBattleTurns, minWoundedAllies+woundedBelowRatio, minTargetArmorReduction, minTargetHpToDamage, minMissingManaShare. Saf self-buff skill'lerinde incomingShare (düşman takımının bana vuracak payı, savunma değeri) ve opportunityShare (buff turunda yapılabilecek en iyi saldırının bedele eklenen payı). reserveMp: N; skill en geç N tur sonra hazır olacaksa ona yetecek MP'yi tüketecek saldırılar ertelenir.",
+  "_not": "Etkiler: damage (damageType physical|magic, element physical|fire|ice|holy|dark|nature|arcane (yalnızca renk/yazı), scale str|int|dex|luck, power; opsiyonel ignoreDefense, lifesteal, bonusVsTag, bonusPerMissingMana, bonusFromShield {ratio, consume}), heal, hot (tur bazlı şifa: turns), shield (shieldType 'magic' ise yalnızca büyü hasarını emer), summon (lifespan: kendi tur sayısı), manaBurn, taunt (turns, breakRatio: taunt'lı bu oranda can kaybedince biter), guard (turns, share). scale: etkinin hangi temel özelliğe (str/int/dex/luck) bağlı olduğu. motion melee olan skill'ler yalnızca düşmanın en öndeki 2 canlı birimine vurabilir. cooldown: kullanıcının kendi tur sayısıyla bekleme. motion/fx/icon yalnızca görsel. Sayılar GEÇİCİDİR. Çağrı skill'inde oyuncu boş yuvayı seçer. HEDEF BİÇİMLERİ: alan skill'i = area_enemies + area {shape: row | column | plus | rect (rows 1-4 sıra x cols 1-3 şerit, anchor bottom_left), stages?: row | column | distance, reverse?}: oyuncu bir anchor HÜCRE seçer (boş olabilir), şeklin hücrelerindeki canlı düşmanlar vurulur (docs/design/combat.md > AOE şekilleri). stages: vuruş aşama aşama gelir (row = sıra sıra, ön sıra önce; column = şerit şerit; distance = anchor'dan dışarı halkalar; reverse ters), olaylarda stage numarası; hasar aynıdır. Eski area.radius ve column_enemies KALDIRILDI. Dizilim: sıra (derinlik) x şerit; motion melee olanlar yalnızca en öndeki dolu sıraya vurur. Çağrı skill'inde oyuncu boş yuvayı seçer. shield efektinde self: true ise kalkan hedefe değil kullanıcıya gider (Shield Bash). Alan skill'leri boş hücreye de atılabilir (useSkill'in slot parametresi). summon efekti birimi daima kullanıcının KENDİ tahtasına çağırır; consumeCorpse: true ise önce karşı taraftaki en son ölen diriltilebilir düşman cesedini tüketir (ceset consumed olur) ve birim fed (beslenmiş) varyantıyla, ceset yoksa unfed varyantıyla gelir (data/summons > variants). status efektinde chance (0-1) her alıcı için bağımsız zar, cause görsel neden (status olayına yazılır, ör. vines). Skill'de ignoreFrontRow: true ise yakın dövüş 'yalnızca ön sıradan' kuralından muaf (dash/charge). BUFF/DEBUFF: {type:'status', status, turns, self?} (data/statuses.json: slow, haste, wound, stun, fortify, blessed...). YER ETKİSİ: {type:'ground', ground, turns, scale, power} (data/grounds.json: poison, burning); skill'in kapsadığı hücrelere bırakılır. {type:'selfDamage', ratio}: kullanıcıya maks canının ratio'su kadar hasar. target 'everyone': herkese gider, her etki 'side' (allies|enemies) ile ya da varsayılanla (hasar/durum düşmana, şifa/kalkan dosta) taraf seçer. Hasar etkisinde falloff: çok hedefli vuruşta her yeni hedef bir öncekinin falloff katı hasar alır (sıra: aşamalıda aşama sırası, değilse öndeki önce). Skill'de ignoreReach: melee olsa da menzil/ön sıra sınırı yok (charge). target 'random_enemies' + count: rastgele (seed'li) farklı count düşmana gider. skyCenter: yukarıdan düşen etki seçilen alanın merkezine tek büyük olarak düşer. skyStagger: hedeflere sırayla (rastgele sıra, ms arayla) başlar. motion 'ground' (yerden çıkan etki: Blood Rite ağzı), 'whip' (kırbaç). taunt etkisinde allyDamageMult: taunt sürerken taunt'lı olmayan dostlar bu çarpanla hasar alır. reach: yakın dövüş menzili bonusu (satır); kullanıcı ön sıranın reach kadar gerisinden vurabilir ve düşmanın meleeRows+reach ön sırasına ulaşır. revive/dead_ally: düşmüş dostu olduğu yerde maks can/mana oranıyla diriltir. sfx: skill'in animasyonunun çaldığı ses adları (data/audio.json). vfx bunlardan yalnızca listede olanları çalar. KUMAR (Gambler): hasar etkisinde repeatChance (0-1): her hedefe vuruştan sonra bu ihtimalle aynı vuruş bir kez daha (çifte vuruş). Hasar etkisinde bet {resource hp|mp, ratio, winChance, winMult, loseMult (varsayılan 1, 0 = iska), perStake}: skill başına bir zar; bahis hp ise maks canın ratio'su (canı en fazla 1'e indirir), mp ise bedel düşüldükten sonra KALAN MP'nin ratio'su; kazanırsa hasar winMult + perStake x bahis katı ve bahis geri kalır, kaybederse loseMult katı ve bahis kaybedilir. {type:'randomStatus', options:[{status, turns, weight}]}: vurulan her hedefe ağırlıklı zarla tek bir durum. cooldown: kullanıldıktan sonra kaç tur beklenir. initialCooldown: savaş başında (yalnızca turns modu, çağrılan birimler hariç) bu skill zaten bu kadar tur bekleme sayacıyla başlar; sayaç mevcut cooldown sayacıyla aynıdır (kullanıcının kendi turlarında azalır), üst sınır data/formulas.json > cooldown.maxInitial (3). ai: yapay zeka bağlam ipucu (src/engine/ai.ts): requires = hepsi sağlanmalı, anyOf = en az biri sağlanmalı; sağlanmayınca skill yalnızca öldürücü vuruş önceliğinde seçilebilir. Koşullar: kill, minTargets (vurulan düşman sayısı), minLivingEnemies, minLivingAllies, minSelfHpRatio, minSelfHpRatioAfter (can bedeli sonrası), minSelfMpRatio, minBattleTurns, minWoundedAllies+woundedBelowRatio, minTargetArmorReduction, minTargetHpToDamage, minMissingManaShare. Saf self-buff skill'lerinde incomingShare (düşman takımının bana vuracak payı, savunma değeri) ve opportunityShare (buff turunda yapılabilecek en iyi saldırının bedele eklenen payı). reserveMp: N; skill en geç N tur sonra hazır olacaksa ona yetecek MP'yi tüketecek saldırılar ertelenir. CUTTHROAT EKLERİ: area.shape x (anchor + 4 çapraz komşu) ve area.hitsAtCenter (anchor hücredeki birim N kez vurulur, ayrı zarlar); target area_any (alan İKİ tahtaya da atılabilir; etkiler side: allies|enemies ile ayrılır; şimdilik yalnızca status); damage.guaranteedCrit (kritik zarı atılmaz, her vuruş kritik; isabet zarı normal); requiresOpenBehind (yalnızca arkasındaki hücrede canlı birim olmayan, en arka sırada olmayan hedef; skillUsed olayında behindSlot/behindBoard/from). RECT ANCHOR: boyutu 3+ olan eksende fare hücresi ortada (ortalanamazsa soldan referans, taşarsa kaydır), 1-2 boyutlu eksende sol-alt köşe.",
   "melee_attack": {
     "id": "melee_attack",
     "name": "Double Strike",
@@ -133,7 +133,7 @@
     "icon": "judgebeam",
     "target": "area_enemies",
     "area": {
-      "radius": 1
+      "shape": "plus"
     },
     "cost": {
       "resource": "mp",
@@ -202,6 +202,12 @@
     "name": "Blizzard",
     "icon": "blizzard",
     "target": "area_enemies",
+    "area": {
+      "shape": "rect",
+      "rows": 3,
+      "cols": 2,
+      "anchor": "bottom_left"
+    },
     "cost": {
       "resource": "mp",
       "amount": 14
@@ -219,9 +225,6 @@
         "element": "ice"
       }
     ],
-    "area": {
-      "radius": 1
-    },
     "vfx": "blizzard",
     "sfx": [
       "windHowl",
@@ -234,6 +237,9 @@
     "name": "Meteor",
     "icon": "meteor",
     "target": "area_enemies",
+    "area": {
+      "shape": "plus"
+    },
     "cost": {
       "resource": "mp",
       "amount": 20
@@ -259,9 +265,6 @@
         "power": 0.7
       }
     ],
-    "area": {
-      "radius": 1
-    },
     "skyCenter": true,
     "vfx": "meteor",
     "sfx": [
@@ -339,6 +342,10 @@
     "name": "Wail of the Dead",
     "icon": "wail",
     "target": "area_enemies",
+    "area": {
+      "shape": "plus",
+      "stages": "distance"
+    },
     "cost": {
       "resource": "mp",
       "amount": 12
@@ -362,12 +369,10 @@
         "power": 0.4
       }
     ],
-    "area": {
-      "radius": 1
-    },
     "vfx": "wail",
     "sfx": [
-      "ghostWail"
+      "ghostWail",
+      "graveMoan"
     ]
   },
   "quick_shot": {
@@ -406,7 +411,11 @@
     "id": "piercing_arrow",
     "name": "Piercing Arrow",
     "icon": "pierce",
-    "target": "column_enemies",
+    "target": "area_enemies",
+    "area": {
+      "shape": "column",
+      "stages": "row"
+    },
     "cost": {
       "resource": "mp",
       "amount": 8
@@ -435,6 +444,12 @@
     "name": "Arrow Rain",
     "icon": "arrows",
     "target": "area_enemies",
+    "area": {
+      "shape": "rect",
+      "rows": 3,
+      "cols": 3,
+      "anchor": "bottom_left"
+    },
     "cost": {
       "resource": "mp",
       "amount": 16
@@ -451,9 +466,6 @@
         "power": 0.74
       }
     ],
-    "area": {
-      "radius": 2
-    },
     "vfx": "arrowrain",
     "sfx": [
       "bowTwang",
@@ -599,6 +611,13 @@
     "name": "Nature's Wrath",
     "icon": "roots",
     "target": "area_enemies",
+    "area": {
+      "shape": "rect",
+      "rows": 2,
+      "cols": 3,
+      "anchor": "bottom_left",
+      "stages": "row"
+    },
     "cost": {
       "resource": "mp",
       "amount": 14
@@ -615,9 +634,6 @@
         "element": "nature"
       }
     ],
-    "area": {
-      "radius": 1
-    },
     "vfx": "vines",
     "sfx": [
       "rootsRumble",
@@ -715,6 +731,12 @@
     "name": "Drain Field",
     "icon": "drainfield",
     "target": "area_enemies",
+    "area": {
+      "shape": "rect",
+      "rows": 3,
+      "cols": 3,
+      "anchor": "bottom_left"
+    },
     "cost": {
       "resource": "mp",
       "amount": 14
@@ -728,9 +750,6 @@
         "amount": 14
       }
     ],
-    "area": {
-      "radius": 2
-    },
     "skyFx": "void",
     "vfx": "drainfield",
     "sfx": [
@@ -814,18 +833,18 @@
       "resource": "mp",
       "amount": 0
     },
-    "motion": "melee",
+    "motion": "sky",
+    "skyFx": "fist",
     "fx": "#8a6a3a",
     "effects": [
       {
         "type": "damage",
         "damageType": "physical",
-        "scale": "str",
+        "scale": "int",
         "power": 1.15
       }
     ],
-    "reach": 1,
-    "vfx": "woodsmash",
+    "vfx": "rootfall",
     "sfx": [
       "woodCreak",
       "woodSmash",
@@ -833,37 +852,50 @@
       "leafRustle"
     ]
   },
-  "thorn_shield": {
-    "id": "thorn_shield",
-    "name": "Thorn Shield",
-    "icon": "thornshield",
-    "target": "self",
+  "vine_snare": {
+    "id": "vine_snare",
+    "name": "Vine Snare",
+    "icon": "vinesnare",
+    "target": "area_enemies",
+    "area": {
+      "shape": "rect",
+      "rows": 2,
+      "cols": 2,
+      "anchor": "bottom_left"
+    },
     "cost": {
       "resource": "mp",
       "amount": 0
     },
+    "cooldown": 3,
     "motion": "cast",
     "fx": "#8bd06a",
     "effects": [
       {
-        "type": "shield",
-        "scale": "str",
-        "power": 1,
-        "self": true
+        "type": "damage",
+        "damageType": "magic",
+        "scale": "int",
+        "power": 0.45,
+        "element": "nature"
       },
       {
-        "type": "thorns",
-        "turns": 3,
-        "scale": "str",
-        "power": 0.5
+        "type": "status",
+        "status": "stun",
+        "turns": 1,
+        "chance": 0.25,
+        "cause": "vines"
       }
     ],
-    "cooldown": 4,
-    "vfx": "thornshield",
+    "ai": {
+      "requires": {
+        "minTargets": 2
+      }
+    },
+    "vfx": "vinesnare",
     "sfx": [
-      "thornCreak",
-      "thornSprout",
-      "thornStab"
+      "woodCreak",
+      "vineLash",
+      "rootGrip"
     ]
   },
   "raise_dead": {
@@ -883,7 +915,7 @@
         "type": "summon",
         "unit": "skeleton",
         "lifespan": 4,
-        "onEnemyBoard": true
+        "consumeCorpse": true
       }
     ],
     "vfx": "raise",
@@ -891,7 +923,8 @@
       "graveMoan",
       "earthCrack",
       "boneClatter",
-      "thud"
+      "thud",
+      "soulDrain"
     ]
   },
   "skeleton_strike": {
@@ -1056,7 +1089,7 @@
     "icon": "tremor",
     "target": "area_enemies",
     "area": {
-      "radius": 1
+      "shape": "row"
     },
     "cost": {
       "resource": "mp",
@@ -1081,7 +1114,8 @@
     "vfx": "tremor",
     "sfx": [
       "effortHah",
-      "armorStomp"
+      "armorStomp",
+      "earthCrack"
     ]
   },
   "fist_crush": {
@@ -1431,6 +1465,169 @@
       "chalkDraw",
       "runeFlare",
       "ruleSnap"
+    ]
+  },
+  "venom_edge": {
+    "_not": "Cutthroat ana skill (0 MP): zehirli kısa bıçakla yakın dövüş kesiği + Wound (kanama). Sayılar PROVİZYON. Görsel: zehir damlayan hançer ikonu; hedefe süzülüp iki hızlı kesik, kenardan yeşil zehir damlası ve kan kıymığı; ses hançer çekme + çift kesik.",
+    "id": "venom_edge",
+    "name": "Venom Edge",
+    "icon": "venomedge",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "melee",
+    "fx": "#7fbf3f",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "dex",
+        "power": 1.1
+      },
+      {
+        "type": "status",
+        "status": "wound",
+        "turns": 2
+      }
+    ],
+    "vfx": "venomedge",
+    "sfx": [
+      "daggerDraw",
+      "twinSlice"
+    ]
+  },
+  "x_cut": {
+    "_not": "Cutthroat: iki bıçakla çapraz X kesiği. YENİ ŞEKİL x: anchor + 4 çapraz komşu (tahta dışı atlanır); hitsAtCenter 2: X çizilirken merkezden iki kez geçildiği için anchor'daki birim İKİ kez vurulur (ayrı zarlar). Menzilli (fırlatılan bıçaklar; ön sıra kısıtı yok). Sayılar PROVİZYON. Görsel: çapraz iki hançer ikonu; anchor hücrenin üstüne sıçrayıp havada ve zeminde X'in iki çaprazını çizen beyaz-turuncu kesikler (merkez her kesikte vurulur).",
+    "id": "x_cut",
+    "name": "Saltire Cut",
+    "icon": "saltire",
+    "target": "area_enemies",
+    "area": {
+      "shape": "x",
+      "hitsAtCenter": 2
+    },
+    "cost": {
+      "resource": "mp",
+      "amount": 9
+    },
+    "cooldown": 2,
+    "motion": "ranged",
+    "fx": "#ff8a1f",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "dex",
+        "power": 0.9
+      }
+    ],
+    "ai": {
+      "requires": {
+        "minTargets": 2
+      }
+    },
+    "vfx": "saltire",
+    "sfx": [
+      "shadowStep",
+      "swordWhoosh",
+      "duelCut"
+    ]
+  },
+  "smoke_bomb": {
+    "_not": "Cutthroat: kil küre içinde kükürt-kömür dumanı. YENİ HEDEF area_any: rect 2x2 alan İKİ TAHTAYA da atılabilir; düşman tarafında içindeki düşmanlar Blinded (isabet -%30), kendi tarafında içindeki dostlar Shrouded (kaçınma +%20); etkiler side ile ayrılır. Hasar yok. Sayılar PROVİZYON. Görsel: kil bomba ikonu; yay çizen bomba kırılır, gri-kömür duman hücreleri kaplar; düşmanda gözde duman şeridi, dostta duman perdesi.",
+    "id": "smoke_bomb",
+    "name": "Smoke Bomb",
+    "icon": "smokebomb",
+    "target": "area_any",
+    "area": {
+      "shape": "rect",
+      "rows": 2,
+      "cols": 2,
+      "anchor": "bottom_left"
+    },
+    "cost": {
+      "resource": "mp",
+      "amount": 10
+    },
+    "cooldown": 3,
+    "motion": "ranged",
+    "fx": "#9aa3ad",
+    "effects": [
+      {
+        "type": "status",
+        "status": "blinded",
+        "turns": 2,
+        "side": "enemies"
+      },
+      {
+        "type": "status",
+        "status": "shrouded",
+        "turns": 2,
+        "side": "allies"
+      }
+    ],
+    "ai": {
+      "anyOf": [
+        {
+          "minTargets": 2
+        },
+        {
+          "minAllyTargets": 2
+        }
+      ]
+    },
+    "vfx": "smokebomb",
+    "sfx": [
+      "fistWhoosh",
+      "smokePuff"
+    ]
+  },
+  "backstab": {
+    "_not": "Cutthroat 4. yuva (ultimate): hedefin ARKASINA ışınlanır, sırtından saplar, geri döner (görsel; formasyon değişmez). Menzil/ön sıra kısıtı yok (ignoreReach + ignoreFrontRow) ama requiresOpenBehind: hedefin hemen arkasındaki hücre (aynı şerit, bir sıra derin) boş olmalı (yalnızca CANLI birim engeller; ceset engellemez); en arka sıradaki hedefe kullanılamaz. guaranteedCrit: kritik zarı atılmaz, her vuruş kritik; isabet zarı normal. Sayılar PROVİZYON. Görsel: sırta saplı hançer ikonu; dumana dönüşüp hedefin arkasında belirir, sırtına saplar (kızıl-beyaz şok halkası, kan, sert sarsıntı, kısa donma), dumanla evine döner.",
+    "id": "backstab",
+    "name": "Backstab",
+    "icon": "backstab",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 12
+    },
+    "cooldown": 4,
+    "initialCooldown": 2,
+    "motion": "melee",
+    "ignoreFrontRow": true,
+    "ignoreReach": true,
+    "requiresOpenBehind": true,
+    "fx": "#c0203a",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "dex",
+        "power": 3.2,
+        "guaranteedCrit": true
+      }
+    ],
+    "ai": {
+      "anyOf": [
+        {
+          "kill": true
+        },
+        {
+          "minTargetMaxHpShare": 0.5
+        },
+        {
+          "targetBehindFront": true
+        }
+      ]
+    },
+    "vfx": "backstab",
+    "sfx": [
+      "shadowStep",
+      "backstabThud",
+      "bloodSplat"
     ]
   }
 }

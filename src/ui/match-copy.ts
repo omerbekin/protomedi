@@ -39,7 +39,7 @@ export function showToast(message: string, ok = true): void {
     toastEl.setAttribute('role', 'status');
     toastEl.style.cssText =
       'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:30000;padding:10px 18px;border-radius:6px;font:600 15px/1.2 system-ui,sans-serif;color:#fff;box-shadow:0 4px 18px rgba(0,0,0,.5);pointer-events:none;max-width:90vw;text-align:center;transition:opacity .2s';
-    document.body.appendChild(toastEl);
+    (document.getElementById('ui-root') ?? document.body).appendChild(toastEl);
   }
   toastEl.textContent = message;
   toastEl.style.background = ok ? '#2f6b3a' : '#8a2f2f';

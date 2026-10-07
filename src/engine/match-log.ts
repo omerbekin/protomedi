@@ -58,7 +58,7 @@ export interface MoveRecord {
   pre: { self: UnitSnap; foes: UnitSnap[]; allies: UnitSnap[] };
   /** Önceki hamleden bu hamleye kadar olanlar (yer hasarı, tur başı şifa, biten durumlar...). */
   startEffects: string[];
-  action: { kind: 'skill' | 'global' | 'pass' | 'stunned' | 'skipped'; id?: string; name: string; targets: string[]; center?: number; cells?: number[]; slot?: number };
+  action: { kind: 'skill' | 'global' | 'pass' | 'stunned' | 'skipped'; id?: string; name: string; targets: string[]; center?: number; cells?: number[]; slot?: number; /** area_any: alanın atıldığı tahta ('own' / 'foe'). */ board?: 'own' | 'foe' };
   ai?: AiExplanation | { none: true };
   events: string[];
   post: { self: UnitSnap; targets: UnitSnap[] };
@@ -92,8 +92,16 @@ export function snapshotUnit(battle: Battle, c: Combatant): UnitSnap {
   };
 }
 
-/** Bir olayın tek satırlık özeti (kayıtta "result" listesi). skillUsed / globalUsed eylemin kendisi olduğu için boş döner. */
+/**
+ * Bir olayın tek satırlık özeti (kayıtta "result" listesi). skillUsed / globalUsed eylemin kendisi olduğu için boş döner.
+ * Aşamalı alan skill'inin olayları başta aşama numarasını taşır: "[stage 1] ...".
+ */
 export function describeEvent(battle: Battle, e: BattleEvent): string | null {
+  const text = describeEventBody(battle, e);
+  return text !== null && e.stage !== undefined ? `[stage ${e.stage}] ${text}` : text;
+}
+
+function describeEventBody(battle: Battle, e: BattleEvent): string | null {
   const L = (uid: string): string => {
     const c = battle.get(uid);
     return c ? unitLabel(c) : uid;
@@ -121,11 +129,13 @@ export function describeEvent(battle: Battle, e: BattleEvent): string | null {
     case 'manaBurn':
       return `${L(e.source)} burns ${e.amount} MP of ${L(e.target)} (now ${e.mpAfter})`;
     case 'status':
-      return `${L(e.target)} +${e.status} ${e.turns}t (from ${L(e.source)})`;
+      return `${L(e.target)} +${e.status} ${e.turns}t (from ${L(e.source)})${e.cause ? ` [${e.cause}]` : ''}`;
     case 'statusEnd':
       return `${L(e.target)} -${e.status}${e.broken ? ' (ended early: broken / control)' : ' (expired)'}`;
     case 'summon':
-      return `${L(e.actor)} summons ${unitLabel(e.combatant)} (hp ${e.combatant.hp}, cell ${e.combatant.slot})`;
+      return `${L(e.actor)} summons ${unitLabel(e.combatant)}${e.empowered === true ? ' EMPOWERED (fed: corpse consumed)' : e.empowered === false ? ' unfed (no corpse to consume)' : ''} (hp ${e.combatant.hp}, str ${e.combatant.stats.str}, int ${e.combatant.stats.int}, own board cell ${e.combatant.slot})`;
+    case 'corpseConsumed':
+      return `${L(e.by)} consumes the corpse of ${L(e.uid)} (cell ${e.slot}): it can no longer be revived`;
     case 'despawn':
       return `${L(e.target)} despawns`;
     case 'revive':
@@ -143,7 +153,7 @@ export function describeEvent(battle: Battle, e: BattleEvent): string | null {
     case 'groundEnd':
       return `ground effect ${e.id} ended`;
     case 'death':
-      return `${L(e.target)} DIED`;
+      return `${L(e.target)} DIED${e.corpse ? ' (leaves a revivable corpse)' : ''}`;
     case 'battleEnd':
       return `BATTLE END: ${e.winner} wins`;
   }
@@ -286,7 +296,7 @@ export class MatchLog {
     });
     if (info.kind === 'pass') return { kind: 'pass', name: 'Pass (nothing to do)', targets: [] };
     if (info.kind === 'global') return { kind: 'global', id: info.id, name: b.globalDef(info.id!)?.name ?? info.id!, targets: [], ...(info.center !== undefined ? { slot: info.center } : {}) };
-    return { kind: 'skill', id: info.id, name: b.skill(info.id!)?.name ?? info.id!, targets: labels, ...(info.center !== undefined ? { center: info.center } : {}), ...(info.cells ? { cells: info.cells } : {}) };
+    return { kind: 'skill', id: info.id, name: b.skill(info.id!)?.name ?? info.id!, targets: labels, ...(info.center !== undefined ? { center: info.center } : {}), ...(info.cells ? { cells: info.cells } : {}), ...(info.board ? { board: info.board === b.get(info.actorUid)?.side ? ('own' as const) : ('foe' as const) } : {}) };
   }
 
   private onAfter(uid: string): void {
@@ -409,7 +419,7 @@ export class MatchLog {
   private formatMove(m: MoveRecord, compact: boolean): string {
     const out: string[] = [];
     const tgt = m.action.targets.length > 0 ? ` -> ${m.action.targets.length > 3 ? `${m.action.targets.slice(0, 3).join(', ')} +${m.action.targets.length - 3}` : m.action.targets.join(', ')}` : '';
-    out.push(`### #${m.n} | turn ${m.turn} | ${m.actor} (own move ${m.own}) | ${m.control === 'ai' ? 'AI' : m.control === 'auto' ? 'AUTO' : 'PLAYER'} | ${m.action.name}${tgt}${m.action.center !== undefined ? ` (center cell ${m.action.center}${m.action.cells ? ` -> cells [${m.action.cells.join(',')}]` : ''})` : ''}${m.action.kind === 'global' && m.action.slot !== undefined ? ` (to cell ${m.action.slot})` : ''}`);
+    out.push(`### #${m.n} | turn ${m.turn} | ${m.actor} (own move ${m.own}) | ${m.control === 'ai' ? 'AI' : m.control === 'auto' ? 'AUTO' : 'PLAYER'} | ${m.action.name}${tgt}${m.action.center !== undefined ? ` (center cell ${m.action.center}${m.action.board ? ` on ${m.action.board} side` : ''}${m.action.cells ? ` -> cells [${m.action.cells.join(',')}]` : ''})` : ''}${m.action.kind === 'global' && m.action.slot !== undefined ? ` (to cell ${m.action.slot})` : ''}`);
     out.push(`before: ${unitText(m.pre.self, true)}`);
     const side = compact ? afterText : (u: UnitSnap) => unitText(u, false);
     if (m.pre.foes.length > 0) out.push(`  foes: ${m.pre.foes.map(side).join(' ; ')}`);
@@ -463,10 +473,11 @@ function formatAi(ai: AiExplanation | { none: true }, compact: boolean): string[
 
 function candidateLine(c: AiExplanation['candidates'][number], withPer: boolean): string {
   const mark = c.verdict === 'chosen' ? '*' : c.verdict === 'blocked' ? 'x' : '-';
-  const where = c.shape ? ` shape ${c.shape} @cell ${c.center} -> cells [${(c.cells ?? []).join(',')}]` : c.center !== undefined ? ` (center cell ${c.center})` : '';
+  const where = c.shape ? ` shape ${c.shape} @cell ${c.center}${c.board ? ` (${c.board} side)` : ''} -> cells [${(c.cells ?? []).join(',')}]` : c.center !== undefined ? ` (center cell ${c.center})` : '';
   const parts = [`${mark} ${c.name}${c.target ? ` -> ${c.target}` : ''}${where}`];
   const showPer = withPer && c.perTarget && c.perTarget.length > 1;
-  if (c.shape) parts.push(`hits ${c.enemyHits} foe(s)${c.hits.length > 0 ? ` [${c.hits.join(',')}]` : ''}`);
+  if (c.shape && c.board === 'own') parts.push(`covers ${c.hits.length} unit(s)${c.hits.length > 0 ? ` [${c.hits.join(',')}]` : ''}`);
+  else if (c.shape) parts.push(`hits ${c.enemyHits} foe(s)${c.hits.length > 0 ? ` [${c.hits.join(',')}]` : ''}`);
   else if (c.hits.length > 1 && !showPer) parts.push(`hits ${c.enemyHits} foe(s) [${c.hits.join(',')}]`);
   else if (c.hits.length > 1) parts.push(`hits ${c.enemyHits} foe(s)`);
   if (c.dmg) parts.push(`dmg ${c.dmg}${c.hit !== undefined ? ` hit ${c.hit}` : ''}`);
@@ -477,7 +488,9 @@ function candidateLine(c: AiExplanation['candidates'][number], withPer: boolean)
   if (c.shield) parts.push(`shield ${c.shield}`);
   if (c.burn) parts.push(`burn ${c.burn}`);
   if (c.buff) parts.push(`buff ${c.buff}`);
+  if (c.mitigation) parts.push(`mitigation ${c.mitigation}`);
   if (c.revive) parts.push(`revive ${c.revive}`);
+  if (c.summonValue !== undefined) parts.push(`summonValue ${c.summonValue}`);
   parts.push(`cost ${c.cost} net ${c.net}`);
   if (c.score !== undefined) parts.push(`score ${c.score}`);
   if (c.tags.length > 0) parts.push(`{${c.tags.join(',')}}`);
@@ -508,7 +521,7 @@ function skillLine(sk: SkillDef): string {
     sk.initialCooldown ? `initialCd ${sk.initialCooldown}` : '',
     sk.motion === 'melee' ? 'melee' : sk.motion,
     sk.reach ? `reach ${sk.reach}` : '',
-    sk.area ? (sk.area.shape ? `area shape ${shapeLabel(sk.area)}` : `area r${sk.area.radius}`) : '',
+    sk.area ? `area shape ${shapeLabel(sk.area)}` : '',
     sk.splash ? 'splash' : '',
     sk.count ? `count ${sk.count}` : '',
   ].filter(Boolean);

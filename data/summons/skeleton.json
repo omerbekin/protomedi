@@ -21,6 +21,15 @@
     "mp": 0,
     "spd": 6
   },
+  "variants": {
+    "_not": "Raise Dead ceset tüketirse fed (beslenmiş = bu dosyadaki taban can/STR), tüketemezse unfed (can ve STR x0,67, ~-%33). Çarpan maks cana, str/int ve Str düz can yenilenmesine uygulanır (stats.ts > applySummonVariant).",
+    "fed": {
+      "mult": 1
+    },
+    "unfed": {
+      "mult": 0.67
+    }
+  },
   "ai": "aggressive",
   "skills": [
     "skeleton_strike",

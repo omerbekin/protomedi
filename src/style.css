@@ -5,57 +5,70 @@
 html,
 body {
   margin: 0;
+  width: 100%;
   height: 100%;
   background: #000;
   color: #edf2f4;
   font-family: system-ui, sans-serif;
   overflow: hidden;
-  touch-action: none;
+  overscroll-behavior: none;
+  touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root {
+  /* Çentik / hareket çubuğu payları (döndürülmüş kipte 0: ekranın fiziksel kenarları sahnenin kenarı değildir) */
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+
+:root.rotated {
+  --sat: 0px;
+  --sar: 0px;
+  --sab: 0px;
+  --sal: 0px;
+}
+
+/* Sahne: görünür alanın tamamı (JS visualViewport ile px verir; yoksa dvh). Dikeyde dokunmatikte 90 derece döner. */
+#stage {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: var(--stage-w, 100vw);
+  height: var(--stage-h, 100dvh);
+  overflow: hidden;
+  background: #000;
+}
+
+:root.rotated #stage {
+  transform-origin: 0 0;
+  transform: translateX(var(--view-w)) rotate(90deg);
 }
 
 #game {
-  position: fixed;
-  inset: 0;
+  position: absolute;
+  left: var(--sal);
+  right: var(--sar);
+  top: var(--sat);
+  bottom: var(--sab);
+  background: #000;
 }
 
-/* --- Dikey ekran uyarısı: oyun ortada kalır, üstte bant çıkar --- */
-.rotate-warning {
-  display: none;
-  position: fixed;
-  left: 0;
-  right: 0;
-  top: 0;
-  padding: 16px;
-  text-align: center;
-  font-size: 18px;
-  background: rgba(20, 20, 30, 0.92);
-  border-bottom: 2px solid #ffb703;
-  z-index: 10;
-}
-
-.rotate-warning .icon {
+#game canvas {
   display: block;
-  font-size: 40px;
-  line-height: 1.2;
-}
-
-@media (orientation: portrait) {
-  .rotate-warning {
-    display: block;
-  }
-}
-
-body.force-portrait .rotate-warning {
-  display: block;
+  touch-action: none;
 }
 
 /* --- Debug menüsü (gerçek piksel; dokunma hedefi >= 44px) --- */
 .debug-toggle {
   position: fixed;
-  right: 8px;
-  bottom: 8px;
+  right: calc(8px + var(--sar));
+  bottom: calc(8px + var(--sab));
   min-width: 64px;
   min-height: 44px;
   padding: 0 12px;
@@ -69,10 +82,10 @@ body.force-portrait .rotate-warning {
 
 .debug-panel {
   position: fixed;
-  right: 8px;
-  bottom: 60px;
-  top: 64px;
-  width: min(520px, calc(100vw - 16px));
+  right: calc(8px + var(--sar));
+  bottom: calc(60px + var(--sab));
+  top: calc(64px + var(--sat));
+  width: min(520px, calc(var(--stage-w, 100vw) - 16px - var(--sar) - var(--sal)));
   overflow: hidden;
   padding: 12px;
   background: rgba(15, 15, 25, 0.95);
@@ -149,8 +162,8 @@ body.force-portrait .rotate-warning {
 
 .fps-counter {
   position: fixed;
-  left: 8px;
-  top: 8px;
+  left: calc(8px + var(--sal));
+  top: calc(8px + var(--sat));
   padding: 4px 8px;
   font: bold 12px monospace;
   background: rgba(0, 0, 0, 0.6);
@@ -307,8 +320,8 @@ body.force-portrait .rotate-warning {
 /* --- Ayarlar (sağ üst) --- */
 .settings-toggle {
   position: fixed;
-  top: 8px;
-  right: 8px;
+  top: calc(8px + var(--sat));
+  right: calc(8px + var(--sar));
   width: 48px;
   height: 48px;
   padding: 0;
@@ -324,11 +337,17 @@ body.force-portrait .rotate-warning {
   image-rendering: pixelated;
 }
 
+.settings-toggle.fullscreen-toggle {
+  right: calc(120px + var(--sar));
+}
+
 .settings-panel {
   position: fixed;
-  top: 64px;
-  right: 8px;
-  width: min(300px, calc(100vw - 16px));
+  top: calc(64px + var(--sat));
+  right: calc(8px + var(--sar));
+  width: min(300px, calc(var(--stage-w, 100vw) - 16px));
+  max-height: calc(var(--stage-h, 100dvh) - 72px - var(--sat) - var(--sab));
+  overflow-y: auto;
   padding: 12px;
   background: rgba(15, 15, 25, 0.95);
   border: 1px solid #8d99ae;
@@ -366,6 +385,65 @@ body.force-portrait .rotate-warning {
   min-width: 0;
   height: 32px;
   accent-color: #ffd23f;
+}
+
+.settings-btn {
+  margin-left: auto;
+  min-width: 72px;
+  min-height: 44px;
+  padding: 0 14px;
+  font: bold 14px system-ui, sans-serif;
+  color: #edf2f4;
+  background: #2b2d42;
+  border: 1px solid #4a4e69;
+  border-radius: 6px;
+}
+
+.settings-btn:active {
+  background: #4a4e69;
+}
+
+.settings-note {
+  display: block;
+  font: 12px system-ui, sans-serif;
+  color: #ffd23f;
+}
+
+.settings-note:empty {
+  display: none;
+}
+
+/* Tam ekran ipucu (ilk açılışta tek seferlik, kapatılabilir) */
+.fs-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(12px + var(--sab));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(var(--stage-w, 100vw) - 32px);
+  padding: 4px 4px 4px 14px;
+  font: 14px system-ui, sans-serif;
+  color: #edf2f4;
+  background: rgba(15, 15, 25, 0.95);
+  border: 1px solid #ffd23f;
+  border-radius: 10px;
+  z-index: 35;
+}
+
+.fs-hint[hidden] {
+  display: none;
+}
+
+.fs-hint-close {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  font: bold 22px system-ui, sans-serif;
+  color: #edf2f4;
+  background: transparent;
+  border: 0;
 }
 
 .settings-value {
@@ -543,18 +621,30 @@ body.force-portrait .rotate-warning {
   border-radius: 6px;
 }
 
-/* Kısa ekranlarda dock daha az yer kaplar, sekme içeriğine yer kalır */
-@media (max-height: 720px) {
-  .debug-dock {
-    max-height: 44%;
-    padding: 4px 12px 6px;
-  }
+/* Kısa sahnede (<= 720px; JS: html.compact, döndürülmüş sahnede de doğru) dock daha az yer kaplar, sekme içeriğine yer kalır */
+:root.compact .debug-dock {
+  max-height: 44%;
+  padding: 4px 12px 6px;
+}
 
-  .debug-dock-btn {
-    min-height: 44px;
-  }
+:root.compact .debug-dock-btn {
+  min-height: 44px;
+}
 
-  .debug-tabs {
-    margin: 6px 0 2px;
-  }
+:root.compact .debug-tabs {
+  margin: 6px 0 2px;
+}
+
+/* Yatay telefon (kısa sahne <= 520px; JS: html.short): debug paneli üst düğmelerin altında değil solda, tüm yüksekliği kullanır */
+:root.short .debug-panel,
+:root.short .debug-panel.left {
+  left: calc(8px + var(--sal));
+  right: auto;
+  top: calc(8px + var(--sat));
+  bottom: calc(8px + var(--sab));
+  width: min(520px, calc(var(--stage-w, 100vw) - 190px - var(--sar) - var(--sal)));
+}
+
+:root.short .debug-dock {
+  max-height: 38%;
 }

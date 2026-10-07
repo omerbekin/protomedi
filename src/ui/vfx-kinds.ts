@@ -30,9 +30,12 @@ export const VFX_KINDS = [
   'vines',
   'rejuvenate',
   'summonroots',
+  /** Yedek: Treant Root Smash'in eski (yürüyüp omzundan yumruk fırlatan) animasyonu; Root Smash artık uzaktan, gökten iner (rootfall). */
   'woodsmash',
-  /** Treant - Thorn Shield: yerden diken ve kök fırlayıp kalkan olur. */
-  'thornshield',
+  /** Treant - Root Smash: Treant yerinde kolunu kaldırır, hedefin üstünde gökten kök kolun ucundaki dev ahşap yumruk düşer. */
+  'rootfall',
+  /** Treant - Vine Snare: yere vurulan kol, toprak altından ilerleyen kökler, 2x2 hücrede fırlayan kök-sarmaşık bacakları sarar. */
+  'vinesnare',
   'taunt',
   'guardlink',
   'tremor',
@@ -55,9 +58,14 @@ export const VFX_KINDS = [
   'shapecolumn',
   'shaperect',
   'shapeplus',
+  /** Cutthroat: zehirli çift kesik, X çizen sıçrayış, kil duman bombası (iki tahta), arkaya ışınlanıp sırttan saplama. */
+  'venomedge',
+  'saltire',
+  'smokebomb',
+  'backstab',
 ] as const;
 
 /** Kullanılmayan ama bilerek saklanan yedek efektler. */
-export const BACKUP_VFX: readonly string[] = ['voidstrikespikes', 'holysword'];
+export const BACKUP_VFX: readonly string[] = ['voidstrikespikes', 'holysword', 'woodsmash'];
 
 export type VfxKind = (typeof VFX_KINDS)[number];

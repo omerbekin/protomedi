@@ -148,6 +148,7 @@ export class CombatantView {
     this.setMp(combatant.mp, false);
     this.setShield(combatant.shield, combatant.magicShield, false);
     this.play('idle');
+    if (combatant.empowered) this.setEmpowered(true); // beslenmiş çağrı (Raise Dead): kalıcı hafif mor aura
   }
 
   get alive(): boolean {
@@ -161,7 +162,7 @@ export class CombatantView {
   setGlow(kind: 'good' | 'bad' | null, strong = false): void {
     const key = kind ? `${kind}:${strong}` : '';
     if (key === this.glowKey) return;
-    if (this.fallen) this.container.setAlpha(kind ? (strong ? 0.8 : 0.5) : 0); // düşmüş birim: yalnızca diriltme hedefiyken hayalet olarak görünür
+    if (this.fallen) this.container.setAlpha(kind && strong ? 0.8 : 0); // düşmüş birim: yalnızca üstüne gelinen diriltme hedefi hayalet olur (yuvada ceset işareti durur; madde 222)
     this.glowKey = key;
     if (this.glowFx) {
       this.scene.tweens.killTweensOf(this.glowFx);
@@ -287,44 +288,119 @@ export class CombatantView {
     }
   }
 
-  /** `thorns` durumunun kalıcı görünümü: sprite'ın kenarlarında küçük sivri ahşap dikenler (bir kısmı arkadan taşar, bir kısmı gövdeye batık). */
-  private thornShell: Phaser.GameObjects.Image[] = [];
+  /**
+   * Beslenmiş (ceset tüketilerek çağrılmış, `combatant.empowered`) birimin kalıcı, hafif mor aurası: sprite'ın arkasında yumuşak mor ışıma
+   * (yavaş nabız), Skeleton'da gözlerde mor ışık, arada gövdeden yükselen tek tük mor kıvılcım. Sprite sınırını çok az aşar; hedef seçim
+   * parıltısıyla (setGlow, postFX) çakışmaz. Beslenmemiş birimde yok.
+   */
+  private empowerFx: { items: Phaser.GameObjects.GameObject[]; timer: Phaser.Time.TimerEvent } | null = null;
 
-  setThornShell(on: boolean): void {
-    if (on === this.thornShell.length > 0) return;
-    const old = this.thornShell;
-    this.thornShell = [];
+  setEmpowered(on: boolean): void {
+    if (on === !!this.empowerFx) return;
     if (!on) {
-      for (const sp of old) {
-        this.scene.tweens.killTweensOf(sp);
-        this.scene.tweens.add({ targets: sp, alpha: 0, scaleY: sp.scaleY * 0.3, duration: slow(260), onComplete: () => sp.destroy() });
+      const old = this.empowerFx!;
+      this.empowerFx = null;
+      old.timer.remove();
+      for (const it of old.items) {
+        this.scene.tweens.killTweensOf(it);
+        this.scene.tweens.add({ targets: it, alpha: 0, duration: 260, onComplete: () => it.destroy() });
       }
       return;
     }
-    const tex = ensureIcon(this.scene, 'thornspike', '#8bd06a', false);
-    const { w, h } = this;
-    // [x, y, derece (0 = yukarı, + saat yönü), boyut, arkada mı]
-    const spec: Array<[number, number, number, number, boolean]> = [];
-    for (const s of [-1, 1]) {
-      for (const k of [0.28, 0.5, 0.72]) spec.push([s * w * 0.42, -h * k, s * 66, 44, true]);
-      spec.push([s * w * 0.3, -h * 0.9, s * 28, 42, true]);
-      for (const k of [0.2, 0.42, 0.62]) spec.push([s * w * 0.3, -h * k, s * 52, 32, false]);
-      spec.push([s * w * 0.17, -4, s * 22, 30, false]);
+    const scene = this.scene;
+    const key = 'fx:empoweraura';
+    if (!scene.textures.exists(key)) {
+      const tex = scene.textures.createCanvas(key, 32, 48);
+      if (tex) {
+        const ctx = tex.getContext();
+        for (let y = 0; y < 48; y++)
+          for (let x = 0; x < 32; x++) {
+            const d = Math.hypot((x + 0.5 - 16) / 16, (y + 0.5 - 26) / 22);
+            if (d >= 1) continue;
+            ctx.globalAlpha = Math.round((1 - d) ** 1.6 * 6) / 6;
+            ctx.fillStyle = d < 0.35 ? '#e3ccff' : d < 0.7 ? '#b872ff' : '#5a2a9c';
+            ctx.fillRect(x, y, 1, 1);
+          }
+        tex.refresh();
+      }
     }
-    spec.push([0, -4, 0, 26, false]);
-    const at = this.container.getIndex(this.sprite);
-    let nBack = 0;
-    spec.forEach(([x, y, deg, size, back], i) => {
-      const sp = this.scene.add.image(x, y, tex).setOrigin(0.5, 1).setDisplaySize(size * 0.6, size).setAngle(deg);
-      this.container.addAt(sp, back ? at + nBack++ : at + nBack + 1 + this.thornShell.filter((q) => q.getData('front')).length);
-      sp.setData('front', !back);
-      const sy = sp.scaleY;
-      sp.setScale(sp.scaleX, 0.05 * sy);
-      this.scene.tweens.add({ targets: sp, scaleY: sy, duration: slow(240), delay: slow(i * 22), ease: 'Back.easeOut' });
-      // hafif nefes: dikenler çok az uzayıp kısalır
-      this.scene.tweens.add({ targets: sp, scaleY: sy * 1.07, duration: 1300 + (i % 4) * 140, delay: slow(600) + i * 70, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-      this.thornShell.push(sp);
+    const aura = scene.add.image(0, -this.h * 0.5, key).setDisplaySize(this.w * 1.05, this.h * 1.02).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
+    this.container.addAt(aura, this.container.getIndex(this.sprite));
+    scene.tweens.add({ targets: aura, alpha: { from: 0.5, to: 0.8 }, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    // ayak dibinde yassı mor ölü ışığı (koyu zeminde aurayı okunur kılar)
+    const pool = scene.add.ellipse(0, -6, this.w * 0.9, 22, 0x7d3fb0, 0.3).setBlendMode(Phaser.BlendModes.ADD);
+    this.container.addAt(pool, this.container.getIndex(aura));
+    scene.tweens.add({ targets: pool, alpha: { from: 0.22, to: 0.4 }, scaleX: { from: 0.95, to: 1.05 }, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const items: Phaser.GameObjects.GameObject[] = [aura, pool];
+    // Skeleton gözleri (sprite'taki göz çukurları: genişliğin %58 ve %64'ü, yüksekliğin %10'u; düşmanda ayna)
+    if (this.combatant.spriteId === 'skeleton' && this.realSprite) {
+      const flip = this.sprite.flipX ? -1 : 1;
+      for (const u of [0.577, 0.637]) {
+        const eye = scene.add.ellipse(flip * (u - 0.5) * this.w, -this.h * 0.9, 9, 6, 0xd9a8ff, 0.95).setBlendMode(Phaser.BlendModes.ADD);
+        this.container.add(eye);
+        scene.tweens.add({ targets: eye, alpha: { from: 0.95, to: 0.5 }, scaleX: { from: 1, to: 1.4 }, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        items.push(eye);
+      }
+    }
+    // tek tük yükselen mor kıvılcım (kapta kalır: birim hareket edince birlikte gider)
+    const timer = scene.time.addEvent({
+      delay: 520,
+      loop: true,
+      callback: () => {
+        if (!this.container.active || this.fallen) return;
+        const m = scene.add.rectangle(Phaser.Math.Between(-this.w * 0.3, this.w * 0.3), -this.h * Phaser.Math.FloatBetween(0.2, 0.8), 4, 4, Phaser.Math.RND.pick([0xb872ff, 0xe3ccff, 0x7d3fb0]));
+        this.container.add(m);
+        scene.tweens.add({ targets: m, y: m.y - Phaser.Math.Between(30, 60), alpha: 0, duration: 900, onComplete: () => m.destroy() });
+      },
     });
+    this.empowerFx = { items, timer };
+  }
+
+  /**
+   * Vine Snare ile yere bağlanan (status `cause: 'vines'`, Stun) birimin bacaklarındaki kalın kök-sarmaşık sargısı: arka kıvrımlar sprite'ın
+   * arkasında, öndekiler önünde; yavaşça sıkışıp gevşer. Stun bitince (statusEnd) ya da ölünce çözülüp yere iner. Sprite'ın alt üçte birinde kalır.
+   */
+  private vineWrap: { back: Phaser.GameObjects.Graphics; front: Phaser.GameObjects.Graphics } | null = null;
+
+  setVineWrap(on: boolean): void {
+    if (on === !!this.vineWrap) return;
+    if (!on) {
+      const old = this.vineWrap!;
+      this.vineWrap = null;
+      for (const g of [old.back, old.front]) {
+        this.scene.tweens.killTweensOf(g);
+        this.scene.tweens.add({ targets: g, alpha: 0, scaleY: 0.2, duration: slow(320), ease: 'Quad.easeIn', onComplete: () => g.destroy() });
+      }
+      return;
+    }
+    const back = this.scene.add.graphics();
+    const front = this.scene.add.graphics();
+    const H = this.h * 0.3;
+    const W = Math.max(24, this.w * 0.3);
+    const turns = 2.1;
+    const max = turns * Math.PI * 2;
+    for (let a = 0; a <= max; a += 0.1) {
+      const k = a / max;
+      const x = Math.round(Math.cos(a) * W * (1 - 0.12 * k) / 2) * 2;
+      const y = Math.round((-2 - k * H + Math.sin(a) * 6) / 2) * 2;
+      const isFront = Math.sin(a) > 0;
+      const g = isFront ? front : back;
+      const th = isFront ? 12 : 9;
+      g.fillStyle(0x2a1a0e, 1).fillRect(x - th / 2 - 1, y - th / 2 - 1, th + 2, th + 2);
+      g.fillStyle(isFront ? (Math.round(a / 0.3) % 2 ? 0x8c5a2b : 0x6b4423) : 0x4a2e1a, 1).fillRect(x - th / 2, y - th / 2, th, th);
+      const i = Math.round(a / 0.1);
+      if (isFront && i % 4 === 0) g.fillStyle(0x62d04b, 1).fillRect(x - th / 2, y - th / 2, th, 3);
+      if (isFront && i % 17 === 8) g.fillStyle(0xa8f08a, 1).fillRect(x - 7, y - 11, 14, 6).fillStyle(0x2c7a2b, 1).fillRect(x - 1, y - 9, 3, 3); // yaprak
+    }
+    const at = this.container.getIndex(this.sprite);
+    this.container.addAt(back, at);
+    this.container.addAt(front, at + 2);
+    for (const g of [back, front]) {
+      g.setScale(1, 0.1);
+      this.scene.tweens.add({ targets: g, scaleY: 1, duration: slow(220), ease: 'Back.easeOut' });
+      this.scene.tweens.add({ targets: g, scaleX: 0.94, duration: 900, yoyo: true, repeat: -1, delay: slow(300), ease: 'Sine.easeInOut' });
+    }
+    this.vineWrap = { back, front };
   }
 
   private tweenWidth(bar: Phaser.GameObjects.Rectangle, width: number, animate: boolean): void {
@@ -690,6 +766,8 @@ export class CombatantView {
 
   /** Süresi dolan çağrı: ölmez, sessizce solar. */
   vanish(): Promise<void> {
+    this.setEmpowered(false);
+    this.setVineWrap(false);
     this.setGlow(null);
     this.setActive(false);
     this.clearPreview();
@@ -700,7 +778,8 @@ export class CombatantView {
   }
 
   die(): Promise<void> {
-    this.setThornShell(false);
+    this.setVineWrap(false);
+    this.setEmpowered(false);
     this.play('death');
     this.setGlow(null);
     this.setActive(false);
@@ -717,6 +796,14 @@ export class CombatantView {
         },
       });
     });
+  }
+
+  /** Savaş zaten bu birim düşmüşken başladıysa/yüklendiyse: ölüm animasyonu oynamadan sahneden kalkar (ceset işareti ayrıca çizilir). */
+  markFallen(): void {
+    this.fallen = true;
+    this.setGlow(null);
+    this.setActive(false);
+    this.container.setAlpha(0);
   }
 
   /** Diriltme: düşmüş birim olduğu yerde canlanır. */

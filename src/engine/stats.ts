@@ -1,4 +1,4 @@
-import type { Attribute, Attributes, CombatantData, CombatantDef, Formulas, Stats } from './types';
+import type { Attribute, Attributes, CombatantData, CombatantDef, Formulas, Stats, SummonVariants } from './types';
 
 /** Primary bonusu aktif mi: primary stat, dört statın en yükseğine eşit veya üstündeyse (eşitlik dahil). */
 export function isPrimaryActive(attrs: Attributes, primary: Attribute | undefined): boolean {
@@ -85,13 +85,33 @@ export function buildDef(data: CombatantData, formulas: Formulas): CombatantDef 
     attributes: { ...data.attributes },
     ...(data.primary ? { primary: data.primary } : {}),
     ...(data.testOnly ? { testOnly: true } : {}),
+    ...(data.hidden ? { hidden: true } : {}),
     stats: deriveStats(data, formulas),
     ...(data.resource === 'rage' ? { maxRage: formulas.rage.max } : {}),
     skills: [...data.skills],
     ...(data.tags ? { tags: [...data.tags] } : {}),
     ...(data.ai ? { ai: data.ai } : {}),
     ...(data.passive ? { passive: data.passive } : {}),
+    ...(data.variants ? { variants: { fed: { ...data.variants.fed }, unfed: { ...data.variants.unfed } } } : {}),
   };
+}
+
+/** Çağrı varyantının stat çarpanı (varyant yoksa 1). */
+export function variantMult(def: CombatantDef, variant: keyof SummonVariants | undefined): number {
+  return variant ? (def.variants?.[variant].mult ?? 1) : 1;
+}
+
+/**
+ * Çağrı varyantı uygulanmış tanım (saf): maks can (tam sayıya yuvarlanır), hasar statları str ve int (0,1'e yuvarlanır) ve Str'e bağlı düz can
+ * yenilenmesi `mult` ile çarpılır; diğer her şey (zırh, hız, isabet, skill'ler, hasar azaltma) aynen kalır. mult 1 ise tanım aynen döner.
+ * Motor (çağrı anı), skill açıklaması, wiki ve maç kaydı bu tek fonksiyonu kullanır.
+ */
+export function applySummonVariant(def: CombatantDef, variant: keyof SummonVariants | undefined): CombatantDef {
+  const mult = variantMult(def, variant);
+  if (mult === 1) return def;
+  const r1 = (v: number) => Math.round(v * mult * 10) / 10;
+  const stats: Stats = { ...def.stats, hp: Math.max(1, Math.round(def.stats.hp * mult)), str: r1(def.stats.str), int: r1(def.stats.int), hpRegen: def.stats.hpRegen * mult };
+  return { ...def, attributes: { ...def.attributes, str: stats.str, int: stats.int }, stats };
 }
 
 /** Bir özelliğin skill gücü: değer x katsayı (hasar, şifa ve kalkan için). */

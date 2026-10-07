@@ -31,7 +31,7 @@ describe('buff / debuff tanımları (data/statuses.json)', () => {
       expect(['buff', 'debuff'], id).toContain(def.type);
       expect(def.color, id).toMatch(/^#[0-9a-fA-F]{6}$/);
       expect(def.text.length, id).toBeGreaterThan(0);
-      expect(def.speedMult !== undefined || def.damageTakenMult !== undefined || def.healTakenMult !== undefined || def.skipTurn === true || id === 'thorns', id).toBe(true); // thorns: motorda kodlu durum (taunt/guard gibi), çarpan alanı yok
+      expect(def.speedMult !== undefined || def.damageTakenMult !== undefined || def.healTakenMult !== undefined || def.skipTurn === true || def.accuracyDelta !== undefined || def.evasionDelta !== undefined, id).toBe(true);
     }
   });
 
@@ -162,8 +162,8 @@ describe('durumlar: hız, alınan hasar, alınan şifa, sersemleme', () => {
 describe('kontrol ve alan skill\'leri', () => {
   it('Tremor Slam (Defender): melee alan skill\'i, alandaki tüm düşmanlara Slow verir', () => {
     const b = calm(grid(cells({ 0: 'defender' }), cells({ 0: 'warrior', 1: 'warrior', 2: 'warrior', 3: 'mage' })));
-    expect(content.skills.tremor_slam).toMatchObject({ target: 'area_enemies', motion: 'melee', area: { radius: 1 } });
-    // ön sıra (3 şerit): merkez orta şerit -> yanındakiler de vurulur; arkadaki Mage melee menzili dışında kalır
+    expect(content.skills.tremor_slam).toMatchObject({ target: 'area_enemies', motion: 'melee', area: { shape: 'row' } });
+    // ön sıra boyunca (row şekli, 3 şerit): ön sıradaki herkes vurulur; arkadaki Mage hem şekil hem melee menzili dışında kalır
     const events = act(b, 'party-0', 'tremor_slam', 'enemy-1');
     expect(ofType(events, 'damage').map((e) => e.target).sort()).toEqual(['enemy-0', 'enemy-1', 'enemy-2']);
     for (const uid of ['enemy-0', 'enemy-1', 'enemy-2']) expect(hasStatus(b, uid, 'slow')).toBe(true);
@@ -293,7 +293,7 @@ describe('tür hassasiyeti (undead + holy, nature + fire)', () => {
 
 describe('Judgment: holy fire alanı', () => {
   it('ilk hasar yok; 1 yarıçaplı alana yüksek hasarlı Holy Fire bırakır; undead\'e %50 fazla vurur', () => {
-    expect(content.skills.judgment).toMatchObject({ target: 'area_enemies', area: { radius: 1 }, motion: 'sky', skyFx: 'light', skyCenter: true });
+    expect(content.skills.judgment).toMatchObject({ target: 'area_enemies', area: { shape: 'plus' }, motion: 'sky', skyFx: 'light', skyCenter: true });
     const b = calm(grid(cells({ 0: 'paladin' }), cells({ 0: 'warrior', 1: 'warrior' }), 'turns', 4));
     b.get('party-0')!.mp = 100;
     while (b.currentUid !== 'party-0') b.skipTurn();
@@ -329,10 +329,11 @@ describe('sınıf verisi (bu turun düzenlemeleri)', () => {
     expect(content.skills.thorn_whip!.motion).toBe('whip');
   });
 
-  it('Treant ve iskelet: can 105; Treant hasarı +%50 (STR 13,5); Treant türü nature', () => {
+  it('Treant ve iskelet: can 105 (iskelette beslenmiş hâl); Treant hasar statı INT 13,5 (madde 222: eski STR 13,5 çıktısı korunur); Treant türü nature', () => {
     expect(content.summons.skeleton!.stats.hp).toBe(105);
     expect(content.summons.treant!.stats.hp).toBe(105);
-    expect(content.summons.treant!.stats.str).toBe(13.5);
+    expect(content.summons.treant!.stats.int).toBe(13.5);
+    expect(content.summons.treant!.tags).toContain('nature');
   });
 
   it('Taunt ikonu çelik eldivenle orta parmak; Void Strike menzilli', () => {

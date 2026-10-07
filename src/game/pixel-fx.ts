@@ -1,4 +1,4 @@
-import { blade, crystal, sparkle, type Draw, type PxGrid } from './pixel-art';
+import { blade, crystal, leafShape, sparkle, type Draw, type PxGrid } from './pixel-art';
 import { goldCoin, holyHammer, isoDie, playingCard, thorn } from './pixel-icons';
 
 /** Efekt (VFX) sprite'ları (32x32): ikon olmayan, animasyonlarda kullanılan çizimler. Aynı jetonlar, aynı araçlar. */
@@ -186,6 +186,41 @@ export const PIXEL_FX: Record<string, Draw> = {
     g.poly([0, 13.5, 6, 14.6, 22, 14.6, 22, 17.4, 6, 17.4, 0, 18.5], 'A');
     g.line(3, 16, 22, 16, 'a', 2.2).line(7, 16, 22, 16, 'z', 1.2).line(12, 16, 22, 16, 'w', 0.5);
     g.poly([20, 10, 31.5, 16, 20, 22, 22.5, 16], 'z').poly([21.5, 12.8, 29, 16, 21.5, 19.2, 23.2, 16], 'w');
+  },
+  // ---------- Cutthroat / Treant (yeni) efektleri ----------
+  // Kil duman bombası (fırlatılan): yuvarlak sırlı çömlek, balmumu tıpa, yanan kısa fitil
+  claybomb: (g) => {
+    g.disc(16, 19, 11, 'k').disc(15, 18, 10, 'b');
+    g.ellipse(11.5, 14, 3.6, 2.6, 'n').disc(10.4, 13, 1, 'w');
+    g.line(6, 21, 26, 21, 'k', 0.8).line(7.5, 25, 24.5, 25, 'k', 0.8);
+    g.rect(12, 5.5, 8, 4, 'b').rect(12, 5.5, 8, 1, 'n').rect(11.4, 4, 9.2, 2, 'R');
+    g.line(17, 4, 20, 0.8, 'n', 1);
+    g.disc(20.6, 0.8, 1.6, 'f').disc(20.6, 0.8, 0.7, 'y');
+  },
+  // Kil kırığı: sırlı çömlek parçası (patlamada saçılır)
+  claychip: (g) => {
+    g.poly([4, 22, 9, 8, 22, 4, 28, 12, 20, 26], 'b').poly([6, 20, 10, 9, 20, 6, 14, 18], 'n');
+    g.line(9, 22, 24, 12, 'k', 1);
+  },
+  // Kök yumruğu (Root Smash, gökten iner): aşağı bakan kabuklu ahşap yumruk; bileği yukarı uzanan kök demeti, yosun ve yaprak
+  rootfist: (g) => {
+    // bilek: üç kök yukarı uzanır
+    g.line(12, 0, 13, 12, 'k', 4).line(16, 0, 16, 12, 'k', 4.4).line(20.5, 0, 19.5, 12, 'k', 4);
+    g.line(12, 0, 13, 12, 'b', 2.4).line(16, 0, 16, 12, 'b', 2.8).line(20.5, 0, 19.5, 12, 'b', 2.4);
+    g.line(15.4, 0, 15.4, 12, 'n', 0.7);
+    // yumruk gövdesi (kabuk)
+    g.poly([6, 12, 26, 11, 28, 18, 27, 25, 5, 25, 4, 18], 'k');
+    g.poly([7, 12.6, 25, 11.8, 26.6, 18, 25.6, 23.6, 6.4, 23.6, 5.4, 18], 'b');
+    g.line(9, 13.4, 9.6, 22, 'k', 0.7).line(15, 13, 14.6, 22.4, 'k', 0.7).line(21.6, 12.8, 22.2, 22, 'k', 0.7);
+    g.rect(7.6, 13.2, 6, 1.4, 'n').rect(17, 12.8, 6.6, 1.2, 'n');
+    // bükülmüş parmaklar (altta, eklem kabarıkları)
+    for (const x of [7.8, 12.6, 17.4, 22.2]) g.disc(x, 26.4, 3, 'k').disc(x - 0.2, 26, 2.2, 'b').rect(x - 1.4, 24.6, 1.6, 0.8, 'n');
+    // başparmak (yanda)
+    g.poly([26, 15, 30, 17, 30.6, 22, 27.6, 23.4, 26.6, 19], 'k').poly([26.6, 15.6, 29.4, 17.4, 29.6, 21.4, 27.6, 22], 'b');
+    // yosun ve sürgün
+    g.disc(10.4, 18.6, 1.8, 'G').disc(10, 18.2, 0.9, 'g').disc(21, 19.4, 1.6, 'G').disc(20.6, 19, 0.7, 'g');
+    leafShape(g, 6, 11.6, 1.2, 7.6, 1.6);
+    leafShape(g, 24.6, 10.8, 29.6, 6.8, 1.6);
   },
   smoke: (g) => {
     g.disc(16, 16, 11, 'd').disc(13, 13, 7, 'm');

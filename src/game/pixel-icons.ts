@@ -182,6 +182,36 @@ export function streak(g: PxGrid, x0: number, y0: number, x1: number, y1: number
   g.poly([...out, ...back], t);
 }
 
+/**
+ * CUTTHROAT ortak parçası: kısa, çift kenarlı hançer (topuz x0,y0 -> uç x1,y1). Bıçak boyun uzunluğunun ~%60'ı; çelik iki ton + oluk,
+ * kısa kömür-demir siper, deri sargılı (turuncu ip) kabza, demir topuz. `w` bıçak genişliği.
+ */
+export function dagger(g: PxGrid, x0: number, y0: number, x1: number, y1: number, w = 3.4, steel: [string, string] = ['l', 'm']): void {
+  const len = Math.hypot(x1 - x0, y1 - y0) || 1;
+  const ux = (x1 - x0) / len;
+  const uy = (y1 - y0) / len;
+  const at = (k: number): [number, number] => [x0 + ux * len * k, y0 + uy * len * k];
+  const [gx, gy] = at(0.36);
+  blade(g, gx, gy, x1, y1, w, steel[0], steel[1]);
+  // siper (bıçağa dik)
+  g.line(gx - uy * w * 1.15, gy + ux * w * 1.15, gx + uy * w * 1.15, gy - ux * w * 1.15, 'd', 1.7);
+  // kabza: deri + turuncu sargı
+  const [hx, hy] = at(0.08);
+  g.line(hx, hy, gx - ux, gy - uy, 'k', 2.2);
+  for (const k of [0.15, 0.24]) {
+    const [sx, sy] = at(k);
+    g.line(sx - uy * 1.1, sy + ux * 1.1, sx + uy * 1.1, sy - ux * 1.1, 'f', 0.7);
+  }
+  g.disc(x0, y0, 1.6, 'd').disc(x0 - 0.4, y0 - 0.4, 0.6, 'l');
+}
+
+/** Gri-kömür duman yumağı (üst üste binen yuvarlaklar, açık tepe); `k` ölçek. */
+export function smokePuffShape(g: PxGrid, cx: number, cy: number, k: number, dark = 'd', mid = 'm', light = 'l'): void {
+  g.disc(cx - 3.2 * k, cy + 0.6 * k, 3.4 * k, dark).disc(cx + 3.2 * k, cy + 0.8 * k, 3.2 * k, dark).disc(cx, cy - 1.6 * k, 4 * k, dark);
+  g.disc(cx - 2.6 * k, cy - 0.2 * k, 2.4 * k, mid).disc(cx + 0.4 * k, cy - 2.2 * k, 2.8 * k, mid);
+  g.disc(cx - 0.6 * k, cy - 3.2 * k, 1.3 * k, light);
+}
+
 /** Dikenli kalkan/kabuk için tek sivri diken (taban merkezi bx,by; ucu tx,ty; taban genişliği w). */
 export function thorn(g: PxGrid, bx: number, by: number, tx: number, ty: number, w: number, lo = 'k', hi = 'n'): void {
   const len = Math.hypot(tx - bx, ty - by) || 1;
@@ -535,28 +565,33 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     g.line(26, 27, 28, 16, 'b', 3).line(28, 16, 24, 10, 'b', 3);
     g.disc(9, 6, 2.6, 'g').disc(12, 4, 2, 'g').disc(22, 4, 2.6, 'g').disc(24, 10, 2.2, 'g').disc(6, 2, 2, 'z');
   },
-  // Thorn Shield: yaşayan ahşap kalkan; kenarından sivri dikenler, altından kökler, üstünde yeşil sürgün
-  thornshield: (g) => {
-    // altta kök ayakları
-    g.line(9, 26, 4, 30, 'k', 2.2).line(16, 28, 16, 31.5, 'k', 2.2).line(23, 26, 28, 30, 'k', 2.2);
-    g.line(9, 26, 6, 28, 'b', 1).line(23, 26, 26, 28, 'b', 1);
-    // dikenler (kenarın dışına)
-    for (const [bx, by, tx, ty] of [[8, 5, 4, 0.5], [16, 3, 16, -0.5], [24, 5, 28, 0.5], [3.5, 13, -1, 11], [28.5, 13, 33, 11], [4.5, 21, 0, 23.5], [27.5, 21, 32, 23.5]] as const) thorn(g, bx, by, tx, ty, 4);
-    // kalkan: koyu ahşap kenar, kahve tahta zemin
-    shieldShape(g, 16, 3.5, 25, 25, 'k', 'b');
-    // tahta damarları ve çıtalar
-    g.line(16, 6, 16, 26, 'k', 0.8).line(10, 8, 10, 19, 'k', 0.6).line(22, 8, 22, 19, 'k', 0.6);
-    g.line(8, 13, 24, 13, 'k', 0.8);
-    g.rect(7, 7, 7, 3, 'n').rect(18, 7, 6, 2, 'n');
-    // sürgünler: kalkanı saran yeşil sarmaşık + yaprak
-    g.line(7, 10, 12, 15, 'G', 1.8).line(12, 15, 16, 14, 'G', 1.8).line(16, 14, 22, 18, 'G', 1.8).line(22, 18, 25, 24, 'G', 1.6);
-    g.line(7, 10, 12, 15, 'g', 0.8).line(16, 14, 22, 18, 'g', 0.8);
-    g.disc(10, 17.5, 2.2, 'g').disc(9.4, 16.8, 0.8, 'z').disc(24.5, 14.5, 2, 'g').disc(23.9, 13.9, 0.7, 'z').disc(19, 21.5, 1.8, 'g');
-    // kalkan göbeği: büyük diken
-    g.disc(16, 16, 3.4, 'k').disc(16, 16, 2.4, 'b');
-    thorn(g, 16, 16, 16, 9.5, 4.2, 'k', 'n');
-    thorn(g, 16, 16, 21.5, 20, 3.4, 'k', 'n');
-    thorn(g, 16, 16, 10.5, 20, 3.4, 'k', 'n');
+  // Vine Snare (Treant): 2x2 toprak karonun dördünden kalın kök-sarmaşık fırlıyor; ortada birbirine dolanıp kapan (ilmek) oluyor
+  vinesnare: (g) => {
+    // 2x2 zemin karosu (eğik perspektif: tahtadaki hücre plakaları gibi)
+    const tile = (x: number, y: number, t: string) => g.poly([x, y, x + 12, y, x + 9.5, y + 4.6, x - 2.5, y + 4.6], t);
+    tile(6.5, 21.6, 'b');
+    tile(19.3, 21.6, 'b');
+    tile(4, 26.8, 'k');
+    tile(16.8, 26.8, 'k');
+    g.line(5.5, 26.6, 28.5, 26.6, 'o', 0.5).line(18.4, 21.8, 15.4, 31.2, 'o', 0.5);
+    // dört kök: karolardan yükselip ortada ilmek olur
+    const root = (pts: Array<[number, number]>, w: number) => {
+      for (let i = 0; i < pts.length - 1; i++) g.line(pts[i]![0], pts[i]![1], pts[i + 1]![0], pts[i + 1]![1], 'k', w + 1.2);
+      for (let i = 0; i < pts.length - 1; i++) g.line(pts[i]![0], pts[i]![1], pts[i + 1]![0], pts[i + 1]![1], 'b', w);
+      for (let i = 0; i < pts.length - 1; i++) g.line(pts[i]![0] - 0.5, pts[i]![1], pts[i + 1]![0] - 0.5, pts[i + 1]![1], 'n', 0.5);
+    };
+    root([[10, 29], [8, 20], [10, 12], [16, 8.5]], 2.2);
+    root([[23, 29], [25, 20], [22.5, 12], [16, 8.5]], 2.2);
+    // yeşil sarmaşık: ilmeği saran, karolardan gelen ince dallar
+    g.ring(16, 14.5, 6.2, 'G', 2).ring(16, 14.5, 6.2, 'g', 0.8, 3.4, 5.6);
+    g.line(13, 24.2, 11.5, 18.2, 'G', 1.6).line(13, 24.2, 11.5, 18.2, 'g', 0.6);
+    g.line(21.4, 24.2, 21.4, 18.6, 'G', 1.6).line(21.4, 24.2, 21.4, 18.6, 'g', 0.6);
+    // dikenler ve yapraklar
+    for (const [bx, by, tx, ty] of [[10.2, 15, 6.6, 13.6], [22, 15.2, 25.6, 13.4], [16, 8.4, 16, 4.6], [12.4, 9.8, 10, 7]] as const) thorn(g, bx, by, tx, ty, 2.2);
+    leafShape(g, 20.2, 9.4, 26, 6.6, 1.8);
+    leafShape(g, 9, 22.4, 4.4, 19.6, 1.6);
+    // ilmeğin düğümü
+    g.disc(16, 20.6, 1.8, 'k').disc(15.6, 20.2, 0.8, 'b');
   },
   leaf: (g) => {
     g.poly([3, 27, 5, 13, 16, 3, 28, 3, 28, 16, 18, 26], 'G');
@@ -788,6 +823,136 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     g.rect(12.5, 2.4, 1, 1.4, 'w').rect(12.5, 28.2, 1, 1.4, 'w').rect(23.4, 15.5, 1.4, 1, 'w');
   },
 
+  // ---------- CUTTHROAT (medieval haydut-suikastçı): ortak dil kömür/kül grisi + turuncu vurgu + zehir yeşili, kan kırmızısı ----------
+  // Class logosu: kapüşonlu, alt yüzü bezle örtülü (yarım maske) haydut; gözlerde turuncu parıltı; göğsünün önünde çapraz hançer
+  cutthroatlogo: (g) => {
+    g.poly([16, 1, 24.5, 5, 28, 13, 29.5, 31, 2.5, 31, 4, 13, 7.5, 5], 'd');
+    g.poly([16, 1, 7.5, 5, 4, 13, 2.5, 31, 7.5, 31, 8.5, 15, 11.5, 6.5], 'm');
+    g.line(16, 1.5, 21, 4.8, 'm', 0.6);
+    // yüz boşluğu (kapüşon gölgesi)
+    g.poly([16, 6.5, 21.8, 9.8, 23, 17, 16, 21, 9, 17, 10.2, 9.8], 'o');
+    // gözler: kısık turuncu bakış
+    g.poly([10.8, 12.6, 14.8, 12.2, 14.4, 13.8, 11.4, 13.7], 'f').poly([17.2, 12.2, 21.2, 12.6, 20.6, 13.7, 17.6, 13.8], 'f');
+    g.rect(13.2, 12.4, 0.8, 0.6, 'y').rect(19.4, 12.4, 0.8, 0.6, 'y');
+    // yarım maske: burnun üstünden çeneye kül grisi bez, alt kenarında dikiş
+    g.poly([9.3, 15, 22.7, 15, 22.2, 19.4, 16, 23.6, 9.8, 19.4], 'l').poly([9.3, 15, 22.7, 15, 22.6, 16.4, 9.4, 16.4], 'w');
+    g.line(12, 19.8, 16, 22.4, 'm', 0.5).line(16, 22.4, 20, 19.8, 'm', 0.5);
+    g.line(16, 16.6, 16, 21.6, 'm', 0.5);
+    // pelerin yakası: turuncu iğne
+    g.disc(16, 25.6, 1.5, 'f').disc(15.6, 25.2, 0.5, 'y');
+    // hançer: sol alttan sağ üste, göğsün önünde
+    dagger(g, 4.2, 29.2, 28.6, 17.2, 3);
+  },
+  // Opportunist (pasif): zayıflamış/kanayan avına eğilmiş akbaba; kel boynu ve kanca gagası aşağıdaki kan damlasına uzanır
+  opportunist: (g) => {
+    // gövde: kambur sırt, katlanmış kanat (uçları tırtıklı birincil tüyler), aşağı sarkan kuyruk
+    g.poly([2, 27, 3.5, 18, 7.5, 12, 14, 9.6, 19.5, 11, 19, 17, 16, 23, 12.5, 27.5], 'd');
+    g.poly([3.5, 18, 7.5, 12, 12, 10.6, 15.5, 13.5, 13.5, 20, 6, 22.5], 'm');
+    for (const [x, y] of [[4, 22], [6.4, 23.4], [8.8, 24.6], [11.2, 25.6]] as const) g.poly([x, y, x + 2.6, y + 1, x + 0.6, y + 6.2], 'd');
+    g.line(6.5, 15.5, 13, 13.2, 'l', 0.5).line(5.5, 18.5, 13, 16.6, 'o', 0.5).line(6, 21, 12.6, 19.6, 'o', 0.5);
+    g.poly([2, 27, 0.5, 31, 5.5, 31, 6.5, 27], 'd');
+    // tüy yakalığı (ruff)
+    g.ellipse(17.2, 11.6, 4.4, 2.8, 'l').ellipse(17.6, 12.4, 3.2, 1.6, 'm');
+    // kel, eğik boyun ve baş (soluk ten)
+    g.line(19, 11.5, 23.5, 14.5, 'n', 2.4).line(19.2, 11, 23.4, 13.8, 'w', 0.5);
+    g.disc(24.8, 15.6, 2.6, 'n');
+    g.disc(25.6, 14.9, 0.75, 'f');
+    // kanca gaga
+    g.poly([26.6, 16, 29.4, 17.6, 29.2, 20.4, 27.6, 18.8, 26, 17.8], 'k').poly([27, 16.4, 29.2, 17.8, 28.6, 18.6], 'Y');
+    // gaganın ucundan kopan kan damlası ve yerdeki küçük gölcük
+    g.poly([27.6, 21.4, 29.2, 24.2, 28.8, 25.6, 27.6, 26.2, 26.4, 25.6, 26, 24.2], 'r').rect(26.8, 23.8, 0.7, 1.2, 'w');
+    g.ellipse(25.5, 29.6, 5, 1.6, 'R').ellipse(24.6, 29.3, 2.6, 0.7, 'r');
+    // pençe (taşın üstünde)
+    g.line(13, 29, 16.5, 29, 'Y', 1).line(12.6, 30.6, 17.4, 30.6, 'd', 1.2);
+  },
+  // Venom Edge: kısa çift kenarlı hançer; kenarından koyu yeşil zehir sızıyor, uçtan damlalar düşüyor
+  venomedge: (g) => {
+    dagger(g, 4, 28.5, 27.5, 5, 4.4);
+    // bıçak kenarında zehir tabakası (alt kenar boyunca yeşil sızıntı)
+    g.line(14.2, 19.2, 25.4, 8.4, 'G', 1.5).line(14.6, 19.6, 25.8, 8.8, 'g', 0.7);
+    g.poly([17, 17.4, 18.6, 17.8, 18.2, 20.6, 17.2, 21.2], 'g').poly([21.2, 13.4, 22.6, 13.8, 22.4, 16.2, 21.4, 16.6], 'g');
+    // düşen damlalar
+    for (const [x, y, r] of [[17.6, 24.4, 1.6], [22, 20.6, 1.3], [26.4, 14.6, 1.1], [19.8, 29, 1]] as const) {
+      g.poly([x, y - r * 1.9, x + r, y, x, y + r, x - r, y], 'g');
+      g.rect(x - r * 0.45, y - r * 0.2, r * 0.45, r * 0.6, 'z');
+    }
+    g.disc(29.2, 3.4, 0.9, 'w');
+  },
+  // Saltire Cut: X (saltire) şeklinde iki çapraz hançer; arkalarında beyaz-turuncu iki kesik izi
+  saltire: (g) => {
+    streak(g, 2, 3, 30, 29, 3.4, 0, 'f');
+    streak(g, 30, 3, 2, 29, 3.4, 0, 'f');
+    streak(g, 3.5, 4.5, 28.5, 27.5, 1.6, 0, 'w');
+    streak(g, 28.5, 4.5, 3.5, 27.5, 1.6, 0, 'w');
+    dagger(g, 5.5, 26.5, 22.5, 7.5, 3.2);
+    dagger(g, 26.5, 26.5, 9.5, 7.5, 3.2);
+    g.disc(16, 16.4, 1.6, 'y').disc(16, 16.4, 0.8, 'w');
+    sparkle(g, 4, 4, 2.2, 'y');
+    sparkle(g, 28.2, 4, 2.2, 'y');
+  },
+  // Smoke Bomb: sırlı kil çömlek bomba (balmumu tıpa + yanan fitil), ağzından kömür-gri duman kabarıyor
+  smokebomb: (g) => {
+    smokePuffShape(g, 21.5, 9, 1.5);
+    smokePuffShape(g, 9.5, 6, 1.05, 'm', 'l', 'w');
+    // çömlek gövdesi
+    g.disc(14, 21.5, 9.2, 'k').disc(13, 20.6, 8.2, 'b');
+    g.ellipse(10.5, 17.4, 3.2, 2.2, 'n').disc(9.4, 16.6, 0.9, 'w');
+    g.ring(14, 21.5, 9.2, 'k', 0.8, 0.35, 2.6);
+    g.line(6.6, 23.4, 21.4, 23.4, 'k', 0.6).line(7.6, 26, 20.4, 26, 'k', 0.6);
+    // boyun + tıpa + fitil
+    g.rect(11, 10, 6, 3.6, 'b').rect(11, 10, 6, 1, 'n').rect(10.4, 8.6, 7.2, 1.8, 'R');
+    g.line(15.6, 8.6, 18.6, 4.2, 'n', 0.8).line(18.6, 4.2, 20.6, 4.6, 'n', 0.8);
+    sparkle(g, 21.4, 4.4, 2.6, 'f');
+    g.disc(21.4, 4.4, 0.8, 'y');
+  },
+  // Backstab: arkası dönük kapüşonlu kurbanın sırtına yukarıdan saplanmış hançer; kızıl kan sıçraması (sert, karanlık)
+  backstab: (g) => {
+    // kurban: arkadan omuzlar ve kapüşon
+    g.poly([1, 31, 2.5, 19, 7, 14.5, 11, 13.5, 21, 13.5, 25, 14.5, 29.5, 19, 31, 31], 'd');
+    g.poly([1, 31, 2.5, 19, 7, 14.5, 10.5, 13.8, 7.5, 31], 'm');
+    g.disc(16, 9.5, 6, 'd').disc(14.6, 8.4, 3.6, 'm');
+    g.line(16, 15.5, 16, 31, 'o', 0.6);
+    // kan: saplanma noktasında sıçrama + akıntı
+    const sx = 19;
+    const sy = 21;
+    for (const [dx, dy] of [[-5, -3], [4.5, -4.2], [-3.4, 3.6], [5.6, 2]] as const) g.line(sx, sy, sx + dx, sy + dy, 'r', 1.2);
+    g.disc(sx, sy, 2.6, 'R').disc(sx - 0.4, sy - 0.4, 1.6, 'r');
+    g.line(sx + 0.4, sy + 2, sx + 0.8, sy + 8, 'R', 1.4).disc(sx + 0.8, sy + 8.6, 1.1, 'r');
+    g.disc(12, 17, 0.8, 'r').disc(25.6, 16.2, 0.7, 'r');
+    // hançer: sağ üstten, bıçağın yarısı sırta gömülü (görünen kısım + siper + kabza)
+    dagger(g, 29.6, 3.6, sx - 2.4, sy + 2.6, 3.6, ['l', 'm']);
+    g.disc(sx, sy, 1.4, 'R');
+    sparkle(g, 26.2, 9.4, 2, 'w');
+  },
+
+  // ---------- Durumlar: Blinded / Shrouded (Smoke Bomb) ----------
+  // Blinded: gözün önünden geçen kömür dumanı; göz kısılmış, yaşarmış
+  blinded: (g) => {
+    g.poly([1, 15, 7, 7.5, 16, 5, 25, 7.5, 31, 15, 25, 22, 16, 24.5, 7, 22], 'w');
+    g.disc(16, 14.6, 6, 'u').disc(16, 14.6, 3, 'o').disc(14.2, 12.8, 1.1, 'w');
+    // gözün ortasından geçen kömür duman şeridi (göz bebeğini örter), uçlarında kıvrılan duman
+    g.poly([0.5, 16.6, 31.5, 12.2, 31.5, 18.6, 0.5, 22.4], 'd');
+    g.line(1.5, 17.6, 30.5, 13.4, 'm', 0.9).line(4, 20.6, 28, 17.4, 'o', 0.5);
+    smokePuffShape(g, 4.6, 18.6, 0.85, 'd', 'm', 'l');
+    smokePuffShape(g, 27.4, 14.4, 0.95, 'd', 'm', 'l');
+    // gözyaşı
+    g.poly([20, 24.6, 21.4, 28, 20, 29.6, 18.6, 28], 'c').rect(19.6, 26.6, 0.6, 1, 'w');
+    // kirpikler
+    g.line(7, 7.5, 5, 4.4, 'o', 0.7).line(16, 5, 16, 1.4, 'o', 0.7).line(25, 7.5, 27, 4.4, 'o', 0.7);
+  },
+  // Shrouded: duman perdesinin ardında soluklaşan kapüşonlu siluet (savunma: görünmez olmaya yakın)
+  shrouded: (g) => {
+    g.poly([16, 3, 22.5, 6.5, 25, 14, 26, 25, 6, 25, 7, 14, 9.5, 6.5], 'm');
+    g.poly([16, 3, 9.5, 6.5, 7, 14, 6, 25, 10, 25, 11, 13, 13, 6], 'l');
+    g.poly([16, 8.5, 20.5, 11, 21, 16.5, 16, 19.5, 11, 16.5, 11.5, 11], 'd');
+    g.rect(13, 13, 2, 0.8, 'l').rect(17, 13, 2, 0.8, 'l');
+    // önünden geçen duman perdesi (alt yarıyı örter)
+    smokePuffShape(g, 8, 25, 1.45, 'l', 'w', 'w');
+    smokePuffShape(g, 17, 26.6, 1.6, 'm', 'l', 'w');
+    smokePuffShape(g, 25.5, 24.6, 1.3, 'l', 'w', 'w');
+    g.line(2, 20, 6, 18.4, 'l', 0.8).line(26, 18.4, 30, 20, 'l', 0.8);
+  },
+
   // ---------- arayüz: debug dock ve ayarlar ----------
   flask: (g) => {
     g.rect(12, 3, 8, 10, 'c').rect(13, 4, 2, 8, 'w');
@@ -840,6 +1005,16 @@ export const PIXEL_ICONS: Record<string, Draw> = {
       g.poly([x1, y1, x2, y2, x3, y3, x4, y4], 'm');
     }
     g.disc(16, 16, 10.5, 'm').disc(16, 16, 8.4, 'l').disc(16, 16, 4.6, 'o').disc(16, 16, 3.4, 'd');
+  },
+  fullscreen: (g) => {
+    // dört köşede dışa bakan ok uçları + köşegen gövdeler
+    g.line(8, 8, 14, 14, 'm', 2).line(24, 8, 18, 14, 'm', 2).line(8, 24, 14, 18, 'm', 2).line(24, 24, 18, 18, 'm', 2);
+    g.poly([3, 3, 13, 3, 3, 13], 'y').poly([29, 3, 19, 3, 29, 13], 'y').poly([3, 29, 13, 29, 3, 19], 'y').poly([29, 29, 19, 29, 29, 19], 'y');
+  },
+  exitfullscreen: (g) => {
+    // dört ok ucu merkeze bakar
+    g.line(4, 4, 10, 10, 'm', 2).line(28, 4, 22, 10, 'm', 2).line(4, 28, 10, 22, 'm', 2).line(28, 28, 22, 22, 'm', 2);
+    g.poly([14, 14, 14, 5, 5, 14], 'y').poly([18, 14, 18, 5, 27, 14], 'y').poly([14, 18, 14, 27, 5, 18], 'y').poly([18, 18, 18, 27, 27, 18], 'y');
   },
   speaker: (g) => {
     g.poly([3, 12, 10, 12, 18, 5, 18, 27, 10, 20, 3, 20], 'l').poly([3, 12, 10, 12, 10, 20, 3, 20], 'm');

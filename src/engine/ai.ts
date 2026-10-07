@@ -2,8 +2,8 @@ import { tileUid, type Battle } from './battle';
 import { shapeLabel } from './area-shape';
 import { betStake } from './gamble';
 import { previewForTargets } from './preview';
-import { armorReduction, attributePower } from './stats';
-import type { Combatant, SkillAiCond, SkillDef } from './types';
+import { armorReduction, attributePower, hitChance } from './stats';
+import type { Combatant, Side, SkillAiCond, SkillDef } from './types';
 
 /**
  * Yapay zeka: sırası gelen aktör için bir skill ve hedef seçer. Saf ve belirleyici:
@@ -11,7 +11,7 @@ import type { Combatant, SkillAiCond, SkillDef } from './types';
  * Öncelikler ve eşikler data/ai.json profillerinden gelir (karakterin `ai` alanı profil seçer).
  * Etki tahmini önizlemeyle aynı hesaptır (src/engine/preview.ts): zırh, menzil, taunt, kalkan hepsi hesaba girer.
  */
-export type AiPriority = 'kill' | 'heal' | 'tactic' | 'summon' | 'shield' | 'aoe' | 'damage' | 'taunt' | 'guard' | 'burn' | 'thorns';
+export type AiPriority = 'kill' | 'heal' | 'tactic' | 'summon' | 'shield' | 'aoe' | 'damage' | 'taunt' | 'guard' | 'burn';
 
 export interface AiProfile {
   priorities: AiPriority[];
@@ -27,8 +27,12 @@ export interface AiProfile {
   guardBelowRatio?: number;
   /** burn: en az bu kadar düşmanın yakılabilir manası varsa toplu mana yak. */
   burnMinTargets?: number;
-  /** thorns: dikenli kalkan açmak için en az bu kadar yakın dövüşçü (motion 'melee' skill'i olan) canlı düşman olmalı. Varsayılan 1. */
-  thornsMinMelee?: number;
+  /**
+   * summon (ceset tüketen çağrı, Raise Dead): tüketilecek düşman cesedi YOKSA çağrı beslenmemiş (unfed) gelir; o zaman yalnızca çağrının tahmini değeri
+   * (birimin en iyi ham hasarı x ömür x summonValueShare) bu turun en iyi başka hamlesinin değerinden (değer - bedel) büyük ya da eşitse çağrılır.
+   * Ceset varsa (beslenmiş) eski kural: en ucuz çağrı. Varsayılan 0,5.
+   */
+  summonValueShare?: number;
 }
 
 /**
@@ -84,8 +88,10 @@ export interface AiChoice {
   skillId: string;
   /** Tek hedefli skill'lerde hedef; çoklu/kendine skill'lerde tanımsız. */
   targetUid?: string;
-  /** move_tile: gidilecek boş yuva (targetUid de aynı yuvayı `tile:<yuva>` olarak taşır: yalnızca targetUid geçiren eski kod yolları için). */
+  /** move_tile: gidilecek boş yuva (targetUid de aynı yuvayı `tile:<yuva>` olarak taşır: yalnızca targetUid geçiren eski kod yolları için). Alan skill'inde anchor hücre. */
   slot?: number;
+  /** area_any alan skill'inde anchor hücrenin tahtası (kendi ya da karşı taraf). */
+  board?: Side;
   /** Hangi öncelik bu kararı verdirdi ('fallback': hiçbiri uymadı, en değerlisi seçildi; rest/skip/move: global skill kuralı). */
   reason: AiPriority | 'fallback' | 'rest' | 'skip' | 'move';
 }
@@ -127,6 +133,13 @@ export interface Option {
   /** Şekil skill'inde seçilen anchor hücre (boş hücre de olabilir) ve şeklin kapsadığı tüm hücreler. */
   anchorSlot?: number;
   cells?: number[];
+  /** area_any (Smoke Bomb) seçeneğinde alanın atıldığı tahta (diğer alan skill'lerinde tanımsız: karşı tahta). */
+  board?: Side;
+  /**
+   * İsabet/kaçınma durumlarının (Blinded/Shrouded) koruma değeri (can-eşdeğer): kör edilen düşmanın vuracağı beklenen hasardaki azalma ya da örtülen
+   * dostun yiyeceği beklenen hasardaki azalma, kalan tur sayısıyla (statusMitigation). value() içine girer.
+   */
+  mitigation: number;
   targets: Combatant[];
   /** Hedeflerin canı/kalkanıyla sınırlı toplam beklenen hasar (fazla vuruş sayılmaz); arkaya sıçrayan dahil. */
   damage: number;
@@ -144,6 +157,8 @@ export interface Option {
   /** Ana hedef (tek hedefli skill'lerde seçilen düşman, alan skill'lerinde merkez/ilk hedef) ve ona beklenen ortalama hasar. */
   primary?: Combatant;
   primaryAvg: number;
+  /** Ana hedefe isabet şansı (hasar veriyorsa; yoksa 0). */
+  primaryHit: number;
   /** bonusPerMissingMana: ana hedefe eksik mana ekinin ham hasar içindeki payı (0-1). */
   missingManaShare: number;
   /** Saf self-buff skill'i (yalnızca kendine durum + kendine hasar): net değeri (can-eşdeğer; savunma + hasar artışı - bedel - kaçırılan hamle). */
@@ -152,9 +167,12 @@ export interface Option {
   /** Skill'in `ai` bağlam ipucu sağlanmıyor: bu seçenek yalnızca öldürücü vuruşta (ya da hiçbir şey uymazsa son çare olarak) seçilir. */
   blocked: boolean;
   summon: boolean;
+  /** Ceset tüketen çağrı: true = şu an ceset var (beslenmiş/empowered), false = ceset yok (beslenmemiş/unfed); diğer seçeneklerde tanımsız. */
+  empowered?: boolean;
+  /** Çağrının tahmini değeri (can-eşdeğer): çağrılacak birimin (varyantı uygulanmış) en iyi ham skill hasarı x ömür x summonValueShare; çağrı değilse 0. */
+  summonValue: number;
   taunt: boolean;
   guard: boolean;
-  thorns: boolean;
   cost: number;
   hpCost: boolean;
 }
@@ -169,6 +187,20 @@ const best = <T>(items: T[], score: (item: T) => number): T | undefined =>
   items.reduce<T | undefined>((top, item) => (top === undefined || score(item) > score(top) ? item : top), undefined);
 
 export function chooseAction(battle: Battle, actorUid: string, config: AiConfig, trace?: AiTrace): AiChoice | null {
+  // hitLoss önbelleği yalnızca bu karar boyunca yaşar (durum değişmez); iç içe çağrıda dıştaki korunur
+  const outer = hitLossCache;
+  hitLossCache = outer ?? new Map();
+  try {
+    return chooseActionInner(battle, actorUid, config, trace);
+  } finally {
+    hitLossCache = outer;
+  }
+}
+
+/** statusMitigation hesabında tekrar eden (saldıran, kurban, ek) sonuçları: tek bir chooseAction çağrısı süresince (saf; seçimi değiştirmez). */
+let hitLossCache: Map<string, number> | null = null;
+
+function chooseActionInner(battle: Battle, actorUid: string, config: AiConfig, trace?: AiTrace): AiChoice | null {
   const actor = battle.get(actorUid);
   if (!actor || actor.hp <= 0) return null;
   const profile = config.profiles[actor.ai ?? config.defaultProfile] ?? config.profiles[config.defaultProfile];
@@ -211,10 +243,16 @@ function pickClassOption(battle: Battle, actor: Combatant, profile: AiProfile, o
 }
 
 function toChoice(option: Option, reason: AiChoice['reason']): AiChoice {
-  return { skillId: option.skill.id, ...(option.targetUid ? { targetUid: option.targetUid } : {}), ...(option.anchorSlot !== undefined ? { slot: option.anchorSlot } : {}), reason };
+  return {
+    skillId: option.skill.id,
+    ...(option.targetUid ? { targetUid: option.targetUid } : {}),
+    ...(option.anchorSlot !== undefined ? { slot: option.anchorSlot } : {}),
+    ...(option.board ? { board: option.board } : {}),
+    reason,
+  };
 }
 
-const value = (o: Option) => o.damage + o.heal + o.selfHeal + o.shield * 0.5 + o.burn * BURN_WEIGHT + Math.max(0, o.buff);
+const value = (o: Option) => o.damage + o.heal + o.selfHeal + o.shield * 0.5 + o.burn * BURN_WEIGHT + Math.max(0, o.buff) + o.mitigation;
 
 function buildOptions(battle: Battle, actor: Combatant, profile: AiProfile, trace?: AiTrace): Option[] {
   const options: Option[] = [];
@@ -267,7 +305,7 @@ function reservedMp(battle: Battle, actor: Combatant, profile: AiProfile): Reser
 }
 
 function spendsReserve(actor: Combatant, o: Option, reserves: Reserve[]): boolean {
-  const pureAttack = o.damage > 0 && o.heal === 0 && o.shield === 0 && o.burn === 0 && !o.summon && !o.taunt && !o.guard && !o.thorns;
+  const pureAttack = o.damage > 0 && o.heal === 0 && o.shield === 0 && o.burn === 0 && !o.summon && !o.taunt && !o.guard;
   if (reserves.length === 0 || o.skill.ai || !pureAttack || o.skill.cost.resource !== 'mp' || o.skill.cost.amount <= 0) return false;
   return reserves.some((r) => actor.mp - o.skill.cost.amount + actor.stats.mpRegen * r.turns < r.need);
 }
@@ -277,34 +315,33 @@ function skillOptions(battle: Battle, actor: Combatant, skillId: string, profile
   const skill = battle.skill(skillId)!;
   const candidates = battle.validTargets(actor.uid, skillId);
   if (candidates.length === 0) return [];
-  const area = skill.target === 'area_enemies' || skill.target === 'column_enemies';
-  // Yan vuruşlu (splash) tek hedef skill'inde grup = seçilen hedef + yanındakiler (ilk eleman seçilen hedeftir)
-  if (battle.isShapeSkill(skillId)) {
-    // Şekil skill'i: her seçilebilir anchor hücre (boş hücre dahil) bir aday; aynı hücre kümesini veren anchor'lar tek aday (en küçük yuva)
+  if (battle.isAreaSkill(skillId)) {
+    // Alan (şekil) skill'i: her seçilebilir anchor hücre (boş hücre dahil) bir aday; aynı hücre kümesini veren anchor'lar tek aday (en küçük yuva).
+    // Aşamalı skill de aynı: değerlendirme toplam hasar / hedef sayısı üzerinden (aşama sırası sonucu değiştirmez; falloff sırası gerçek vuruşla aynı).
+    // area_any (Smoke Bomb): her iki tahtanın anchor'ları ayrı aday (tahta anahtarın parçası).
     const out: Option[] = [];
     const seen = new Set<string>();
-    for (const slot of battle.shapeAnchors(actor.uid, skillId)) {
-      const cells = battle.areaCells(skillId, slot, actor.side === 'party' ? 'enemy' : 'party');
-      const key = cells.join(',');
+    const anyBoard = battle.isAnyBoardArea(skillId);
+    for (const { board, slot } of battle.shapeAnchorCells(actor.uid, skillId)) {
+      const cells = battle.areaCells(skillId, slot, board);
+      const key = `${board}:${cells.join(',')}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const targets = battle.areaWindowAt(actor.uid, skillId, slot);
-      const occupant = battle.livingByDepth(foeSide(actor)).find((c) => c.board === foeSide(actor) && c.slot === slot);
-      const o = evaluate(battle, actor, skill, targets, occupant?.uid, profile);
+      const targets = battle.areaWindowAt(actor.uid, skillId, slot, board);
+      const occupant = battle.combatants.find((c) => c.hp > 0 && c.board === board && c.slot === slot);
+      // X şekli: anchor'daki birim hitsAtCenter kez vurulur (önizleme/değer buna göre)
+      const center = targets.find((c) => c.board === board && c.slot === slot);
+      const o = evaluate(battle, actor, skill, targets, occupant?.uid, profile, board === foeSide(actor) ? cells : undefined, center?.uid);
       o.anchorSlot = slot;
       o.cells = cells;
+      if (anyBoard) o.board = board;
       out.push(o);
     }
     return out;
   }
-  const groups = area ? candidates.map((t) => battle.areaWindow(actor.uid, skillId, t.uid)) : battle.needsTargetChoice(skillId) ? candidates.map((t) => [t, ...battle.splashTargets(skillId, t)]) : [candidates];
-  const anchors = candidates.map((t) => t.uid);
-  const out: Option[] = [];
-  for (const [gi, targets] of groups.entries()) {
-    const targetUid = area ? anchors[gi] : battle.needsTargetChoice(skillId) ? targets[0]!.uid : undefined;
-    out.push(evaluate(battle, actor, skill, targets, targetUid, profile));
-  }
-  return out;
+  // Yan vuruşlu (splash) tek hedef skill'inde grup = seçilen hedef + yanındakiler (ilk eleman seçilen hedeftir)
+  const groups = battle.needsTargetChoice(skillId) ? candidates.map((t) => [t, ...battle.splashTargets(skillId, t)]) : [candidates];
+  return groups.map((targets) => evaluate(battle, actor, skill, targets, battle.needsTargetChoice(skillId) ? targets[0]!.uid : undefined, profile));
 }
 
 const foeSide = (actor: Combatant) => (actor.side === 'party' ? 'enemy' : 'party');
@@ -326,7 +363,7 @@ function selfHpCost(actor: Combatant, skill: SkillDef): number {
  * (MP'si yeten) en çok hasar veren skill'iyle (isabet şansı, zırh ve durum çarpanı dahil; önizleme formülü).
  */
 function incomingDamage(battle: Battle, actor: Combatant): number {
-  const attacking = ['single_enemy', 'area_enemies', 'column_enemies', 'all_enemies', 'random_enemies', 'everyone'];
+  const attacking = ['single_enemy', 'area_enemies', 'all_enemies', 'random_enemies', 'everyone'];
   let total = 0;
   for (const foe of battle.living(foeSide(actor))) {
     let top = 0;
@@ -389,6 +426,11 @@ function condFailure(cond: SkillAiCond, battle: Battle, actor: Combatant, o: Opt
   if (cond.minTargetArmorReduction !== undefined && (!primary || armorReduction(battle.effectiveStats(primary).armor, battle.formulas) < cond.minTargetArmorReduction)) return detail ? `minTargetArmorReduction ${cond.minTargetArmorReduction} (target ${primary ? r2(armorReduction(battle.effectiveStats(primary).armor, battle.formulas)) : 'none'})` : '';
   if (cond.minTargetHpToDamage !== undefined && (!primary || o.primaryAvg <= 0 || (primary.hp + primary.shield + primary.magicShield) / o.primaryAvg < cond.minTargetHpToDamage)) return detail ? `minTargetHpToDamage ${cond.minTargetHpToDamage} (target ${primary && o.primaryAvg > 0 ? r2((primary.hp + primary.shield + primary.magicShield) / o.primaryAvg) : 'n/a'})` : '';
   if (cond.minMissingManaShare !== undefined && o.missingManaShare < cond.minMissingManaShare) return detail ? `minMissingManaShare ${cond.minMissingManaShare} (have ${r2(o.missingManaShare)})` : '';
+  const allyHits = o.targets.filter((t) => t.side === actor.side).length;
+  if (cond.minAllyTargets !== undefined && allyHits < cond.minAllyTargets) return detail ? `minAllyTargets ${cond.minAllyTargets} (covers ${allyHits})` : '';
+  const share = primary && primary.maxHp > 0 ? (o.primaryAvg * o.primaryHit) / primary.maxHp : 0;
+  if (cond.minTargetMaxHpShare !== undefined && share < cond.minTargetMaxHpShare) return detail ? `minTargetMaxHpShare ${cond.minTargetMaxHpShare} (expected ${r2(share)} of max HP)` : '';
+  if (cond.targetBehindFront && (!primary || battle.rowRank(primary.uid) < battle.formulas.formation.meleeRows)) return detail ? `targetBehindFront (target ${primary ? `row rank ${battle.rowRank(primary.uid)}` : 'none'} is within normal melee reach)` : '';
   return null;
 }
 
@@ -400,13 +442,15 @@ function hintHolds(battle: Battle, actor: Combatant, o: Option, mpOverride?: num
   return !hint.anyOf?.length || hint.anyOf.some((c) => condHolds(c, battle, actor, o, mpOverride));
 }
 
-function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Combatant[], targetUid: string | undefined, profile: AiProfile): Option {
-  const previews = previewForTargets(battle, actor, skill.id, targets);
+function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Combatant[], targetUid: string | undefined, profile: AiProfile, areaCells?: number[], centerUid?: string): Option {
+  const previews = previewForTargets(battle, actor, skill.id, targets, centerUid);
   const o: Option = {
     skill,
     ...(targetUid ? { targetUid } : {}),
     ...(targets[0] ? { primary: targets[0] } : {}),
     targets,
+    mitigation: statusMitigation(battle, actor, skill, targets),
+    primaryHit: 0,
     damage: 0,
     kills: [],
     heal: 0,
@@ -424,7 +468,7 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
     summon: skill.effects.some((e) => e.type === 'summon'),
     taunt: skill.effects.some((e) => e.type === 'taunt'),
     guard: skill.effects.some((e) => e.type === 'guard'),
-    thorns: skill.effects.some((e) => e.type === 'thorns'),
+    summonValue: 0,
     // Rage bedeli skora yansımaz (Rage yalnızca harcanmak için birikir; bedel koşulu canUse + skill'in ai bağlamıyla sağlanır)
     cost: skill.cost.amount * (skill.cost.resource === 'mp' ? profile.mpCostWeight : skill.cost.resource === 'hp' ? profile.hpCostWeight : 0),
     hpCost: (skill.cost.resource === 'hp' && skill.cost.amount > 0) || skill.effects.some((e) => e.type === 'damage' && e.bet?.resource === 'hp'),
@@ -435,6 +479,13 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
       const mpLeft = skill.cost.resource === 'mp' && !battle.freeMp ? actor.mp - skill.cost.amount : actor.mp;
       o.cost += (1 - e.bet.winChance) * betStake(e.bet, actor.maxHp, actor.hp, mpLeft) * profile.mpCostWeight;
     }
+  }
+  // Çağrı: beslenmiş/beslenmemiş hâli ve tahmini değeri (varyantı uygulanmış birimin en iyi ham hasarı x ömür x summonValueShare)
+  const summonEffect = skill.effects.find((e) => e.type === 'summon');
+  if (summonEffect && summonEffect.type === 'summon') {
+    const sp = battle.summonPreview(actor.uid, skill.id);
+    if (sp.empowered !== undefined) o.empowered = sp.empowered;
+    if (sp.unit) o.summonValue = summonRawDamage(battle, sp.unit.stats, sp.unit.skills) * (summonEffect.lifespan ?? 3) * (profile.summonValueShare ?? 0.5);
   }
   const manaEffect = skill.effects.find((e) => e.type === 'damage' && e.bonusPerMissingMana);
   const first = targets[0];
@@ -448,7 +499,10 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
     const target = battle.get(p.uid);
     if (!target) continue;
     if (p.damage) {
-      if (target === targets[0]) o.primaryAvg = p.damage.avg;
+      if (target === targets[0]) {
+        o.primaryAvg = p.damage.avg;
+        o.primaryHit = p.damage.hitChance;
+      }
       // Beklenen hasar isabet şansıyla çarpılır; "öldürür" saymak için isabet şansı yeterince yüksek olmalı (formulas.json > hit.aiKillMin)
       o.damage += (p.damage.hpLoss + p.damage.absorbed) * p.damage.hitChance;
       if (p.damage.hpLoss >= target.hp && p.damage.hitChance >= battle.formulas.hit.aiKillMin) o.kills.push(target);
@@ -458,21 +512,20 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
     if (skill.effects.some((e) => e.type === 'revive')) o.revive += target.maxHp;
     if (p.hot) o.heal += p.hot.total;
     // Saldırı skill'inin kendine verdiği kalkan (Shield Bash) kalkan önceliğini tetiklemez
-    if (p.shield && !['single_enemy', 'all_enemies', 'area_enemies', 'column_enemies'].includes(skill.target)) o.shield += p.shield.amount;
+    if (p.shield && !['single_enemy', 'all_enemies', 'area_enemies'].includes(skill.target)) o.shield += p.shield.amount;
     if (p.burn) {
       o.burn += p.burn;
       o.burnScore += p.burn * Math.max(0.5, target.maxMp / 30); // mana havuzu büyük (büyücü) hedefte mana yakmak daha değerli
       o.burnTargets++;
     }
   }
-  // Yerde kalan etki (zehir, yanan zemin, holy fire): alandaki düşmanların turlar boyunca alacağı beklenen hasar
-  const anchor = targetUid ? battle.get(targetUid) : undefined;
-  if (anchor && skill.target === 'area_enemies') {
+  // Yerde kalan etki (zehir, yanan zemin, holy fire): alandaki (şeklin TÜM hücreleri; boş anchor dahil) düşmanların turlar boyunca alacağı beklenen hasar
+  if (areaCells) {
+    const cells = new Set(areaCells);
     for (const e of skill.effects) {
       if (e.type !== 'ground') continue;
-      const cells = new Set(battle.areaCells(skill.id, anchor.slot, anchor.board));
       const amount = Math.round(attributePower(actor.stats, e.scale, battle.formulas) * e.power);
-      const standing = battle.living(anchor.side).filter((c) => c.board === anchor.board && cells.has(c.slot)).length;
+      const standing = battle.living(foeSide(actor)).filter((c) => c.board === foeSide(actor) && cells.has(c.slot)).length;
       o.damage += amount * e.turns * standing * 0.7;
     }
   }
@@ -483,6 +536,95 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
   }
   o.selfHeal = Math.min(Math.round(o.selfHeal), actor.maxHp - actor.hp);
   return o;
+}
+
+const ATTACK_TARGETS = ['single_enemy', 'area_enemies', 'all_enemies', 'random_enemies', 'everyone'];
+
+/**
+ * `attacker` -> `victim` en iyi saldırısının (MP/Rage'i yeten) beklenen hasarındaki AZALMA, saldıranın isabetine `accDelta` ya da kurbanın
+ * kaçınmasına `evaDelta` eklenince: max(skill) [ortalama hasar x (hit şansı - yeni hit şansı)]. Önizleme formülü (zırh, durumlar, kalkan dahil).
+ */
+function hitLoss(battle: Battle, attacker: Combatant, victim: Combatant, accDelta: number, evaDelta: number): number {
+  const key = `${attacker.uid}|${victim.uid}|${accDelta}|${evaDelta}`;
+  const cached = hitLossCache?.get(key);
+  if (cached !== undefined) return cached;
+  const v = hitLossRaw(battle, attacker, victim, accDelta, evaDelta);
+  hitLossCache?.set(key, v);
+  return v;
+}
+
+function hitLossRaw(battle: Battle, attacker: Combatant, victim: Combatant, accDelta: number, evaDelta: number): number {
+  const f = battle.formulas;
+  const a = battle.effectiveStats(attacker);
+  const v = battle.effectiveStats(victim);
+  const after = hitChance({ accuracy: Math.max(0, a.accuracy + accDelta) }, { evasion: Math.max(0, v.evasion + evaDelta) }, f);
+  let top = 0;
+  for (const id of attacker.skills) {
+    const sk = battle.skill(id);
+    if (!sk || !ATTACK_TARGETS.includes(sk.target)) continue;
+    if (sk.cost.resource === 'mp' && attacker.mp < sk.cost.amount) continue;
+    if (sk.cost.resource === 'rage' && (attacker.rage ?? 0) < sk.cost.amount) continue;
+    const d = previewForTargets(battle, attacker, id, [victim]).find((p) => p.uid === victim.uid)?.damage;
+    if (d) top = Math.max(top, d.avg * Math.max(0, d.hitChance - after));
+  }
+  return top;
+}
+
+/**
+ * İsabet/kaçınma durumlarının (statuses.json > accuracyDelta / evasionDelta: Blinded, Shrouded) koruma değeri, can-eşdeğer, yapay ağırlık YOK:
+ * - Düşmana isabet cezası (Blinded): o düşmanın bizim canlı birimlerimize yapabileceği en iyi saldırının beklenen hasar azalması, birimlerimizin ORTALAMASI
+ *   (her turda birine vurur) x yeni eklenen tur sayısı (zaten varsa yalnızca uzayan kısım).
+ * - Dosta kaçınma bonusu (Shrouded): her düşmanın o dosta en iyi saldırısındaki beklenen hasar azalmasının toplamı / canlı dost sayısı
+ *   (her düşman birimlerimizden birine vurur) x yeni eklenen tur sayısı.
+ */
+function statusMitigation(battle: Battle, actor: Combatant, skill: SkillDef, targets: Combatant[]): number {
+  let total = 0;
+  for (const e of skill.effects) {
+    if (e.type !== 'status' || e.self) continue;
+    const def = battle.statusDef(e.status);
+    const acc = def?.accuracyDelta ?? 0;
+    const eva = def?.evasionDelta ?? 0;
+    if (acc >= 0 && eva <= 0) continue;
+    const chance = (e as { chance?: number }).chance ?? 1;
+    for (const t of targets) {
+      if (t.hp <= 0 || !battle.effectAppliesTo(skill, e, t, actor)) continue;
+      const turns = Math.max(0, e.turns - (t.statuses.find((s) => s.kind === e.status)?.turns ?? 0));
+      if (turns <= 0) continue;
+      if (acc < 0 && t.side !== actor.side) {
+        const victims = battle.living(actor.side);
+        if (victims.length > 0) total += (sum(victims.map((v) => hitLoss(battle, t, v, acc, 0))) / victims.length) * turns * chance;
+      }
+      if (eva > 0 && t.side === actor.side) {
+        const allies = Math.max(1, battle.living(actor.side).length);
+        total += (sum(battle.living(foeSide(actor)).map((foe) => hitLoss(battle, foe, t, 0, eva))) / allies) * turns * chance;
+      }
+    }
+  }
+  return total;
+}
+
+/** Bir birimin skill'leri arasında tek kullanımlık en yüksek HAM hasar (zırhsız, kritiksiz; yan vuruş dahil değil): stat x güç toplamı. */
+function summonRawDamage(battle: Battle, stats: Combatant['stats'], skills: string[]): number {
+  let top = 0;
+  for (const id of skills) {
+    const sk = battle.skill(id);
+    if (!sk) continue;
+    const raw = sum(sk.effects.map((e) => (e.type === 'damage' ? attributePower(stats, e.scale, battle.formulas) * e.power : 0)));
+    top = Math.max(top, raw);
+  }
+  return top;
+}
+
+/**
+ * Çağrı seçimi (summon önceliği ve açıklaması aynı fonksiyonu kullanır): yeterince çağrı yoksa. Beslenmiş (ceset tüketen) ya da ceset tüketmeyen çağrı:
+ * en ucuzu. Beslenmemiş (ceset yok) çağrı: yalnızca tahmini değeri, bu turun en iyi başka (çağrı olmayan) hamlesinin değerinden düşük değilse.
+ */
+function summonPool(options: Option[]): { pool: Option[]; alt: number; unfedOnly: boolean } {
+  const summons = options.filter((o) => o.summon);
+  const ready = summons.filter((o) => o.empowered !== false);
+  if (ready.length > 0 || summons.length === 0) return { pool: ready, alt: 0, unfedOnly: false };
+  const alt = Math.max(0, ...options.filter((o) => !o.summon).map((o) => (o.pureBuff ? o.buff : value(o)) - o.cost));
+  return { pool: summons.filter((o) => o.summonValue - o.cost >= alt), alt, unfedOnly: true };
 }
 
 type Picker = (battle: Battle, actor: Combatant, profile: AiProfile, options: Option[]) => Option | undefined;
@@ -664,7 +806,7 @@ function bestMove(battle: Battle, actor: Combatant, g: AiGlobalConfig, vNow: num
 
 /**
  * Global skill kararı (Rest / Skip Turn / Move Tile); null = class hamlesi (ya da pas) kalır.
- * Öldürücü ve işlevsel (şifa, çağrı, kalkan, taunt, guard, thorns, mana yakma) hamleler her zaman önce gelir.
+ * Öldürücü ve işlevsel (şifa, çağrı, kalkan, taunt, guard, mana yakma) hamleler her zaman önce gelir.
  * Tehlikede (can düşük ve gelen hasar büyük) dinlenme/bekleme denenmez; yalnızca geri çekilme (Move) olabilir.
  */
 function chooseGlobal(battle: Battle, actor: Combatant, profile: AiProfile, g: AiGlobalConfig, pick: { option: Option; reason: AiChoice['reason'] } | null, trace?: GlobalTrace): AiChoice | null {
@@ -753,7 +895,7 @@ function chooseGlobal(battle: Battle, actor: Combatant, profile: AiProfile, g: A
 const affordable = (actor: Combatant, profile: AiProfile) => (o: Option) =>
   !o.hpCost || ratio(actor) >= profile.minHpRatioForHpCost;
 
-const hasStatus = (c: Combatant, kind: 'taunt' | 'guard' | 'regen' | 'thorns') => c.statuses.some((s) => s.kind === kind);
+const hasStatus = (c: Combatant, kind: 'taunt' | 'guard' | 'regen') => c.statuses.some((s) => s.kind === kind);
 
 const PICKERS: Record<AiPriority, Picker> = {
   // Birini öldürebilen en iyi seçenek: en tehlikeli düşmanları öldüren, sonra en ucuz olan.
@@ -780,11 +922,11 @@ const PICKERS: Record<AiPriority, Picker> = {
     return best(options.filter((o) => o.skill.ai && score(o) > 0).filter(affordable(actor, profile)), score);
   },
 
-  // Yeterince çağrılmış birim yoksa çağır.
+  // Yeterince çağrılmış birim yoksa çağır (ceset tüketen çağrıda: ceset varsa hemen; yoksa yalnızca beslenmemiş hâlin değeri yetiyorsa).
   summon: (battle, actor, profile, options) => {
     const alive = battle.combatants.filter((c) => c.side === actor.side && c.summoned && c.hp > 0).length;
     if (alive >= profile.maxSummons) return undefined;
-    return best(options.filter((o) => o.summon), (o) => -o.cost);
+    return best(summonPool(options).pool, (o) => -o.cost);
   },
 
   // Kalkansız ve canı eşiğin altındaki dosta (veya kendine) kalkan; en yaralı olana öncelik.
@@ -799,14 +941,6 @@ const PICKERS: Record<AiPriority, Picker> = {
   taunt: (battle, actor, _p, options) => {
     if (hasStatus(actor, 'taunt') || battle.living(actor.side).length < 2) return undefined;
     return best(options.filter((o) => o.taunt), (o) => -o.cost);
-  },
-
-  // Thorns: kendinde yoksa ve karşıda yeterince yakın dövüşçü varsa dikenli kalkan aç (yansıyan hasar yalnızca melee vuruşlara işler).
-  thorns: (battle, actor, profile, options) => {
-    if (hasStatus(actor, 'thorns')) return undefined;
-    const melee = battle.living(actor.side === 'party' ? 'enemy' : 'party').filter((c) => c.skills.some((id) => battle.skill(id)?.motion === 'melee')).length;
-    if (melee < (profile.thornsMinMelee ?? 1)) return undefined;
-    return best(options.filter((o) => o.thorns), (o) => -o.cost);
   },
 
   // Guard: canı eşiğin altındaki, korumasız (kendimiz olmayan) dostu koru; en yaralı olana öncelik.
@@ -863,6 +997,10 @@ export interface AiCandidate {
   /** Şekil skill'inde: şekil adı ('rect 2x3', 'row', 'column', 'plus') ve kapsadığı tüm hücreler (match-log). */
   shape?: string;
   cells?: number[];
+  /** area_any (Smoke Bomb): alanın atıldığı tahta ('own' = kendi tarafı, 'foe' = karşı taraf). */
+  board?: 'own' | 'foe';
+  /** İsabet/kaçınma durumlarının (Blinded/Shrouded) koruma değeri (can-eşdeğer; 0 ise yazılmaz). */
+  mitigation?: number;
   /** Vurulan/etkilenen tüm birimler (alan, yan vuruş, herkes) ve bunların kaçı düşman. */
   hits: string[];
   enemyHits: number;
@@ -883,7 +1021,9 @@ export interface AiCandidate {
   hit?: number;
   /** Hedef başına beklenen hasar (en çok 8): ortalama hasar, isabet şansı, bu vuruşla öldürür mü. */
   perTarget?: Array<{ unit: string; avg: number; hit: number; lethal: boolean }>;
-  /** Etiketler: summon, taunt, guard, thorns, selfBuff, hpCost, hint (skill'in ai bağlam ipucu var). */
+  /** Çağrı adayında tahmini çağrı değeri (birimin en iyi ham hasarı x ömür x summonValueShare). */
+  summonValue?: number;
+  /** Etiketler: summon, empowered (ceset tüketilecek), unfed (ceset yok), taunt, guard, selfBuff, hpCost, hint (skill'in ai bağlam ipucu var). */
   tags: string[];
   /** Kazanan önceliğin seçicisinde bu adayın puanı (yalnızca seçicinin havuzundaki adaylarda). */
   score?: number;
@@ -900,7 +1040,7 @@ export interface AiExplanation {
   priorities: string[];
   focusRule: string;
   /** Verilen karar (chooseAction ile birebir aynı); null = hiçbir şey yapılamadı (tur pas). */
-  final: { skill: string; name: string; target?: string; slot?: number; reason: string } | null;
+  final: { skill: string; name: string; target?: string; slot?: number; board?: 'own' | 'foe'; reason: string } | null;
   /** Tek cümlelik özet: hangi kural/öncelik neden bu kararı verdirdi. */
   why: string;
   /** Öncelik sırası boyunca her seçici: picked (seçti) / none (uymadı) ve gerekçe. */
@@ -939,8 +1079,16 @@ function pickerView(priority: AiPriority | 'fallback', actor: Combatant, profile
         score: (o) => (o.pureBuff ? o.buff : value(o)) - o.cost,
         rule: 'tactic: skills with an ai context hint that holds and net > 0; highest (value - cost); a self-buff uses its net buff value',
       };
-    case 'summon':
-      return { pool: options.filter((o) => o.summon), score: (o) => -o.cost, rule: 'summon: cheapest summon' };
+    case 'summon': {
+      const sp = summonPool(options);
+      return {
+        pool: sp.pool,
+        score: (o) => -o.cost,
+        rule: sp.unfedOnly
+          ? `summon: no corpse to consume, so the summon comes unfed; only if its value (summon value - cost) >= best other move ${r1(sp.alt)}; cheapest`
+          : 'summon: cheapest summon (a corpse-consuming summon is ready to be empowered)',
+      };
+    }
     case 'shield': {
       const needs = (c: Combatant) => c.shield === 0 && c.magicShield === 0 && ratio(c) < profile.shieldBelowRatio;
       return {
@@ -951,8 +1099,6 @@ function pickerView(priority: AiPriority | 'fallback', actor: Combatant, profile
     }
     case 'taunt':
       return { pool: options.filter((o) => o.taunt), score: (o) => -o.cost, rule: 'taunt: cheapest taunt' };
-    case 'thorns':
-      return { pool: options.filter((o) => o.thorns), score: (o) => -o.cost, rule: 'thorns: cheapest thorns skill' };
     case 'guard': {
       const limit = profile.guardBelowRatio ?? 0;
       return {
@@ -1008,14 +1154,18 @@ function noPickReason(priority: AiPriority | 'fallback', battle: Battle, actor: 
     }
     case 'summon': {
       const alive = battle.combatants.filter((c) => c.side === actor.side && c.summoned && c.hp > 0).length;
-      return alive >= profile.maxSummons ? `summons alive ${alive} >= maxSummons ${profile.maxSummons}` : 'no usable summon skill';
+      if (alive >= profile.maxSummons) return `summons alive ${alive} >= maxSummons ${profile.maxSummons}`;
+      const sp = summonPool(options);
+      if (sp.unfedOnly) {
+        const top = Math.max(...options.filter((o) => o.summon).map((o) => o.summonValue - o.cost));
+        return `no corpse to consume (summon would be unfed): summon value ${r1(top)} < best other move ${r1(sp.alt)}`;
+      }
+      return 'no usable summon skill';
     }
     case 'shield':
       return profile.shieldBelowRatio <= 0 ? 'shieldBelowRatio is 0 (disabled)' : `no unshielded ally below ${profile.shieldBelowRatio} HP with a usable shield`;
     case 'taunt':
       return hasStatus(actor, 'taunt') ? 'already taunting' : battle.living(actor.side).length < 2 ? 'alone on the field' : 'no usable taunt skill';
-    case 'thorns':
-      return hasStatus(actor, 'thorns') ? 'thorns already active' : `fewer than ${profile.thornsMinMelee ?? 1} melee foe(s) or no usable thorns skill`;
     case 'guard':
       return (profile.guardBelowRatio ?? 0) <= 0 ? 'guardBelowRatio is 0 (disabled)' : `no unguarded ally below ${profile.guardBelowRatio} HP with a usable guard`;
     case 'burn':
@@ -1057,18 +1207,18 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
   const winnerStep = pick ? trace.steps[trace.steps.length - 1] : undefined;
   const view = winnerStep ? pickerView(winnerStep.priority, actor, profile, winnerStep.priority === 'fallback' ? trace.options : visibleFor(winnerStep.priority)) : null;
   const candidates: AiCandidate[] = trace.options.map((o) => {
-    const previews = previewForTargets(battle, actor, o.skill.id, o.targets);
+    const centerUid = o.anchorSlot !== undefined ? o.targets.find((t) => t.board === (o.board ?? foeSide(actor)) && t.slot === o.anchorSlot)?.uid : undefined;
+    const previews = previewForTargets(battle, actor, o.skill.id, o.targets, centerUid);
     const perTarget = previews
       .filter((p) => p.damage)
       .slice(0, 8)
       .map((p) => ({ unit: labelOf(battle, p.uid), avg: r1(p.damage!.avg), hit: r2(p.damage!.hitChance), lethal: p.damage!.hpLoss >= (battle.get(p.uid)?.hp ?? Infinity) }));
-    const anchor = o.targetUid ? battle.get(o.targetUid) : undefined;
     const firstHit = previews.find((p) => p.damage)?.damage;
     const c: AiCandidate = {
       skill: o.skill.id,
       name: o.skill.name,
       ...(o.targetUid ? { target: labelOf(battle, o.targetUid) } : {}),
-      ...(o.anchorSlot !== undefined ? { center: o.anchorSlot, shape: shapeLabel(o.skill.area!), cells: o.cells ?? [] } : (o.skill.target === 'area_enemies' || o.skill.target === 'column_enemies') && anchor ? { center: anchor.slot } : {}),
+      ...(o.anchorSlot !== undefined ? { center: o.anchorSlot, shape: shapeLabel(o.skill.area!), cells: o.cells ?? [] } : {}),
       hits: o.targets.map((t) => unitLabel(t)),
       enemyHits: o.targets.filter((t) => t.side !== actor.side).length,
       dmg: r1(o.damage),
@@ -1078,12 +1228,15 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
       shield: r1(o.shield),
       burn: r1(o.burn),
       buff: r1(o.buff),
+      ...(o.board ? { board: o.board === actor.side ? ('own' as const) : ('foe' as const) } : {}),
+      ...(o.mitigation > 0 ? { mitigation: r1(o.mitigation) } : {}),
       revive: r1(o.revive),
       cost: r1(o.cost),
       net: r1((o.pureBuff ? o.buff : value(o)) - o.cost),
       ...(firstHit ? { hit: r2(firstHit.hitChance) } : {}),
       ...(perTarget.length > 0 ? { perTarget } : {}),
-      tags: [o.summon && 'summon', o.taunt && 'taunt', o.guard && 'guard', o.thorns && 'thorns', o.pureBuff && 'selfBuff', o.hpCost && 'hpCost', o.skill.ai && 'hint'].filter((t): t is string => !!t),
+      ...(o.summon ? { summonValue: r1(o.summonValue) } : {}),
+      tags: [o.summon && 'summon', o.empowered === true && 'empowered', o.empowered === false && 'unfed', o.taunt && 'taunt', o.guard && 'guard', o.pureBuff && 'selfBuff', o.hpCost && 'hpCost', o.skill.ai && 'hint'].filter((t): t is string => !!t),
       verdict: 'skipped',
     };
     const inPool = view?.pool.includes(o) ?? false;
@@ -1107,7 +1260,7 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
     else if (!trace.options.some((o) => o.skill.id === id)) rejected.push({ skill: id, name: skillName(id), reason: 'no valid target' });
   }
 
-  const final = choice ? { skill: choice.skillId, name: skillName(choice.skillId), ...(choice.targetUid ? { target: labelOf(battle, choice.targetUid) } : {}), ...(choice.slot !== undefined ? { slot: choice.slot } : {}), reason: choice.reason } : null;
+  const final = choice ? { skill: choice.skillId, name: skillName(choice.skillId), ...(choice.targetUid ? { target: labelOf(battle, choice.targetUid) } : {}), ...(choice.slot !== undefined ? { slot: choice.slot } : {}), ...(choice.board ? { board: choice.board === actor.side ? ('own' as const) : ('foe' as const) } : {}), reason: choice.reason } : null;
   const chosen = candidates.find((c) => c.verdict === 'chosen');
   const runnerUp = candidates.find((c) => c.verdict === 'lost');
   const tag = (c: AiCandidate) => `${c.name}${c.target ? ` -> ${c.target}` : ''}`;

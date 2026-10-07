@@ -53,7 +53,7 @@ after: <aktörün sonraki durumu> ;; <etkilenen birimlerin sonraki durumu>
 
 | Alan | Anlamı |
 |---|---|
-| `shape rect 2x3 @cell 4 -> cells [..]` | AOE şekli skill adayı: şekil adı (`row`/`column`/`plus`/`rect RxC`), anchor hücre (boş olabilir), kapsanan tüm hücreler; ardından `hits N foe(s)`. Hamle başlığı: `(center cell 4 -> cells [..])`; skill satırında `area shape rect 2x3` |
+| `shape rect 2x3 @cell 4 -> cells [..]` | Alan (şekil) skill adayı (tüm alan skill'leri): şekil adı (`row`/`column`/`plus`/`rect RxC`; aşamalıysa `staged row` / `staged distance` eki), anchor hücre (boş olabilir), kapsanan tüm hücreler; ardından `hits N foe(s)`. Hamle başlığı: `(center cell 4 -> cells [..])`; skill satırında `area shape rect 2x3 staged row`. Aşamalı skill'in `result` satırları `[stage N]` önekiyle (aşama sırasıyla). X şekli `x center x2` (merkez 2 vuruş). İki tahtaya atılabilen alan (Smoke Bomb, `area_any`): aday satırında `@cell N (own side|foe side)`, kendi tarafında `covers N unit(s) [..]`, Blinded/Shrouded değeri `mitigation N` (önlenen beklenen hasar, can-eşdeğer); hamle başlığında `(center cell N on own/foe side -> cells [..])`. AI bağlam koşulları (blocked notu): `minAllyTargets`, `minTargetMaxHpShare`, `targetBehindFront` |
 | `hits N foe(s)` / `center cell` | Alan (AOE) skill'inde vurulan düşman sayısı ve merkez hücre; `per [...]` hedef başına beklenen hasar `ortalama@isabet`, `LETHAL` = bu vuruş canını bitirir |
 | `dmg` | Hedeflerin canı/kalkanıyla sınırlı TOPLAM beklenen hasar, isabet şansıyla çarpılmış (alan skill'inde tüm hedeflerin toplamı); `hit` ana hedefe isabet şansı |
 | `kills [...]` | Beklenen hasarı canını bitiren (ve isabet şansı `hit.aiKillMin` üstünde olan) düşmanlar |
@@ -61,13 +61,15 @@ after: <aktörün sonraki durumu> ;; <etkilenen birimlerin sonraki durumu>
 | `cost` | MP/can bedelinin skora yansıyan ağırlıklı değeri (`ai.json` > `mpCostWeight`/`hpCostWeight`) |
 | `net` | genel değer - bedel (yedek seçim ve global skill kararları bunu kullanır) |
 | `score` | **Kazanan önceliğin kendi puanı** (kill: öldürülenlerin tehdidi x 1000 - bedel; damage: hasar + kendine şifa + 0,6 x mana yakma - bedel; aoe: toplam hasar - bedel...). Yalnızca o önceliğin havuzundaki adaylarda bulunur; seçim en yüksek score'ludur |
-| `{...}` | etiketler: `hint` (skill'in `ai` bağlam ipucu var), `summon`, `taunt`, `guard`, `thorns`, `selfBuff`, `hpCost` |
+| `{...}` | etiketler: `hint` (skill'in `ai` bağlam ipucu var), `summon`, `empowered` (ceset tüketen çağrı: tüketilecek ceset var), `unfed` (ceset yok, çağrı zayıf gelir), `taunt`, `guard`, `selfBuff`, `hpCost`; çağrı adayında ayrıca `summonValue` (birimin en iyi ham hasarı x ömür x profil `summonValueShare`) |
 | `[chosen]` | seçildi |
 | `[lost]` | kazanan önceliğin havuzundaydı ama puanı daha düşük |
 | `[skipped: ...]` | kazanan önceliğin havuzu dışında (ör. "not on the focus target", "not in the pool of kill") |
 | `[blocked: ...]` | elendi: skill'in `ai` bağlam ipucu sağlanmadı (hangi koşul: `minTargets 2 (hits 1)`...) ya da MP başka bir skill için ayrıldı (`MP kept in reserve for X`) |
 
 Öncelik sırası profilden gelir (`data/ai.json`): `kill > tactic > aoe > damage` gibi. İlk uyan öncelik seçimi verir; sonrakiler denenmez. `steps` satırı her önceliğin neden uymadığını yazar (ör. `aoe=none (living foes 2 < aoeMinTargets 3)`). Hiçbiri uymazsa `fallback`.
+
+Çağrı (`summon`) önceliği (madde 222): ceset tüketen çağrıda (Raise Dead) tüketilecek düşman cesedi varsa en ucuz çağrı seçilir; yoksa çağrı beslenmemiş gelir ve yalnızca `summonValue - cost` bu turun en iyi başka hamlesinin net değerinden düşük değilse seçilir (`steps` satırında `no corpse to consume (summon would be unfed): summon value X < best other move Y`). `result` satırları: `... consumes the corpse of E1:Defender (cell 1): it can no longer be revived`, `... summons Ps0:Skeleton EMPOWERED (fed: corpse consumed) (hp .., str .., own board cell 1)` ya da `unfed (no corpse to consume)`; ölüm satırında `DIED (leaves a revivable corpse)`; sebepli durumda `+stun 1t (from ..) [vines]`.
 
 Global skill'ler (`global skills:` satırı): sınıf hamlesi öldürücü ya da işlevselse (şifa, çağrı, kalkan, taunt...) hiç denenmez; aksi halde Rest/Skip/Move'un taktik değeri, şimdiki sınıf hamlesinin değeriyle (`class move value`) karşılaştırılır; tehlike (`danger`) ve her kuralın eşiği yazılır.
 

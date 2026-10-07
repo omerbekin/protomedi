@@ -1,12 +1,13 @@
-import { damageRange, rollCrit, rollDamage, rollHeal, shieldAmount } from './formulas';
-import { isShapeArea, shapeCells } from './area-shape';
+import { rollCrit, rollDamage, rollHeal, shieldAmount } from './formulas';
+import { isShapeArea, shapeCells, shapeStages } from './area-shape';
 import { pickSideNeighbors } from './formation';
 import { betMultipliers, betStake } from './gamble';
 import { Rng } from './rng';
 import { damageSpecFor, type DamageEffect } from './spec';
-import { armorReduction, attributePower, hitOutcome } from './stats';
+import { applySummonVariant, armorReduction, attributePower, hitOutcome } from './stats';
+import type { Corpse, CorpseState } from './types';
 import { advanceTurn, predictQueue, turnProgress, type TurnSlot } from './turn-order';
-import type { ActionInfo, BattleAction, BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GlobalSkillDef, GroundDef, GroundEffect, Side, SkillDef, SkillEffect, Status, StatusDef } from './types';
+import type { ActionInfo, AreaStage, BattleAction, BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GlobalSkillDef, GroundDef, GroundEffect, Side, SkillDef, SkillEffect, Status, StatusDef } from './types';
 
 export interface BattleSetup {
   seed: number;
@@ -48,6 +49,8 @@ export interface ChoiceLike {
   targetUid?: string;
   /** Move Tile: hedef boş yuva. */
   slot?: number;
+  /** area_any alan skill'i: anchor hücrenin tahtası (yoksa karşı taraf). */
+  board?: Side;
 }
 
 /** Global skill'in oyun içi sonucu için birim başına son eylem türü (yapay zeka salınımı önlemek için okur). */
@@ -70,6 +73,8 @@ export interface ObservedAction {
   center?: number;
   /** Alan/şerit skill'inde kapsanan tüm hücreler (boş olanlar dahil). */
   cells?: number[];
+  /** area_any (Smoke Bomb): alanın atıldığı tahta. */
+  board?: Side;
 }
 
 /**
@@ -118,8 +123,14 @@ export class Battle {
   observer: BattleObserver | null = null;
   /** debugCast sürerken true: menzil/taunt kısıtları yok sayılır. */
   private debugCasting = false;
-  /** Şu an işlenen skill yakın dövüş (motion 'melee') mü: dikenli (thorns) durum yalnızca bu vuruşları yansıtır. */
-  private castMelee = false;
+  /**
+   * Cesetler (madde 222): ölen her ÇAĞRI OLMAYAN birim yuvasında ceset bırakır (uid -> durum). revivable = Resurrection ile diriltilebilir,
+   * consumed = Raise Dead tüketti (diriltilemez, yuvası rezerve değil). Dirilince kayıt silinir. Çağrıların ölümü ceset bırakmaz.
+   */
+  private readonly corpseState = new Map<string, CorpseState>();
+  /** Ceset sırası (ölüm anı): uid -> artan sayı; Raise Dead EN SON öleni tüketir. */
+  private readonly corpseOrder = new Map<string, number>();
+  private corpseCounter = 0;
 
   /** Eşit sayaçta önce oynayan taraf: seed'e göre belirlenir ki hiçbir taraf kalıcı avantaj almasın. */
   private readonly tieFirst: Side;
@@ -280,6 +291,8 @@ export class Battle {
 
   /** 'everyone' hedefli skill'lerde bir etkinin bu hedefe uygulanıp uygulanmadığı (diğer skill'lerde hep evet). */
   effectAppliesTo(skill: SkillDef, effect: SkillEffect, target: Combatant, actor: Combatant): boolean {
+    // area_any (Smoke Bomb): etki yalnızca `side` tarafındaki birimlere (alan hangi tahtaya atılırsa atılsın; veri doğrulaması side'ı zorunlu kılar)
+    if (skill.target === 'area_any') return effect.side === undefined || (effect.side === 'allies') === (target.side === actor.side);
     if (skill.target !== 'everyone') return true;
     const alliedDefault = effect.type === 'heal' || effect.type === 'hot' || effect.type === 'shield' || effect.type === 'guard';
     const side = effect.side ?? (alliedDefault ? 'allies' : 'enemies');
@@ -287,16 +300,30 @@ export class Battle {
   }
 
   private effectTargets(skill: SkillDef, effect: SkillEffect, targets: Combatant[], actor: Combatant): Combatant[] {
-    return skill.target === 'everyone' ? targets.filter((c) => this.effectAppliesTo(skill, effect, c, actor)) : targets;
+    return skill.target === 'everyone' || skill.target === 'area_any' ? targets.filter((c) => this.effectAppliesTo(skill, effect, c, actor)) : targets;
   }
 
   /**
-   * Zırh aurası (Defender gibi) dahil, savaştaki geçerli stat'lar. Aura yoksa gerçek stat nesnesi döner.
+   * Zırh aurası (Defender gibi) ve durumların isabet/kaçınma ekleri (Blinded/Shrouded: statuses.json > accuracyDelta/evasionDelta) dahil,
+   * savaştaki geçerli stat'lar. Hiçbiri yoksa gerçek stat nesnesi döner. İsabet/kaçınma 0'ın altına inmez; hit şansı ayrıca [0, hit.max] arasına sıkışır.
    * Aura: kaynağın KENDİ zırhının pct'si, kendine ve artı şeklindeki komşu dostlara; bir birim en fazla maxStacks kaynaktan (en büyükler) alır.
    */
   effectiveStats(c: Combatant): Combatant['stats'] {
     const bonus = this.auraArmor(c);
-    return bonus > 0 ? { ...c.stats, armor: c.stats.armor + bonus } : c.stats;
+    let acc = 0;
+    let eva = 0;
+    for (const s of c.statuses) {
+      const d = this.statusDef(s.kind);
+      acc += d?.accuracyDelta ?? 0;
+      eva += d?.evasionDelta ?? 0;
+    }
+    if (bonus <= 0 && acc === 0 && eva === 0) return c.stats;
+    return {
+      ...c.stats,
+      armor: c.stats.armor + bonus,
+      accuracy: Math.max(0, Math.round((c.stats.accuracy + acc) * 10000) / 10000),
+      evasion: Math.max(0, Math.round((c.stats.evasion + eva) * 10000) / 10000),
+    };
   }
 
   /** Birimin aldığı toplam aura zırhı (pasif armorAura kaynaklarından). */
@@ -370,7 +397,7 @@ export class Battle {
   /** Skill tek bir hedef seçilmesini gerektiriyor mu? */
   needsTargetChoice(skillId: string): boolean {
     const t = this.skill(skillId)?.target;
-    return t === 'single_enemy' || t === 'single_ally' || t === 'dead_ally' || t === 'area_enemies' || t === 'column_enemies';
+    return t === 'single_enemy' || t === 'single_ally' || t === 'dead_ally' || t === 'area_enemies' || t === 'area_any';
   }
 
   /** Çağrı skill'i mi (yeri oyuncu seçer)? */
@@ -378,98 +405,208 @@ export class Battle {
     return !!this.skill(skillId)?.effects.some((e) => e.type === 'summon');
   }
 
-  /** Alan veya şerit skill'i mi (oyuncu bir merkez hücre seçer; hücre boş olabilir)? */
+  /** Alan skill'i mi (target 'area_enemies' / 'area_any' + area.shape; oyuncu bir anchor hücre seçer, hücre boş olabilir)? */
   isAreaSkill(skillId: string): boolean {
-    const t = this.skill(skillId)?.target;
-    return t === 'area_enemies' || t === 'column_enemies';
+    return this.isShapeSkill(skillId);
   }
 
-  /** Skill'in şekli: merkez hücreye göre (satır farkı, şerit farkı) bu hücre kapsanıyor mu? */
-  private inShape(skill: SkillDef, centerSlot: number, slot: number): boolean {
-    const dr = Math.abs(this.rowOf(slot) - this.rowOf(centerSlot));
-    const dl = Math.abs(this.laneOf(slot) - this.laneOf(centerSlot));
-    if (skill.target === 'column_enemies') return dl === 0;
-    const radius = skill.area?.radius ?? 1;
-    if (dr === 0 || dl === 0) return Math.max(dr, dl) <= radius;
-    return radius >= 2 && dr === 1 && dl === 1;
-  }
-
-  /** Şekil (hücre kümesi) tabanlı alan skill'i mi (area.shape: row | column | rect | plus)? Eski `area.radius` ve column_enemies skill'leri şekil DEĞİLdir (davranışları aynen). */
+  /** Şekil (hücre kümesi) tabanlı alan skill'i mi (area.shape: row | column | rect | plus | x)? Tüm alan skill'leri şekillidir (isAreaSkill ile aynı). */
   isShapeSkill(skillId: string): boolean {
     const skill = this.skill(skillId);
-    return skill?.target === 'area_enemies' && isShapeArea(skill.area);
+    return (skill?.target === 'area_enemies' || skill?.target === 'area_any') && isShapeArea(skill.area);
+  }
+
+  /** İki tahtaya da atılabilen alan skill'i mi (target 'area_any': Smoke Bomb)? Anchor tahtası `board` ile seçilir. */
+  isAnyBoardArea(skillId: string): boolean {
+    return this.isShapeSkill(skillId) && this.skill(skillId)!.target === 'area_any';
+  }
+
+  /** Aşamalı (area.stages) alan skill'i mi? */
+  isStagedSkill(skillId: string): boolean {
+    return this.isShapeSkill(skillId) && !!this.skill(skillId)!.area!.stages;
+  }
+
+  /** Alan skill'inin bu kullanıcı için geçerli tahtası: area_any'de istenen tahta (yoksa karşı taraf), diğerlerinde hep karşı taraf. */
+  private areaBoard(actor: Combatant | undefined, skillId: string, board?: Side): Side {
+    const foe: Side = actor ? opposite(actor.side) : 'enemy';
+    return board && this.isAnyBoardArea(skillId) ? board : foe;
   }
 
   /**
-   * Alan/şerit skill'inin anchor (merkez) hücreye göre kapsadığı tüm hücreler (boş olanlar dahil; gösterim için), yuva sırasıyla.
-   * `board`: hücrelerin ait olduğu tahta (varsayılan 'enemy'); yalnızca şekil skill'lerinde önemlidir (rect'in ekrandaki sol-alt köşesi tahtaya göre ayna).
+   * Alan skill'inin anchor hücreye göre kapsadığı tüm hücreler (boş olanlar dahil; gösterim için), yuva sırasıyla.
+   * `board`: hücrelerin ait olduğu tahta (varsayılan 'enemy'; rect'in ekrandaki sol-alt köşesi tahtaya göre ayna).
    */
   areaCells(skillId: string, centerSlot: number, board: Side = 'enemy'): number[] {
     const skill = this.skill(skillId);
-    if (!skill) return [];
-    if (this.isShapeSkill(skillId)) return shapeCells(skill.area!, centerSlot, board, this.setup.formulas.formation);
-    const total = this.setup.formulas.formation.rows * this.setup.formulas.formation.lanes;
-    return Array.from({ length: total }, (_, i) => i).filter((i) => this.inShape(skill, centerSlot, i));
+    if (!skill || !this.isShapeSkill(skillId)) return [];
+    return shapeCells(skill.area!, centerSlot, board, this.setup.formulas.formation);
   }
 
-  /**
-   * Alan/şerit skill'inin merkez hücreye göre vurduğu düşmanlar (slot sırasıyla).
-   * area_enemies (radius 1): merkez + önü, arkası, sağı, solu (artı, çapraz yok). radius 2: öne/arkaya/sağa/sola 2'şer + çaprazlara 1'er.
-   * column_enemies: merkezin şeridindeki herkes. Boş/ölü hücreler boşluktur; merkez hücre boş olabilir.
-   */
-  areaWindowAt(actorUid: string, skillId: string, centerSlot: number): Combatant[] {
+  /** Alan skill'inin hücreleri aşamalara bölünmüş (aşamasız skill: tek aşama). Her aşama yuva sırasıyla; boş hücreler dahil. */
+  areaStageCells(skillId: string, centerSlot: number, board: Side = 'enemy'): number[][] {
     const skill = this.skill(skillId);
-    if (!skill) return [];
-    const actor = this.get(actorUid);
-    const board = actor ? opposite(actor.side) : 'enemy';
-    if (this.isShapeSkill(skillId)) {
-      // Şekil hücre kümesi 'vurulabilir hücreler'i belirler; yakın dövüşte erişilemeyen (arkadaki) hücreler validTargets ile elenir
-      const cells = new Set(this.areaCells(skillId, centerSlot, board));
-      return this.validTargets(actorUid, skillId).filter((c) => c.board === board && cells.has(c.slot));
-    }
-    return this.validTargets(actorUid, skillId).filter((c) => c.board === board && this.inShape(skill, centerSlot, c.slot));
+    if (!skill || !this.isShapeSkill(skillId)) return [];
+    return shapeStages(skill.area!, centerSlot, board, this.setup.formulas.formation);
   }
 
   /**
-   * UI için: bu alan skill'inin SEÇİLEBİLİR anchor hücreleri (hedef tahtasında, artan sırada). Boş hücre de anchor olabilir: şekil en az bir
-   * vurulabilir (canlı, erişilebilir) düşmanı kapsıyorsa geçerlidir. Alan skill'i değilse boş liste.
+   * UI/vfx için: aşamalı skill'in anchor'a göre aşamaları (hücreler + vurulacak birimler, aşama sırasıyla). Aşamasız skill'de tek aşama.
+   * Cast edilince `skillUsed.stages` ile aynıdır (aşamalı skill'lerde). Savaşı değiştirmez. `board`: yalnızca area_any'de anlamlı.
    */
-  shapeAnchors(actorUid: string, skillId: string): number[] {
+  areaStages(actorUid: string, skillId: string, anchorSlot: number, board?: Side): AreaStage[] {
+    const actor = this.get(actorUid);
+    if (!actor) return [];
+    const b = this.areaBoard(actor, skillId, board);
+    const hits = this.areaWindowAt(actorUid, skillId, anchorSlot, b);
+    return this.areaStageCells(skillId, anchorSlot, b).map((cells) => ({ cells, targets: hits.filter((c) => cells.includes(c.slot)).map((c) => c.uid) }));
+  }
+
+  /**
+   * Alan skill'inin anchor hücreye göre vurduğu/etkilediği birimler. Şekil hücre kümesi 'vurulabilir hücreler'i belirler; ölü/boş hücreler boşluktur,
+   * yakın dövüşte erişilemeyen (arkadaki) hücreler validTargets ile elenir. Sıra: aşamalı skill'de aşama sırasıyla (aşama içinde derinlik sırası),
+   * aşamasızda derinlik sırası (öndeki önce; falloff bu sırayla azalır). `board`: area_any'de anchor tahtası (yoksa karşı taraf); area_any alandaki
+   * birimlerden en az bir etkinin uygulandığı (side) canlı birimleri döndürür; area_enemies yalnızca düşmanları.
+   */
+  areaWindowAt(actorUid: string, skillId: string, centerSlot: number, board?: Side): Combatant[] {
+    const skill = this.skill(skillId);
+    if (!skill || !this.isShapeSkill(skillId)) return [];
+    const actor = this.get(actorUid);
+    const b = this.areaBoard(actor, skillId, board);
+    const stages = this.areaStageCells(skillId, centerSlot, b);
+    const cells = new Set(stages.flat());
+    let hits = this.validTargets(actorUid, skillId).filter((c) => c.board === b && cells.has(c.slot));
+    // area_any: hiçbir etkinin uygulanmadığı birimler (ör. yalnızca düşmana giden etki varken dostlar) hedef sayılmaz
+    if (actor && skill.target === 'area_any') hits = hits.filter((c) => skill.effects.some((e) => this.effectAppliesTo(skill, e, c, actor)));
+    if (stages.length <= 1) return hits;
+    return stages.flatMap((st) => hits.filter((c) => st.includes(c.slot)));
+  }
+
+  /**
+   * UI için: bu alan skill'inin SEÇİLEBİLİR anchor hücreleri (tahtada, artan sırada). Boş hücre de anchor olabilir: şekil en az bir
+   * vurulabilir (canlı, erişilebilir) birimi kapsıyorsa geçerlidir. Alan skill'i değilse boş liste. `board`: area_any'de hangi tahta (yoksa karşı taraf).
+   */
+  shapeAnchors(actorUid: string, skillId: string, board?: Side): number[] {
     const actor = this.get(actorUid);
     if (!actor || !this.isAreaSkill(skillId)) return [];
+    const b = this.areaBoard(actor, skillId, board);
     const total = this.setup.formulas.formation.rows * this.setup.formulas.formation.lanes;
-    return Array.from({ length: total }, (_, i) => i).filter((i) => this.areaWindowAt(actorUid, skillId, i).length > 0);
+    return Array.from({ length: total }, (_, i) => i).filter((i) => this.areaWindowAt(actorUid, skillId, i, b).length > 0);
+  }
+
+  /** TÜM seçilebilir anchor hücreleri (tahta + yuva): area_enemies'de yalnızca karşı tahta; area_any'de önce karşı, sonra kendi tahtası. */
+  shapeAnchorCells(actorUid: string, skillId: string): Array<{ board: Side; slot: number }> {
+    const actor = this.get(actorUid);
+    if (!actor || !this.isAreaSkill(skillId)) return [];
+    const boards: Side[] = this.isAnyBoardArea(skillId) ? [opposite(actor.side), actor.side] : [opposite(actor.side)];
+    return boards.flatMap((board) => this.shapeAnchors(actorUid, skillId, board).map((slot) => ({ board, slot })));
   }
 
   /**
    * UI hover: anchor hücreye atılırsa kapsanan hücreler (tahtaya sığdırılmış), vurulacak birimler (uid, yuva sırasıyla) ve geçerlilik.
    * valid=false ise reason nedeni yazar; cells yine de döner (hücre aralık dışı değilse) ki UI şekli soluk gösterebilsin. Savaşı değiştirmez.
+   * `board`: yalnızca area_any'de anlamlı (kendi tahtan ya da karşı tahta; yoksa karşı taraf).
    */
-  shapePreviewCells(actorUid: string, skillId: string, anchorSlot: number): { cells: number[]; targets: string[]; valid: boolean; reason?: string } {
+  shapePreviewCells(actorUid: string, skillId: string, anchorSlot: number, board?: Side): { cells: number[]; targets: string[]; valid: boolean; reason?: string } {
     const actor = this.get(actorUid);
     const total = this.setup.formulas.formation.rows * this.setup.formulas.formation.lanes;
     if (!actor || !this.skill(skillId)) return { cells: [], targets: [], valid: false, reason: 'Unknown unit or skill' };
     if (!this.isAreaSkill(skillId)) return { cells: [], targets: [], valid: false, reason: 'Not an area skill' };
     if (!Number.isInteger(anchorSlot) || anchorSlot < 0 || anchorSlot >= total) return { cells: [], targets: [], valid: false, reason: 'Invalid cell' };
-    const board = opposite(actor.side);
-    const cells = this.areaCells(skillId, anchorSlot, board);
-    const targets = this.areaWindowAt(actorUid, skillId, anchorSlot).map((c) => c.uid);
+    const b = this.areaBoard(actor, skillId, board);
+    const cells = this.areaCells(skillId, anchorSlot, b);
+    const targets = this.areaWindowAt(actorUid, skillId, anchorSlot, b).map((c) => c.uid);
     if (targets.length > 0) return { cells, targets, valid: true };
-    const inShape = this.livingByDepth(opposite(actor.side)).some((c) => c.board === board && cells.includes(c.slot));
+    if (this.isAnyBoardArea(skillId)) return { cells, targets, valid: false, reason: b === actor.side ? 'No ally in the area' : 'No enemy in the area' };
+    const inShape = this.livingByDepth(opposite(actor.side)).some((c) => c.board === b && cells.includes(c.slot));
     return { cells, targets, valid: false, reason: inShape ? 'No target in reach' : 'No enemy in the area' };
   }
 
-  /** Merkez olarak seçilen birimin hücresine göre areaWindowAt. */
+  /** Anchor olarak seçilen (canlı) birimin hücresine göre areaWindowAt (birim erişim dışında da olabilir: yalnızca hücreyi belirler). area_any'de birimin tahtası. */
   areaWindow(actorUid: string, skillId: string, anchorUid: string): Combatant[] {
-    const center = this.validTargets(actorUid, skillId).find((c) => c.uid === anchorUid);
-    return center ? this.areaWindowAt(actorUid, skillId, center.slot) : [];
+    const actor = this.get(actorUid);
+    const anchor = this.get(anchorUid);
+    if (!actor || !anchor || anchor.hp <= 0) return [];
+    if (this.isAnyBoardArea(skillId)) return this.areaWindowAt(actorUid, skillId, anchor.slot, anchor.board);
+    if (anchor.board !== opposite(actor.side)) return [];
+    return this.areaWindowAt(actorUid, skillId, anchor.slot);
   }
 
-  /** Çağrı skill'inin birimi hangi tahtaya koyacağı (kendi tahtası ya da düşmanın tahtası). */
-  summonBoard(actorUid: string, skillId: string): Side {
+  /** Çağrı skill'inin birimi hangi tahtaya koyacağı: daima kullanıcının KENDİ tahtası (Raise Dead dahil; eski düşman tahtasına çağrı kaldırıldı, madde 222). */
+  summonBoard(actorUid: string, _skillId?: string): Side {
+    return this.get(actorUid)?.side ?? 'party';
+  }
+
+  // --- Cesetler (madde 222) ---
+
+  /** Bir tarafın cesetleri (ölü, çağrı olmayan birimler; revivable ya da consumed), ölüm sırasıyla (ilk ölen önce). UI: ankh (revivable) / kuru kafa (consumed) işaretleri. */
+  corpses(side: Side): Corpse[] {
+    return this.combatants
+      .filter((c) => c.side === side && this.corpseState.has(c.uid) && c.hp <= 0)
+      .sort((a, b) => (this.corpseOrder.get(a.uid) ?? 0) - (this.corpseOrder.get(b.uid) ?? 0))
+      .map((c) => ({ uid: c.uid, slot: c.slot, side: c.side, state: this.corpseState.get(c.uid)! }));
+  }
+
+  /** Birimin cesedi (yoksa null: canlı, çağrı ya da hiç ölmemiş). */
+  corpseOf(uid: string): Corpse | null {
+    const c = this.get(uid);
+    const state = this.corpseState.get(uid);
+    return c && state && c.hp <= 0 ? { uid: c.uid, slot: c.slot, side: c.side, state } : null;
+  }
+
+  /**
+   * Ceset tüketen çağrının (Raise Dead) şu an tüketeceği ceset: kullanıcının KARŞI tarafındaki diriltilebilir (revivable) cesetlerden EN SON öleni
+   * (aynı anda ölenlerde küçük yuva). Yoksa null (çağrı beslenmemiş gelir). Savaşı değiştirmez (UI önizleme/tooltip ve YZ için).
+   */
+  corpseToConsume(actorUid: string): Corpse | null {
     const actor = this.get(actorUid);
-    const onEnemy = this.skill(skillId)?.effects.some((e) => e.type === 'summon' && e.onEnemyBoard);
-    return actor ? (onEnemy ? opposite(actor.side) : actor.side) : 'party';
+    if (!actor) return null;
+    const list = this.corpses(opposite(actor.side)).filter((c) => c.state === 'revivable');
+    if (list.length === 0) return null;
+    return list.reduce((best, c) => {
+      const ob = this.corpseOrder.get(best.uid) ?? 0;
+      const oc = this.corpseOrder.get(c.uid) ?? 0;
+      return oc > ob || (oc === ob && c.slot < best.slot) ? c : best;
+    });
+  }
+
+  /**
+   * Çağrı skill'inin şu an hangi varyantla çağıracağı (UI tooltip/önizleme ve YZ için; savaşı değiştirmez): ceset tüketen çağrıda
+   * { empowered: true/false, corpse } (beslenmiş / beslenmemiş), diğer çağrılarda { empowered: undefined, corpse: null }.
+   */
+  summonPreview(actorUid: string, skillId: string): { unit: CombatantDef | null; empowered: boolean | undefined; corpse: Corpse | null } {
+    const effect = this.skill(skillId)?.effects.find((e) => e.type === 'summon');
+    if (!effect || effect.type !== 'summon') return { unit: null, empowered: undefined, corpse: null };
+    const def = this.setup.units[effect.unit];
+    if (!effect.consumeCorpse) return { unit: def ?? null, empowered: undefined, corpse: null };
+    const corpse = this.corpseToConsume(actorUid);
+    return { unit: def ? applySummonVariant(def, corpse ? 'fed' : 'unfed') : null, empowered: !!corpse, corpse };
+  }
+
+  /**
+   * Diriltme hedefinin neden seçilemeyeceği (UI tooltip, önizleme): null = diriltilebilir. 'Corpse was consumed' (Raise Dead tüketti),
+   * 'Cell is taken' (yuvasında canlı birim var), 'Not a fallen ally' (canlı, çağrı ya da düşman).
+   */
+  reviveBlockReason(actorUid: string, targetUid: string): string | null {
+    const actor = this.get(actorUid);
+    const t = this.get(targetUid);
+    if (!actor || !t || t.side !== actor.side || t.hp > 0 || t.summoned) return 'Not a fallen ally';
+    if (this.corpseState.get(t.uid) === 'consumed') return 'Corpse was consumed';
+    if (this.combatants.some((o) => o.hp > 0 && o.board === t.board && o.slot === t.slot)) return 'Cell is taken';
+    return null;
+  }
+
+  /** Ceset kaydı: çağrı olmayan birim öldüğünde (revivable). */
+  private leaveCorpse(c: Combatant): boolean {
+    if (c.summoned) return false;
+    this.corpseState.set(c.uid, 'revivable');
+    this.corpseOrder.set(c.uid, ++this.corpseCounter);
+    return true;
+  }
+
+  /** Dirilen birimin ceset kaydı biter. */
+  private clearCorpse(uid: string): void {
+    this.corpseState.delete(uid);
+    this.corpseOrder.delete(uid);
   }
 
   /** Bir tahtadaki çağrı için seçilebilecek boş yuvalar (küçükten büyüğe). */
@@ -499,21 +636,17 @@ export class Battle {
         return [actor];
       case 'single_enemy':
       case 'area_enemies':
-      case 'column_enemies':
       case 'random_enemies':
       case 'all_enemies': {
         let list = this.livingByDepth(opposite(actor.side));
         if (skill.motion === 'melee' && !skill.ignoreReach && !this.debugCasting) {
-          if (actor.board !== actor.side) {
-            // Düşman tahtasına sızmış dost çağrı: yalnızca 1 birim yarıçapındaki (artı şekli) düşmanlara vurabilir
-            list = list.filter((c) => c.board === actor.board && Math.abs(this.rowOf(c.slot) - this.rowOf(actor.slot)) + Math.abs(this.laneOf(c.slot) - this.laneOf(actor.slot)) <= 1);
-          } else {
-            // Ön sıra, düşmanın kendi tahtasındaki birimlere göre belirlenir; bizim tahtamıza sızan düşman çağrıları hep yakındadır
-            const home = list.filter((c) => c.board === c.side);
-            const rows = [...new Set(home.map((c) => this.rowOf(c.slot)))].slice(0, this.setup.formulas.formation.meleeRows + (skill.reach ?? 0));
-            list = list.filter((c) => c.board !== c.side || rows.includes(this.rowOf(c.slot)));
-          }
+          // Ön sıra, düşmanın kendi tahtasındaki birimlere göre belirlenir (çağrılar da kendi tahtalarında durur; eski "düşman tahtasına sızan çağrı" kuralı madde 222 ile kalktı)
+          const home = list.filter((c) => c.board === c.side);
+          const rows = [...new Set(home.map((c) => this.rowOf(c.slot)))].slice(0, this.setup.formulas.formation.meleeRows + (skill.reach ?? 0));
+          list = list.filter((c) => c.board !== c.side || rows.includes(this.rowOf(c.slot)));
         }
+        // Backstab: yalnızca arkası boş hedefler (menzil gibi bir erişim kuralı; taunt bundan SONRA uygulanır: arkası dolu taunter seçilemez)
+        if (skill.requiresOpenBehind && !this.debugCasting) list = list.filter((c) => this.openBehindProblem(c) === null);
         if (skill.target === 'single_enemy' && !this.debugCasting) {
           const taunters = list.filter((c) => c.statuses.some((s) => s.kind === 'taunt'));
           if (taunters.length > 0) list = taunters;
@@ -524,15 +657,59 @@ export class Battle {
       case 'all_allies':
         return this.livingByDepth(actor.side);
       case 'dead_ally':
-        // Düşmüş dostlar (çağrılar hariç); yuvası başka bir birim tarafından doldurulduysa diriltilemez
+        // Düşmüş dostlar (çağrılar hariç); cesedi tüketildiyse (Raise Dead) ya da yuvası başka bir birim tarafından doldurulduysa diriltilemez
         return this.combatants
-          .filter((c) => c.side === actor.side && c.board === c.side && c.hp <= 0 && !c.summoned && !this.combatants.some((o) => o.hp > 0 && o.board === c.board && o.slot === c.slot))
+          .filter((c) => c.side === actor.side && c.board === c.side && c.hp <= 0 && !c.summoned && this.corpseState.get(c.uid) !== 'consumed' && !this.combatants.some((o) => o.hp > 0 && o.board === c.board && o.slot === c.slot))
           .sort((x, y) => x.slot - y.slot);
       case 'everyone':
         return [...this.livingByDepth(actor.side), ...this.livingByDepth(opposite(actor.side))];
+      case 'area_any':
+        // İki tahtaya da atılabilen alan (Smoke Bomb): alandaki her canlı birim aday; etkiler `side` ile ayrılır (menzil/taunt yok)
+        return [...this.livingByDepth(opposite(actor.side)), ...this.livingByDepth(actor.side)];
       case 'empty_tile':
         return []; // hedef birim değil boş yuva: freeTiles(uid)
     }
+  }
+
+  /** Bir birimin hemen ARKASINDAKİ hücre (bir sıra daha derin, aynı şerit, kendi tahtasında); en arka sıradaysa null. */
+  behindSlotOf(c: Combatant): number | null {
+    const { rows, lanes } = this.setup.formulas.formation;
+    const behind = c.slot + lanes;
+    return behind < rows * lanes ? behind : null;
+  }
+
+  /**
+   * requiresOpenBehind (Backstab) kuralı: hedefin arkası BOŞ mu? Boşsa null; değilse oyuncuya gösterilecek neden (İngilizce):
+   * 'No room behind the target' (hedef en arka sırada) ya da 'Target is shielded from behind' (arkasındaki hücrede CANLI birim var).
+   * Karar: yalnızca canlı birim engeller; ceset ve ölü dostun ayrılmış (fallenSlots) hücresi engel DEĞİLDİR.
+   */
+  openBehindProblem(target: Combatant): string | null {
+    const behind = this.behindSlotOf(target);
+    if (behind === null) return 'No room behind the target';
+    if (this.combatants.some((o) => o.hp > 0 && o.board === target.board && o.slot === behind)) return 'Target is shielded from behind';
+    return null;
+  }
+
+  /**
+   * UI/önizleme: bu skill bu hedefe kullanılabilir mi? Kullanılabilirse null; değilse neden (ör. Backstab: 'No room behind the target' /
+   * 'Target is shielded from behind'; menzil: 'Out of reach'; taunt: 'Must target the taunting enemy'). Bedel/sıra denetlenmez (canUse ayrı).
+   */
+  targetProblem(actorUid: string, skillId: string, targetUid: string): string | null {
+    const actor = this.get(actorUid);
+    const skill = this.skill(skillId);
+    const target = this.get(targetUid);
+    if (!actor || !skill || !target) return 'Invalid target';
+    if (target.hp <= 0 && skill.target !== 'dead_ally') return 'Target is dead';
+    if (this.validTargets(actorUid, skillId).some((c) => c.uid === targetUid)) return null;
+    if (skill.target === 'single_enemy' && target.side !== actor.side) {
+      if (skill.requiresOpenBehind) {
+        const p = this.openBehindProblem(target);
+        if (p) return p;
+      }
+      const tauntingFoe = this.living(target.side).some((c) => c.statuses.some((s) => s.kind === 'taunt'));
+      return tauntingFoe ? 'Must target the taunting enemy' : 'Out of reach';
+    }
+    return 'Invalid target';
   }
 
   /** Aktör şu an bu skill'i kullanabilir mi (sıra, bedel, yer, savaş durumu)? */
@@ -557,8 +734,14 @@ export class Battle {
     if (skill.effects.some((e) => e.type === 'summon') && this.freeSlots(this.summonBoard(actorUid, skillId)).length === 0) {
       return { ok: false, reason: 'No free slot' };
     }
-    if (this.validTargets(actorUid, skillId).length === 0) return { ok: false, reason: skill.target === 'dead_ally' ? 'No fallen ally' : 'No target in reach' };
+    if (this.validTargets(actorUid, skillId).length === 0) return { ok: false, reason: skill.target === 'dead_ally' ? this.noReviveReason(actor) : skill.requiresOpenBehind ? 'No target with room behind it' : 'No target in reach' };
     return { ok: true };
+  }
+
+  /** Diriltilecek hedef yoksa neden: tüm düşmüş dostların cesedi tüketildiyse 'Corpse was consumed', aksi halde 'No fallen ally'. */
+  private noReviveReason(actor: Combatant): string {
+    const fallen = this.combatants.filter((c) => c.side === actor.side && c.hp <= 0 && !c.summoned);
+    return fallen.length > 0 && fallen.every((c) => this.corpseState.get(c.uid) === 'consumed') ? 'Corpse was consumed' : 'No fallen ally';
   }
 
   /** Aktörün şu an kullanabileceği en az bir skill'i var mı? */
@@ -566,21 +749,24 @@ export class Battle {
     return (this.get(actorUid)?.skills ?? []).some((id) => this.canUse(actorUid, id).ok);
   }
 
-  /** Class skill'i ya da (skillId global bir id ise) global skill kullanır; global skill'de `slot` Move Tile'ın hedef boş yuvasıdır. */
-  useSkill(actorUid: string, skillId: string, targetUid?: string, slot?: number): ActionResult {
+  /**
+   * Class skill'i ya da (skillId global bir id ise) global skill kullanır; global skill'de `slot` Move Tile'ın hedef boş yuvasıdır.
+   * `board`: yalnızca area_any (Smoke Bomb) alan skill'inde anchor hücrenin tahtası (yoksa karşı taraf; `targetUid = 'tile:<yuva>'` kendi tahtası).
+   */
+  useSkill(actorUid: string, skillId: string, targetUid?: string, slot?: number, board?: Side): ActionResult {
     if (this.globalDef(skillId)) return this.useGlobal(actorUid, skillId, slot ?? slotOfTileUid(targetUid));
-    return this.cast(actorUid, skillId, targetUid, slot, false);
+    return this.cast(actorUid, skillId, targetUid, slot, false, board);
   }
 
   /** Tek giriş noktası: class skill'i ya da global skill ({kind:'global', id, slot?}). */
   act(actorUid: string, action: BattleAction): ActionResult {
-    return action.kind === 'global' ? this.useGlobal(actorUid, action.id, action.slot ?? slotOfTileUid(action.targetUid)) : this.cast(actorUid, action.skillId, action.targetUid, action.slot, false);
+    return action.kind === 'global' ? this.useGlobal(actorUid, action.id, action.slot ?? slotOfTileUid(action.targetUid)) : this.cast(actorUid, action.skillId, action.targetUid, action.slot, false, action.board);
   }
 
   /** Yapay zeka seçimini uygular; seçim yoksa (null) turu pas geçer (skipTurn). */
   applyChoice(actorUid: string, choice: ChoiceLike | null): ActionResult {
     if (!choice) return this.skipTurn();
-    return this.useSkill(actorUid, choice.skillId, choice.targetUid, choice.slot);
+    return this.useSkill(actorUid, choice.skillId, choice.targetUid, choice.slot, choice.board);
   }
 
   /** Global skill tanımı (data/global-skills.json). */
@@ -605,10 +791,10 @@ export class Battle {
     return this.freeSlots(actor.side).filter((s) => !reserved.has(s));
   }
 
-  /** Bir tarafın tahtasında diriltilmeyi bekleyen (düşmüş, çağrı olmayan) dostların boş yuvaları. */
+  /** Bir tarafın tahtasında diriltilmeyi bekleyen (düşmüş, çağrı olmayan, cesedi TÜKETİLMEMİŞ) dostların boş yuvaları; tüketilmiş cesedin yuvası rezerve değildir. */
   fallenSlots(side: Side): number[] {
     return this.combatants
-      .filter((c) => c.side === side && c.board === side && c.hp <= 0 && !c.summoned && !this.combatants.some((o) => o.hp > 0 && o.board === side && o.slot === c.slot))
+      .filter((c) => c.side === side && c.board === side && c.hp <= 0 && !c.summoned && this.corpseState.get(c.uid) !== 'consumed' && !this.combatants.some((o) => o.hp > 0 && o.board === side && o.slot === c.slot))
       .map((c) => c.slot)
       .sort((a, b) => a - b);
   }
@@ -736,7 +922,7 @@ export class Battle {
     }
   }
 
-  private cast(actorUid: string, skillId: string, targetUid: string | undefined, slot: number | undefined, debug: boolean): ActionResult {
+  private cast(actorUid: string, skillId: string, targetUid: string | undefined, slot: number | undefined, debug: boolean, boardArg?: Side): ActionResult {
     if (!debug) {
       const can = this.canUse(actorUid, skillId);
       if (!can.ok) return can;
@@ -752,19 +938,32 @@ export class Battle {
     let centerCells: number[] | undefined;
     const hit = new Set<string>();
     const splashUids = new Set<string>();
+    let stageGroups: AreaStage[] | undefined;
+    let stageTargets: Combatant[][] | undefined;
+    let areaBoard: Side | undefined;
     if (this.isAreaSkill(skillId)) {
-      // Merkez (anchor): seçilen birimin hücresi ya da (boş olabilen) seçilen hücre. Şekil skill'inde anchor birimi erişim dışında (arkada) da olabilir.
-      const board = opposite(actor.side);
-      const shape = this.isShapeSkill(skillId);
-      const anchorUnit = targetUid ? (shape ? this.get(targetUid) : targets.find((c) => c.uid === targetUid)) : undefined;
-      const anchor = anchorUnit && anchorUnit.hp > 0 && (!shape || anchorUnit.board === board) ? anchorUnit : undefined;
+      // Anchor: seçilen birimin hücresi ya da (boş olabilen) seçilen hücre. Anchor birimi erişim dışında (arkada) da olabilir: yalnızca hücreyi belirler.
+      // area_any (Smoke Bomb): tahta = anchor biriminin tahtası; `tile:<yuva>` = kendi tahtası; yoksa `boardArg` (varsayılan karşı taraf).
+      const anyBoard = this.isAnyBoardArea(skillId);
+      const tileSlot = anyBoard ? slotOfTileUid(targetUid) : undefined;
+      const anchorUnit = targetUid && tileSlot === undefined ? this.get(targetUid) : undefined;
+      const board: Side = anyBoard ? (tileSlot !== undefined ? actor.side : anchorUnit && anchorUnit.hp > 0 ? anchorUnit.board : (boardArg ?? opposite(actor.side))) : opposite(actor.side);
+      const anchor = anchorUnit && anchorUnit.hp > 0 && anchorUnit.board === board ? anchorUnit : undefined;
       const total = this.setup.formulas.formation.rows * this.setup.formulas.formation.lanes;
-      const center = anchor ? anchor.slot : (slot ?? (debug ? targets[0]?.slot : undefined));
+      const center = anchor ? anchor.slot : (tileSlot ?? slot ?? (debug ? targets.find((c) => c.board === board)?.slot ?? targets[0]?.slot : undefined));
       if (center === undefined || !Number.isInteger(center) || center < 0 || center >= total) return { ok: false, reason: 'Invalid target' };
-      targets = this.areaWindowAt(actorUid, skillId, center);
-      if (shape && !debug && targets.length === 0) return { ok: false, reason: 'No target in the area' };
+      targets = this.areaWindowAt(actorUid, skillId, center, board);
+      if (!debug && targets.length === 0) return { ok: false, reason: anyBoard && board === actor.side ? 'No ally in the area' : 'No target in the area' };
       centerSlot = center;
+      areaBoard = board;
       centerCells = this.areaCells(skillId, center, board);
+      // Aşamalı vuruş: hedefler aşamalara bölünür (areaWindowAt zaten aşama sırasıyla döner)
+      if (this.isStagedSkill(skillId)) {
+        const all = targets;
+        const cellsByStage = this.areaStageCells(skillId, center, board);
+        stageTargets = cellsByStage.map((cells) => all.filter((c) => cells.includes(c.slot)));
+        stageGroups = cellsByStage.map((cells, i) => ({ cells, targets: stageTargets![i]!.map((c) => c.uid) }));
+      }
     } else if (skill.target === 'random_enemies') {
       // Rastgele (seed'li) farklı `count` düşman
       const pool = [...targets];
@@ -775,7 +974,7 @@ export class Battle {
       targets = pool.slice(0, skill.count ?? 3).sort((x, y) => x.slot - y.slot);
     } else if (this.needsTargetChoice(skillId)) {
       const chosen = targets.find((c) => c.uid === targetUid) ?? (debug ? targets[0] : undefined);
-      if (!chosen) return { ok: false, reason: 'Invalid target' };
+      if (!chosen) return { ok: false, reason: skill.target === 'dead_ally' && targetUid && this.corpseState.get(targetUid) === 'consumed' ? 'Corpse was consumed' : (targetUid && skill.requiresOpenBehind && this.targetProblem(actorUid, skillId, targetUid)) || 'Invalid target' };
       targets = [chosen];
       // Yan vuruşlu (splash) skill: seçilen hedefin yanındaki hücreler de vurulur (ilk hedef = seçilen)
       for (const s of this.splashTargets(skillId, chosen)) {
@@ -785,13 +984,28 @@ export class Battle {
     }
 
     const events: BattleEvent[] = [];
+    // Aşamalı skill: aşama sürerken çıkan HER olay aşama numarasını taşır (stage)
+    let stage: number | undefined;
     const emit: Emit = (e) => {
-      events.push(e);
-      this.record(e);
+      const ev: BattleEvent = stage === undefined ? e : { ...e, stage };
+      events.push(ev);
+      this.record(ev);
     };
 
-    if (!debug) this.observer?.before?.({ kind: 'skill', actorUid, id: skillId, targetUids: targets.map((t) => t.uid), ...(centerSlot !== undefined ? { center: centerSlot, cells: centerCells } : {}) });
-    emit({ type: 'skillUsed', actor: actor.uid, skill: skill.id, targets: targets.map((t) => t.uid), ...(centerSlot !== undefined ? { center: centerSlot, anchor: centerSlot, cells: centerCells } : {}) });
+    if (!debug) this.observer?.before?.({ kind: 'skill', actorUid, id: skillId, targetUids: targets.map((t) => t.uid), ...(centerSlot !== undefined ? { center: centerSlot, cells: centerCells } : {}), ...(areaBoard && skill.target === 'area_any' ? { board: areaBoard } : {}) });
+    // Backstab (requiresOpenBehind): görsel ışınlanma hücresi (hedefin arkası) ve dönüş hücresi; gerçek yer değiştirme yok
+    const backTarget = skill.requiresOpenBehind ? targets[0] : undefined;
+    const behind = backTarget ? this.behindSlotOf(backTarget) : null;
+    emit({
+      type: 'skillUsed',
+      actor: actor.uid,
+      skill: skill.id,
+      targets: targets.map((t) => t.uid),
+      ...(centerSlot !== undefined ? { center: centerSlot, anchor: centerSlot, cells: centerCells } : {}),
+      ...(stageGroups ? { stages: stageGroups } : {}),
+      ...(areaBoard && skill.target === 'area_any' ? { board: areaBoard } : {}),
+      ...(backTarget && behind !== null ? { behindSlot: behind, behindBoard: backTarget.board, from: actor.slot } : {}),
+    });
 
     if (!debug && this.mode === 'turns' && (skill.cooldown ?? 0) > 0) actor.cooldowns[skill.id] = skill.cooldown!;
 
@@ -808,21 +1022,37 @@ export class Battle {
 
     // Rage'li kullanıcı: bu skill'in isabet eden hasar vuruşları hedef başına toplanır (strike doldurur), skill bitince tek kazanç olarak işlenir
     this.rageTally = !debug && actor.maxRage !== undefined ? new Map() : null;
-    this.castMelee = skill.motion === 'melee';
+    // Aşamasız skill tek grup (tüm hedefler). Aşamalı skill: her aşama sırayla tüm etkileri uygular (aşama başına bir kez çalışması sorun olan
+    // etkiler (bahis, kalkan tüketme, mana çalma kazancı, kendine etkiler) aşamalı skill'de veri doğrulamasıyla yasak: stagedEffectProblem).
+    const groups: Array<{ targets: Combatant[]; cells?: number[] }> =
+      stageTargets && stageGroups ? stageTargets.map((ts, i) => ({ targets: ts, cells: stageGroups![i]!.cells })) : [{ targets, ...(centerCells ? { cells: centerCells } : {}) }];
+    let repeatAnnounced = false;
+    const hitIndex = new Map<SkillEffect, number>(); // etki başına toplam vuruş sırası (falloff ve ilk-hedef ekleri aşamalar boyunca sürer)
+    for (const [gi, group] of groups.entries()) {
+    stage = stageGroups ? gi : undefined;
     for (const effect of skill.effects) {
-      const ts = this.effectTargets(skill, effect, targets, actor);
+      const ts = this.effectTargets(skill, effect, group.targets, actor);
       switch (effect.type) {
         case 'damage': {
           // Bahis: skill başına bir kez zar atılır; kazanç/kayıp çarpanı tüm vuruşlara uygulanır
           const betMult = effect.bet ? this.rollBet(actor, effect.bet, emit) : 1;
-          let repeatAnnounced = false;
+          const base = hitIndex.get(effect) ?? 0;
+          hitIndex.set(effect, base + ts.length);
           if (betMult > 0) {
-            ts.forEach((target, idx) => {
+            ts.forEach((target, i) => {
+              const idx = base + i;
               if (target.hp <= 0) return;
               // Şerit skill'inde her yeni hedef bir öncekinin `falloff` katı hasar alır (öndekinden arkadakine)
               const mult = (effect.falloff ? Math.pow(effect.falloff, idx) : 1) * betMult * (splashUids.has(target.uid) ? skill.splash?.mult ?? 1 : 1);
               const r = this.strike(actor, target, effect, emit, mult, idx === 0);
               if (r.landed) hit.add(target.uid);
+              // X şekli gibi: anchor (merkez) hücredeki birim hitsAtCenter kez vurulur (her vuruş ayrı isabet/hasar/kritik zarı)
+              if (centerSlot !== undefined && target.board === areaBoard && target.slot === centerSlot) {
+                for (let k = 1; k < (skill.area?.hitsAtCenter ?? 1) && target.hp > 0; k++) {
+                  const rc = this.strike(actor, target, effect, emit, mult, false);
+                  if (rc.landed) hit.add(target.uid);
+                }
+              }
               // Çifte vuruş: aynı vuruş bir kez daha (zar her hedef için bir kez atılır)
               if (effect.repeatChance && this.rng.next() < effect.repeatChance && target.hp > 0) {
                 if (!repeatAnnounced) {
@@ -861,6 +1091,7 @@ export class Battle {
             target.turnCounter = 0;
             if (target.maxRage !== undefined) target.rage = 0;
             this.announcedDead.delete(target.uid);
+            this.clearCorpse(target.uid);
             emit({ type: 'revive', source: actor.uid, target: target.uid, hpAfter: target.hp, mpAfter: target.mp });
           }
           break;
@@ -920,7 +1151,13 @@ export class Battle {
           // Hasar veren skill'lerde yalnızca gerçekten vurulanlar; hasar yoksa (saf buff/debuff) tüm hedefler
           const hasDamage = skill.effects.some((e) => e.type === 'damage');
           const recipients = effect.self ? [actor] : hasDamage ? ts.filter((c) => hit.has(c.uid)) : ts;
-          for (const r of recipients) if (r.hp > 0) this.addStatus(r, { kind: effect.status, turns: effect.turns, source: actor.uid }, emit);
+          // `chance`: her (canlı) alıcı için BAĞIMSIZ zar (alıcı başına bir rng sayısı; chance yoksa/1 ise zar atılmaz, akış eskisiyle aynı)
+          const chance = effect.chance ?? 1;
+          for (const r of recipients) {
+            if (r.hp <= 0) continue;
+            if (chance < 1 && !(this.rng.next() < chance)) continue;
+            this.addStatus(r, { kind: effect.status, turns: effect.turns, source: actor.uid }, emit, effect.cause);
+          }
           break;
         }
         case 'randomStatus': {
@@ -937,7 +1174,7 @@ export class Battle {
         }
         case 'ground': {
           if (centerSlot === undefined) break;
-          const slots = centerCells ?? this.areaCells(skillId, centerSlot, opposite(actor.side));
+          const slots = group.cells ?? this.areaCells(skillId, centerSlot, opposite(actor.side));
           const g: GroundEffect = {
             id: `g${this.groundCount++}`,
             ground: effect.ground,
@@ -955,9 +1192,6 @@ export class Battle {
           emit({ type: 'ground', id: g.id, ground: g.ground, board: g.board, slots: g.slots, turns: g.turns });
           break;
         }
-        case 'thorns':
-          this.addStatus(actor, { kind: 'thorns', turns: effect.turns, source: actor.uid, amount: Math.round(attributePower(actor.stats, effect.scale, f) * effect.power) }, emit);
-          break;
         case 'selfDamage': {
           const amount = Math.min(actor.hp - 1, Math.round(actor.maxHp * effect.ratio));
           if (amount > 0) {
@@ -967,17 +1201,29 @@ export class Battle {
           break;
         }
         case 'summon': {
-          const def = this.setup.units[effect.unit];
-          const board = effect.onEnemyBoard ? opposite(actor.side) : actor.side;
-          const spot = def ? (slot ?? this.defaultSummonSlot(board, def)) : null;
-          if (!def || spot === null) break;
+          const baseDef = this.setup.units[effect.unit];
+          const board = actor.side; // çağrılar daima kendi tahtasına
+          const spot = baseDef ? (slot ?? this.defaultSummonSlot(board, baseDef)) : null;
+          if (!baseDef || spot === null) break;
+          // Ceset tüketen çağrı (Raise Dead): karşı taraftaki en son ölen diriltilebilir cesedi tüketir -> beslenmiş (fed); ceset yoksa beslenmemiş (unfed)
+          let empowered: boolean | undefined;
+          if (effect.consumeCorpse) {
+            const corpse = this.corpseToConsume(actor.uid);
+            empowered = !!corpse;
+            if (corpse) {
+              this.corpseState.set(corpse.uid, 'consumed');
+              emit({ type: 'corpseConsumed', uid: corpse.uid, by: actor.uid, slot: corpse.slot, side: corpse.side });
+            }
+          }
+          const def = empowered === undefined ? baseDef : applySummonVariant(baseDef, empowered ? 'fed' : 'unfed');
           const summoned = createCombatant(def, actor.side, spot, `${actor.side}-s${this.summonCount++}`);
           summoned.board = board;
           summoned.owner = actor.uid;
           summoned.summoned = true;
           summoned.lifespan = effect.lifespan;
+          if (empowered !== undefined) summoned.empowered = empowered;
           this.combatants.push(summoned);
-          emit({ type: 'summon', actor: actor.uid, combatant: cloneCombatant(summoned) });
+          emit({ type: 'summon', actor: actor.uid, combatant: cloneCombatant(summoned), ...(empowered !== undefined ? { empowered } : {}) });
           // Pasif: Verdant Blessing, çağrı yapınca tüm dostları iyileştirir
           const pe = actor.passive?.effect;
           if (pe?.type === 'verdantBlessing') {
@@ -989,8 +1235,8 @@ export class Battle {
         }
       }
     }
-
-    this.castMelee = false;
+    }
+    stage = undefined;
 
     // Rage kazancı: skill başına tek (en yüksek tek hedefin toplamı; perCastCap ile sınırlı), yalnızca isabet eden hasar vuruşlarından
     if (this.rageTally && this.rageTally.size > 0 && actor.maxRage !== undefined) {
@@ -1181,7 +1427,8 @@ export class Battle {
       }));
   }
 
-  private addStatus(target: Combatant, status: Status, emit: Emit): void {
+  /** `cause`: görsel neden (skill etkisinin `cause` alanı, ör. 'vines'); `status` olayına aynen yazılır. */
+  private addStatus(target: Combatant, status: Status, emit: Emit, cause?: string): void {
     // Str-primary Resilience: karaktere uygulanan her debuff, uygulanırken ihtimalle 1 tur kısalır (en az 1 kalır; 1 turluk debuff'ta zar atılmaz).
     // Yer etkilerinin kendi süresi (ground turns) buradan geçmez; yalnızca karakter üstünde tutulan durumlar etkilenir.
     const resilience = target.stats.resilience ?? 0;
@@ -1191,7 +1438,7 @@ export class Battle {
     }
     target.statuses = target.statuses.filter((s) => !(s.kind === status.kind && (status.kind !== 'regen' || s.source === status.source)));
     target.statuses.push(status);
-    emit({ type: 'status', target: target.uid, status: status.kind, turns: status.turns, source: status.source });
+    emit({ type: 'status', target: target.uid, status: status.kind, turns: status.turns, source: status.source, ...(cause ? { cause } : {}) });
     // Kontrol (CC) durumu (data/statuses.json > breaksTaunt, şu an Stun): taunt'ı olan birim bunu yerse taunt uygulandığı AN silinir (süre kısalsa da, 1 tur olsa da)
     if (this.statusDef(status.kind)?.breaksTaunt && target.statuses.some((s) => s.kind === 'taunt')) {
       target.statuses = target.statuses.filter((s) => s.kind !== 'taunt');
@@ -1207,7 +1454,8 @@ export class Battle {
   private strike(actor: Combatant, target: Combatant, effect: DamageEffect, emit: Emit, powerMult: number, extras: boolean): { landed: boolean } {
     const f = this.setup.formulas;
     // Zarlar her zaman atılır (debug zorlaması rastgele sayı akışını değiştirmez); vuruş başına TEK zar üç sonuca ayrışır
-    let outcome = hitOutcome(actor.stats, target.stats, f, this.rng.next());
+    // İsabet/kaçınma: durum ekleri (Blinded/Shrouded) dahil geçerli stat'lar (effectiveStats); hit şansı [0, hit.max]
+    let outcome = hitOutcome(this.effectiveStats(actor), this.effectiveStats(target), f, this.rng.next());
     if (this.debug.dodge === 'always') outcome = 'dodge';
     else if (this.debug.miss === 'always') outcome = 'miss';
     else if (this.debug.dodge === 'never') outcome = 'hit';
@@ -1218,7 +1466,8 @@ export class Battle {
     const spec = damageSpecFor(actor, target, effect, f, powerMult, extras, this.damageTakenMult(target), this.hunterMarkMult(actor, target));
     const targetStats = this.effectiveStats(target);
     const base = rollDamage(actor.stats, targetStats, spec, f, this.rng);
-    const rolled = rollCrit(actor.stats, this.rng);
+    // Garantili kritik (Backstab): kritik zarı ATILMAZ, kritik çarpanı uygulanır (debug 'never' yine kapatır)
+    const rolled = effect.guaranteedCrit ? { crit: true } : rollCrit(actor.stats, this.rng);
     const crit = this.debug.crit === 'auto' ? rolled.crit : this.debug.crit === 'always';
     const mult = crit ? actor.stats.critMult : 1;
     const total = Math.max(f.damage.minDamage, Math.round(base * mult * this.debug.damageMult));
@@ -1268,26 +1517,9 @@ export class Battle {
         }
       }
     }
-    this.reflectThorns(actor, target, emit);
     this.announceIfDead(target, emit);
     if (guardian) this.announceIfDead(guardian, emit);
     return { landed: true };
-  }
-
-  /**
-   * Dikenli (thorns) durumdaki birime yakın dövüşle isabet eden saldırgan sabit fiziksel hasar alır (zırh etkiler; isabet/kritik/sapma yok, RNG tüketmez).
-   * Yansıma doğrudan applyHit'ten geçer: yeni bir vuruş (strike) olmadığı için yansımayı tekrar yansıtmaz.
-   */
-  private reflectThorns(attacker: Combatant, holder: Combatant, emit: Emit): void {
-    if (!this.castMelee || attacker.hp <= 0 || attacker.side === holder.side) return;
-    const th = holder.statuses.find((s) => s.kind === 'thorns');
-    if (!th || !th.amount) return;
-    const f = this.setup.formulas;
-    const taken = attacker.summoned ? f.summon.damageTakenMultiplier : 1;
-    const dmg = damageRange(holder.stats, this.effectiveStats(attacker), { damageType: 'physical', scale: 'str', power: 0, extra: th.amount, takenMultiplier: taken }, f).avg;
-    emit({ type: 'passive', actor: holder.uid, passive: 'thorns', name: 'Thorns' });
-    this.applyHit(holder, attacker, dmg, 'physical', false, emit, false);
-    this.announceIfDead(attacker, emit);
   }
 
   /** Hasarı kalkana (büyüyse önce büyü kalkanına) ve cana uygular; canı düşüren miktarı döndürür. */
@@ -1341,7 +1573,9 @@ export class Battle {
   private announceIfDead(c: Combatant, emit: Emit): void {
     if (c.hp > 0 || this.announcedDead.has(c.uid) || c.lifespan === 0) return;
     this.announcedDead.add(c.uid);
-    emit({ type: 'death', target: c.uid });
+    // Çağrı olmayan birim yuvasında ceset bırakır (revivable); çağrının ölümü (sahibiyle birlikte ölmesi dahil) ceset bırakmaz
+    const corpse = this.leaveCorpse(c);
+    emit({ type: 'death', target: c.uid, corpse });
     // Çağıran ölünce çağırdıkları da ölür
     for (const s of this.combatants) {
       if (s.owner === c.uid && s.hp > 0) {
@@ -1401,7 +1635,7 @@ export class Battle {
     return { ok: true, events: [] };
   }
 
-  /** Debug: düşmüş (çağrı olmayan) birimi, hücresi boşsa, maks canının `ratio` kadarıyla diriltir. */
+  /** Debug: düşmüş (çağrı olmayan) birimi, hücresi boşsa, maks canının `ratio` kadarıyla diriltir (debug aracı: tüketilmiş cesedi de diriltir; ceset kaydı silinir). */
   debugRevive(uid: string, ratio = 1): ActionResult {
     const c = this.get(uid);
     if (!c || c.hp > 0) return { ok: false, reason: 'Unit is not dead' };
@@ -1416,6 +1650,7 @@ export class Battle {
     c.turnCounter = 0;
     if (c.maxRage !== undefined) c.rage = 0;
     this.announcedDead.delete(c.uid);
+    this.clearCorpse(c.uid);
     this.record({ type: 'revive', source: c.uid, target: c.uid, hpAfter: c.hp, mpAfter: c.mp });
     return { ok: true, events: [] };
   }

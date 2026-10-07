@@ -6,6 +6,8 @@ import { TeamSelectScene } from './game/scenes/TeamSelectScene';
 import { DebugMenu } from './ui/debug-menu';
 import { DEBUG_TABS, registerDebugTools } from './ui/debug-tools';
 import { SettingsMenu } from './ui/settings';
+import { createFullscreenButton } from './ui/fullscreen';
+import { installViewport, parseRotateMode } from './ui/viewport';
 import { WikiPanel } from './wiki/view';
 import { debugState } from './game/debug-state';
 import './style.css';
@@ -24,12 +26,16 @@ const game = new Phaser.Game({
   height: layout.height,
   backgroundColor: '#000000',
   antialias: true,
+  // Oran korunarak (FIT) görünür alanın en büyük 16:9 kısmı; yerleşim/döndürme src/ui/viewport.ts
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: skipSelect ? [BattleScene, TeamSelectScene] : [TeamSelectScene, BattleScene],
 });
 
 // Dev only: lets the browser console inspect the running game (window.__game)
 if (import.meta.env.DEV) (window as unknown as { __game: Phaser.Game }).__game = game;
+
+// --- Screen layout: fills the visible area, follows the address bar, rotates the stage on upright phones ---
+installViewport(game, document.getElementById('stage')!, parseRotateMode(window.location.search));
 
 // --- Debug menu ---
 const debug = new DebugMenu(document.getElementById('ui-root')!, DEBUG_TABS);
@@ -41,6 +47,9 @@ new SettingsMenu(document.getElementById('ui-root')!, {
   },
   preview: () => playSfxOn((game.sound as unknown as { context?: AudioContext }).context, 'stunChime'),
 });
+
+// --- Fullscreen button (top right, next to the wiki); hidden where the browser has no Fullscreen API (iPhone: shows an Add to Home Screen hint) ---
+createFullscreenButton(document.getElementById('ui-root')!);
 
 // --- Wiki (top right, next to the settings gear): opens over the game; the battle is paused while it is open ---
 const battleNow = (): BattleScene | null => (game.scene.isActive(BattleScene.KEY) ? (game.scene.getScene(BattleScene.KEY) as BattleScene) : null);
@@ -64,4 +73,19 @@ debug.register({
   run: () => wiki.setOpen(true),
 });
 
-registerDebugTools({ game, debug });
+registerDebugTools({
+  game,
+  debug,
+  // Asset Gallery artık Wiki > Assets içinde: debug menüsünden o bölümde açılır
+  openAssets: (section = 'assets') => {
+    wiki.show(section);
+    wiki.setOpen(true);
+  },
+});
+
+// Derin bağlantı: ?wiki=<bölüm> wiki'yi o bölümde açar (assets, sounds, animations, icons, art, palette, legacy, classes, skills...); ?wiki= boşsa başlangıç
+const wikiParam = new URLSearchParams(window.location.search).get('wiki');
+if (wikiParam !== null) {
+  wiki.show(wikiParam);
+  wiki.setOpen(true);
+}

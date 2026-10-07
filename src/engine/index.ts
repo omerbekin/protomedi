@@ -11,7 +11,7 @@ export { advanceTurn, predictQueue, turnProgress } from './turn-order';
 export type { TurnSlot } from './turn-order';
 export { damageRange, healRange, rollCrit, rollDamage, rollHeal, rollHit, rollHitOutcome, shieldAmount } from './formulas';
 export type { DamageSpec, Range } from './formulas';
-export { accuracyOf, armorReduction, attributePower, buildDef, deriveStats, evasionOf, hitChance, hitOutcome } from './stats';
+export { accuracyOf, applySummonVariant, armorReduction, attributePower, buildDef, deriveStats, evasionOf, hitChance, hitOutcome, variantMult } from './stats';
 export type { HitOutcome } from './stats';
 export { damageSpecFor } from './spec';
 export { betMultipliers, betStake } from './gamble';

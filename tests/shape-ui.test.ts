@@ -115,26 +115,24 @@ describe('skill şekil şeması (mini ızgara 4x3)', () => {
     expect(t('shape_row')).toEqual(['.#..', '.A..', '.#..']);
     expect(t('shape_column')).toEqual(['....', '#A##', '....']);
     expect(t('shape_plus')).toEqual(['.#..', '#A#.', '.#..']);
-    // rect: 2 sütun x 3 satır, anchor sol-alt köşe
-    expect(t('shape_rect')).toEqual(['.##.', '.##.', '.A#.']);
+    // rect: 2 sütun x 3 satır; şerit ekseni 3 olduğu için anchor dikeyde ortada (madde 226), yatayda (2 boyut) en solda
+    expect(t('shape_rect')).toEqual(['.##.', '.A#.', '.##.']);
   });
 
   it('şekil olmayan skill / alan olmayan skill için şema yok', () => {
-    expect(skillMiniGrid(content.skills.judgment!, F)).toBeNull(); // eski radius tabanlı alan skill'i
     expect(skillMiniGrid(Object.values(content.skills).find((s) => s.target === 'single_enemy')!, F)).toBeNull();
     expect(shapeMiniGrid(undefined, F)).toBeNull();
-    expect(shapeMiniGrid({ radius: 1 }, F)).toBeNull();
   });
 });
 
 describe('takım seçimi: test class kartı', () => {
   it('Geometer kart listesinde (seçilebilir), testOnly olarak işaretli ve test kartları SONDA', () => {
     const ids = rosterIds();
-    expect(ids).toContain('aoe_tester');
+    expect(ids).not.toContain('aoe_tester'); // Geometer şimdilik gizli (hidden): takım seçiminde görünmez
     expect(isTestClass(content.classes.aoe_tester!)).toBe(true);
     expect(ids).toHaveLength(content.selectableClasses.length);
     const firstTest = ids.findIndex((id) => content.classes[id]!.testOnly);
-    expect(ids.slice(firstTest).every((id) => content.classes[id]!.testOnly)).toBe(true);
+    if (firstTest >= 0) expect(ids.slice(firstTest).every((id) => content.classes[id]!.testOnly)).toBe(true); // görünür test class varsa SONDA
     for (const id of ids.filter((x) => x !== 'aoe_tester')) expect(isTestClass(content.classes[id]!), id).toBe(false);
   });
 
@@ -161,13 +159,15 @@ describe('wiki: şekil şeması ve TEST rozeti verisi', () => {
   const wiki = buildWiki({ sprites: {}, avatars: {} });
 
   it('şekil skill\'lerinde shape şeması var, diğerlerinde yok', () => {
-    const shapeSkills = wiki.skills.filter((s) => s.shape);
-    expect(shapeSkills.map((s) => s.id).sort()).toEqual(['shape_column', 'shape_plus', 'shape_rect', 'shape_row']);
+    const areaIds = Object.values(content.skills).filter((s) => s.target === 'area_enemies' || s.target === 'area_any').map((s) => s.id).sort();
+    expect(wiki.skills.filter((s) => s.shape).map((s) => s.id).sort()).toEqual(areaIds); // tüm alan skill'leri şekil şeması taşır
     for (const s of wiki.skills.filter((x) => !x.shape)) expect(content.skills[s.id]?.area?.shape, s.id).toBeUndefined();
   });
 
-  it('Area shapes makalesi her şekil için bir şema taşır (Row, Column, Block 2x3, Cross)', () => {
+  it('Area shapes makalesi Row, Column, Cross ve en az bir Block (RxC) şeması taşır', () => {
     const a = wiki.mechanics.find((x) => x.id === 'area-shapes')!;
-    expect(a.shapes!.map((x) => x.label).sort()).toEqual(['Block 2x3', 'Column', 'Cross', 'Row']);
+    const labels = a.shapes!.map((x) => x.label);
+    for (const l of ['Row', 'Column', 'Cross']) expect(labels).toContain(l);
+    expect(labels.some((l) => /^Block \d+x\d+$/.test(l))).toBe(true);
   });
 });

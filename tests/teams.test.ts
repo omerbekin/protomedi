@@ -40,9 +40,10 @@ describe('seed\'e göre takım seçimi', () => {
       const counts = new Map<string, number>();
       for (const s of SEEDS) for (const id of content.rollTeams(BATTLE, s)[side]) counts.set(id, (counts.get(id) ?? 0) + 1);
       for (const id of ids) {
-        const share = (counts.get(id) ?? 0) / SEEDS.length; // beklenen: 5/8 = 0,625
-        expect(share, `${side} ${id}`).toBeGreaterThan(0.5);
-        expect(share, `${side} ${id}`).toBeLessThan(0.75);
+        const share = (counts.get(id) ?? 0) / SEEDS.length; // beklenen: takım boyutu / havuz (5/10 = 0,5)
+        const expected = content.battles[BATTLE]!.random!.size / ids.length;
+        expect(share, `${side} ${id}`).toBeGreaterThan(expected - 0.125);
+        expect(share, `${side} ${id}`).toBeLessThan(expected + 0.125);
       }
     }
   });

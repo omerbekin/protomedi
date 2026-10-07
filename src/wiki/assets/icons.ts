@@ -1,6 +1,6 @@
-import { iconUrl } from '../ui/dom-icons';
-import type { Catalog, IconEntry } from './catalog';
-import { applyFilter, chipBar, h, isolateKeys, openLightbox, searchable, type SectionApi } from './dom';
+import { iconUrl } from '../../ui/dom-icons';
+import type { Catalog, IconEntry } from '../../gallery/catalog';
+import { applyFilter, chipBar, h, isolateKeys, openLightbox, searchable, type SectionApi } from '../../gallery/dom';
 
 const CATEGORY_LABEL: Record<IconEntry['category'], string> = {
   skill: 'Skill',

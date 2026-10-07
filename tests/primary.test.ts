@@ -28,12 +28,16 @@ describe('stat toplamı ve primary stat (class verisi)', () => {
     });
   }
 
-  it("hiçbir class dex 0 değil (en az 2); çevik class'lar (Archer, Anti-Mage, Gambler) çevik olmayanlardan çok dex taşır", () => {
+  it("hiçbir class dex 0 değil (en az 2); çevik class'lar (Archer, Anti-Mage, Gambler, Cutthroat) çevik olmayanlardan çok dex taşır", () => {
     for (const def of classes) expect(def.attributes.dex, def.id).toBeGreaterThanOrEqual(2);
-    const agile = ['archer', 'antimage', 'gambler'].map((id) => content.classes[id]!.attributes.dex);
-    const slow = classes.filter((c) => !['archer', 'antimage', 'gambler'].includes(c.id)).map((c) => c.attributes.dex);
+    const AGILE = ['archer', 'antimage', 'gambler', 'cutthroat'];
+    const agile = AGILE.map((id) => content.classes[id]!.attributes.dex);
+    const slow = classes.filter((c) => !AGILE.includes(c.id)).map((c) => c.attributes.dex);
     expect(Math.min(...agile)).toBeGreaterThan(Math.max(...slow));
-    expect(content.classes.archer!.attributes.dex).toBe(Math.max(...classes.map((c) => c.attributes.dex)));
+    // En yüksek dex dex-primary bir class'ta (Cutthroat 15, Archer 14)
+    const top = Math.max(...classes.map((c) => c.attributes.dex));
+    expect(classes.filter((c) => c.attributes.dex === top).every((c) => c.primary === 'dex')).toBe(true);
+    expect(content.classes.cutthroat!.attributes.dex).toBe(top);
   });
 
   it('çağrılan birimlerin primary statı yok ve bonus almazlar', () => {

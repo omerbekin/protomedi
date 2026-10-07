@@ -7,6 +7,8 @@ import type { CombatantView } from './combatant-view';
 import { color, slow } from './combatant-view';
 import { playSfx } from './audio';
 import { ensureIcon } from './icons';
+import { cellOutlineEdges } from './cell-style';
+import { cellQuad } from './shape-geometry';
 
 /**
  * Skill efektleri (VFX): hepsi piksel art. Küçük 16x16'lık sprite'lar (ikonlar + efekt sprite'ları) tamsayı katıyla büyütülür,
@@ -25,8 +27,18 @@ export interface VfxCtx {
   center?: number;
   /** Alan/şerit skill'inde oyuncunun tıkladığı MERKEZ hücrenin zemin konumu (efektin düşeceği yer). */
   centerPos?: { x: number; y: number };
-  /** Alan/şerit skill'inin kapsadığı hücrelerin zemin konumları (boş hücreler dahil). */
+  /** Alan skill'inin kapsadığı TÜM hücrelerin zemin konumları (boş hücreler dahil; `slots` ile aynı sırada). */
   cells: Array<{ x: number; y: number }>;
+  /** Alan skill'inin kapsadığı tüm hücrelerin yuva numaraları (hedef tahtasına göre, ayna doğru). Alan skill'i değilse boş. */
+  slots?: number[];
+  /**
+   * Yalnızca aşamalı (area.stages) alan skill'inde: aşamalar sırayla (hücreler + o aşamada vurulacak birimler). Efekt aşama i'nin vuruş anında
+   * `releaseStage(i)` çağırır: o aşamanın hasar rakamları / hit tepkileri / ölümleri o an akar. İlk aşamayı efektin Promise'i çözülmeden ÖNCE
+   * (ya da çözülürken) bırakmak gerekir; hiç çağrılmazsa olaylar eskisi gibi Promise çözülünce hemen akar.
+   */
+  stages?: VfxStage[];
+  /** Aşamalı skill'de aşama i'yi (ve öncekileri) serbest bırakır. Aşamasız skill'de etkisiz. */
+  releaseStage: (i: number) => void;
   /** Yakın dövüş: kullanıcı hedefe atılır; Promise vuruş anında çözülür (geri dönüş sürer). */
   lunge: (towardX: number) => Promise<void>;
   /** Büyü/atış hazırlığı (halka + şişme). */
@@ -42,6 +54,18 @@ export interface VfxCtx {
   gate: (skip: number, run: () => Promise<void>, abort: () => void) => void;
   /** Gambler: motor olaylarından okunan sonuç (bahis kazanıldı/kaybedildi, çifte vuruş geldi). Yoksa genel animasyon. */
   result?: { bet?: 'win' | 'lose'; doubleHit?: boolean };
+  /**
+   * requiresOpenBehind (Backstab): kullanıcının GÖRSEL olarak ışınlandığı hücrenin (hedefin hemen arkası; skillUsed.behindSlot/behindBoard)
+   * zemin konumu. Gerçek yer değiştirme yok: efekt arkaya ışınlanır, vurur, evine (skillUsed.from = actor.home) döner.
+   */
+  behind?: { x: number; y: number };
+}
+
+/** Aşamalı alan skill'inin bir aşaması (VfxCtx.stages). */
+export interface VfxStage {
+  slots: number[];
+  cells: Array<{ x: number; y: number }>;
+  targets: CombatantView[];
 }
 
 const DEPTH = 4300;
@@ -256,6 +280,88 @@ const BONE = ['#fdfaf2', '#d7dce6', '#98a2b4'];
 const BLOOD = ['#e5463b', '#8e1f2c', '#ff7a6a'];
 const DUST = ['#98a2b4', '#d7dce6', '#5b6579'];
 const WOOD = ['#8c5a2b', '#e3b983', '#4a2e1a'];
+
+// ---------------------------------------------------------------------------------------------------------------------
+// HÜCRE TABANLI ALAN YARDIMCILARI (tüm şekil/alan skill'leri)
+//
+// Alan efektleri tek bir "alan elipsi" yerine şeklin HÜCRELERİNE oturur: hücre = zemindeki eğik dörtgen (seçim plakasıyla aynı geometri:
+// shape-geometry.cellQuad), komşu hücreler boşluksuz birleşir, birleşik dış hat cell-style.cellOutlineEdges ile çizilir. Oyuncu tahtası aynalı
+// yuvalardan otomatik ayna olur. Zemin katmanı karakterlerin ALTINDA (FLOOR_FX), parıltılar DEPTH üstünde.
+
+type Quad = Array<{ x: number; y: number }>;
+/** Zemin efekti derinliği: hücre plakaları (40-62) ile karakterler (785+) arası. */
+const FLOOR_FX = 48;
+const boardSlots = (board: 'party' | 'enemy') => (board === 'party' ? layout.partySlots : layout.enemySlots) as Array<{ x: number; y: number }>;
+/** Hücrenin zemin dörtgeni (köşeler: -sıra-şerit, +sıra-şerit, +sıra+şerit, -sıra+şerit); fill 1 = komşuyla bitişik. */
+const quadOf = (board: 'party' | 'enemy', slot: number, fill = 1): Quad => cellQuad(boardSlots(board), content.GRID.lanes, slot, fill);
+/** Hücre zemin merkezi (plakalarla aynı: ayak noktasının 4 px üstü). */
+const cellMid = (board: 'party' | 'enemy', slot: number) => {
+  const s = boardSlots(board)[slot] ?? { x: 0, y: 0 };
+  return { x: s.x, y: s.y - 4 };
+};
+/** Hücre kümesinin birleşik dış hattı (kenar çiftleri). */
+const outlineOf = (board: 'party' | 'enemy', slots: number[]) => cellOutlineEdges((s) => quadOf(board, s, 1), content.GRID.lanes, content.GRID.rows, slots);
+/** Dörtgenin içinde rastgele nokta (`m` < 1: kenarlardan içeride). */
+function inQuad(q: Quad, m = 0.8): { x: number; y: number } {
+  const u = 0.5 + rnd(-m / 2, m / 2);
+  const v = 0.5 + rnd(-m / 2, m / 2);
+  const ax = q[0]!.x + (q[1]!.x - q[0]!.x) * u;
+  const ay = q[0]!.y + (q[1]!.y - q[0]!.y) * u;
+  const bx = q[3]!.x + (q[2]!.x - q[3]!.x) * u;
+  const by = q[3]!.y + (q[2]!.y - q[3]!.y) * u;
+  return { x: ax + (bx - ax) * v, y: ay + (by - ay) * v };
+}
+/** Dörtgeni merkezine göre `k` katına ölçekler. */
+function scaleQuad(q: Quad, k: number): Quad {
+  const cx = (q[0]!.x + q[2]!.x) / 2;
+  const cy = (q[0]!.y + q[2]!.y) / 2;
+  return q.map((p) => ({ x: cx + (p.x - cx) * k, y: cy + (p.y - cy) * k }));
+}
+/** Efektin hücreleri: olaydaki yuva listesi (VfxCtx.slots); yoksa konumlardan / hedeflerden. */
+function fxSlots(c: VfxCtx): number[] {
+  if (c.slots?.length) return c.slots;
+  const slots = boardSlots(c.board);
+  if (c.cells.length) return [...new Set(c.cells.map((q) => slots.reduce((b, s, i) => (Math.hypot(s.x - q.x, s.y - q.y) < Math.hypot(slots[b]!.x - q.x, slots[b]!.y - q.y) ? i : b), 0)))];
+  return c.targets.map((t) => t.combatant.slot);
+}
+/** Aşamalar: aşamalı skill'de VfxCtx.stages, değilse tek aşama (tüm hücreler, tüm hedefler). */
+function fxStages(c: VfxCtx): VfxStage[] {
+  if (c.stages?.length) return c.stages;
+  const slots = fxSlots(c);
+  return [{ slots, cells: slots.map((s) => cellMid(c.board, s)), targets: c.targets }];
+}
+/** Hedefin durduğu hücre. */
+const slotOfView = (t: CombatantView) => t.combatant.slot;
+/** Bir satır/sıra adımının ekrandaki vektörü (R: bir sıra derine, L: bir şerit aşağı). */
+function gridSteps(board: 'party' | 'enemy'): { R: { x: number; y: number }; L: { x: number; y: number } } {
+  const s = boardSlots(board);
+  const lanes = content.GRID.lanes;
+  return { R: { x: s[lanes]!.x - s[0]!.x, y: s[lanes]!.y - s[0]!.y }, L: { x: s[1]!.x - s[0]!.x, y: s[1]!.y - s[0]!.y } };
+}
+/** Hücre kümesini (birleşik dörtgenler) tek renkle doldurur ve dış hattını çizer. */
+function fillCells(g: Phaser.GameObjects.Graphics, board: 'party' | 'enemy', slots: number[], o: { fill: number; fillA: number; edge?: number; edgeA?: number; edgeW?: number; k?: number }): void {
+  for (const s of slots) g.fillStyle(o.fill, o.fillA).fillPoints(quadOf(board, s, o.k ?? 1), true);
+  if (o.edge !== undefined && (o.edgeA ?? 1) > 0) {
+    g.lineStyle(o.edgeW ?? 3, o.edge, o.edgeA ?? 1);
+    for (const [a, b] of outlineOf(board, slots)) g.lineBetween(a.x, a.y, b.x, b.y);
+  }
+}
+/**
+ * Efekti arka planda oynatır; dönen Promise `hit()` çağrıldığı an (ilk vuruş: hasar rakamları akmaya başlar) ya da efekt bitince çözülür.
+ * Aşamalı skill'ler böyle kurulur: ilk aşamada releaseStage(0) + hit(), sonraki aşamalar efekt sürerken kendi anlarında releaseStage(i).
+ */
+function playUntilHit(run: (hit: () => void) => Promise<void>): Promise<void> {
+  const d = deferred();
+  void run(d.resolve)
+    .catch((err: unknown) => console.error('vfx', err))
+    .finally(d.resolve);
+  return d.promise;
+}
+
+/** Hedeflerin vuruş anları (gate zinciri: c.targets sırasıyla); `arrive(t)` hedefin efektin değdiği anda çözülen Promise'i. */
+function hitsAt(c: VfxCtx, arrive: (t: CombatantView) => Promise<void>, fallback: Promise<void>): Promise<void> {
+  return syncHits(c, c.targets.map(arrive), fallback);
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 // WARRIOR
@@ -579,52 +685,83 @@ const glowTexture = (scene: Phaser.Scene) =>
     return { c: d < 0.35 ? '#ffffff' : d < 0.7 ? '#fff0a0' : '#ffd23f', a: (1 - d) ** 1.2 };
   });
 
-/** Judgment: seçilen alanın merkezine, alan göstergesi genişliğinde TEK büyük ışık huzmesi iner; yere değince parlar (yer etkisi huzmeden sonra doğar). */
+/** Yukarıdan inen yumuşak ışık huzmesi (beamTexture); Promise yere değince çözülür, huzme titreşip söner. */
+async function holyBeam(c: VfxCtx, x: number, landY: number, bw: number, fall: number, alpha = 0.95): Promise<void> {
+  const top = -40;
+  const beam = c.scene.add.image(x, top, beamTexture(c.scene)).setOrigin(0.5, 0).setDisplaySize(bw, landY - top).setDepth(DEPTH + 10).setAlpha(alpha);
+  beam.setCrop(0, 0, 32, 1);
+  await counter(c.scene, slow(fall), (u) => beam.setCrop(0, 0, 32, Math.max(1, Math.round(BEAM_TEX_H * u * u))));
+  beam.setCrop();
+  c.scene.tweens.add({ targets: beam, displayWidth: bw * 1.1, duration: slow(160), yoyo: true });
+  c.scene.tweens.add({ targets: beam, alpha: 0, delay: slow(260), duration: slow(560), ease: 'Quad.easeIn', onComplete: () => beam.destroy() });
+  for (let k = 0; k < Math.round(bw / 14); k++) {
+    const m = sprite(c.scene, 'spark', '#fff0a0', x + rnd(-bw * 0.4, bw * 0.4), landY - rnd(10, 60), 24, DEPTH + 30);
+    c.scene.tweens.add({ targets: m, y: m.y - rnd(160, 380), alpha: 0, duration: slow(rnd(600, 950)), onComplete: () => m.destroy() });
+  }
+}
+
+/** Hücrenin zemininde yumuşak kutsal parlama (yassı, hücre boyutunda); `power` boyut/parlaklık. */
+function holyCellGlow(c: VfxCtx, slot: number, power = 1): void {
+  const m = cellMid(c.board, slot);
+  const { R, L } = gridSteps(c.board);
+  const w = (Math.abs(R.x) + Math.abs(L.x)) * 1.05 * power;
+  const h = Math.abs(L.y) * 1.9 * power;
+  const glow = c.scene.add.image(m.x, m.y, glowTexture(c.scene)).setDisplaySize(w, h).setDepth(FLOOR_FX + 2).setBlendMode(Phaser.BlendModes.ADD);
+  c.scene.tweens.add({ targets: glow, displayWidth: w * 1.35, displayHeight: h * 1.35, alpha: 0, duration: slow(700), ease: 'Quad.easeOut', onComplete: () => glow.destroy() });
+}
+
+/**
+ * Judgment (plus): seçilen MERKEZ hücreye geniş bir ışık huzmesi iner; yere değince merkez hücre parlar ve zeminde dört yöne (artının kolları,
+ * tahta içindekiler) altın ışık hatları koşar; hat kolun hücresine varınca oraya daha ince bir huzme iner. Artı şeklinin hücreleri birleşik
+ * altın plaka olarak bir an parlar. Kutsal ateş (Holy Fire) zemini, huzmeler indikten sonra AYNI hücrelerde doğar.
+ */
 const judgment = async (c: VfxCtx) => {
   await c.windUp('#fff0a0');
   c.sfx('hammerWhoosh');
-  const center = c.centerPos ?? (c.targets[0] ? feet(c.targets[0]) : feet(c.actor));
-  // Tek, geniş huzme: alan göstergesinin elipsine (BattleScene.showAreaMarker: bbox + 160 x bbox + 96) oturur; hücre başına ayrı huzme yok
-  const pts = c.cells.length ? c.cells : [center];
-  const minX = Math.min(...pts.map((p) => p.x));
-  const maxX = Math.max(...pts.map((p) => p.x));
-  const minY = Math.min(...pts.map((p) => p.y));
-  const maxY = Math.max(...pts.map((p) => p.y));
-  const ex = pts.length > 1 ? (minX + maxX) / 2 : center.x;
-  const ey = (pts.length > 1 ? (minY + maxY) / 2 : center.y) - 4;
-  const ew = maxX - minX + 160; // elipsin genişliği
-  const eh = maxY - minY + 116; // elipsin yüksekliği
-  const beamKey = beamTexture(c.scene);
-  const glowKey = glowTexture(c.scene);
-  const FALL = 340;
-  const bw = ew * 0.9;
-  const top = -40;
-  const landY = ey;
-  const beam = c.scene.add.image(ex, top, beamKey).setOrigin(0.5, 0).setDisplaySize(bw, landY - top).setDepth(DEPTH + 10).setAlpha(0.95);
-  beam.setCrop(0, 0, 32, 1);
-  // ışık huzmesi yukarıdan aşağı uzar (uç noktası yere doğru ilerler)
-  await counter(c.scene, slow(FALL), (u) => beam.setCrop(0, 0, 32, Math.max(1, Math.round(BEAM_TEX_H * u * u))));
-  beam.setCrop();
-  // yere değiş (vuruş anı): alan elipsini dolduran parlama, halka, kıvılcım
-  const glow = c.scene.add.image(ex, landY, glowKey).setDisplaySize(ew, eh).setDepth(DEPTH - 20).setAlpha(1);
-  c.scene.tweens.add({ targets: glow, displayWidth: ew * 1.5, displayHeight: eh * 1.5, alpha: 0, duration: slow(650), ease: 'Quad.easeOut', onComplete: () => glow.destroy() });
-  void ring(c.scene, ex, landY, { r: ew * 0.5, flat: eh / ew, n: 44, colors: HOLY, dur: 540, size: 12 });
-  void ring(c.scene, ex, landY, { r: ew * 0.3, flat: eh / ew, n: 28, colors: ['#ffffff', '#ffd23f'], dur: 420, size: 12 });
-  burst(c.scene, ex, landY - 10, { colors: HOLY, n: 36, speed: [80, 360], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 420, life: [450, 850], size: [6, 12] });
-  // huzme hafifçe titreşip söner
-  c.scene.tweens.add({ targets: beam, displayWidth: bw * 1.1, duration: slow(160), yoyo: true });
-  c.scene.tweens.add({ targets: beam, alpha: 0, delay: slow(260), duration: slow(560), ease: 'Quad.easeIn', onComplete: () => beam.destroy() });
-  // huzme boyunca yükselen ışık tozları
-  for (let k = 0; k < 14; k++) {
-    const m = sprite(c.scene, 'spark', '#fff0a0', ex + rnd(-bw * 0.4, bw * 0.4), landY - rnd(10, 60), 24, DEPTH + 30);
-    c.scene.tweens.add({ targets: m, y: m.y - rnd(160, 380), alpha: 0, duration: slow(rnd(600, 950)), onComplete: () => m.destroy() });
-  }
+  const slots = fxSlots(c);
+  const midSlot = c.center !== undefined && slots.includes(c.center) ? c.center : slots[0];
+  const center = midSlot !== undefined ? cellMid(c.board, midSlot) : (c.centerPos ?? feet(c.actor));
+  const { R } = gridSteps(c.board);
+  // 1) merkez huzme (hücre genişliğinde)
+  await holyBeam(c, center.x, center.y, Math.abs(R.x) * 0.92, 340);
   c.sfx('hammerSlam');
-  flash(c.scene, '#fff7d0', 0.4, 320);
+  flash(c.scene, '#fff7d0', 0.38, 320);
   shake(c.scene, 220, 0.007);
-  void wait(c.scene, slow(240)).then(() => c.sfx('fireCrackle'));
-  // Promise burada çözülür: hasar alan karakterlerin hit tepkisi huzme çarptığı anda başlar; yer etkisi (Holy Fire) hemen ardından
-  // aynı hücrelerde doğar (BattleScene.addGroundView -> groundReveal)
+  if (midSlot !== undefined) holyCellGlow(c, midSlot, 1.15);
+  void ring(c.scene, center.x, center.y, { r: Math.abs(R.x) * 0.55, flat: 0.32, n: 30, colors: HOLY, dur: 480, size: 12 });
+  burst(c.scene, center.x, center.y - 10, { colors: HOLY, n: 26, speed: [80, 340], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 420, life: [450, 850], size: [6, 12] });
+  // 2) artının birleşik plakası bir an altın parlar
+  const plate = c.scene.add.graphics().setDepth(FLOOR_FX + 1);
+  fillCells(plate, c.board, slots, { fill: 0xffd23f, fillA: 0.26, edge: 0xfff0a0, edgeA: 0.95, edgeW: 4, k: 0.98 });
+  plate.setAlpha(0);
+  c.scene.tweens.add({ targets: plate, alpha: 1, duration: slow(140) });
+  c.scene.tweens.add({ targets: plate, alpha: 0, delay: slow(520), duration: slow(520), onComplete: () => plate.destroy() });
+  // 3) kollar: zeminde ışık hattı koşar, varınca ince huzme
+  const arms = slots.filter((s) => s !== midSlot);
+  const lines = c.scene.add.graphics().setDepth(FLOOR_FX + 3);
+  const RUN = 170;
+  await Promise.all(
+    arms.map(async (s) => {
+      const to = cellMid(c.board, s);
+      await counter(c.scene, slow(RUN), (u) => {
+        const n = Math.max(1, Math.floor((Math.hypot(to.x - center.x, to.y - center.y) * u) / 6));
+        for (let k = 0; k <= n; k++) {
+          const v = (k / n) * u;
+          const x = snap(center.x + (to.x - center.x) * v);
+          const y = snap(center.y + (to.y - center.y) * v);
+          lines.fillStyle(0xffd23f, 0.3).fillRect(x - 7, y - 4, 14, 8);
+          lines.fillStyle(k % 3 ? 0xfff0a0 : 0xffffff, 0.95).fillRect(x - 2, y - 2, 4, 4);
+        }
+      }, 'Quad.easeOut');
+      await holyBeam(c, to.x, to.y, Math.abs(R.x) * 0.5, 150, 0.85);
+      holyCellGlow(c, s, 0.9);
+      burst(c.scene, to.x, to.y - 10, { colors: HOLY, n: 12, speed: [60, 260], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 420, life: [400, 700], size: [6, 10] });
+    }),
+  );
+  if (arms.length) c.sfx('hammerSlam');
+  c.scene.tweens.add({ targets: lines, alpha: 0, duration: slow(420), onComplete: () => lines.destroy() });
+  void wait(c.scene, slow(160)).then(() => c.sfx('fireCrackle'));
+  // Promise burada çözülür: Judgment hasarı zemindendir; Holy Fire zemini (BattleScene.addGroundView -> groundArea) hemen ardından aynı hücrelerde doğar
   await wait(c.scene, slow(60));
 };
 
@@ -636,34 +773,49 @@ const poisonGlowTexture = (scene: Phaser.Scene) =>
     return { c: d < 0.35 ? '#c8ff9a' : d < 0.7 ? '#7ed957' : '#2f7a2a', a: (1 - d) ** 1.2 };
   });
 
+/** Yanan zemin için yumuşak turuncu-kızıl yassı ışıma dokusu. */
+const emberGlowTexture = (scene: Phaser.Scene) =>
+  softTexture(scene, 'fx:emberglow', 48, 24, (x, y) => {
+    const d = Math.hypot((x + 0.5 - 24) / 24, (y + 0.5 - 12) / 12);
+    if (d >= 1) return null;
+    return { c: d < 0.3 ? '#ffd23f' : d < 0.65 ? '#ff8a1f' : '#c0301a', a: (1 - d) ** 1.2 };
+  });
+
+const GROUND_LOOK: Record<string, { edge: string; fill: string; inner: string; glow: (s: Phaser.Scene) => string; tint: number; ring: string[] }> = {
+  holy_fire: { edge: '#ffd23f', fill: '#ff9a2a', inner: '#ff7a1a', glow: glowTexture, tint: 0xffa63a, ring: HOLY },
+  poison: { edge: '#8ee060', fill: '#4a9a35', inner: '#2f7a2a', glow: poisonGlowTexture, tint: 0xffffff, ring: ['#8ee060', '#c8ff9a', '#2f7a2a'] },
+  burning: { edge: '#ff8a1f', fill: '#c0301a', inner: '#ff7a1a', glow: emberGlowTexture, tint: 0xffffff, ring: FIRE },
+};
+
 /**
- * Yer etkisi (data/grounds.json) görseli: Drain Field gibi seçim göstergesinin en geniş dairesine oturan TEK yassı elips alan.
- * Merkezden yavaşça büyür (iç/dış halka + ışıma), sonra ground süresince hafifçe canlı kalır: Holy Fire'da düşük şiddetli
- * alev dilleri/kor/kıvılcım, Poison'da yeşil sis ve kabarcıklar. Container yok edilince (BattleScene.removeGroundView) döngü durur.
- * Başka yer etkisi için null döner (eski karo görseli kullanılır). `delay`: önceki animasyonun (huzme) bitmesini bekleme süresi.
+ * Yer etkisi (data/grounds.json) görseli: zemin, etkinin bırakıldığı HÜCRELERE oturur (şekil skill'leri: artı, blok, sıra...).
+ * Karar: her hücre kendi yumuşak, yassı ışıma elipsini taşır (Drain Field'ın sevilen yumuşak elips dili) ve elipsler komşu hücrelerle
+ * kaynaşır; altta hücre dörtgenlerinin birleşik plakası ve ince birleşik dış hat şeklin sınırını net gösterir (seçim plakasıyla aynı geometri).
+ * Böylece artı şekli artı, 3x3 blok kare görünür; aşamalı skill'in aşama aşama bıraktığı zeminler (Wail) yan yana tek alan gibi birleşir.
+ * Hücreler ilk hücreden dışa doğru sırayla büyür; sonra ground süresince canlı kalır: Holy Fire'da alçak altın alev dilleri/kor, Poison'da
+ * yeşil sis ve kabarcıklar, Burning Ground'da kızgın kor, alev dilleri ve is dumanı. Container yok edilince (BattleScene.removeGroundView)
+ * döngü durur. Tanımsız yer etkisi için null döner (eski görünüm). `delay`: önceki animasyonun bitmesini bekleme süresi.
  */
-export function groundArea(scene: Phaser.Scene, groundId: string, cells: Array<{ x: number; y: number }>, delay = 0): Phaser.GameObjects.Container | null {
+export function groundArea(scene: Phaser.Scene, groundId: string, board: 'party' | 'enemy', slots: number[], delay = 0): Phaser.GameObjects.Container | null {
+  const look = GROUND_LOOK[groundId];
+  if (!look || slots.length === 0) return null;
   const holy = groundId === 'holy_fire';
-  if ((!holy && groundId !== 'poison') || cells.length === 0) return null;
-  const minX = Math.min(...cells.map((q) => q.x));
-  const maxX = Math.max(...cells.map((q) => q.x));
-  const minY = Math.min(...cells.map((q) => q.y));
-  const maxY = Math.max(...cells.map((q) => q.y));
-  const fx = (minX + maxX) / 2;
-  const fy = (minY + maxY) / 2 - 4;
-  const fw = maxX - minX + 160;
-  const fh = maxY - minY + 116;
-  const rx = fw / 2;
-  const ry = fh / 2;
-  const look = holy
-    ? { edge: '#ffd23f', fill: '#ff9a2a', inner: '#ff7a1a', glow: glowTexture(scene), tint: 0xffa63a }
-    : { edge: '#8ee060', fill: '#4a9a35', inner: '#2f7a2a', glow: poisonGlowTexture(scene), tint: 0xffffff };
-  const glow = scene.add.image(fx, fy, look.glow).setDisplaySize(fw * 1.12, fh * 1.18).setAlpha(0).setTint(look.tint);
-  const outer = scene.add.ellipse(fx, fy, fw, fh, color(look.fill), 0).setStrokeStyle(4, color(look.edge), 0).setScale(0.04);
-  const inner = scene.add.ellipse(fx, fy, fw * 0.78, fh * 0.78, color(look.inner), 0).setStrokeStyle(2, color(look.edge), 0).setScale(0.04);
-  const box = scene.add.container(0, 0, [glow, outer, inner]).setDepth(30);
+  const burning = groundId === 'burning';
+  const { R, L } = gridSteps(board);
+  const gw = (Math.abs(R.x) + Math.abs(L.x)) * 1.08;
+  const gh = Math.abs(L.y) * 2.1;
+  const quads = slots.map((s) => ({ s, q: quadOf(board, s, 0.98), m: cellMid(board, s) }));
+  const first = quads[0]!.m;
+  const order = quads.map((k) => Math.hypot(k.m.x - first.x, k.m.y - first.y));
+  const span = Math.max(1, ...order);
+  const glows = quads.map((k) => scene.add.image(k.m.x, k.m.y, look.glow(scene)).setDisplaySize(gw, gh).setAlpha(0).setTint(look.tint).setBlendMode(Phaser.BlendModes.ADD));
+  const base = glows.map((g) => ({ x: g.scaleX, y: g.scaleY }));
+  const plate = scene.add.graphics();
+  const edge = scene.add.graphics();
+  const box = scene.add.container(0, 0, [plate, ...glows, edge]).setDepth(30);
   const GROW = 900;
   const alive = () => box.active && box.scene !== undefined;
+  const edges = outlineOf(board, slots);
   scene.tweens.addCounter({
     from: 0,
     to: 1,
@@ -673,41 +825,53 @@ export function groundArea(scene: Phaser.Scene, groundId: string, cells: Array<{
     onUpdate: (tw) => {
       if (!alive()) return;
       const u = tw.getValue() ?? 0;
-      outer.setScale(0.04 + 0.96 * u).setFillStyle(color(look.fill), 0.2 * u).setStrokeStyle(4, color(look.edge), 0.9 * u);
-      inner.setScale(0.04 + 0.96 * u).setFillStyle(color(look.inner), 0.26 * u).setStrokeStyle(2, color(look.edge), 0.5 * u);
-      glow.setAlpha(0.75 * u);
+      plate.clear();
+      quads.forEach((k, i) => {
+        // hücreler ilk hücreden dışa doğru sırayla büyür
+        const v = Math.max(0, Math.min(1, (u - (order[i]! / span) * 0.45) / 0.55));
+        const e = 1 - (1 - v) ** 2;
+        if (v > 0) {
+          plate.fillStyle(color(look.fill), 0.22 * v).fillPoints(scaleQuad(k.q, 0.15 + 0.85 * e), true);
+          plate.fillStyle(color(look.inner), 0.2 * v).fillPoints(scaleQuad(k.q, (0.15 + 0.85 * e) * 0.66), true);
+        }
+        glows[i]!.setAlpha(0.8 * v).setScale(base[i]!.x * (0.3 + 0.7 * e), base[i]!.y * (0.3 + 0.7 * e));
+      });
+      edge.clear().lineStyle(3, color(look.edge), 0.9 * Math.max(0, (u - 0.5) / 0.5));
+      for (const [a, b] of edges) edge.lineBetween(a.x, a.y, b.x, b.y);
     },
     onComplete: () => {
       if (!alive()) return;
       live = true;
-      void ring(scene, fx, fy, { r: rx, flat: ry / rx, n: 36, colors: holy ? HOLY : ['#8ee060', '#c8ff9a', '#2f7a2a'], dur: 480, size: 10 });
-      scene.tweens.add({ targets: glow, alpha: { from: 0.75, to: 0.45 }, duration: holy ? 420 : 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      for (const k of quads) void ring(scene, k.m.x, k.m.y, { r: Math.abs(R.x) * 0.45, flat: 0.32, n: 16, colors: look.ring, dur: 480, size: 8 });
+      scene.tweens.add({ targets: glows, alpha: { from: 0.8, to: 0.45 }, duration: holy || burning ? 420 : 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     },
   });
-  // Süreklilik döngüsü: hafif alev dilleri/kor (Holy Fire) ya da sis/kabarcık (Poison)
+  // Süreklilik döngüsü: rastgele bir hücrenin içinde alev dili/kor (Holy Fire, Burning) ya da sis/kabarcık (Poison). Sıklık hücre sayısıyla
+  // hafifçe artar (tek döngü: 9 hücrede de hafif).
   let tick = 0;
   let live = false;
-  const inEllipse = (k = 0.85) => {
-    const a = rnd(0, Math.PI * 2);
-    const r = Math.sqrt(rnd(0, 1)) * k;
-    return { x: fx + Math.cos(a) * rx * r, y: fy + Math.sin(a) * ry * r };
-  };
   const loop = scene.time.addEvent({
-    delay: holy ? 170 : 260,
+    delay: Math.round((holy || burning ? 170 : 260) / Math.max(1, Math.min(2.2, Math.sqrt(slots.length / 2.5)))),
     loop: true,
     callback: () => {
       if (!live || !alive() || box.alpha < 0.2) return;
       tick++;
-      const q = inEllipse();
-      if (holy) {
-        // alev dili: yerden kısa yükselen küçük turuncu/altın alev
-        const f = sprite(scene, 'ember', tick % 2 ? '#ff8a1f' : '#ffd23f', q.x, q.y + 4, rnd(14, 26), 31).setOrigin(0.5, 1).setAlpha(0.8);
+      const q = inQuad(pick(quads).q, 0.8);
+      if (holy || burning) {
+        // alev dili: yerden kısa yükselen küçük alev (Holy: altın/turuncu, Burning: kızıl/turuncu, biraz daha uzun)
+        const hex = holy ? (tick % 2 ? '#ff8a1f' : '#ffd23f') : tick % 3 === 0 ? '#ffd23f' : tick % 2 ? '#ff4d1a' : '#ff8a1f';
+        const f = sprite(scene, 'ember', hex, q.x, q.y + 4, rnd(14, 26) * (burning ? 1.25 : 1), 31).setOrigin(0.5, 1).setAlpha(0.85);
         const sx = f.scaleX;
         f.setScale(sx * 0.4, sx * 0.3);
-        scene.tweens.add({ targets: f, scaleX: sx * 0.9, scaleY: sx * 1.7, y: f.y - rnd(14, 34), alpha: 0, duration: slow(rnd(520, 800)), ease: 'Quad.easeOut', onComplete: () => f.destroy() });
+        scene.tweens.add({ targets: f, scaleX: sx * 0.9, scaleY: sx * (burning ? 2.1 : 1.7), y: f.y - rnd(14, 34), alpha: 0, duration: slow(rnd(520, 800)), ease: 'Quad.easeOut', onComplete: () => f.destroy() });
         if (tick % 3 === 0) {
-          const k = scene.add.rectangle(snap(q.x), snap(q.y), 4, 4, color(pick(['#ffd23f', '#fff0a0', '#ff8a1f']))).setDepth(32);
+          const k = scene.add.rectangle(snap(q.x), snap(q.y), 4, 4, color(pick(holy ? ['#ffd23f', '#fff0a0', '#ff8a1f'] : ['#ffd23f', '#ff8a1f', '#ff4d1a']))).setDepth(32);
           scene.tweens.add({ targets: k, x: snap(k.x + rnd(-14, 14)), y: snap(k.y - rnd(30, 70)), alpha: 0, duration: slow(rnd(600, 950)), onComplete: () => k.destroy() });
+        }
+        if (burning && tick % 4 === 0) {
+          // is dumanı: koyu, yavaş yükselen
+          const m = sprite(scene, 'smoke', '#5b6579', q.x, q.y - 10, 26, 31).setTint(0x2a2226).setAlpha(0.4);
+          scene.tweens.add({ targets: m, y: m.y - rnd(40, 70), displayWidth: 60, displayHeight: 50, alpha: 0, duration: slow(rnd(1100, 1500)), ease: 'Quad.easeOut', onComplete: () => m.destroy() });
         }
       } else {
         // sis: yavaş yükselen yeşil duman
@@ -724,7 +888,7 @@ export function groundArea(scene: Phaser.Scene, groundId: string, cells: Array<{
   });
   box.once('destroy', () => {
     loop.remove(false);
-    scene.tweens.killTweensOf([glow, outer, inner]);
+    scene.tweens.killTweensOf([plate, edge, ...glows]);
   });
   return box;
 }
@@ -754,39 +918,130 @@ const fireball = async (c: VfxCtx) => {
   );
 };
 
+/** Fırtına bulutu dokusu: birkaç yumuşak topak birleşimi, üstü açık altı koyu (tint ile renklenir; kontur yok). */
+const stormCloudTexture = (scene: Phaser.Scene) =>
+  softTexture(scene, 'fx:stormcloud', 64, 28, (x, y) => {
+    const blobs: Array<[number, number, number, number]> = [[16, 17, 13, 10], [30, 12, 15, 11], [46, 15, 14, 10], [24, 20, 16, 7], [40, 20, 16, 7]];
+    let a = 0;
+    for (const [bx, by, rx, ry] of blobs) a = Math.max(a, 1 - Math.hypot((x + 0.5 - bx) / rx, (y + 0.5 - by) / ry));
+    if (a <= 0) return null;
+    const shade = y < 10 ? '#ffffff' : y < 17 ? '#d7dce6' : '#98a2b4';
+    return { c: shade, a: Math.min(1, a * 2.2) };
+  });
+
+/** Buz plakası dokusu (bir kez): hücre zemininde donmuş yüzey; açık buz mavisi, beyaz kırağı benekleri ve ince çatlaklar. */
+function frostPlate(scene: Phaser.Scene, board: 'party' | 'enemy', slots: number[]): Phaser.GameObjects.Graphics {
+  const g = scene.add.graphics().setDepth(FLOOR_FX);
+  fillCells(g, board, slots, { fill: 0x8fd8ff, fillA: 0.42, edge: 0xffffff, edgeA: 0.9, edgeW: 3 });
+  for (const s of slots) {
+    const q = quadOf(board, s, 0.94);
+    g.fillStyle(0xe8fbff, 0.32).fillPoints(scaleQuad(q, 0.62), true); // ortası daha açık (yansıma)
+    // kırağı benekleri
+    for (let k = 0; k < 14; k++) {
+      const p = inQuad(q, 0.9);
+      g.fillStyle(k % 3 ? 0xffffff : 0xa8ebff, 0.85).fillRect(snap(p.x), snap(p.y), k % 4 ? 2 : 4, 2);
+    }
+    // ince çatlaklar (buz çizikleri)
+    for (let k = 0; k < 3; k++) {
+      let p = inQuad(q, 0.6);
+      const a = rnd(-0.5, 0.5) + (k % 2 ? Math.PI : 0);
+      for (let i = 0; i < 7; i++) {
+        p = { x: p.x + Math.cos(a + rnd(-0.6, 0.6)) * 8, y: p.y + Math.sin(a + rnd(-0.6, 0.6)) * 3 };
+        g.fillStyle(0xffffff, 0.75).fillRect(snap(p.x), snap(p.y), 2, 2);
+      }
+    }
+  }
+  return g;
+}
+
+/**
+ * Blizzard (rect 3x2): bloğun üstünde koyu bir fırtına bulutu toplanır, rüzgârla eğik kar ve buz kristalleri YALNIZCA bloğun hücrelerine yağar;
+ * hücrelerin zemini sırayla donar (birleşik buz plakası, kırağı, çatlaklar). Sonra her hücreye buz sarkıtları çöker ve parçalanır (vuruş anı);
+ * hedeflerin ayağında buz kabuğu çatırdar. Buz plakası bir süre kalıp erir.
+ */
 const blizzard = async (c: VfxCtx) => {
   c.sfx('windHowl');
   c.sfx('hailPatter');
   await c.windUp('#8fd8ff');
+  const slots = fxSlots(c);
+  const quads = slots.map((s) => ({ s, q: quadOf(c.board, s, 0.92), m: cellMid(c.board, s) }));
+  const xs = quads.flatMap((k) => k.q.map((p) => p.x));
+  const ys = quads.flatMap((k) => k.q.map((p) => p.y));
+  const x0 = Math.min(...xs);
+  const x1 = Math.max(...xs);
+  const cloudY = Math.min(...ys) - 300;
+  const wind = c.board === 'enemy' ? 1 : -1; // rüzgâr büyücüden uzağa eser
+  // 1) fırtına bulutu: blok genişliğinde koyu, kabaran duman kümeleri
+  const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x0a1830, 0).setDepth(DEPTH - 25);
+  c.scene.tweens.add({ targets: dim, alpha: 0.26, duration: slow(380) });
+  // iki katman yumuşak bulut dokusu (arkada koyu, önde biraz açık ve alçak): konturlu 'duman' baloncukları yerine yumuşak piksel bulut
+  const puffs: Phaser.GameObjects.Image[] = [];
+  const nPuff = Math.max(4, Math.round((x1 - x0) / 90));
+  for (const layer of [0, 1]) {
+    for (let i = 0; i < nPuff; i++) {
+      const x = x0 - 40 + ((x1 - x0 + 80) * (i + layer * 0.5)) / nPuff + rnd(-16, 16);
+      const w = rnd(200, 260) * (layer ? 0.85 : 1);
+      const p = c.scene.add.image(x, cloudY + (layer ? 26 : 0) + rnd(-14, 14), stormCloudTexture(c.scene)).setDisplaySize(w, w * 0.62).setTint(layer ? 0x9fb4d0 : 0x55688a).setAlpha(0).setDepth(DEPTH + 18 + layer).setFlipX(Math.random() < 0.5);
+      c.scene.tweens.add({ targets: p, alpha: layer ? 0.8 : 0.95, x: p.x + wind * rnd(8, 24), duration: slow(rnd(300, 440)), delay: slow(i * 26 + layer * 60), ease: 'Quad.easeOut' });
+      puffs.push(p);
+    }
+  }
+  await wait(c.scene, slow(260));
+  // 2) kar yağışı: her hücreye eğik düşen kar taneleri (hücre dörtgeninin içine konar)
+  const snow = c.scene.time.addEvent({
+    delay: 26,
+    loop: true,
+    callback: () => {
+      const k = pick(quads);
+      const to = inQuad(k.q, 0.9);
+      const lift = rnd(20, 140);
+      const fl = sprite(c.scene, 'flake', '#ffffff', to.x - wind * rnd(60, 120), cloudY + rnd(10, 40), Math.random() < 0.5 ? 16 : 24, DEPTH + 20).setAlpha(0.95);
+      c.scene.tweens.add({ targets: fl, x: to.x, y: to.y - lift * 0.15, rotation: rnd(-2, 2), alpha: 0.15, duration: slow(rnd(420, 620)), ease: 'Sine.easeIn', onComplete: () => fl.destroy() });
+    },
+  });
+  // 3) zemin hücre hücre donar (birleşik buz plakası belirir)
+  const frost = frostPlate(c.scene, c.board, slots).setAlpha(0);
+  c.scene.tweens.add({ targets: frost, alpha: 1, duration: slow(520), ease: 'Quad.easeOut' });
+  await wait(c.scene, slow(360));
+  // 4) buz sarkıtları: her hücreye bir ya da iki sarkıt çöker; ilk dalga yere değince vuruş anı
   let shattered = 0;
-  const spots = c.cells.length ? c.cells : c.targets.map((t) => feet(t));
-  for (const cell of spots) {
-    for (let i = 0; i < 12; i++) {
-      void wait(c.scene, slow(i * 28)).then(() => {
-        const fl = sprite(c.scene, 'flake', '#ffffff', cell.x + rnd(-70, 70), -40, i % 2 ? 24 : 16, DEPTH + 20);
-        c.scene.tweens.add({ targets: fl, y: cell.y - rnd(20, 120), x: fl.x + rnd(-60, 60), alpha: 0.2, duration: slow(rnd(380, 560)), onComplete: () => fl.destroy() });
-      });
+  const jobs = quads.flatMap((k, ci) =>
+    Array.from({ length: c.targets.some((t) => slotOfView(t) === k.s) ? 2 : 1 }, async (_, i) => {
+      await wait(c.scene, slow(i * 110 + (ci % 3) * 30 + rnd(0, 40)));
+      const to = i === 0 ? { x: k.m.x + rnd(-12, 12), y: k.m.y - rnd(30, 70) } : inQuad(k.q, 0.7);
+      const s = sprite(c.scene, 'shard', '#8fd8ff', to.x - wind * 70, cloudY + 20, 104, DEPTH + 30).setRotation(wind * 0.2);
+      await travel(c.scene, s, to, 260, { ease: 'in' });
+      s.destroy();
+      if (shattered++ % 3 === 0) c.sfx('iceCrack');
+      burst(c.scene, to.x, to.y, { colors: ICE, n: 10, speed: [100, 340], angle: [-Math.PI, 0.2], gravity: 600, life: [300, 560], size: [8, 14] });
+      void ring(c.scene, k.m.x, k.m.y, { r: 70, flat: 0.32, n: 14, colors: ICE, dur: 360, size: 8 });
+    }),
+  );
+  await Promise.race([Promise.all(jobs), wait(c.scene, slow(330))]);
+  // vuruş anı: hedeflerin ayağında buz kabuğu çatırdar
+  shake(c.scene, 160, 0.004);
+  for (const t of c.targets) {
+    const f = feet(t);
+    const crust = c.scene.add.graphics().setDepth(t.container.depth + 1);
+    for (let i = 0; i < 7; i++) {
+      const x = f.x + (i - 3) * (t.w * 0.11) + rnd(-4, 4);
+      const h = rnd(18, 38) * (1 - Math.abs(i - 3) * 0.12);
+      crust.fillStyle(0x4aa3ff, 0.9).fillTriangle(x - 8, f.y + 4, x + 8, f.y + 4, x, f.y - h);
+      crust.fillStyle(0xe8fbff, 0.95).fillTriangle(x - 4, f.y + 2, x + 2, f.y + 2, x - 1, f.y - h + 6);
     }
+    crust.setScale(1, 0.2);
+    crust.y = f.y * 0.8;
+    c.scene.tweens.add({ targets: crust, scaleY: 1, y: 0, duration: slow(120), ease: 'Back.easeOut' });
+    c.scene.tweens.add({ targets: crust, alpha: 0, delay: slow(650), duration: slow(380), onComplete: () => crust.destroy() });
   }
-  const jobs: Promise<void>[] = [];
-  for (const cell of spots) {
-    for (let i = 0; i < 3; i++) {
-      jobs.push(
-        (async () => {
-          await wait(c.scene, slow(i * 90 + rnd(0, 80)));
-          const x = cell.x + rnd(-60, 60);
-          const y = cell.y - rnd(30, 120);
-          const s = sprite(c.scene, 'shard', '#8fd8ff', x + rnd(-50, 50), -100, 96, DEPTH + 30).setRotation(rnd(-0.25, 0.25));
-          await travel(c.scene, s, { x, y }, 300, { ease: 'in' });
-          s.destroy();
-          if (shattered++ % 3 === 0) c.sfx('iceCrack');
-          burst(c.scene, x, y, { colors: ICE, n: 12, speed: [100, 340], gravity: 500, life: [300, 560], size: [8, 14] });
-          void ring(c.scene, x, y + 30, { r: 70, flat: 0.4, n: 14, colors: ICE, dur: 360, size: 8 });
-        })(),
-      );
-    }
-  }
-  await Promise.all(jobs);
+  // kuyruk: kar diner, bulut dağılır, buz plakası erir
+  void Promise.all(jobs).then(async () => {
+    await wait(c.scene, slow(240));
+    snow.remove();
+    c.scene.tweens.add({ targets: puffs, alpha: 0, y: `-=${30}`, duration: slow(520), onComplete: () => puffs.forEach((p) => p.destroy()) });
+    c.scene.tweens.add({ targets: dim, alpha: 0, duration: slow(520), onComplete: () => dim.destroy() });
+    c.scene.tweens.add({ targets: frost, alpha: 0, delay: slow(500), duration: slow(700), onComplete: () => frost.destroy() });
+  });
 };
 
 const barrier = async (c: VfxCtx) => {
@@ -807,6 +1062,11 @@ const barrier = async (c: VfxCtx) => {
   );
 };
 
+/**
+ * Meteor (plus): gökyüzü kızarır, zeminde gölge büyür; alevli meteor çapraz düşüp MERKEZ hücrede patlar (çok katmanlı ateş topu, kaya, duman).
+ * Ardından artının kolları boyunca (tahta içindeki komşu hücrelere) yerden alev dalgası koşar, kolun hücresinde alev patlar; her hedefin hasarı
+ * alevin ona değdiği an. Şeklin hücreleri kömürleşir; Burning Ground aynı hücrelerde doğar (groundArea).
+ */
 const meteor = async (c: VfxCtx) => {
   await c.windUp('#ff4d1a');
   c.sfx('meteorWhistle');
@@ -848,7 +1108,7 @@ const meteor = async (c: VfxCtx) => {
     const e = sprite(c.scene, name, hex, cx, cy, 90, DEPTH + 45);
     grow(c.scene, e, 0.3, size / 90, dur, 'Cubic.easeOut', { alpha: 0, onComplete: () => e.destroy() });
   }
-  void ring(c.scene, cx, cy + 44, { r: 400, flat: 0.34, n: 60, colors: FIRE, dur: 680, size: 14 });
+  void ring(c.scene, cx, cy + 44, { r: 300, flat: 0.32, n: 54, colors: FIRE, dur: 640, size: 14 });
   void ring(c.scene, cx, cy + 44, { r: 240, flat: 0.34, n: 40, colors: ['#ffffff', '#ffd23f'], dur: 480, size: 12 });
   burst(c.scene, cx, cy, { colors: FIRE, n: 56, speed: [180, 720], angle: [-Math.PI, 0], gravity: 800, life: [600, 1200], size: [10, 26] });
   burst(c.scene, cx, cy + 10, { colors: ['#3a2a2a', '#5b6579', '#98a2b4'], n: 24, speed: [40, 220], angle: [-Math.PI, 0], gravity: -90, life: [900, 1600], size: [16, 40] });
@@ -863,10 +1123,48 @@ const meteor = async (c: VfxCtx) => {
       if (u >= 1) r.destroy();
     });
   }
-  // yanık iz
-  const scorch = c.scene.add.ellipse(cx, cy + 44, 300, 90, 0x15101c, 0.55).setDepth(DEPTH - 45);
-  c.scene.tweens.add({ targets: scorch, alpha: 0, duration: slow(1800), delay: slow(400), onComplete: () => scorch.destroy() });
-  await wait(c.scene, slow(90));
+  // Artı şekli: merkezden dört yöne (tahta içindeki kollar) yer boyunca alev dalgası koşar; kolun hücresine varınca alev patlar.
+  // Hasar rakamları her hedefe alev değdiği anda çıkar (merkez = çarpma anı).
+  const slots = fxSlots(c);
+  const midSlot = c.center !== undefined && slots.includes(c.center) ? c.center : slots[0];
+  const arrive = new Map<number, ReturnType<typeof deferred>>(slots.map((s) => [s, deferred()]));
+  if (midSlot !== undefined) arrive.get(midSlot)?.resolve();
+  // yanık iz: şeklin hücrelerinde kömürleşmiş zemin (birleşik plaka), yavaşça söner (Burning Ground görünümü ardından gelir)
+  const scorch = c.scene.add.graphics().setDepth(FLOOR_FX - 1);
+  fillCells(scorch, c.board, slots, { fill: 0x15101c, fillA: 0.5, k: 0.96 });
+  scorch.setAlpha(0);
+  c.scene.tweens.add({ targets: scorch, alpha: 1, duration: slow(160) });
+  c.scene.tweens.add({ targets: scorch, alpha: 0, duration: slow(1600), delay: slow(700), onComplete: () => scorch.destroy() });
+  const arms = slots.filter((s) => s !== midSlot);
+  const mid = midSlot !== undefined ? cellMid(c.board, midSlot) : { x: cx, y: cy + 44 };
+  void wait(c.scene, slow(70)).then(() => {
+    if (arms.length) c.sfx('fireCrackle');
+    for (const s of arms) {
+      const to = cellMid(c.board, s);
+      let lastK = -1;
+      void counter(c.scene, slow(230), (u) => {
+        // alev dilleri dalganın ucunda yerden yükselir (her ~%12'de bir)
+        const k = Math.floor(u * 8);
+        if (k === lastK) return;
+        lastK = k;
+        const x = mid.x + (to.x - mid.x) * u;
+        const y = mid.y + (to.y - mid.y) * u;
+        const f = sprite(c.scene, 'ember', k % 2 ? '#ff8a1f' : '#ffd23f', x + rnd(-8, 8), y + 6, rnd(40, 64), y + 2).setOrigin(0.5, 1);
+        const sx = f.scaleX;
+        f.setScale(sx * 0.5, sx * 0.4);
+        c.scene.tweens.add({ targets: f, scaleX: sx * 0.9, scaleY: sx * 2.1, y: f.y - rnd(10, 30), alpha: 0, duration: slow(rnd(380, 560)), ease: 'Quad.easeOut', onComplete: () => f.destroy() });
+        burst(c.scene, x, y - 6, { colors: FIRE, n: 2, speed: [40, 160], angle: [-Math.PI * 0.9, -Math.PI * 0.1], gravity: 300, life: [260, 480], size: [8, 14] });
+      }, 'Quad.easeOut').then(() => {
+        // kolun ucunda alev patlaması
+        const e = sprite(c.scene, 'ember', '#ff8a1f', to.x, to.y - 40, 90, DEPTH + 44);
+        grow(c.scene, e, 0.3, 2.2, 300, 'Cubic.easeOut', { alpha: 0, onComplete: () => e.destroy() });
+        burst(c.scene, to.x, to.y - 30, { colors: FIRE, n: 16, speed: [120, 420], angle: [-Math.PI, 0], gravity: 600, life: [380, 760], size: [10, 18] });
+        void ring(c.scene, to.x, to.y, { r: 110, flat: 0.32, n: 22, colors: FIRE, dur: 380, size: 10 });
+        arrive.get(s)?.resolve();
+      });
+    }
+  });
+  await hitsAt(c, (t) => arrive.get(slotOfView(t))?.promise ?? Promise.resolve(), wait(c.scene, slow(90)));
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -956,24 +1254,72 @@ const bloodhands = async (c: VfxCtx) => {
   );
 };
 
-const wail = async (c: VfxCtx) => {
+const WAIL = ['#b872ff', '#5a2a9c', '#ffffff', '#a8ebff'];
+
+/** Ağıt dalgasının bir hücreye çarpması: zeminde mor ağıt halkası (hücreye oturan), yerden yükselen hayalet ruhlar, hücredeki hedeflerin titremesi. */
+function wailCell(c: VfxCtx, slot: number, victims: CombatantView[], power: number): void {
+  const m = cellMid(c.board, slot);
+  const { R } = gridSteps(c.board);
+  const rr = Math.abs(R.x) * 0.5;
+  // hücre zemininde kısa ölü-ışık plakası
+  const g = c.scene.add.graphics().setDepth(FLOOR_FX + 1);
+  fillCells(g, c.board, [slot], { fill: 0x5a2a9c, fillA: 0.38, edge: 0xb872ff, edgeA: 0.9, edgeW: 3, k: 0.94 });
+  g.setAlpha(0);
+  c.scene.tweens.add({ targets: g, alpha: 1, duration: slow(120), yoyo: true, hold: slow(260), onComplete: () => g.destroy() });
+  for (let i = 0; i < 2; i++) void wait(c.scene, slow(i * 110)).then(() => ring(c.scene, m.x, m.y, { r: rr * (1 + i * 0.25) * power, flat: 0.32, n: 22, colors: WAIL, dur: 520, size: 10, startR: 14 }));
+  burst(c.scene, m.x, m.y - 16, { colors: ['#b872ff', '#a8ebff', '#5a2a9c'], n: Math.round(10 * power), speed: [40, 160], angle: [-Math.PI, 0], gravity: -160, life: [600, 1000], size: [8, 14] });
+  for (let k = 0; k < 2; k++) {
+    const w = sprite(c.scene, 'wisp', '#b36bff', m.x + rnd(-40, 40), m.y - 10, 56 + k * 12, DEPTH + 40).setAlpha(0.9);
+    c.scene.tweens.add({ targets: w, y: w.y - rnd(130, 190), x: w.x + rnd(-20, 20), alpha: 0, duration: slow(rnd(800, 1000)), delay: slow(k * 90), onComplete: () => w.destroy() });
+  }
+  for (const t of victims) {
+    // çığlığın titrettiği beden: hızlı sağ-sol sarsılma + mor halka
+    c.scene.tweens.add({ targets: t.container, x: t.container.x + 6, duration: slow(30), yoyo: true, repeat: 3 });
+    const p = spot(t);
+    void ring(c.scene, p.x, p.y, { r: 70, flat: 0.9, n: 18, colors: WAIL, dur: 340, size: 8 });
+  }
+}
+
+/**
+ * Wail of the Dead (plus, aşamalı distance): ağlayan ruh Undead'den kavis çizerek MERKEZ hücrenin üstüne uçar ve çığlık atar; ağıt halkası
+ * merkezden başlar (1. aşama: merkezdeki hedefin hasarı ve zehri), sonra zeminde mor bir dalga halka halka dışa yayılıp dört komşu hücreye
+ * çarpar (2. aşama: komşuların hasarı ve zehri). Zehir bulutu her aşamanın kendi hücrelerinde, o aşamanın anında belirir.
+ */
+const wail = (c: VfxCtx) => playUntilHit(async (hit) => {
   c.sfx('ghostWail');
   await c.windUp('#b36bff');
   const a = spot(c.actor);
-  const cell = c.centerPos ?? (c.targets[0] ? feet(c.targets[0]) : feet(c.actor));
+  const stages = fxStages(c);
+  const midSlot = stages[0]?.slots[0] ?? c.center;
+  const cell = midSlot !== undefined ? cellMid(c.board, midSlot) : (c.centerPos ?? feet(c.actor));
   const g = sprite(c.scene, 'wail', '#b36bff', a.x, a.y, 128, DEPTH + 30);
   if (cell.x < a.x) g.setFlipX(true);
-  await travel(c.scene, g, { x: cell.x, y: cell.y - 90 }, 460, { arc: 90, trail: (x, y) => burst(c.scene, x, y, { colors: ['#b872ff', '#5a2a9c', '#a8ebff'], n: 3, speed: [10, 80], gravity: -40, life: [300, 560], size: [8, 16] }), trailEvery: 26 });
-  c.scene.tweens.add({ targets: g, displayWidth: 260, displayHeight: 260, alpha: 0, duration: slow(420), onComplete: () => g.destroy() });
+  await travel(c.scene, g, { x: cell.x, y: cell.y - 110 }, 460, { arc: 90, trail: (x, y) => burst(c.scene, x, y, { colors: ['#b872ff', '#5a2a9c', '#a8ebff'], n: 3, speed: [10, 80], gravity: -40, life: [300, 560], size: [8, 16] }), trailEvery: 26 });
+  // çığlık: ruh şişip titrer, sonra dağılır
+  c.scene.tweens.add({ targets: g, x: g.x + 5, duration: slow(28), yoyo: true, repeat: 5 });
+  c.scene.tweens.add({ targets: g, displayWidth: 240, displayHeight: 240, alpha: 0, delay: slow(160), duration: slow(460), onComplete: () => g.destroy() });
   flash(c.scene, '#5a2a9c', 0.3, 420);
   shake(c.scene, 220, 0.005);
-  for (const q of c.cells.length ? c.cells : [cell]) {
-    void ring(c.scene, q.x, q.y - 40, { r: 150, flat: 0.5, n: 28, colors: ['#b872ff', '#5a2a9c', '#ffffff'], dur: 620, size: 12, startR: 20 });
-    burst(c.scene, q.x, q.y - 20, { colors: ['#b872ff', '#a8ebff', '#5a2a9c'], n: 12, speed: [40, 160], angle: [-Math.PI, 0], gravity: -160, life: [600, 1000], size: [8, 14] });
-    const w = sprite(c.scene, 'wisp', '#b36bff', q.x + rnd(-30, 30), q.y - 20, 64, DEPTH + 40);
-    c.scene.tweens.add({ targets: w, y: w.y - 160, alpha: 0, duration: slow(900), onComplete: () => w.destroy() });
+  const { R } = gridSteps(c.board);
+  for (const [si, st] of stages.entries()) {
+    if (si > 0) {
+      // dalga: önceki aşamanın hücrelerinden dışa doğru zeminde genişleyen mor halka; bu aşamanın hücrelerine varınca çarpar
+      const reach = Math.max(...st.slots.map((s) => Math.hypot(cellMid(c.board, s).x - cell.x, cellMid(c.board, s).y - cell.y)), Math.abs(R.x));
+      const startR = Math.abs(R.x) * 0.45 * si;
+      const dur = 260;
+      void ring(c.scene, cell.x, cell.y, { r: reach * 1.05, flat: 0.32, n: 46, colors: WAIL, dur, size: 12, startR });
+      void ring(c.scene, cell.x, cell.y - 30, { r: reach * 0.95, flat: 0.45, n: 30, colors: ['#5a2a9c', '#b872ff'], dur: dur + 60, size: 8, startR: startR * 0.8 });
+      if (si === 1) c.sfx('graveMoan');
+      await wait(c.scene, slow(dur * 0.8));
+    }
+    for (const s of st.slots) wailCell(c, s, st.targets.filter((t) => slotOfView(t) === s), si === 0 ? 1.2 : 1);
+    await wait(c.scene, slow(70));
+    c.releaseStage(si);
+    if (si === 0) hit();
+    if (si < stages.length - 1) await wait(c.scene, slow(200));
   }
-};
+  await wait(c.scene, slow(300));
+});
 
 const raise = async (c: VfxCtx) => {
   c.sfx('graveMoan');
@@ -1114,64 +1460,141 @@ const arrowshot = async (c: VfxCtx) => {
   c.actor.play('idle');
 };
 
-const pierce = async (c: VfxCtx) => {
+/**
+ * Piercing Arrow (column, aşamalı row): Archer yayı sonuna kadar gerer (kiriş titrer), tek ağır atış; ok bel hizasında şerit boyunca önden
+ * arkaya düz uçar ve HER hücreyi delip geçer: dolu hücrede hedefe saplanıp çıkar (kıymık + kıvılcım, hedef geri itilir; o aşamanın hasar rakamı
+ * tam o an), boş hücrede uçmaya devam eder. Arkasında solan iz bırakır; son hücreyi geçip ekrandan/şeritten çıkarken söner.
+ */
+const pierce = (c: VfxCtx) => playUntilHit(async (hit1) => {
   c.actor.play('attack');
-  await wait(c.scene, slow(220)); // yayı geri çeker
+  const a = spot(c.actor);
+  const stages = fxStages(c);
+  const cells = stages.map((st) => ({ slots: st.slots, targets: st.targets, m: cellMid(c.board, st.slots[0] ?? 0) }));
+  const dir = cells.length ? (cells[cells.length - 1]!.m.x >= a.x ? 1 : -1) : c.actor.combatant.side === 'party' ? 1 : -1;
+  // yay gerilir: elde kısa ışık, kiriş titrer
+  const draw = sprite(c.scene, 'spark', '#ffd166', a.x + dir * 34, a.y, 30, DEPTH + 30).setAlpha(0.8);
+  c.scene.tweens.add({ targets: draw, displayWidth: 54, displayHeight: 54, alpha: 0.2, duration: slow(220) });
+  c.scene.tweens.add({ targets: c.actor.container, x: c.actor.container.x - dir * 8, duration: slow(200), yoyo: true, hold: slow(20) });
+  await wait(c.scene, slow(230));
+  draw.destroy();
   c.sfx('heavyTwang');
   c.sfx('arrowWhoosh');
-  const a = spot(c.actor);
-  const far = c.targets.length ? c.targets.reduce((m, t) => (Math.abs(t.container.x - a.x) > Math.abs(m.container.x - a.x) ? t : m)) : undefined;
-  // Şerit skill'i: ok, tıklanan şeridin en uzak hücresine uçar (şeritte kimse olmasa da orayı gösterir)
-  const farCell = c.cells.length ? c.cells.reduce((m, q) => (Math.abs(q.x - a.x) > Math.abs(m.x - a.x) ? q : m)) : undefined;
-  const end = farCell ? { x: farCell.x, y: farCell.y - 70 } : far ? spot(far) : { x: a.x + 600, y: a.y };
-  const ang = Math.atan2(end.y - a.y, end.x - a.x);
-  const s = sprite(c.scene, 'pierce', '#ffd166', a.x, a.y, 128, DEPTH + 30).setRotation(arrowRot(ang));
-  const total = Math.hypot(end.x - a.x, end.y - a.y) || 1;
-  const done = new Set<CombatantView>();
-  const dur = 460;
-  await travel(c.scene, s, { x: end.x + Math.cos(ang) * 60, y: end.y + Math.sin(ang) * 60 }, dur, {
-    trail: (x, y) => burst(c.scene, x, y, { colors: ['#ffd166', '#ffffff'], n: 2, speed: [0, 40], gravity: 0, life: [220, 380], size: [8, 12] }),
-    trailEvery: 20,
-  });
-  for (const t of c.targets) done.add(t);
-  s.destroy();
-  for (const t of c.targets) {
-    const p = spot(t);
-    const frac = Math.hypot(p.x - a.x, p.y - a.y) / total;
-    void wait(c.scene, slow(dur * 0.1 * (1 - frac))).then(() => {
-      c.sfx('arrowThunk');
-      hit(c.scene, p.x, p.y, ['#ffd166', '#ffffff'], 1);
+  burst(c.scene, a.x + dir * 40, a.y, { colors: ['#d9c9a3', '#ffffff'], n: 6, speed: [60, 160], angle: dir > 0 ? [Math.PI * 0.8, Math.PI * 1.2] : [-0.2, 0.2], gravity: 0, life: [200, 360], size: [8, 12] });
+  // yol: elden ilk hücrenin bel hizasına, sonra şerit boyunca düz, son hücreyi geçince 260 px daha
+  const lift = 76;
+  const laneY = cells.length ? cells[0]!.m.y - lift : a.y;
+  const startX = a.x + dir * 40;
+  const firstX = cells.length ? cells[0]!.m.x - dir * 120 : startX + dir * 200;
+  const lastX = cells.length ? cells[cells.length - 1]!.m.x + dir * 260 : startX + dir * 700;
+  const path = [{ x: startX, y: a.y }, { x: firstX, y: laneY }, { x: lastX, y: laneY }];
+  const total = polyLen(path);
+  const at = cells.map((k) => polyLen([path[0]!, path[1]!]) + Math.abs(k.m.x - firstX));
+  const arrow = sprite(c.scene, 'pierce', '#ffd166', startX, a.y, 128, DEPTH + 30);
+  const trail = c.scene.add.graphics().setDepth(DEPTH + 26);
+  const marks: Array<{ x: number; y: number; t: number }> = [];
+  const passed = new Set<number>();
+  const SPEED = 2.1; // px / ms (oyun zamanı, skillSlowdown'dan önce)
+  let hitDone = false;
+  await counter(c.scene, slow(total / SPEED), (u) => {
+    const d = total * u;
+    const p = pointAt(path, d);
+    const q = pointAt(path, Math.min(total, d + 6));
+    arrow.setPosition(snap(p.x), snap(p.y)).setRotation(arrowRot(Math.atan2(q.y - p.y, q.x - p.x || dir)));
+    marks.push({ x: p.x, y: p.y, t: d });
+    trail.clear();
+    for (const m of marks) {
+      const age = (d - m.t) / 260;
+      if (age > 1) continue;
+      trail.fillStyle(age < 0.3 ? 0xffffff : 0xffd166, (1 - age) * 0.7).fillRect(snap(m.x) - 3, snap(m.y) - 2, 6, 4);
+    }
+    cells.forEach((k, i) => {
+      if (passed.has(i) || d < at[i]!) return;
+      passed.add(i);
+      // aşama i: ok bu hücreyi delip geçer
+      for (const t of k.targets) {
+        const tp = { x: t.container.x, y: laneY };
+        c.sfx('arrowThunk');
+        hit(c.scene, tp.x, tp.y, ['#ffd166', '#ffffff', '#d9c9a3'], 0.9);
+        burst(c.scene, tp.x, tp.y, { colors: ['#e3b983', '#8c5a2b', '#ffffff'], n: 6, speed: [120, 320], angle: dir > 0 ? [-0.5, 0.5] : [Math.PI - 0.5, Math.PI + 0.5], gravity: 500, life: [260, 480], size: [6, 10] });
+        c.scene.tweens.add({ targets: t.container, x: t.container.x + dir * 14, duration: slow(50), yoyo: true });
+      }
+      if (!k.targets.length) burst(c.scene, k.m.x, laneY, { colors: ['#ffd166', '#ffffff'], n: 2, speed: [20, 60], gravity: 0, life: [160, 260], size: [6, 8] });
+      c.releaseStage(i);
+      if (!hitDone) {
+        hitDone = true;
+        hit1();
+      }
     });
-  }
+  });
+  for (let i = 0; i < cells.length; i++) c.releaseStage(i);
+  c.scene.tweens.add({ targets: arrow, alpha: 0, duration: slow(120), onComplete: () => arrow.destroy() });
+  c.scene.tweens.add({ targets: trail, alpha: 0, duration: slow(260), onComplete: () => trail.destroy() });
   c.actor.play('idle');
-};
+});
 
+/**
+ * Arrow Rain (rect 3x3): Archer göğe doğru hızlı bir ok yaylımı atar (oklar ekranın üstünden çıkar); kısa bir an sonra ok yağmuru YALNIZCA
+ * 3x3 bloğun hücrelerine iner: dalga ön sıradan arkaya doğru yürür, her hücreye birkaç ok eğik saplanır (toz, kıymık); hücredeki düşmana
+ * gelen oklar gövdeye saplanır (hasar rakamı o hücreye ilk okun düştüğü an). Saplanan oklar bir süre yerde kalıp söner.
+ */
 const arrowrain = async (c: VfxCtx) => {
   c.actor.play('attack');
   c.sfx('bowTwang');
   await c.windUp('#d9c9a3', 'attack');
-  c.sfx('arrowShower');
-  let landed = 0;
-  const spots = c.cells.length ? c.cells : c.targets.map((t) => feet(t));
-  const jobs: Promise<void>[] = [];
-  for (const cell of spots) {
-    for (let i = 0; i < 4; i++) {
-      jobs.push(
-        (async () => {
-          await wait(c.scene, slow(rnd(0, 380)));
-          const x = cell.x + rnd(-62, 62);
-          const y = cell.y - rnd(10, 110);
-          const s = sprite(c.scene, 'arrow', '#d9c9a3', x - 60, -90, 80, DEPTH + 30).setRotation(arrowRot(Math.atan2(y + 90, 60)));
-          await travel(c.scene, s, { x, y }, 260, { ease: 'in' });
-          if (landed++ % 4 === 0) c.sfx('arrowThunk');
-          burst(c.scene, x, y + 10, { colors: DUST, n: 4, speed: [30, 140], angle: [-Math.PI, 0], gravity: 400, life: [250, 450], size: [6, 10] });
-          c.scene.tweens.add({ targets: s, alpha: 0, duration: slow(380), delay: slow(120), onComplete: () => s.destroy() });
-        })(),
-      );
-    }
+  const a = spot(c.actor);
+  const slots = fxSlots(c);
+  const dir = slots.length ? (cellMid(c.board, slots[0]!).x >= a.x ? 1 : -1) : 1;
+  // 1) göğe yaylım: oklar yukarı fırlar
+  for (let i = 0; i < 6; i++) {
+    void wait(c.scene, slow(i * 30)).then(() => {
+      const s = sprite(c.scene, 'arrow', '#d9c9a3', a.x + dir * 20, a.y - 20, 72, DEPTH + 30);
+      const to = { x: a.x + dir * (120 + i * 26), y: -120 };
+      s.setRotation(arrowRot(Math.atan2(to.y - s.y, to.x - s.x)));
+      void travel(c.scene, s, to, 260, { ease: 'out' }).then(() => s.destroy());
+    });
   }
-  await Promise.all(jobs);
-  c.actor.play('idle');
+  await wait(c.scene, slow(420));
+  c.sfx('arrowShower');
+  // 2) yağmur: hücre başına 3-4 ok; dalga yuva sırasıyla (ön sıra önce), hedefli hücrede bir ok gövdeye
+  const lanes = content.GRID.lanes;
+  const arrive = new Map<number, ReturnType<typeof deferred>>(slots.map((s) => [s, deferred()]));
+  const slant = dir * 0.32; // oklar atış yönünde hafif eğik iner
+  let landed = 0;
+  const jobs = slots.flatMap((s) => {
+    const q = quadOf(c.board, s, 0.86);
+    const row = Math.floor(s / lanes);
+    const lane = s % lanes;
+    const base = row * 110 + lane * 30;
+    const victim = c.targets.find((t) => slotOfView(t) === s);
+    return Array.from({ length: victim ? 4 : 3 }, async (_, i) => {
+      await wait(c.scene, slow(base + i * 70 + rnd(0, 30)));
+      const body = victim && i === 0;
+      const to = body ? { x: victim.container.x + rnd(-victim.w * 0.18, victim.w * 0.18), y: victim.container.y - victim.h * rnd(0.3, 0.6) } : inQuad(q, 0.9);
+      const ang = Math.PI / 2 - slant; // aşağı doğru
+      const from = { x: to.x - Math.cos(ang) * 620, y: to.y - Math.sin(ang) * 620 };
+      const arrow = sprite(c.scene, 'arrow', '#d9c9a3', from.x, from.y, 76, body ? victim.container.depth + 1 : to.y + 1).setRotation(arrowRot(ang));
+      await travel(c.scene, arrow, to, 200, { ease: 'in' });
+      if (landed++ % 3 === 0) c.sfx('arrowThunk');
+      if (body) {
+        hit(c.scene, to.x, to.y, ['#ffffff', '#d9c9a3', '#e5463b'], 0.6);
+        c.scene.tweens.add({ targets: victim.container, y: victim.container.y + 5, duration: slow(50), yoyo: true });
+        arrive.get(s)?.resolve();
+      } else {
+        // yere saplanır: ok yarı gömülü kalır (ucu toprağın içinde: dokuda kuzeydoğudaki uç kırpılır, yalnız gövde ve tüy görünür)
+        const fw = arrow.frame.width;
+        const fh = arrow.frame.height;
+        arrow.setCrop(0, fh * 0.3, fw * 0.7, fh * 0.7);
+        burst(c.scene, to.x, to.y, { colors: DUST, n: 3, speed: [30, 120], angle: [-Math.PI, 0], gravity: 400, life: [220, 420], size: [6, 10] });
+        if (!victim && i === 0) arrive.get(s)?.resolve();
+      }
+      c.scene.tweens.add({ targets: arrow, alpha: 0, duration: slow(420), delay: slow(body ? 260 : 700 + rnd(0, 200)), onComplete: () => arrow.destroy() });
+    });
+  });
+  void Promise.all(jobs).then(() => {
+    for (const d of arrive.values()) d.resolve();
+    c.actor.play('idle');
+  });
+  await hitsAt(c, (t) => arrive.get(slotOfView(t))?.promise ?? Promise.resolve(), wait(c.scene, slow(420)));
 };
 
 const aimed = async (c: VfxCtx) => {
@@ -1308,30 +1731,202 @@ const thornwhip = async (c: VfxCtx) => {
   c.actor.play('idle');
 };
 
-const vines = async (c: VfxCtx) => {
+/**
+ * Yerde sürünen dikenli sarmaşık (Nature's Wrath): `from`dan `to`ya zemin boyunca kıvrılarak uzanır (Graphics, karakterlerin altında).
+ * Gövde koyu kontur + iki ton yeşil kare piksel; aralıklarla yaprak ve beyaz diken; ucu kahverengi kök. Promise uç varınca çözülür; `fade()` söndürür.
+ */
+function creeper(scene: Phaser.Scene, from: { x: number; y: number }, to: { x: number; y: number }, dur: number, o: { width?: number; depth?: number } = {}): { done: Promise<void>; fade: (delay: number) => void } {
+  // iki katman: koyu kontur altta, gövde üstte (aksi hâlde her yeni kontur karesi bir öncekinin gövdesini keser: noktalı görünür)
+  const edge = scene.add.graphics().setDepth(o.depth ?? FLOOR_FX + 1);
+  const g = scene.add.graphics().setDepth((o.depth ?? FLOOR_FX + 1) + 0.5);
+  const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+  const ux = (to.x - from.x) / len;
+  const uy = (to.y - from.y) / len;
+  const ph = rnd(0, 6);
+  const w = o.width ?? 9;
+  const at = (s: number) => {
+    const off = Math.sin(s / 34 + ph) * 9 * Math.min(1, s / 60, (len - s) / 40 + 0.3) + Math.sin(s / 11 + ph * 2) * 2.5;
+    return { x: snap(from.x + ux * s - uy * off), y: snap(from.y + uy * s + ux * off * 0.55) };
+  };
+  let drawn = 0;
+  let dirtAt = 0;
+  const done = counter(scene, slow(dur), (u) => {
+    const end = len * u;
+    for (let s = drawn; s <= end; s += 2) {
+      const p = at(s);
+      const k = s / len;
+      const th = Math.max(4, w * (1 - 0.35 * k));
+      edge.fillStyle(0x1f3a14, 1).fillRect(p.x - th / 2 - 2, p.y - th / 2 - 2, th + 4, th + 4);
+      g.fillStyle(Math.floor(s / 6) % 2 ? 0x62d04b : 0x3f9a34, 1).fillRect(p.x - th / 2, p.y - th / 2, th, th);
+      if (Math.floor(s / 6) % 3 === 0) g.fillStyle(0xa8f08a, 1).fillRect(p.x - th / 2, p.y - th / 2, th, 2); // ışık
+      if (s % 4 !== 0) continue;
+      const i = Math.round(s / 4);
+      if (i % 11 === 5) {
+        const side = i % 22 === 5 ? 1 : -1;
+        g.fillStyle(0xa8f08a, 1).fillRect(p.x - 4 - uy * side * 8, p.y - 3 + ux * side * 6, 9, 5); // yaprak
+        g.fillStyle(0x2c7a2b, 1).fillRect(p.x - 1 - uy * side * 8, p.y - 1 + ux * side * 6, 3, 2);
+      }
+      if (i % 9 === 0) {
+        const side = i % 18 === 0 ? 1 : -1;
+        g.fillStyle(0xfdfaf2, 1).fillTriangle(p.x, p.y, p.x - uy * side * 10 - ux * 2, p.y + ux * side * 6 - uy * 2, p.x - uy * side * 10 + ux * 2, p.y + ux * side * 6 + uy * 2); // diken
+      }
+    }
+    drawn = Math.max(drawn, Math.floor(end / 2) * 2 + 2);
+    if (u * dur >= dirtAt && u < 1) {
+      dirtAt += 45;
+      const p = at(end);
+      g.fillStyle(0x4a2e1a, 1).fillRect(p.x - 5, p.y - 5, 10, 10); // kök ucu
+      burst(scene, p.x, p.y - 2, { colors: ['#4a2e1a', '#6b4423', '#8c5a2b'], n: 1, speed: [30, 110], angle: [-Math.PI * 0.9, -Math.PI * 0.1], gravity: 500, life: [220, 380], size: [6, 10], depth: o.depth ?? FLOOR_FX + 2 });
+    }
+  });
+  return { done, fade: (delay) => scene.tweens.add({ targets: [g, edge], alpha: 0, delay: slow(delay), duration: slow(420), onComplete: () => (g.destroy(), edge.destroy()) }) };
+}
+
+/**
+ * Dikenli sarmaşığın bir karakteri sarması: ayaklarından beline doğru dönerek yükselen sarmal. Arkadaki kıvrımlar karakterin arkasında,
+ * öndekiler önünde çizilir (iki Graphics). Büyür, vuruşta sıkar (karakter hafif ezilir), bir süre tutar, sonra çözülüp yere iner.
+ */
+function vineCoil(scene: Phaser.Scene, t: CombatantView, hold = 520, o: { height?: number; turns?: number; snare?: boolean } = {}): void {
+  const back = scene.add.graphics().setDepth(t.container.depth - 1);
+  const front = scene.add.graphics().setDepth(t.container.depth + 2);
+  const cx = t.container.x;
+  const base = t.container.y - 2;
+  const H = t.h * (o.height ?? 0.6);
+  const W = Math.max(26, t.w * 0.34);
+  const turns = o.turns ?? 2.6;
+  // Vine Snare (snare): dikensiz, kalın kök-sarmaşık (kahve gövde, yeşil sürgün) bacakları sarar
+  const snare = !!o.snare;
+  const max = turns * Math.PI * 2;
+  const ph = rnd(0, Math.PI * 2);
+  const draw = (grow: number, squeeze: number) => {
+    back.clear();
+    front.clear();
+    const top = grow * max;
+    for (let a = 0; a <= top; a += 0.1) {
+      const k = a / max;
+      const r = W * (1 - 0.18 * k) * squeeze;
+      const x = snap(cx + Math.cos(a + ph) * r);
+      const y = snap(base - k * H + Math.sin(a + ph) * 7);
+      const isFront = Math.sin(a + ph) > 0;
+      const g = isFront ? front : back;
+      const th = (isFront ? 11 : 8) + (snare ? 3 : 0);
+      g.fillStyle(snare ? 0x2a1a0e : 0x1f3a14, 1).fillRect(x - th / 2 - 1, y - th / 2 - 1, th + 2, th + 2);
+      const body = snare ? (isFront ? (Math.round(a / 0.3) % 2 ? 0x8c5a2b : 0x6b4423) : 0x4a2e1a) : isFront ? (Math.round(a / 0.3) % 2 ? 0x62d04b : 0x3f9a34) : 0x2c6a26;
+      g.fillStyle(body, 1).fillRect(x - th / 2, y - th / 2, th, th);
+      const i = Math.round(a / 0.1);
+      if (snare && isFront && i % 4 === 0) g.fillStyle(0x62d04b, 1).fillRect(x - th / 2, y - th / 2, th, 3); // kökü saran yeşil sürgün
+      if (!snare && isFront && i % 11 === 5) g.fillStyle(0xfdfaf2, 1).fillTriangle(x, y - 4, x + (Math.cos(a + ph) > 0 ? 14 : -14), y - 8, x, y + 3); // diken
+      if (isFront && i % 19 === 12) g.fillStyle(0xa8f08a, 1).fillRect(x - 7, y - 11, 14, 6).fillStyle(0x2c7a2b, 1).fillRect(x - 1, y - 9, 3, 3); // yaprak
+    }
+  };
+  void counter(scene, slow(240), (u) => draw(u, 1), 'Quad.easeOut').then(async () => {
+    // sıkma: sarmal daralır, karakter hafif ezilir
+    scene.tweens.add({ targets: t.container, scaleX: 0.95, duration: slow(70), yoyo: true });
+    await counter(scene, slow(140), (u) => draw(1, 1 - 0.16 * Math.sin(u * Math.PI)));
+    await wait(scene, slow(hold));
+    await counter(scene, slow(260), (u) => draw(1 - u, 1), 'Quad.easeIn');
+    back.destroy();
+    front.destroy();
+  });
+}
+
+/** Bir hücrede yerden dikenli sarmaşıklar fırlar (karakterle derinlik sıralı), toprak/yaprak saçılır; hücredeki hedefler sarılır. */
+function vineEruption(c: VfxCtx, slot: number, victims: CombatantView[], big: boolean): void {
+  const q = quadOf(c.board, slot, 0.9);
+  const mid = cellMid(c.board, slot);
+  const n = big ? 4 : 3;
+  for (let i = 0; i < n; i++) {
+    const p = inQuad(q, 0.85);
+    const h = rnd(130, 190) * (big ? 1.1 : 1);
+    const v = c.scene.add.image(snap(p.x), snap(p.y + 2), ensureIcon(c.scene, i % 3 === 2 ? 'thornspike' : 'thornvine', '#8bd06a', false)).setOrigin(0.5, 1).setDisplaySize(h * (i % 3 === 2 ? 0.42 : 0.5), h).setDepth(p.y + 1);
+    v.setFlipX(Math.random() < 0.5).setRotation(rnd(-0.25, 0.25));
+    const sy = v.scaleY;
+    v.setScale(v.scaleX, sy * 0.05);
+    c.scene.tweens.add({ targets: v, scaleY: sy, duration: slow(rnd(160, 230)), delay: slow(i * 35), ease: 'Back.easeOut' });
+    c.scene.tweens.add({ targets: v, angle: v.angle + rnd(-6, 6), duration: slow(420), yoyo: true, delay: slow(240), ease: 'Sine.easeInOut' });
+    c.scene.tweens.add({ targets: v, scaleY: sy * 0.1, alpha: 0, delay: slow(900 + i * 40), duration: slow(300), ease: 'Quad.easeIn', onComplete: () => v.destroy() });
+    burst(c.scene, p.x, p.y, { colors: ['#4a2e1a', '#6b4423', '#8c5a2b'], n: 3, speed: [60, 220], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 650, life: [300, 600], size: [8, 14] });
+  }
+  // zeminde kısa çatlak ve toprak tozu
+  const g = c.scene.add.graphics().setDepth(FLOOR_FX);
+  for (let k = 0; k < 5; k++) {
+    let x = mid.x;
+    let y = mid.y;
+    const a = (k / 5) * Math.PI * 2 + rnd(-0.3, 0.3);
+    for (let s = 0; s < 8; s++) {
+      x += Math.cos(a + rnd(-0.5, 0.5)) * 7;
+      y += Math.sin(a + rnd(-0.5, 0.5)) * 3;
+      g.fillStyle(0x2a1a0e, 0.85).fillRect(snap(x), snap(y), 4, 4);
+    }
+  }
+  c.scene.tweens.add({ targets: g, alpha: 0, delay: slow(700), duration: slow(500), onComplete: () => g.destroy() });
+  dustCloud(c.scene, mid.x, mid.y, { n: 3, spread: 70, rise: 40, size: [30, 54], tint: 0x8a6a3a, life: 700 });
+  for (let k = 0; k < 4; k++) {
+    const leaf = sprite(c.scene, 'leafbit', '#7ed957', mid.x + rnd(-50, 50), mid.y - rnd(20, 90), 34, DEPTH + 40);
+    c.scene.tweens.add({ targets: leaf, y: leaf.y - rnd(40, 110), x: leaf.x + rnd(-70, 70), rotation: rnd(-4, 4), alpha: 0, duration: slow(rnd(600, 900)), onComplete: () => leaf.destroy() });
+  }
+  for (const t of victims) {
+    vineCoil(c.scene, t);
+    const p = spot(t);
+    burst(c.scene, p.x, p.y, { colors: ['#62d04b', '#2c7a2b', '#fdfaf2'], n: 6, speed: [80, 260], gravity: 500, life: [300, 600], size: [6, 12] });
+  }
+}
+
+/**
+ * Nature's Wrath (rect 2x3, aşamalı row): Druid asasını kaldırır, ayağının dibinden dikenli sarmaşıklar zemin boyunca sürünerek ÖN sıradaki
+ * (1. aşama) her hücreye ayrı dal olarak koşar; hücreye varınca yerden dikenli sarmaşıklar fırlar ve oradaki düşmanı sarar (1. aşama hasarı).
+ * Sonra sarmaşık her hücreden arkadaki sıraya (2. aşama) doğru yayılır, orada da fışkırır ve sarar (2. aşama hasarı). Sesler Druid'in kendi sesleri.
+ */
+const vines = (c: VfxCtx) => playUntilHit(async (hit) => {
   c.sfx('rootsRumble');
   await c.windUp('#7ed957');
-  const spots = c.cells.length ? c.cells : c.targets.map((t) => feet(t));
-  await Promise.all(
-    spots.map(async (q, i) => {
-      await wait(c.scene, slow(i * 60));
-      const r = sprite(c.scene, 'roots', '#7ed957', q.x, q.y + 20, 192, DEPTH + 25);
-      sprout(c.scene, r, 280);
-      if (i === 0) {
-        c.sfx('thud');
-        c.sfx('leafRustle');
-      }
-      burst(c.scene, q.x, q.y, { colors: [...NATURE, '#8c5a2b'], n: 14, speed: [60, 260], angle: [-Math.PI, 0], gravity: 500, life: [400, 800], size: [8, 14] });
-      void ring(c.scene, q.x, q.y, { r: 80, flat: 0.35, n: 16, colors: NATURE, dur: 400, size: 10 });
-      await wait(c.scene, slow(380));
-      for (let k = 0; k < 3; k++) {
-        const leaf = sprite(c.scene, 'leafbit', '#7ed957', q.x + rnd(-40, 40), q.y - rnd(40, 120), 40, DEPTH + 40);
-        c.scene.tweens.add({ targets: leaf, y: leaf.y - rnd(40, 100), x: leaf.x + rnd(-60, 60), rotation: rnd(-3, 3), alpha: 0, duration: slow(700), onComplete: () => leaf.destroy() });
-      }
-      c.scene.tweens.add({ targets: r, alpha: 0, duration: slow(300), onComplete: () => r.destroy() });
-    }),
-  );
-};
+  c.actor.play('cast');
+  const stages = fxStages(c);
+  const dir = c.board === 'enemy' ? 1 : -1;
+  const root = { x: c.actor.container.x + dir * 30, y: c.actor.container.y - 4 };
+  const fades: Array<(d: number) => void> = [];
+  let prev: number[] = [];
+  let first = true;
+  for (const [si, st] of stages.entries()) {
+    // her hücreye bir dal: 1. aşamada Druid'in ayağından, sonrakilerde önceki aşamanın en yakın hücresinden
+    const runs = st.slots.map((slot) => {
+      const to = cellMid(c.board, slot);
+      const fromSlot = prev.length ? prev.reduce((b, s) => (Math.hypot(cellMid(c.board, s).x - to.x, cellMid(c.board, s).y - to.y) < Math.hypot(cellMid(c.board, b).x - to.x, cellMid(c.board, b).y - to.y) ? s : b)) : null;
+      const from = fromSlot === null ? root : cellMid(c.board, fromSlot);
+      const dist = Math.hypot(to.x - from.x, to.y - from.y);
+      const cr = creeper(c.scene, from, to, Math.max(200, dist / (first ? 2.3 : 1.5)), { width: first ? 10 : 8 });
+      fades.push(cr.fade);
+      return { slot, done: cr.done };
+    });
+    if (si > 0) {
+      c.sfx('rootsRumble');
+      c.sfx('leafRustle');
+    }
+    // dallar vardıkça fışkırma; aşamanın vuruş anı = son dal varınca (aşamanın tüm hücreleri sarılmış olur)
+    await Promise.all(
+      runs.map(async (r, i) => {
+        await r.done;
+        vineEruption(c, r.slot, st.targets.filter((t) => slotOfView(t) === r.slot), si === 0);
+        if (i === 0) {
+          c.sfx('thud');
+          c.sfx('leafRustle');
+          shake(c.scene, 140, si === 0 ? 0.004 : 0.003);
+        }
+      }),
+    );
+    await wait(c.scene, slow(90));
+    // aşamanın hasar rakamları bu anda akar; ilk aşamada efektin Promise'i de çözülür (yayılma arkada sürer)
+    c.releaseStage(si);
+    if (first) {
+      first = false;
+      hit();
+    }
+    prev = st.slots;
+    if (si < stages.length - 1) await wait(c.scene, slow(240));
+  }
+  c.actor.play('idle');
+  for (const f of fades) f(500);
+});
 
 const rejuvenate = async (c: VfxCtx) => {
   c.sfx('chimeHeal');
@@ -1448,74 +2043,183 @@ const woodsmash = async (c: VfxCtx) => {
   void wait(c.scene, slow(200)).then(() => a.returnHome());
 };
 
-/** `thorns` durumundaki birimin saldırgana yansıttığı diken: saldırganın üstünde kısa yeşil-kahve diken kıvılcımı ve ufak sarsıntı. */
-export function thornReflectFx(scene: Phaser.Scene, victim: CombatantView, holder: CombatantView): void {
-  const p = spot(victim);
-  const dir = victim.container.x >= holder.container.x ? 1 : -1;
-  playSfx(scene, 'thornStab');
-  // diken uçları holder tarafından saldırganın gövdesine saplanır (uçları saldırgana bakar)
+/**
+ * Treant - Root Smash (uzak menzil, havadan; veri `motion: sky` + `skyFx: fist`): Treant YERİNDE kalır, gövdesini gerip dal-kolunu göğe kaldırır
+ * (yapraklar dökülür). Hedefin tam üstünde, gökten sarkan burgulu bir kök "kolun" ucunda dev ahşap yumruk belirir (hedefin boyuna oranlı) ve
+ * düşer; çarpınca hedefin ayağının dibinden kökler patlar, toprak çatlar, kıymık/yaprak/toz saçılır, hafif sarsıntı. Fist Crush'ın altın
+ * yumruğundan ayrışır: kabuklu ahşap yumruk + yukarı uzanan kök kol + yerden kök patlaması (parıltı yok). Hasar çarpma anında.
+ */
+const rootfall = async (c: VfxCtx) => {
+  const t = c.targets[0];
+  if (!t) return;
+  const a = c.actor;
+  c.sfx('woodCreak');
+  a.play('attack');
+  // kol kaldırma: gövde yukarı gerilir, tepesinden yaprak ve kıymık dökülür
+  c.scene.tweens.add({ targets: a.container, scaleY: 1.07, scaleX: 0.97, duration: slow(200), yoyo: true, hold: slow(160), ease: 'Quad.easeOut' });
+  burst(c.scene, a.container.x, a.container.y - a.h * 0.95, { colors: ['#62d04b', '#2c7a2b', '#8c5a2b', '#e3b983'], n: 8, speed: [40, 160], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 300, life: [400, 800], size: [8, 14] });
   for (let i = 0; i < 4; i++) {
-    const off = rnd(-0.55, 0.55);
-    const sp = sprite(scene, 'thornspike', '#8bd06a', p.x - dir * 70, p.y + (i - 1.5) * 26 + rnd(-8, 8), 56, DEPTH + 55).setRotation(dir * (Math.PI / 2) + off);
-    const to = { x: p.x - dir * rnd(0, 18), y: sp.y + off * 24 };
-    void travel(scene, sp, to, 80, { ease: 'out' }).then(() => scene.tweens.add({ targets: sp, alpha: 0, duration: slow(200), delay: slow(60), onComplete: () => sp.destroy() }));
+    const leaf = sprite(c.scene, 'leafbit', '#7ed957', a.container.x + rnd(-40, 40), a.container.y - a.h * rnd(0.7, 1), 30, DEPTH + 40);
+    c.scene.tweens.add({ targets: leaf, y: leaf.y + rnd(60, 140), x: leaf.x + rnd(-60, 60), rotation: rnd(-4, 4), alpha: 0, duration: slow(rnd(700, 1000)), onComplete: () => leaf.destroy() });
   }
-  burst(scene, p.x, p.y, { colors: ['#62d04b', '#2c7a2b', '#8c5a2b', '#e3b983'], n: 7, speed: [100, 300], angle: [-Math.PI * 0.95, -0.1], gravity: 700, life: [260, 520], size: [6, 10] });
-  scene.tweens.add({ targets: victim.container, x: victim.container.x + dir * 9, duration: slow(45), yoyo: true, repeat: 1 });
-  shake(scene, 80, 0.002);
+  await wait(c.scene, slow(240));
+  const f = feet(t);
+  const p = spot(t);
+  const size = Math.max(128, Math.min(240, Math.round((t.h * 0.95) / 16) * 16));
+  const landY = p.y + size * 0.08;
+  // yerde büyüyen gölge
+  const shadow = c.scene.add.ellipse(f.x, f.y, 30, 12, 0x000000, 0.42).setDepth(FLOOR_FX + 4);
+  c.scene.tweens.add({ targets: shadow, scaleX: size / 22, scaleY: size / 44, duration: slow(420), ease: 'Quad.easeIn' });
+  // yumruk + gökten sarkan kök kol
+  const fist = sprite(c.scene, 'rootfist', '#8c5a2b', p.x, -size * 0.6, size, DEPTH + 40);
+  const arm = c.scene.add.graphics().setDepth(DEPTH + 39);
+  const ph = rnd(0, 6);
+  const drawArm = (sway: number) => {
+    arm.clear();
+    const topY = -30;
+    const endY = fist.y - size * 0.4;
+    const n = Math.max(2, Math.ceil((endY - topY) / 12));
+    for (let i = 0; i <= n; i++) {
+      const u = i / n;
+      const y = topY + (endY - topY) * u;
+      const x = fist.x + Math.sin(u * Math.PI * 2.2 + ph) * 14 * (1 - u) * sway + Math.sin(u * 9 + ph) * 3;
+      const w = Math.round(size * 0.2 - u * size * 0.04);
+      arm.fillStyle(0x2a1a0e, 1).fillRect(snap(x - w / 2 - 2), snap(y - 7), w + 4, 16);
+      arm.fillStyle(i % 3 === 0 ? 0x4a2e1a : 0x6b4423, 1).fillRect(snap(x - w / 2), snap(y - 6), w, 14);
+      arm.fillStyle(0x8c5a2b, 1).fillRect(snap(x - w / 2), snap(y - 6), Math.max(4, w * 0.3), 14);
+      if (i % 4 === 1) arm.fillStyle(0x62d04b, 1).fillRect(snap(x + w / 2 - 2), snap(y - 4), 8, 6); // yosun/sürgün
+      if (i % 5 === 3) arm.fillStyle(0xe3b983, 1).fillRect(snap(x - 3), snap(y - 2), 6, 3); // kabuk çatlağı
+    }
+  };
+  c.sfx('leafRustle');
+  await counter(
+    c.scene,
+    slow(380),
+    (u) => {
+      fist.setY(snap(-size * 0.6 + (landY + size * 0.6) * u * u));
+      drawArm(1 - u * 0.6);
+      if (u > 0.3 && Math.random() < 0.5) burst(c.scene, fist.x + rnd(-size * 0.3, size * 0.3), fist.y - size * 0.4, { colors: ['#8c5a2b', '#e3b983', '#62d04b'], n: 1, speed: [0, 40], gravity: 200, life: [200, 360], size: [8, 12] });
+    },
+  );
+  shadow.destroy();
+  // çarpma: kök patlaması, çatlak, toz, kıymık
+  c.sfx('woodSmash');
+  c.sfx('rootsRumble');
+  hit(c.scene, p.x, p.y + size * 0.15, WOOD, 1.5);
+  cracks(c.scene, f.x, f.y - 2, { len: 150, n: 8, dur: 700 });
+  dustCloud(c.scene, f.x, f.y, { n: 7, spread: 100, rise: 50, size: [30, 56], tint: 0x8a6a3a });
+  burst(c.scene, f.x, f.y - 8, { colors: ['#4a2e1a', '#6b4423', '#8c5a2b'], n: 14, speed: [120, 400], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 900, life: [420, 800], size: [10, 18] });
+  for (let i = 0; i < 5; i++) {
+    const dx = (i - 2) * (t.w * 0.28) + rnd(-8, 8);
+    const r = sprite(c.scene, i % 2 ? 'thornspike' : 'roots', i % 2 ? '#8c5a2b' : '#7ed957', f.x + dx, f.y + 6, i % 2 ? 60 : 84, f.y + 2 + (i % 2));
+    r.setRotation(dx / 220);
+    sprout(c.scene, r, 140);
+    c.scene.tweens.add({ targets: r, scaleY: r.scaleY * 0.1, alpha: 0, duration: slow(300), delay: slow(420 + i * 30), ease: 'Quad.easeIn', onComplete: () => r.destroy() });
+  }
+  for (let i = 0; i < 9; i++) {
+    const sp = sprite(c.scene, i % 3 === 0 ? 'leafbit' : 'splinter', i % 3 === 0 ? '#62d04b' : '#e3b983', p.x, p.y, 34, DEPTH + 45).setRotation(rnd(0, 6));
+    c.scene.tweens.add({ targets: sp, x: p.x + rnd(-170, 170), y: p.y + rnd(-130, 40), rotation: sp.rotation + rnd(-4, 4), alpha: 0, duration: slow(560), onComplete: () => sp.destroy() });
+  }
+  c.scene.tweens.add({ targets: t.container, scaleY: 0.9, scaleX: 1.06, duration: slow(70), yoyo: true });
+  shake(c.scene, 150, 0.007);
+  // yumruk bir an çakılı kalır, sonra kök kol onu göğe geri çeker
+  void wait(c.scene, slow(160)).then(() =>
+    counter(c.scene, slow(320), (u) => {
+      fist.setY(snap(landY - (landY + size) * u * u)).setAlpha(1 - u * 0.6);
+      drawArm(0.4 + u * 0.6);
+      arm.setAlpha(1 - u * 0.6);
+    }).then(() => {
+      fist.destroy();
+      arm.destroy();
+    }),
+  );
+  await wait(c.scene, slow(60));
+  a.play('idle');
+};
+
+/**
+ * Vine Snare'in bir hücresi: yerden kalın kökler ve sarmaşıklar fırlar (dikenli Nature's Wrath dallarından ayrı: kahve kök + yeşil sürgün),
+ * toprak çatlar/kabarır; hücredeki düşmanların BACAKLARINI kalın kök-sarmaşık sarar (sıkıştırır). Promise'siz; anlık.
+ */
+function snareEruption(c: VfxCtx, slot: number, victims: CombatantView[]): void {
+  const q = quadOf(c.board, slot, 0.9);
+  const mid = cellMid(c.board, slot);
+  for (let i = 0; i < 4; i++) {
+    const p = inQuad(q, 0.85);
+    const h = rnd(110, 160);
+    const vine = i % 2 === 0;
+    const v = c.scene.add.image(snap(p.x), snap(p.y + 2), ensureIcon(c.scene, vine ? 'thornvine' : 'roots', vine ? '#62d04b' : '#7ed957', false)).setOrigin(0.5, 1).setDisplaySize(h * (vine ? 0.55 : 0.8), h).setDepth(p.y + 1);
+    v.setFlipX(Math.random() < 0.5).setRotation(rnd(-0.3, 0.3));
+    if (vine) v.setTint(0xb9a06a); // dikeni bastırılmış, kök tonlu sarmaşık
+    const sy = v.scaleY;
+    v.setScale(v.scaleX, sy * 0.05);
+    c.scene.tweens.add({ targets: v, scaleY: sy, duration: slow(rnd(150, 210)), delay: slow(i * 30), ease: 'Back.easeOut' });
+    // kamçı gibi kıvrılıp hedefe doğru eğilir
+    c.scene.tweens.add({ targets: v, angle: v.angle + (Math.random() < 0.5 ? -18 : 18), duration: slow(160), yoyo: true, delay: slow(220), ease: 'Sine.easeInOut' });
+    c.scene.tweens.add({ targets: v, scaleY: sy * 0.1, alpha: 0, delay: slow(780 + i * 40), duration: slow(280), ease: 'Quad.easeIn', onComplete: () => v.destroy() });
+    burst(c.scene, p.x, p.y, { colors: ['#4a2e1a', '#6b4423', '#8c5a2b'], n: 3, speed: [60, 220], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 650, life: [300, 600], size: [8, 14] });
+  }
+  // zeminde kabaran toprak halkası
+  const g = c.scene.add.graphics().setDepth(FLOOR_FX + 1);
+  fillCells(g, c.board, [slot], { fill: 0x3a2412, fillA: 0.45, edge: 0x8c5a2b, edgeA: 0.7, edgeW: 3, k: 0.86 });
+  c.scene.tweens.add({ targets: g, alpha: 0, delay: slow(600), duration: slow(500), onComplete: () => g.destroy() });
+  dustCloud(c.scene, mid.x, mid.y, { n: 3, spread: 70, rise: 36, size: [30, 54], tint: 0x8a6a3a, life: 700 });
+  for (const t of victims) {
+    vineCoil(c.scene, t, 420, { height: 0.34, turns: 2.2, snare: true });
+    const p = feet(t);
+    burst(c.scene, p.x, p.y - 20, { colors: ['#62d04b', '#8c5a2b', '#e3b983'], n: 6, speed: [80, 240], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 600, life: [300, 600], size: [6, 12] });
+    c.scene.tweens.add({ targets: t.container, y: t.container.y + 6, duration: slow(80), yoyo: true, hold: slow(120) });
+  }
 }
 
 /**
- * Treant - Thorn Shield: Treant'ın çevresinde yerden ahşap dikenler ve dikenli kökler fırlar, çevresini kaplayıp kalkan olur (doğal, yeşil-kahve; parıltı yok).
- * Dikenler arkada/önde elips boyunca dizilir; sonra iner ve yerini `thorns` durumunun kalıcı diken kabuğu alır (CombatantView.setThornShell).
+ * Treant - Vine Snare (rect 2x2; %25 yere bağlama + 1 tur Stun): Treant yerinde kalır, dal-kolunu yere vurur (çatlak, toz); kökler toprağın
+ * altından alana doğru ilerler (yer kabarır, toprak sıçrar), 2x2 alanın her hücresinde yerden kalın kökler ve sarmaşıklar fırlar ve düşmanların
+ * bacaklarını sarar (hasar rakamları o an). Stun'a bağlanan düşmanda (status `cause: 'vines'`) sarmaşık stun süresince bacaklarında kalır
+ * (CombatantView.setVineWrap; stun bitince çözülür) ve kısa "Rooted" yazısı çıkar.
  */
-const thornshield = async (c: VfxCtx) => {
+const vinesnare = (c: VfxCtx) => playUntilHit(async (hit) => {
   const a = c.actor;
-  c.sfx('thornCreak');
-  a.play('cast');
-  const f = feet(a);
-  const rx = a.w * 0.58;
-  const ry = 30;
-  const spikes: Phaser.GameObjects.Image[] = [];
-  cracks(c.scene, f.x, f.y, { len: 150, n: 8, dur: 900 });
-  dustCloud(c.scene, f.x, f.y, { n: 6, spread: 100, rise: 70, size: [34, 60], tint: 0x9a7c52 });
-  await wait(c.scene, slow(260));
-  c.sfx('thornSprout');
-  const N = 12;
-  for (let i = 0; i < N; i++) {
-    void wait(c.scene, slow(i * 36)).then(() => {
-      const th = (i / N) * Math.PI * 2 + 0.2;
-      const side = Math.cos(th);
-      const x = f.x + side * rx;
-      const y = f.y + Math.sin(th) * ry;
-      const back = Math.sin(th) < 0;
-      const h = 72 + Math.abs(side) * 48 + (back ? 16 : -8) + rnd(0, 18);
-      const sp = c.scene.add.image(snap(x), snap(y), ensureIcon(c.scene, 'thornspike', '#8bd06a', false)).setOrigin(0.5, 1).setDisplaySize(h * 0.46, h).setRotation(side * 0.42 + rnd(-0.1, 0.1)).setDepth(back ? a.container.depth - 1 : DEPTH - 40);
-      const sy = sp.scaleY;
-      sp.setScale(sp.scaleX, sy * 0.05);
-      c.scene.tweens.add({ targets: sp, scaleY: sy, duration: slow(190), ease: 'Back.easeOut' });
-      spikes.push(sp);
-      burst(c.scene, x, y, { colors: ['#4a2e1a', '#8c5a2b', '#e3b983'], n: 3, speed: [40, 190], angle: [-Math.PI, 0], gravity: 560, life: [260, 520], size: [6, 10] });
+  const slots = fxSlots(c);
+  c.sfx('woodCreak');
+  a.play('attack');
+  // kol yere iner: gövde öne çöker
+  await new Promise<void>((resolve) => c.scene.tweens.add({ targets: a.container, scaleY: 0.92, scaleX: 1.04, y: a.container.y + 6, duration: slow(140), yoyo: true, hold: slow(80), ease: 'Quad.easeIn', onYoyo: () => resolve() }));
+  const dir = c.board === 'enemy' ? 1 : -1;
+  const slam = { x: a.container.x + dir * (a.w * 0.45), y: a.container.y - 4 };
+  cracks(c.scene, slam.x, slam.y, { len: 110, n: 6, dur: 600 });
+  dustCloud(c.scene, slam.x, slam.y, { n: 4, spread: 70, rise: 40, size: [30, 54], tint: 0x8a6a3a });
+  burst(c.scene, slam.x, slam.y - 6, { colors: ['#4a2e1a', '#6b4423', '#62d04b'], n: 10, speed: [80, 300], angle: [-Math.PI * 0.95, -Math.PI * 0.05], gravity: 800, life: [350, 650], size: [8, 14] });
+  shake(c.scene, 140, 0.005);
+  // kökler yerin altından ilerler: her hücreye bir kabarma izi
+  c.sfx('vineLash');
+  const arrivals = slots.map(async (slot) => {
+    const to = cellMid(c.board, slot);
+    const dist = Math.hypot(to.x - slam.x, to.y - slam.y);
+    const dur = Math.max(180, dist / 2.6);
+    const ridge = c.scene.add.graphics().setDepth(FLOOR_FX + 1);
+    let lastDirt = 0;
+    await counter(c.scene, slow(dur), (u) => {
+      const x = slam.x + (to.x - slam.x) * u + Math.sin(u * 9) * 6;
+      const y = slam.y + (to.y - slam.y) * u;
+      ridge.fillStyle(0x2a1a0e, 0.75).fillRect(snap(x) - 5, snap(y) - 2, 10, 4);
+      ridge.fillStyle(0x6b4423, 0.85).fillRect(snap(x) - 3, snap(y) - 4, 6, 2);
+      if (u * dur - lastDirt > 40) {
+        lastDirt = u * dur;
+        burst(c.scene, x, y - 2, { colors: ['#4a2e1a', '#6b4423', '#8c5a2b'], n: 1, speed: [40, 140], angle: [-Math.PI * 0.85, -Math.PI * 0.15], gravity: 600, life: [220, 400], size: [6, 10] });
+      }
     });
-  }
-  // dikenli kökler iki yanda yükselip gövdeye sarılır
-  for (const sgn of [-1, 1]) {
-    void wait(c.scene, slow(150 + (sgn > 0 ? 70 : 0))).then(() => {
-      const v = c.scene.add.image(snap(f.x + sgn * rx * 0.72), snap(f.y + 4), ensureIcon(c.scene, 'thornvine', '#8bd06a', false)).setOrigin(0.5, 1).setDisplaySize(84, 170).setDepth(DEPTH - 41);
-      v.setFlipX(sgn < 0);
-      const by = v.scaleY;
-      v.setScale(v.scaleX, by * 0.05);
-      c.scene.tweens.add({ targets: v, scaleY: by, duration: slow(300), ease: 'Back.easeOut' });
-      c.scene.tweens.add({ targets: v, angle: sgn * 5, duration: slow(520), yoyo: true, ease: 'Sine.easeInOut' });
-      spikes.push(v);
-    });
-  }
-  shake(c.scene, 220, 0.0035);
-  await wait(c.scene, slow(N * 36 + 160));
-  // tutundukları an: hafif bir sarsılma, sonra dikenler iner (kabuk devralır)
-  c.scene.tweens.add({ targets: a.container, scaleX: 1.025, scaleY: 0.98, duration: slow(90), yoyo: true });
-  for (const sp of spikes) c.scene.tweens.add({ targets: sp, scaleY: sp.scaleY * 0.45, alpha: 0, duration: slow(440), delay: slow(380), ease: 'Quad.easeIn', onComplete: () => sp.destroy() });
-};
+    c.scene.tweens.add({ targets: ridge, alpha: 0, delay: slow(300), duration: slow(500), onComplete: () => ridge.destroy() });
+    snareEruption(c, slot, c.targets.filter((t) => slotOfView(t) === slot));
+  });
+  await Promise.all(arrivals);
+  c.sfx('rootGrip');
+  shake(c.scene, 120, 0.004);
+  await wait(c.scene, slow(140)); // sarmaşıklar sıkar: hasar rakamları o an
+  hit();
+  a.play('idle');
+  await wait(c.scene, slow(500));
+});
 
 // ---------------------------------------------------------------------------------------------------------------------
 // DEFENDER
@@ -1588,17 +2292,92 @@ const guardlink = async (c: VfxCtx) => {
   await wait(c.scene, slow(150));
 };
 
+/**
+ * Tremor Slam (row, melee): Defender hedef SIRANIN başına (ekranda en üstteki şeridin önüne) koşar, zırhlı yumruğunu kaldırıp yere indirir;
+ * sarsıntı dalgası sıra boyunca hücreden hücreye (üst şeritten alta) ilerler: zeminde zikzak bir çatlak çizgisi uzar, her hücrede taş
+ * parçaları yerden fırlar, toz kalkar, o hücredeki düşman sarsılıp havaya sıçrar (hasar rakamı dalga ona değdiği an).
+ */
 const tremor = async (c: VfxCtx) => {
-  await c.lunge(avgX(c.targets, c.actor.container.x));
+  const slots = [...fxSlots(c)].sort((p, q) => cellMid(c.board, p).y - cellMid(c.board, q).y); // ekranda üstten alta (şerit sırası)
+  const head = slots[0] !== undefined ? cellMid(c.board, slots[0]) : (c.centerPos ?? feet(c.actor));
+  await meleeApproach(c.scene, c.actor, c.targets, head);
   c.sfx('effortHah');
+  const dir = head.x >= c.actor.container.x ? 1 : -1;
+  // zırhlı yumruk iner: Defender'ın önünde yere çakılır
+  const impact = { x: c.actor.container.x + dir * (c.actor.w * 0.5 + 26), y: head.y };
+  const fist = sprite(c.scene, 'fistcrush', '#ffe9b0', impact.x, impact.y - 150, 112, DEPTH + 40);
+  await travel(c.scene, fist, { x: impact.x, y: impact.y - 46 }, 90, { ease: 'in' });
   c.sfx('armorStomp');
-  const cell = c.centerPos ?? (c.targets[0] ? feet(c.targets[0]) : feet(c.actor));
-  cracks(c.scene, cell.x, cell.y - 8, { len: 220, n: 9 });
-  void ring(c.scene, cell.x, cell.y - 8, { r: 260, flat: 0.32, n: 36, colors: DUST, dur: 600, size: 14 });
-  void ring(c.scene, cell.x, cell.y - 8, { r: 150, flat: 0.32, n: 26, colors: ['#ffffff', '#ffd23f'], dur: 420, size: 12 });
-  burst(c.scene, cell.x, cell.y - 20, { colors: ['#5b6579', '#98a2b4', '#4a2e1a'], n: 22, speed: [160, 460], angle: [-Math.PI, 0], gravity: 900, life: [500, 950], size: [10, 20] });
-  for (const q of c.cells.filter((x) => x !== c.centerPos)) burst(c.scene, q.x, q.y - 10, { colors: DUST, n: 8, speed: [40, 160], angle: [-Math.PI, 0], gravity: 500, life: [300, 600], size: [8, 14] });
-  shake(c.scene, 240, 0.008);
+  c.scene.tweens.add({ targets: fist, alpha: 0, y: fist.y + 6, delay: slow(140), duration: slow(220), onComplete: () => fist.destroy() });
+  shake(c.scene, 260, 0.009);
+  void ring(c.scene, impact.x, impact.y, { r: 130, flat: 0.32, n: 26, colors: ['#ffffff', '#ffe9b0', ...DUST], dur: 420, size: 12 });
+  burst(c.scene, impact.x, impact.y - 12, { colors: ['#5b6579', '#98a2b4', '#4a2e1a'], n: 16, speed: [140, 420], angle: [-Math.PI, 0], gravity: 900, life: [450, 850], size: [10, 18] });
+  dustCloud(c.scene, impact.x, impact.y, { n: 4, spread: 80, rise: 50, size: [40, 70], life: 800 });
+  // dalga: çarpma noktasından sıranın hücreleri boyunca (merkezden merkeze) zikzak çatlak + yerden fırlayan taşlar
+  const path = [impact, ...slots.map((s) => cellMid(c.board, s))];
+  const extra = slots.length ? { x: path[path.length - 1]!.x + (path[path.length - 1]!.x - path[path.length - 2]!.x) * 0.45, y: path[path.length - 1]!.y + (path[path.length - 1]!.y - path[path.length - 2]!.y) * 0.45 } : impact;
+  path.push(extra);
+  const crack = c.scene.add.graphics().setDepth(FLOOR_FX + 1);
+  const arrive = new Map<number, ReturnType<typeof deferred>>(slots.map((s) => [s, deferred()]));
+  const reachedAt = slots.map((_, i) => polyLen(path.slice(0, i + 2))); // dalganın i. hücrenin merkezine vardığı mesafe
+  const total = polyLen(path);
+  const reached = new Set<number>();
+  let last = 0;
+  let wobble = 0;
+  c.sfx('earthCrack');
+  const WAVE = 120 * Math.max(1, slots.length) + 80;
+  void counter(c.scene, slow(WAVE), (u) => {
+    const d = total * u;
+    for (let s = last; s <= d; s += 4) {
+      const p = pointAt(path, s);
+      wobble += rnd(-3, 3);
+      wobble = Math.max(-9, Math.min(9, wobble));
+      const x = snap(p.x);
+      const y = snap(p.y + wobble * 0.5);
+      crack.fillStyle(0x15101c, 0.95).fillRect(x - 2, y - 2, 5, 4);
+      crack.fillStyle(0x4a2e1a, 0.8).fillRect(x - 3, y + 2, 6, 2);
+      if (Math.random() < 0.18) {
+        // yan çatlak dalı
+        let bx = x;
+        let by = y;
+        const a = rnd(0, Math.PI * 2);
+        for (let k = 0; k < 4; k++) {
+          bx += Math.cos(a) * 5;
+          by += Math.sin(a) * 2.5;
+          crack.fillStyle(0x15101c, 0.8).fillRect(snap(bx), snap(by), 3, 3);
+        }
+      }
+    }
+    last = d;
+    // dalganın ucunda yerden küçük taş fırlar
+    const tip = pointAt(path, d);
+    if (Math.random() < 0.6) burst(c.scene, tip.x, tip.y - 4, { colors: ['#5b6579', '#98a2b4', '#4a2e1a'], n: 2, speed: [80, 240], angle: [-Math.PI * 0.85, -Math.PI * 0.15], gravity: 900, life: [300, 520], size: [8, 14] });
+    slots.forEach((s, i) => {
+      if (reached.has(s) || d < reachedAt[i]!) return;
+      reached.add(s);
+      const m = cellMid(c.board, s);
+      // hücrede kaya parçaları yerden fırlar, toz kalkar
+      for (let k = 0; k < 3; k++) {
+        const p = inQuad(quadOf(c.board, s, 0.8), 0.8);
+        const r = sprite(c.scene, 'rock', '#98a2b4', p.x, p.y, 34 + k * 8, p.y + 1).setOrigin(0.5, 1);
+        const sy = r.scaleY;
+        r.setScale(r.scaleX, sy * 0.1);
+        c.scene.tweens.add({ targets: r, scaleY: sy, y: r.y - rnd(6, 16), duration: slow(90), ease: 'Back.easeOut', yoyo: true, hold: slow(140), onComplete: () => r.destroy() });
+      }
+      dustCloud(c.scene, m.x, m.y, { n: 3, spread: 90, rise: 50, size: [40, 70], life: 760 });
+      void ring(c.scene, m.x, m.y, { r: 90, flat: 0.32, n: 18, colors: DUST, dur: 360, size: 10 });
+      for (const t of c.targets.filter((v) => slotOfView(v) === s)) {
+        c.scene.tweens.add({ targets: t.container, y: t.container.y - 18, duration: slow(70), yoyo: true, ease: 'Quad.easeOut' });
+        hit(c.scene, t.container.x, t.container.y - t.h * 0.35, ['#ffffff', '#ffe9b0', '#98a2b4'], 0.8);
+      }
+      shake(c.scene, 110, 0.004);
+      arrive.get(s)?.resolve();
+    });
+  }).then(() => {
+    for (const a of arrive.values()) a.resolve();
+    c.scene.tweens.add({ targets: crack, alpha: 0, delay: slow(500), duration: slow(600), onComplete: () => crack.destroy() });
+  });
+  await hitsAt(c, (t) => arrive.get(slotOfView(t))?.promise ?? Promise.resolve(), wait(c.scene, slow(WAVE)));
 };
 
 const fistcrush = async (c: VfxCtx) => {
@@ -1715,58 +2494,110 @@ const manasteal = async (c: VfxCtx) => {
   await wait(c.scene, slow(300));
 };
 
+/** Drain Field'ın yumuşak mor zemin ışıması (yassı elips, hücre başına). */
+const voidGlowTexture = (scene: Phaser.Scene) =>
+  softTexture(scene, 'fx:voidglow', 48, 24, (x, y) => {
+    const d = Math.hypot((x + 0.5 - 24) / 24, (y + 0.5 - 12) / 12);
+    if (d >= 1) return null;
+    return { c: d < 0.3 ? '#e3ccff' : d < 0.65 ? '#b872ff' : '#7d3fb0', a: (1 - d) ** 1.25 };
+  });
+
+/** Mor sıvı sütunu dokusu: ortası açık, kenarları koyu mor; üst ucu yumuşakça erir. */
+const voidSurgeTexture = (scene: Phaser.Scene) =>
+  softTexture(scene, 'fx:voidsurge', 16, 48, (x, y) => {
+    const u = Math.abs((x + 0.5) / 16 - 0.5) * 2;
+    const body = (1 - u ** 1.5) ** 1.1;
+    const top = Math.min(1, (y + 1) / 26);
+    return { c: u < 0.3 ? '#e3ccff' : u < 0.66 ? '#b872ff' : '#7d3fb0', a: body * top };
+  });
+
+/** Hücreden mor sıvının kısa bir sütun hâlinde yükselip geri çökmesi (Drain Field patlaması). */
+function voidSurge(scene: Phaser.Scene, x: number, y: number, w: number): void {
+  const img = scene.add.image(x, y + 4, voidSurgeTexture(scene)).setOrigin(0.5, 1).setDisplaySize(w, 120).setDepth(DEPTH + 6).setAlpha(0.85);
+  const sy = img.scaleY;
+  img.setScale(img.scaleX, sy * 0.1);
+  scene.tweens.add({ targets: img, scaleY: sy * rnd(0.9, 1.25), duration: slow(160), ease: 'Quad.easeOut', yoyo: true, hold: slow(60), onComplete: () => img.destroy() });
+  // çöken sıvıdan damlalar
+  for (let i = 0; i < 3; i++) {
+    const d = sprite(scene, 'manadrop', '#9b59d0', x + rnd(-w * 0.3, w * 0.3), y - rnd(60, 100), rnd(22, 32), DEPTH + 7).setRotation(Math.PI);
+    scene.tweens.add({ targets: d, y: y - 4, duration: slow(rnd(260, 360)), delay: slow(200), ease: 'Quad.easeIn', onComplete: () => d.destroy() });
+  }
+}
+
 /**
- * Drain Field: Anti-Mage seçilen alanı büyüyle mühürler (projectile yok). Yerde, seçilen merkezden başlayarak yavaşça büyüyen mor
- * bir alan açılır, dolunca patlar; alandaki her karakterin bedeninden Void Strike'ın mana damlaları havaya yükselip uzayarak
- * buharlaşır ve etkilenen her karakterin çevresinde sönen mor bir çerçeve kalır.
+ * Drain Field (rect 3x3): Anti-Mage seçilen alanı büyüyle mühürler (projectile yok). Yerde, tıklanan hücreden başlayıp şeklin hücrelerine
+ * sızarak yavaşça büyüyen mor sıvı alan açılır (hücre başına yumuşak mor ışıma + birleşik hücre plakası ve dış hat); dolunca her hücreden
+ * mor sıvı kısa bir sütun hâlinde yükselip çöker; alandaki her karakterin bedeninden Void Strike'ın mana damlaları havaya yükselip
+ * uzayarak buharlaşır ve etkilenen her karakterin silüeti sönen mor bir ışımayla kalır.
  */
 const drainfield = async (c: VfxCtx) => {
   c.sfx('voidSuction');
   await c.windUp('#9b59d0');
-  const center = c.centerPos ?? (c.targets[0] ? feet(c.targets[0]) : feet(c.actor));
-  const cells = (c.cells.length ? c.cells : [center]).slice().sort((p, q) => Math.hypot(p.x - center.x, p.y - center.y) - Math.hypot(q.x - center.x, q.y - center.y));
+  const slots = fxSlots(c);
+  const midSlot = c.center !== undefined && slots.includes(c.center) ? c.center : slots[0];
+  const center = midSlot !== undefined ? cellMid(c.board, midSlot) : (c.centerPos ?? feet(c.actor));
   const GROW = 900; // alanın yavaşça büyüme süresi (ms)
-  // 1) yerde yavaşça büyüyen TEK mor alan: hücre hücre değil, genel alan göstergesinin en geniş dairesi (yassı elips) kadar
-  // Seçim sırasında zeminde görünen alan göstergesiyle AYNI elips: kapsanan hücrelerin sınır kutusuna oturur; ızgara kenarında
-  // kesilen alanlarda küçülür/kayar, bu yüzden her seferinde aynı olmaz.
-  const minX = Math.min(...cells.map((q) => q.x));
-  const maxX = Math.max(...cells.map((q) => q.x));
-  const minY = Math.min(...cells.map((q) => q.y));
-  const maxY = Math.max(...cells.map((q) => q.y));
-  const fx = (minX + maxX) / 2;
-  const fy = (minY + maxY) / 2 - 4;
-  const fw = maxX - minX + 160;
-  const fh = maxY - minY + 96 + 20;
-  const rx = fw / 2;
-  const ry = fh / 2;
-  const outer = c.scene.add.ellipse(fx, fy, fw * 1.08, fh * 1.12, color('#9b59d0'), 0).setStrokeStyle(4, color('#b872ff'), 0).setDepth(DEPTH - 28).setScale(0.04);
-  const inner = c.scene.add.ellipse(fx, fy, fw, fh, color('#7d3fb0'), 0).setDepth(DEPTH - 27).setScale(0.04);
+  // 1) yerde yavaşça büyüyen mor alan, ŞEKLİN HÜCRELERİNE oturur: tıklanan hücreden başlayıp komşu hücrelere sızar (her hücre kendi
+  // merkezinden büyüyen mor sıvı; komşular kaynaşınca birleşik plaka olur). Her hücrede Drain Field'ın yumuşak mor ışıması (yassı elips)
+  // nabız atar; birleşik dış hat alan doldukça belirir.
+  const quads = slots.map((s) => ({ s, q: quadOf(c.board, s, 1), m: cellMid(c.board, s) }));
+  const dist = quads.map((k) => Math.hypot(k.m.x - center.x, k.m.y - center.y));
+  const span = Math.max(1, ...dist);
+  const { R, L } = gridSteps(c.board);
+  const gw = (Math.abs(R.x) + Math.abs(L.x)) * 1.05;
+  const gh = Math.abs(L.y) * 2.0;
+  const pool = c.scene.add.graphics().setDepth(FLOOR_FX);
+  const edge = c.scene.add.graphics().setDepth(FLOOR_FX + 1);
+  const glows = quads.map((k) => c.scene.add.image(k.m.x, k.m.y, voidGlowTexture(c.scene)).setDisplaySize(gw, gh).setAlpha(0).setDepth(FLOOR_FX + 2).setBlendMode(Phaser.BlendModes.ADD));
+  const gBase = glows.map((g) => ({ x: g.scaleX, y: g.scaleY }));
+  const edges = outlineOf(c.board, slots);
   const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x1a0630, 0).setDepth(DEPTH - 25);
   c.scene.tweens.add({ targets: dim, alpha: 0.3, duration: slow(GROW) });
+  const drawPool = (u: number, hot = 0) => {
+    pool.clear();
+    quads.forEach((k, i) => {
+      const v = Math.max(0, Math.min(1, (u - (dist[i]! / span) * 0.5) / 0.5));
+      const e = 1 - (1 - v) ** 2;
+      if (v > 0) {
+        const wob = 1 + 0.03 * Math.sin(u * 24 + i);
+        pool.fillStyle(hot ? 0xb872ff : 0x9b59d0, (0.26 + 0.34 * hot) * v).fillPoints(scaleQuad(k.q, (0.1 + 0.9 * e) * wob), true);
+        pool.fillStyle(hot ? 0xe3ccff : 0x7d3fb0, (0.34 + 0.08 * Math.sin(u * 24) + 0.4 * hot) * v).fillPoints(scaleQuad(k.q, (0.1 + 0.9 * e) * 0.68 * wob), true);
+      }
+      glows[i]!.setAlpha((0.55 + 0.45 * hot) * v).setScale(gBase[i]!.x * (0.25 + 0.75 * e), gBase[i]!.y * (0.25 + 0.75 * e));
+    });
+    edge.clear().lineStyle(4, 0xb872ff, 0.9 * Math.max(0, (u - 0.45) / 0.55));
+    for (const [a, b] of edges) edge.lineBetween(a.x, a.y, b.x, b.y);
+  };
   await counter(
     c.scene,
     slow(GROW),
     (u) => {
-      const e = 1 - (1 - u) ** 2;
-      outer.setScale(0.04 + 0.96 * e).setFillStyle(color('#9b59d0'), 0.26 * u).setStrokeStyle(4, color('#b872ff'), 0.9 * u);
-      inner.setScale(0.04 + 0.96 * e).setFillStyle(color('#7d3fb0'), (0.34 + 0.08 * Math.sin(u * 24)) * u);
-      if (Math.random() < 0.3) burst(c.scene, fx + rnd(-rx, rx) * 0.8, fy + rnd(-ry, ry) * 0.8, { colors: VOIDPURPLE, n: 1, speed: [20, 70], angle: [-Math.PI, 0], gravity: -60, life: [500, 900], size: [6, 10] });
+      drawPool(u);
+      // sıvıdan kabarcık/damla yükselir
+      if (Math.random() < 0.45) {
+        const p = inQuad(pick(quads).q, 0.8);
+        burst(c.scene, p.x, p.y, { colors: VOIDPURPLE, n: 1, speed: [20, 70], angle: [-Math.PI, 0], gravity: -60, life: [500, 900], size: [6, 10] });
+      }
     },
     'Quad.easeIn',
   );
-  // 2) alan dolunca tüm alan birden parlayıp patlar
+  // 2) alan dolunca tüm hücreler birden parlar: her hücreden mor sıvı kısa bir sütun hâlinde yükselip çöker, dış hat boyunca kıvılcım koşar
   c.sfx('voidPulse');
   flash(c.scene, '#b872ff', 0.4, 380);
   shake(c.scene, 240, 0.007);
-  void ring(c.scene, fx, fy, { r: rx + 70, flat: ry / rx, n: 56, colors: [...VOIDPURPLE, '#ffffff'], dur: 560, size: 14 });
-  outer.setFillStyle(color('#b872ff'), 0.6);
-  inner.setFillStyle(color('#b872ff'), 0.85);
-  c.scene.tweens.add({ targets: [outer, inner], alpha: 0, duration: slow(750), ease: 'Quad.easeIn', onComplete: () => { outer.destroy(); inner.destroy(); } });
-  for (let k = 0; k < 14; k++) {
-    const ang = rnd(0, Math.PI * 2);
-    const rr = Math.sqrt(rnd(0, 1));
-    burst(c.scene, fx + Math.cos(ang) * rx * rr * 0.9, fy + Math.sin(ang) * ry * rr * 0.9, { colors: [...VOIDPURPLE, '#ffffff'], n: 8, speed: [120, 420], angle: [-Math.PI, 0], gravity: 500, life: [400, 800], size: [6, 12] });
+  drawPool(1, 1);
+  for (const k of quads) {
+    voidSurge(c.scene, k.m.x, k.m.y, Math.abs(R.x) * 0.55);
+    for (let j = 0; j < 2; j++) {
+      const p = inQuad(k.q, 0.85);
+      burst(c.scene, p.x, p.y - 4, { colors: [...VOIDPURPLE, '#ffffff'], n: 5, speed: [120, 420], angle: [-Math.PI, 0], gravity: 500, life: [400, 800], size: [6, 12] });
+    }
   }
+  for (const [a, b] of edges) {
+    const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    burst(c.scene, m.x, m.y, { colors: [...VOIDPURPLE, '#ffffff'], n: 2, speed: [40, 140], angle: [-Math.PI, 0], gravity: 200, life: [300, 560], size: [6, 10] });
+  }
+  c.scene.tweens.add({ targets: [pool, edge, ...glows], alpha: 0, duration: slow(750), ease: 'Quad.easeIn', onComplete: () => { pool.destroy(); edge.destroy(); glows.forEach((g) => g.destroy()); } });
   c.scene.tweens.add({ targets: dim, alpha: 0, duration: slow(800), onComplete: () => dim.destroy() });
   await wait(c.scene, slow(200));
   c.sfx('energySlurp');
@@ -2366,8 +3197,8 @@ function survey(c: VfxCtx): Survey {
   const slots = (c.board === 'party' ? layout.partySlots : layout.enemySlots) as Pt[];
   const { rows, lanes } = content.GRID;
   const at = (slot: number): GridCell => ({ slot, r: Math.floor(slot / lanes), l: slot % lanes, x: slots[slot]?.x ?? 0, y: (slots[slot]?.y ?? 0) - 4 });
-  let list: number[] = [];
-  if (c.skill.area?.shape && c.center !== undefined) list = shapeCells(c.skill.area, c.center, c.board, content.formulas.formation);
+  let list: number[] = c.slots?.length ? [...c.slots] : [];
+  if (!list.length && c.skill.area?.shape && c.center !== undefined) list = shapeCells(c.skill.area, c.center, c.board, content.formulas.formation);
   if (!list.length && c.cells.length)
     list = c.cells.map((q) => slots.reduce((best, s, i) => (ptDist(s, q) < ptDist(slots[best]!, q) ? i : best), 0));
   if (!list.length) list = c.targets.map((t) => t.combatant.slot);
@@ -2914,6 +3745,462 @@ const shapeplus = async (c: VfxCtx) => {
   await hits;
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
+// CUTTHROAT (medieval haydut-suikastçı): kısa hançer, zehir, kil duman bombası, gölge adımı. Renk dili kömür/kül grisi + turuncu vurgu +
+// zehir yeşili; Backstab'de kızıl. Parıltılı büyü yok: çelik, duman, kan.
+
+const VENOM = ['#62d04b', '#2c7a2b', '#a8f08a', '#7fbf3f'];
+const STEEL = ['#ffffff', '#d7dce6', '#98a2b4'];
+const EMBERCUT = ['#ffffff', '#ffe9b0', '#ff8a1f', '#ffd23f'];
+const SOOT = 0x3a3f47;
+
+/** Yumuşak duman yumağı dokusu: tırtıklı kenarlı, sol-üstten ışık alan gri-kömür top (Smoke Bomb, gölge adımı). */
+const smokeTexture = (scene: Phaser.Scene) =>
+  softTexture(scene, 'fx:smokeball', 40, 40, (x, y) => {
+    const dx = x + 0.5 - 20;
+    const dy = y + 0.5 - 20;
+    const ang = Math.atan2(dy, dx);
+    const edge = 0.8 + 0.12 * Math.sin(ang * 5 + 0.7) + 0.07 * Math.sin(ang * 9 + 2.1);
+    const d = Math.hypot(dx, dy) / 20 / edge;
+    if (d >= 1) return null;
+    const lit = (-dx - dy) / 40; // sol-üst aydınlık
+    const c = lit > 0.28 ? '#d7dce6' : lit > -0.05 ? '#aab2bc' : lit > -0.35 ? '#7d8691' : '#59616c';
+    return { c, a: (1 - d ** 2.2) * 0.95 };
+  });
+
+/** Duman pufu: verilen noktada kabaran, hafif yükselen ve sönen yumuşak duman topları. `depthAt` verilirse o zemin y'sine göre karakterlerle sıralanır. */
+function smokePuffs(scene: Phaser.Scene, x: number, y: number, o: { n: number; spread: number; size: [number, number]; rise?: number; life?: number; hold?: number; alpha?: number; tint?: number; depth?: number; grow?: number }): void {
+  for (let i = 0; i < o.n; i++) {
+    const s = rnd(o.size[0], o.size[1]);
+    const px = x + rnd(-o.spread, o.spread);
+    const py = y + rnd(-o.spread * 0.3, o.spread * 0.3);
+    const puff = scene.add.image(px, py, smokeTexture(scene)).setDisplaySize(s * 0.35, s * 0.3).setAlpha(0).setTint(o.tint ?? 0xffffff).setDepth(o.depth ?? DEPTH + 20);
+    puff.setRotation(rnd(-0.4, 0.4)).setFlipX(Math.random() < 0.5);
+    const grow = o.grow ?? 1;
+    scene.tweens.add({ targets: puff, displayWidth: s * grow, displayHeight: s * 0.86 * grow, alpha: o.alpha ?? 0.9, duration: slow(rnd(160, 260)), delay: slow(rnd(0, 70)), ease: 'Cubic.easeOut' });
+    scene.tweens.add({ targets: puff, y: py - (o.rise ?? 30) * rnd(0.6, 1.2), x: px + rnd(-14, 14), duration: slow((o.life ?? 900) + (o.hold ?? 0)), ease: 'Sine.easeOut' });
+    scene.tweens.add({ targets: puff, alpha: 0, displayWidth: s * grow * 1.25, displayHeight: s * grow * 1.1, delay: slow((o.hold ?? 0) + (o.life ?? 900) * 0.45), duration: slow((o.life ?? 900) * 0.55), ease: 'Quad.easeIn', onComplete: () => puff.destroy() });
+  }
+}
+
+/**
+ * Kapüşonlu siluetin dumana dönüşüp çözülmesi (gölge adımı): kısa duman pufu, karakter koyu hayalet izleri bırakarak saydamlaşır, kömür
+ * kıvılcımları yükselir. `appear` true ise tersine: dumanın içinden belirir. Promise geçiş bitince çözülür.
+ */
+async function shadowStepFx(scene: Phaser.Scene, v: CombatantView, appear: boolean, ms = 150): Promise<void> {
+  const f = feet(v);
+  smokePuffs(scene, f.x, f.y - v.h * 0.3, { n: 6, spread: v.w * 0.35, size: [70, 120], rise: 40, life: 640, depth: v.container.depth + 1, alpha: 0.85 });
+  smokePuffs(scene, f.x, f.y - 4, { n: 3, spread: v.w * 0.4, size: [60, 90], rise: 10, life: 520, depth: v.container.depth - 1, alpha: 0.8 });
+  burst(scene, f.x, f.y - v.h * 0.5, { colors: ['#3a3f47', '#59616c', '#15101c', '#ff8a1f'], n: 8, speed: [40, 160], angle: [-Math.PI, 0], gravity: -120, life: [300, 600], size: [6, 12] });
+  if (!appear) {
+    for (let i = 0; i < 3; i++) void wait(scene, slow(i * 40)).then(() => v.afterimage(SOOT, 0.6 - i * 0.15, 260));
+    await new Promise<void>((resolve) => scene.tweens.add({ targets: v.container, alpha: 0, scaleX: 0.86, duration: slow(ms), ease: 'Quad.easeIn', onComplete: () => resolve() }));
+    v.container.setScale(1);
+  } else {
+    v.container.setAlpha(0).setScale(1.08, 1);
+    await new Promise<void>((resolve) => scene.tweens.add({ targets: v.container, alpha: 1, scaleX: 1, duration: slow(ms), ease: 'Quad.easeOut', onComplete: () => resolve() }));
+  }
+}
+
+/** Düz kesik izi (havada): a'dan b'ye uçtan sivri, ortası kalın, kuyruğu sönen piksel şerit. Promise iz bitince çözülür; `onPass(k)` uç ilerledikçe. */
+function lineSlash(scene: Phaser.Scene, a: Pt, b: Pt, o: { dur: number; size: number; colors: string[]; depth?: number; onPass?: (k: number) => void }): Promise<void> {
+  const g = scene.add.graphics().setDepth(o.depth ?? DEPTH + 40);
+  const cols = o.colors.map(color);
+  const n = Math.max(24, Math.round(ptDist(a, b) / 6));
+  return counter(scene, slow(o.dur), (u) => {
+    g.clear();
+    const head = Math.min(1, u * 1.35);
+    o.onPass?.(head);
+    for (let i = 0; i < n; i++) {
+      const k = i / (n - 1);
+      if (k > head || k < head - 0.6) continue;
+      const fade = 1 - (head - k) / 0.6;
+      const s = Math.max(2, o.size * PX * 1.4 * fade * (0.45 + 0.55 * Math.sin(Math.PI * Math.min(1, k * 1.1))));
+      const x = snap(a.x + (b.x - a.x) * k);
+      const y = snap(a.y + (b.y - a.y) * k);
+      g.fillStyle(cols[(i + Math.floor(u * 6)) % cols.length]!, Math.min(1, fade * 1.4)).fillRect(x - s / 2, y - s / 2, s, s);
+    }
+    if (u >= 1) g.destroy();
+  });
+}
+
+/** Zemindeki kesik izi: a'dan b'ye uçtan uca yanan beyaz çekirdek + turuncu kenar; kısa süre parlar, söner. */
+function groundScar(scene: Phaser.Scene, a: Pt, b: Pt, dur: number): void {
+  const g = scene.add.graphics().setDepth(FLOOR_FX + 3);
+  const len = ptDist(a, b) || 1;
+  let drawn = 0;
+  void counter(scene, slow(dur), (u) => {
+    const end = len * Math.min(1, u * 1.3);
+    for (let s = drawn; s <= end; s += 3) {
+      const x = snap(a.x + ((b.x - a.x) * s) / len);
+      const y = snap(a.y + ((b.y - a.y) * s) / len);
+      const taper = Math.sin(Math.PI * Math.min(1, Math.max(0, s / len)));
+      const w = 4 + 6 * taper;
+      g.fillStyle(0x8a3a10, 0.7).fillRect(x - w / 2 - 2, y - 3, w + 4, 6);
+      g.fillStyle(0xff8a1f, 0.9).fillRect(x - w / 2, y - 2, w, 4);
+      g.fillStyle(0xffffff, 1).fillRect(x - w / 4, y - 1, Math.max(2, w / 2), 2);
+    }
+    drawn = Math.max(drawn, end);
+  }).then(() => scene.tweens.add({ targets: g, alpha: 0, delay: slow(260), duration: slow(520), onComplete: () => g.destroy() }));
+}
+
+/**
+ * Venom Edge (tek hedef, yakın dövüş): Cutthroat hançerini çekip hedefin yanına süzülür, iki hızlı kesik atar (çelik + zehir yeşili iz);
+ * hançerin kenarından yeşil zehir damlaları yere damlar, yaradan yeşil sızıntı akar, birkaç kan kıymığı (Wound) saçılır. Tek hasar rakamı
+ * ikinci kesikte.
+ */
+const venomedge = async (c: VfxCtx) => {
+  const t = c.targets[0];
+  if (!t) return;
+  const stand = standNear(c.actor, t);
+  const dir = stand.dir;
+  c.sfx('daggerDraw');
+  // hançer çekilirken elde kısa çelik parıltısı
+  const hand = { x: c.actor.container.x + dir * c.actor.w * 0.3, y: c.actor.container.y - c.actor.h * 0.5 };
+  burst(c.scene, hand.x, hand.y, { colors: STEEL, n: 4, speed: [40, 120], gravity: 0, life: [160, 280], size: [6, 10] });
+  await c.actor.approach(stand.x, stand.y, 170, SOOT);
+  const p = spot(t);
+  c.actor.play('attack');
+  c.sfx('twinSlice');
+  const cut = (i: number) => {
+    const up = i === 1;
+    c.scene.tweens.add({ targets: c.actor.container, x: stand.x + dir * 22, duration: slow(45), yoyo: true });
+    void arcSlash(c.scene, p.x - dir * 4, p.y + (up ? -16 : 10), { dir, from: up ? 1.15 : -1.15, to: up ? -1.15 : 1.15, r: 96, dur: 100, size: 16, colors: up ? ['#ffffff', '#a8f08a', '#d7dce6'] : STEEL });
+    void arcSlash(c.scene, p.x - dir * 4, p.y + (up ? -10 : 16), { dir, from: up ? 1.15 : -1.15, to: up ? -1.15 : 1.15, r: 112, dur: 130, size: 9, colors: ['#62d04b', '#2c7a2b', '#a8f08a'] });
+    hit(c.scene, p.x, p.y, ['#ffffff', '#a8f08a', '#62d04b'], 0.7);
+    burst(c.scene, p.x, p.y, { colors: BLOOD, n: 3, speed: [120, 300], angle: [dir > 0 ? -0.6 : Math.PI - 0.4, dir > 0 ? 0.4 : Math.PI + 0.6], gravity: 800, life: [260, 480], size: [6, 10] });
+    c.scene.tweens.add({ targets: t.container, x: t.container.x + dir * 10, duration: slow(40), yoyo: true });
+  };
+  // kesikler ses kayıtlarıyla eş zamanlı (twinSlice: 75 ms ve 225 ms; ses yavaşlatılmaz)
+  await wait(c.scene, 75);
+  cut(0);
+  await wait(c.scene, 150);
+  cut(1);
+  shake(c.scene, 90, 0.003);
+  // zehir: bıçak kenarından damlalar yere düşer, yaradan yeşil sızıntı akar, ayak dibinde küçük zehir lekesi
+  const f = feet(t);
+  for (let k = 0; k < 5; k++) {
+    const d = sprite(c.scene, 'blooddrop', '#62d04b', p.x + rnd(-18, 18), p.y + rnd(-10, 14), 18, DEPTH + 45).setTint(0x7fdc5a);
+    c.scene.tweens.add({ targets: d, y: f.y - 4, duration: slow(rnd(280, 420)), delay: slow(k * 50), ease: 'Quad.easeIn', onComplete: () => {
+      burst(c.scene, d.x, f.y - 4, { colors: VENOM, n: 2, speed: [30, 90], angle: [-Math.PI * 0.9, -Math.PI * 0.1], gravity: 500, life: [160, 300], size: [4, 8] });
+      d.destroy();
+    } });
+  }
+  for (let k = 0; k < 6; k++) {
+    const seep = c.scene.add.rectangle(snap(p.x + rnd(-t.w * 0.18, t.w * 0.18)), snap(p.y + rnd(-12, 10)), 4, 6, color(pick(VENOM))).setDepth(t.container.depth + 1);
+    c.scene.tweens.add({ targets: seep, y: seep.y + rnd(30, 70), scaleY: 2.2, alpha: 0, duration: slow(rnd(600, 900)), delay: slow(80 + k * 40), ease: 'Sine.easeIn', onComplete: () => seep.destroy() });
+  }
+  const stain = c.scene.add.ellipse(f.x, f.y - 2, 30, 8, 0x2c7a2b, 0.55).setDepth(FLOOR_FX + 3);
+  c.scene.tweens.add({ targets: stain, scaleX: 2.6, scaleY: 1.8, duration: slow(380), ease: 'Quad.easeOut' });
+  c.scene.tweens.add({ targets: stain, alpha: 0, delay: slow(500), duration: slow(500), onComplete: () => stain.destroy() });
+  void wait(c.scene, slow(200)).then(() => c.actor.returnHome(220, SOOT));
+};
+
+/**
+ * Saltire Cut (x şekli, merkez hücre 2 vuruş): Cutthroat gölge adımıyla anchor hücrenin üstüne sıçrar ve havada iki hızlı kesikle X'i çizer:
+ * her kesik bir çapraz boyunca hem havada (beyaz-turuncu iz) hem zeminde (yanık kesik izi) hücre köşelerini birleştirerek koşar; ucun değdiği
+ * hücredeki düşman vurulur. Merkez her iki kesikte de vurulur (iki ayrı hasar rakamı). İkinci kesik, olay sırasında ona düşen ilk vuruştan
+ * hemen önce oynar (VfxCtx.gate); çaprazı tahta dışına taşan kol merkez hücrenin köşesinde biter.
+ */
+const saltire = async (c: VfxCtx) => {
+  const slots = fxSlots(c);
+  const lanes = content.GRID.lanes;
+  const center = c.center ?? slots[0];
+  if (center === undefined) return;
+  const C = cellMid(c.board, center);
+  const { R, L } = gridSteps(c.board);
+  const inX = (dr: number, dl: number) => {
+    const row = Math.floor(center / lanes) + dr;
+    const lane = (center % lanes) + dl;
+    return row >= 0 && row < content.GRID.rows && lane >= 0 && lane < lanes && slots.includes(row * lanes + lane);
+  };
+  // çaprazlar: A = (+sıra,+şerit) yönü, B = (+sıra,-şerit) yönü; uçlar hücre köşelerinde (komşu yoksa merkez hücrenin köşesi)
+  const diag = (sl: number) => {
+    const v = { x: R.x + sl * L.x, y: R.y + sl * L.y };
+    const e1 = inX(-1, -sl) ? 1.5 : 0.5;
+    const e2 = inX(1, sl) ? 1.5 : 0.5;
+    const p1 = { x: C.x - v.x * e1, y: C.y - v.y * e1 };
+    const p2 = { x: C.x + v.x * e2, y: C.y + v.y * e2 };
+    return p1.y <= p2.y ? [p1, p2] as const : [p2, p1] as const; // yukarıdan aşağı kesilir
+  };
+  const lineOf = (t: CombatantView): 'A' | 'B' | 'C' => {
+    const s = slotOfView(t);
+    if (s === center) return 'C';
+    const dr = Math.floor(s / lanes) - Math.floor(center / lanes);
+    const dl = (s % lanes) - (center % lanes);
+    return dr === dl ? 'A' : 'B';
+  };
+  // olay sırası (c.targets sırası; merkezdeki birim art arda iki kez): B kesiğine düşen ilk vuruşun sırası
+  const owners = c.targets.flatMap((t) => (lineOf(t) === 'C' ? ['A', 'B'] : [lineOf(t)]));
+  const firstB = owners.indexOf('B');
+  const a = c.actor;
+  const dir = C.x >= a.container.x ? 1 : -1;
+  // sıçrayış: anchor hücrenin önüne-üstüne (havada)
+  c.sfx('shadowStep');
+  a.play('attack');
+  a.container.setDepth(3500);
+  const air = { x: C.x - dir * (Math.abs(R.x) * 0.55), y: C.y - 70 };
+  const from = { x: a.container.x, y: a.container.y };
+  for (let i = 0; i < 3; i++) void wait(c.scene, slow(i * 50)).then(() => a.afterimage(SOOT, 0.45, 220));
+  await counter(c.scene, slow(220), (u) => {
+    const e = 1 - (1 - u) ** 2;
+    a.container.setPosition(snap(from.x + (air.x - from.x) * e), snap(from.y + (air.y - from.y) * e - Math.sin(u * Math.PI) * 60));
+  });
+  const slash = async (which: 'A' | 'B') => {
+    const [p1, p2] = diag(which === 'A' ? 1 : -1);
+    const lift = 64;
+    c.sfx('swordWhoosh');
+    a.play('attack');
+    c.scene.tweens.add({ targets: a.container, x: air.x + dir * 18, y: air.y + (which === 'A' ? 10 : -10), duration: slow(60), yoyo: true });
+    groundScar(c.scene, p1, p2, 150);
+    const victims = c.targets.filter((t) => lineOf(t) === which || lineOf(t) === 'C');
+    const struck = new Set<CombatantView>();
+    await lineSlash(c.scene, { x: p1.x, y: p1.y - lift }, { x: p2.x, y: p2.y - lift }, {
+      dur: 150,
+      size: 22,
+      colors: EMBERCUT,
+      onPass: (k) => {
+        const hx = p1.x + (p2.x - p1.x) * k;
+        const hy = p1.y + (p2.y - p1.y) * k;
+        for (const t of victims) {
+          if (struck.has(t) || Math.hypot(t.container.x - hx, t.container.y - hy) > Math.abs(L.y) * 0.8) continue;
+          struck.add(t);
+          const q = spot(t);
+          hit(c.scene, q.x, q.y, ['#ffffff', '#ffe9b0', '#ff8a1f'], lineOf(t) === 'C' ? 1.1 : 0.85);
+          burst(c.scene, q.x, q.y, { colors: BLOOD, n: 4, speed: [120, 320], gravity: 800, life: [260, 480], size: [6, 10] });
+          c.scene.tweens.add({ targets: t.container, x: t.container.x + dir * 12, duration: slow(45), yoyo: true });
+        }
+      },
+    });
+    c.sfx('duelCut');
+    shake(c.scene, 90, 0.0035);
+  };
+  const land = () => {
+    void wait(c.scene, slow(120)).then(() => a.returnHome(260, SOOT));
+  };
+  await slash('A');
+  if (firstB <= 0) {
+    // B kesiğine düşen vuruş A'dan önce gelmiyorsa ya da yoksa: iki kesik de çizilir, sonra rakamlar akar
+    await wait(c.scene, slow(50));
+    await slash('B');
+    land();
+    return;
+  }
+  c.gate(
+    firstB,
+    async () => {
+      await slash('B');
+      land();
+    },
+    () => land(),
+  );
+};
+
+/**
+ * Smoke Bomb (rect 2x2, area_any: iki tahtaya atılabilir; ctx.board): Cutthroat fitili yanan kil bombayı yay çizerek alanın ortasına atar;
+ * bomba çatlayıp kırılır, gri-kömür duman bulutu hücreleri kaplar (karakterlerin önünde ve arkasında kabaran yumuşak duman).
+ * Düşman tahtasında: düşmanların gözlerinin önünden koyu duman şeridi geçer (Blinded), öksürür gibi sarsılırlar. Kendi tahtasında: dostların
+ * çevresinde yumuşak duman perdesi döner, siluetleri bir an soluklaşır (Shrouded: savunma). Kalıcı görsel yok: süre rozetle görünür.
+ */
+const smokebomb = (c: VfxCtx) => playUntilHit(async (hit) => {
+  const a = c.actor;
+  const slots = fxSlots(c);
+  const own = c.board === a.combatant.side;
+  const mids = slots.map((s) => cellMid(c.board, s));
+  const aim = mids.length ? { x: mids.reduce((s, m) => s + m.x, 0) / mids.length, y: mids.reduce((s, m) => s + m.y, 0) / mids.length } : (c.centerPos ?? feet(a));
+  a.play('attack');
+  c.sfx('fistWhoosh');
+  const dir = aim.x >= a.container.x ? 1 : -1;
+  c.scene.tweens.add({ targets: a.container, x: a.container.x - dir * 14, duration: slow(90), yoyo: true });
+  await wait(c.scene, slow(90));
+  // bomba: elden alanın ortasına yay çizerek uçar; fitilinden kıvılcım ve ince duman izi
+  const hand = { x: a.container.x + dir * a.w * 0.3, y: a.container.y - a.h * 0.7 };
+  const bomb = sprite(c.scene, 'claybomb', '#8c5a2b', hand.x, hand.y, 56, DEPTH + 45);
+  const dist = Math.hypot(aim.x - hand.x, aim.y - hand.y);
+  await travel(c.scene, bomb, { x: aim.x, y: aim.y - 14 }, Math.max(380, Math.min(560, dist * 0.6)), {
+    arc: own ? 150 : 200,
+    spin: 1.25 * dir,
+    trail: (x, y) => {
+      burst(c.scene, x, y - 18, { colors: ['#ffd23f', '#ff8a1f'], n: 1, speed: [10, 60], gravity: 80, life: [120, 240], size: [4, 8] });
+      smokePuffs(c.scene, x, y - 20, { n: 1, spread: 2, size: [16, 26], rise: 10, life: 360, alpha: 0.55 });
+    },
+    trailEvery: 30,
+  });
+  // kırılma: kil kırıkları, kısa parlama, duman patlaması
+  bomb.destroy();
+  c.sfx('smokePuff');
+  for (let i = 0; i < 7; i++) {
+    const chip = sprite(c.scene, 'claychip', '#8c5a2b', aim.x, aim.y - 14, rnd(16, 26), DEPTH + 46).setRotation(rnd(0, 6));
+    c.scene.tweens.add({ targets: chip, x: aim.x + rnd(-120, 120), rotation: chip.rotation + rnd(-6, 6), duration: slow(rnd(380, 560)), onComplete: () => chip.destroy() });
+    c.scene.tweens.add({ targets: chip, y: aim.y - rnd(40, 110), duration: slow(160), ease: 'Quad.easeOut', onComplete: () => c.scene.tweens.add({ targets: chip, y: aim.y + rnd(0, 20), alpha: 0, duration: slow(260), ease: 'Quad.easeIn' }) });
+  }
+  burst(c.scene, aim.x, aim.y - 14, { colors: ['#ffffff', '#ffd23f', '#ff8a1f'], n: 6, speed: [80, 220], gravity: 200, life: [140, 260], size: [6, 10] });
+  void ring(c.scene, aim.x, aim.y, { r: Math.abs(gridSteps(c.board).R.x) * 0.9, flat: 0.32, n: 28, colors: ['#d7dce6', '#98a2b4', '#5b6579'], dur: 420, size: 12 });
+  shake(c.scene, 110, 0.003);
+  // zeminde koyu duman gölgesi (hücrelere oturur)
+  const floor = c.scene.add.graphics().setDepth(FLOOR_FX + 2).setAlpha(0);
+  fillCells(floor, c.board, slots, { fill: 0x2a2f36, fillA: 0.5, edge: 0x98a2b4, edgeA: 0.45, edgeW: 3, k: 1 });
+  c.scene.tweens.add({ targets: floor, alpha: 1, duration: slow(160) });
+  c.scene.tweens.add({ targets: floor, alpha: 0, delay: slow(1400), duration: slow(700), onComplete: () => floor.destroy() });
+  // duman bulutu: her hücrede karakterlerin önünde ve arkasında kabaran yumaklar (bomba noktasından hücreye doğru kısa gecikme)
+  const cellW = Math.abs(gridSteps(c.board).R.x);
+  for (const s of slots) {
+    const m = cellMid(c.board, s);
+    const lag = Math.hypot(m.x - aim.x, m.y - aim.y) / 3;
+    void wait(c.scene, slow(lag)).then(() => {
+      const q = quadOf(c.board, s, 0.95);
+      for (let k = 0; k < 4; k++) {
+        const p = inQuad(q, 0.9);
+        smokePuffs(c.scene, p.x, p.y - 10, { n: 1, spread: 6, size: [cellW * 0.8, cellW * 1.15], rise: 24, life: 1300, hold: 500, alpha: 0.88, depth: p.y + (k % 2 ? 2 : -2) });
+      }
+      smokePuffs(c.scene, m.x, m.y - 90, { n: 2, spread: cellW * 0.3, size: [cellW * 0.7, cellW * 1.0], rise: 50, life: 1300, hold: 300, alpha: 0.5 });
+    });
+  }
+  await wait(c.scene, slow(220));
+  // durum görselleri
+  for (const t of c.targets) {
+    const head = { x: t.container.x, y: t.container.y - t.h * 0.86 };
+    if (!own) {
+      // Blinded: gözlerin önünden geçen koyu duman şeridi + öksürük sarsıntısı
+      const band = c.scene.add.image(head.x - dirTo(a, t.container) * 40, head.y, smokeTexture(c.scene)).setDisplaySize(t.w * 0.3, 18).setTint(0x30353c).setAlpha(0).setDepth(t.container.depth + 3);
+      c.scene.tweens.add({ targets: band, x: head.x, displayWidth: t.w * 0.85, displayHeight: 30, alpha: 0.95, duration: slow(220), ease: 'Quad.easeOut' });
+      c.scene.tweens.add({ targets: band, alpha: 0, displayWidth: t.w * 1.1, y: head.y - 16, delay: slow(820), duration: slow(420), onComplete: () => band.destroy() });
+      smokePuffs(c.scene, head.x, head.y, { n: 2, spread: t.w * 0.2, size: [30, 46], rise: 30, life: 900, hold: 200, alpha: 0.7, tint: 0x8a929c, depth: t.container.depth + 3 });
+      c.scene.tweens.add({ targets: t.container, x: t.container.x + 5, duration: slow(45), yoyo: true, repeat: 3, delay: slow(160) });
+    } else {
+      // Shrouded: çevresinde dönen yumuşak duman perdesi; silueti bir an soluklaşır
+      const body = spot(t);
+      for (let k = 0; k < 4; k++) {
+        const veil = c.scene.add.image(body.x, body.y, smokeTexture(c.scene)).setDisplaySize(t.w * 0.7, t.h * 0.45).setAlpha(0).setDepth(t.container.depth + (k % 2 ? 1 : -1));
+        void counter(c.scene, slow(1000), (u) => {
+          const ang = u * Math.PI * 2.2 + (k * Math.PI) / 2;
+          veil.setPosition(snap(body.x + Math.cos(ang) * t.w * 0.38), snap(body.y + Math.sin(ang) * 14 + (k - 1.5) * t.h * 0.12));
+          veil.setDepth(t.container.depth + (Math.sin(ang) > 0 ? 1 : -1));
+          veil.setAlpha(Math.sin(u * Math.PI) * 0.6);
+        }).then(() => veil.destroy());
+      }
+      c.scene.tweens.add({ targets: t.container, alpha: 0.5, duration: slow(260), yoyo: true, hold: slow(380), ease: 'Sine.easeInOut', onComplete: () => t.container.setAlpha(1) });
+    }
+  }
+  hit();
+  await wait(c.scene, slow(600));
+});
+
+/**
+ * Backstab (garantili kritik): Cutthroat dumana dönüşüp kaybolur (kapüşonlu siluet çözülür), hedefin ARKASINDAKİ hücrede (ctx.behind)
+ * duman patlamasıyla belirir ve hedefe dönük, hançerini sırtına gömer: kızıl-beyaz şok halkası, kan, sert sarsıntı ve çok kısa donma (hitstop).
+ * Sonra yine dumanla kaybolup kendi hücresinde belirir. Tahta/ayna: arka hücre konumu olaydan gelir; sprite yönü vuruş anında hedefe çevrilir.
+ */
+const backstab = async (c: VfxCtx) => {
+  const t = c.targets[0];
+  if (!t) return;
+  const a = c.actor;
+  const away = t.container.x >= a.container.x ? 1 : -1;
+  const behind = c.behind ?? { x: t.container.x + away * Math.abs(gridSteps(c.board).R.x), y: t.container.y };
+  const face = t.container.x >= behind.x ? 1 : -1; // arkadan hedefe bakış yönü
+  // 1) kaybolma
+  c.sfx('shadowStep');
+  a.play('cast');
+  await shadowStepFx(c.scene, a, false, 150);
+  await wait(c.scene, slow(60));
+  // 2) arkada belirme (hedefe dönük)
+  a.container.setPosition(behind.x, behind.y).setDepth(t.container.depth + 1);
+  a.sprite.setFlipX(face < 0);
+  await shadowStepFx(c.scene, a, true, 110);
+  // 3) saplama
+  a.play('attack');
+  // arka hücreden hedefin sırtına tek adımda atılır (çömelip fırlama), saplar, geri sekip arka hücrede durur
+  const reach = t.container.x - face * (t.w * 0.3 + a.w * 0.22);
+  await new Promise<void>((resolve) => c.scene.tweens.add({ targets: a.container, x: behind.x - face * 14, duration: slow(60), ease: 'Quad.easeOut', onComplete: () => resolve() }));
+  c.scene.tweens.add({ targets: a.container, x: reach, duration: slow(70), ease: 'Quad.easeIn', yoyo: true, hold: slow(170) });
+  for (let i = 0; i < 2; i++) void wait(c.scene, slow(20 + i * 25)).then(() => a.afterimage(SOOT, 0.4, 200));
+  await wait(c.scene, slow(40));
+  const p = { x: t.container.x - face * t.w * 0.16, y: t.container.y - t.h * 0.56 };
+  const knife = sprite(c.scene, 'duelsword', '#c0203a', p.x - face * 70, p.y - 30, 72, t.container.depth + 2).setRotation(face > 0 ? Math.PI / 4 + 0.35 : -Math.PI / 4 - 0.35).setFlipX(face < 0);
+  void travel(c.scene, knife, { x: p.x - face * 18, y: p.y - 6 }, 50, { ease: 'in' }).then(() => c.scene.tweens.add({ targets: knife, alpha: 0, delay: slow(160), duration: slow(200), onComplete: () => knife.destroy() }));
+  await wait(c.scene, slow(50));
+  c.sfx('backstabThud');
+  c.sfx('bloodSplat');
+  void ring(c.scene, p.x, p.y, { r: 110, flat: 0.95, n: 26, colors: ['#ffffff', '#ff7a6a', '#e5463b'], dur: 340, size: 12, startR: 10 });
+  void ring(c.scene, p.x, p.y, { r: 170, flat: 0.95, n: 20, colors: ['#e5463b', '#8e1f2c'], dur: 460, size: 8, startR: 30 });
+  for (let k = 0; k < 8; k++) {
+    const ang = (k / 8) * Math.PI * 2;
+    const len = rnd(60, 110);
+    const line = c.scene.add.rectangle(p.x + Math.cos(ang) * 30, p.y + Math.sin(ang) * 30, len, 4, k % 2 ? 0xffffff : 0xe5463b).setRotation(ang).setDepth(DEPTH + 50);
+    c.scene.tweens.add({ targets: line, x: p.x + Math.cos(ang) * 90, y: p.y + Math.sin(ang) * 90, scaleX: 0.2, alpha: 0, duration: slow(220), onComplete: () => line.destroy() });
+  }
+  burst(c.scene, p.x, p.y, { colors: BLOOD, n: 18, speed: [160, 440], angle: face > 0 ? [-1.1, 0.5] : [Math.PI - 0.5, Math.PI + 1.1], gravity: 900, life: [400, 800], size: [8, 14] });
+  flash(c.scene, '#8e1f2c', 0.28, 260);
+  shake(c.scene, 220, 0.012);
+  // hitstop: ikisi de bir an donar (hedef beyaza kesilir), sonra hasar akar
+  t.sprite.setTintFill(0xffffff);
+  await wait(c.scene, 70);
+  t.sprite.clearTint();
+  c.scene.tweens.add({ targets: t.container, x: t.container.x + face * 20, duration: slow(70), yoyo: true });
+  // 4) dönüş: dumanla kaybol, evinde belir
+  void (async () => {
+    await wait(c.scene, slow(320));
+    a.play('cast');
+    await shadowStepFx(c.scene, a, false, 120);
+    a.container.setPosition(a.home.x, a.home.y).setDepth(a.home.y);
+    a.sprite.setFlipX(a.combatant.side === 'enemy');
+    await shadowStepFx(c.scene, a, true, 120);
+    a.play('idle');
+  })();
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// UNDEAD: ceset tüketimi (Raise Dead, olay corpseConsumed)
+
+/**
+ * Ceset tüketimi: düşman cesedinin yuvasında kemik tozu kalkar, kemik kıymıkları sıçrar; cesetten Undead'in göğsüne kıvrılarak akan mor ruh
+ * ipi (iki iplik + ruh pırıltıları) çekilir, Undead mor halkayla emer. Promise ip Undead'e varınca çözülür (çağrı efekti arkadan gelir).
+ */
+export async function corpseDrainFx(scene: Phaser.Scene, corpse: { x: number; y: number }, caster: CombatantView | undefined): Promise<void> {
+  playSfx(scene, 'soulDrain');
+  // kemik tozu ve kıymıklar
+  dustCloud(scene, corpse.x, corpse.y, { n: 6, spread: 70, rise: 60, size: [34, 60], tint: 0xd9d4c0, life: 1000 });
+  for (let i = 0; i < 5; i++) {
+    const sp = sprite(scene, 'bonesliver', '#d9d4c0', corpse.x + rnd(-30, 30), corpse.y - 10, 30, DEPTH + 40).setRotation(rnd(0, 6));
+    scene.tweens.add({ targets: sp, y: sp.y - rnd(40, 90), x: sp.x + rnd(-40, 40), rotation: sp.rotation + rnd(-4, 4), alpha: 0, duration: slow(rnd(500, 750)), onComplete: () => sp.destroy() });
+  }
+  burst(scene, corpse.x, corpse.y - 20, { colors: ['#b872ff', '#5a2a9c', '#e3ccff'], n: 10, speed: [30, 120], angle: [-Math.PI, 0], gravity: -140, life: [500, 900], size: [8, 12] });
+  const glow = scene.add.ellipse(corpse.x, corpse.y - 2, 120, 34, 0x5a2a9c, 0.5).setDepth(FLOOR_FX + 3);
+  scene.tweens.add({ targets: glow, scaleX: 0.2, scaleY: 0.2, alpha: 0, duration: slow(900), ease: 'Quad.easeIn', onComplete: () => glow.destroy() });
+  if (!caster) {
+    await wait(scene, slow(500));
+    return;
+  }
+  const to = spot(caster);
+  const from = { x: corpse.x, y: corpse.y - 40 };
+  const g = scene.add.graphics().setDepth(DEPTH + 30);
+  const draw = (head: number, tail: number, phase: number) => {
+    g.clear();
+    const n = 46;
+    for (let strand = 0; strand < 2; strand++) {
+      for (let i = Math.floor(n * tail); i <= n * head; i++) {
+        const u = i / n;
+        const w = Math.sin(u * Math.PI * 3 + phase + strand * Math.PI) * 14 * Math.sin(u * Math.PI);
+        const x = snap(from.x + (to.x - from.x) * u);
+        const y = snap(from.y + (to.y - from.y) * u - Math.sin(u * Math.PI) * 90 + w);
+        g.fillStyle(strand ? 0x5a2a9c : 0xb872ff, 0.9).fillRect(x - 4, y - 4, 8, 8);
+        if (i % 3 === 0) g.fillStyle(0xe3ccff, 1).fillRect(x - 2, y - 2, 4, 4);
+      }
+    }
+  };
+  await counter(scene, slow(520), (u) => draw(u, 0, u * 8), 'Quad.easeIn');
+  // ruh pırıltıları ip boyunca Undead'e akar
+  for (let k = 0; k < 4; k++) {
+    const w = sprite(scene, 'wisp', '#b36bff', from.x, from.y, 40, DEPTH + 35).setAlpha(0.9);
+    void travel(scene, w, to, 420, { arc: 90, ease: 'in' }).then(() => w.destroy());
+    await wait(scene, slow(60));
+  }
+  void ring(scene, caster.container.x, caster.container.y - 4, { r: 110, flat: 0.32, n: 24, colors: ['#b872ff', '#5a2a9c', '#e3ccff'], dur: 480, size: 10 });
+  caster.ring('#b872ff', 0.8);
+  void counter(scene, slow(320), (u) => draw(1, u, 8 + u * 6)).then(() => g.destroy());
+  await wait(scene, slow(200));
+}
+
 export const VFX: Record<VfxKind, (c: VfxCtx) => Promise<void>> = {
   doublestrike,
   charge,
@@ -2942,7 +4229,8 @@ export const VFX: Record<VfxKind, (c: VfxCtx) => Promise<void>> = {
   rejuvenate,
   summonroots,
   woodsmash,
-  thornshield,
+  rootfall,
+  vinesnare,
   taunt: tauntFx,
   guardlink,
   tremor,
@@ -2960,6 +4248,10 @@ export const VFX: Record<VfxKind, (c: VfxCtx) => Promise<void>> = {
   shapecolumn,
   shaperect,
   shapeplus,
+  venomedge,
+  saltire,
+  smokebomb,
+  backstab,
 };
 
 /** Yerden yükselen toz bulutu: kabaran, yükselen, sönen gri-kahve dumanlar. */
@@ -2988,50 +4280,79 @@ function dustCloud(scene: Phaser.Scene, x: number, y: number, o: { n: number; sp
   }
 }
 
-/** Çağrılan birim sahneye girerken oynayan efekt; birim görünür olunca (giriş bitince) Promise çözülür. İskelet mezardan, Treant topraktan çıkar. */
-export async function summonFx(scene: Phaser.Scene, unitId: string, view: CombatantView): Promise<void> {
+/**
+ * Çağrılan birim sahneye girerken oynayan efekt; birim görünür olunca (giriş bitince) Promise çözülür. İskelet mezardan, Treant topraktan çıkar.
+ * Skeleton (Raise Dead, kendi tahtasında): `empowered` true = ceset tüketildi (beslenmiş): Undead'den çağrı yerine mor ruh ipi akar, mor ölü
+ * ışığı, el/toz patlaması ve sonunda mor parlamayla doğar, gözleri mor yanar ve ömrü boyunca hafif mor aura taşır (CombatantView.setEmpowered).
+ * `empowered` false = ceset yoktu (beslenmemiş): soluk, gri-kahve tozlu, daha zayıf ve titrek doğuş; parlama ve aura yok.
+ */
+export async function summonFx(scene: Phaser.Scene, unitId: string, view: CombatantView, o: { empowered?: boolean; caster?: CombatantView } = {}): Promise<void> {
   const f = feet(view);
   if (unitId === 'skeleton') {
-    // 1) zemin çatlar, mor ölü ışığı sızar, yer titrer
+    const fed = o.empowered !== false;
+    const glowHex = fed ? 0xb36bff : 0x8a7f96;
+    if (o.empowered) view.setEmpowered(false); // aura doğuşun sonunda "yanar"
+    // 0) beslenmiş: Undead'den çağrı yerine akan mor ruh (cesetten emilen güç)
+    if (o.empowered && o.caster) {
+      const s = spot(o.caster);
+      const w = sprite(scene, 'wisp', '#b36bff', s.x, s.y, 64, DEPTH + 35).setAlpha(0.95);
+      await travel(scene, w, { x: f.x, y: f.y - 30 }, 420, { arc: 110, ease: 'in', trail: (x, y) => burst(scene, x, y, { colors: ['#b872ff', '#5a2a9c', '#e3ccff'], n: 2, speed: [10, 60], gravity: -40, life: [300, 520], size: [8, 12] }), trailEvery: 26 });
+      w.destroy();
+      void ring(scene, f.x, f.y, { r: 120, flat: 0.34, n: 26, colors: ['#e3ccff', '#b872ff'], dur: 380, size: 10 });
+    }
+    // 1) zemin çatlar, ölü ışığı sızar, yer titrer (beslenmemişte soluk ve kısa)
     const dim = scene.add.rectangle(960, 540, 1920, 1080, 0x10061a, 0).setDepth(DEPTH - 25);
-    scene.tweens.add({ targets: dim, alpha: 0.4, duration: slow(500) });
-    const glow = scene.add.ellipse(f.x, f.y, 40, 14, 0xb36bff, 0.5).setDepth(DEPTH - 35);
-    scene.tweens.add({ targets: glow, scaleX: 5, scaleY: 3, alpha: 0.85, duration: slow(900), yoyo: true });
-    const circle = sprite(scene, 'circle', '#b36bff', f.x, f.y, 260, DEPTH - 36).setScale(1.2, 0.42).setAlpha(0.9);
+    scene.tweens.add({ targets: dim, alpha: fed ? 0.4 : 0.2, duration: slow(500) });
+    const glow = scene.add.ellipse(f.x, f.y, 40, 14, glowHex, fed ? 0.5 : 0.3).setDepth(DEPTH - 35);
+    scene.tweens.add({ targets: glow, scaleX: fed ? 5 : 3.6, scaleY: fed ? 3 : 2.2, alpha: fed ? 0.85 : 0.4, duration: slow(900), yoyo: true });
+    const circle = sprite(scene, 'circle', fed ? '#b36bff' : '#8a7f96', f.x, f.y, 260, DEPTH - 36).setScale(1.2, 0.42).setAlpha(fed ? 0.9 : 0.45);
     scene.tweens.add({ targets: circle, angle: 120, alpha: 0, duration: slow(1500), onComplete: () => circle.destroy() });
-    cracks(scene, f.x, f.y, { len: 240, n: 12, dur: 1500 });
-    shake(scene, 700, 0.004);
+    cracks(scene, f.x, f.y, { len: fed ? 240 : 150, n: fed ? 12 : 7, dur: 1500 });
+    shake(scene, fed ? 700 : 400, fed ? 0.004 : 0.0025);
     playSfx(scene, 'earthCrack');
     playSfx(scene, 'graveMoan');
-    burst(scene, f.x, f.y - 6, { colors: ['#b872ff', '#5a2a9c', '#a8ebff'], n: 14, speed: [20, 90], angle: [-Math.PI, 0], gravity: -90, life: [700, 1200], size: [10, 18] });
-    dustCloud(scene, f.x, f.y, { n: 6, spread: 90, rise: 70, size: [40, 70] });
-    await wait(scene, slow(520));
-    // 2) toprak patlar: büyük toz bulutu, taş parçaları, çürük eller kenarlardan tırmanır
-    dustCloud(scene, f.x, f.y, { n: 16, spread: 170, rise: 190 });
-    burst(scene, f.x, f.y - 10, { colors: ['#4a2e1a', '#8c5a2b', '#5b6579', '#98a2b4'], n: 26, speed: [140, 480], angle: [-Math.PI, 0], gravity: 900, life: [500, 1000], size: [10, 22] });
-    void ring(scene, f.x, f.y, { r: 220, flat: 0.34, n: 40, colors: ['#b872ff', '#5a2a9c', '#98a2b4'], dur: 560, size: 12 });
-    shake(scene, 260, 0.008);
+    if (fed) burst(scene, f.x, f.y - 6, { colors: ['#b872ff', '#5a2a9c', '#a8ebff'], n: 14, speed: [20, 90], angle: [-Math.PI, 0], gravity: -90, life: [700, 1200], size: [10, 18] });
+    else burst(scene, f.x, f.y - 6, { colors: ['#8a7f96', '#5b6579'], n: 6, speed: [20, 70], angle: [-Math.PI, 0], gravity: -60, life: [600, 1000], size: [8, 14] });
+    dustCloud(scene, f.x, f.y, { n: fed ? 6 : 4, spread: 90, rise: 70, size: [40, 70] });
+    await wait(scene, slow(fed ? 520 : 420));
+    // 2) toprak patlar: toz bulutu, taş parçaları, çürük eller kenarlardan tırmanır
+    dustCloud(scene, f.x, f.y, { n: fed ? 16 : 9, spread: 170, rise: fed ? 190 : 120, ...(fed ? {} : { tint: 0x9a8f80 }) });
+    burst(scene, f.x, f.y - 10, { colors: ['#4a2e1a', '#8c5a2b', '#5b6579', '#98a2b4'], n: fed ? 26 : 14, speed: [140, fed ? 480 : 320], angle: [-Math.PI, 0], gravity: 900, life: [500, 1000], size: [10, 22] });
+    void ring(scene, f.x, f.y, { r: fed ? 220 : 150, flat: 0.34, n: 40, colors: fed ? ['#b872ff', '#5a2a9c', '#98a2b4'] : ['#98a2b4', '#5b6579'], dur: 560, size: 12 });
+    shake(scene, 260, fed ? 0.008 : 0.005);
     playSfx(scene, 'boneClatter');
     const hands: Phaser.GameObjects.Image[] = [];
-    for (const dx of [-62, 58, -26, 30]) {
-      const h = sprite(scene, 'undeadhand', '#b36bff', f.x + dx, f.y + 6, 150, view.container.depth + 2).setRotation(dx < 0 ? 0.25 : -0.25);
+    for (const dx of fed ? [-62, 58, -26, 30] : [-50, 44]) {
+      const h = sprite(scene, 'undeadhand', fed ? '#b36bff' : '#8a7f96', f.x + dx, f.y + 6, 150, view.container.depth + 2).setRotation(dx < 0 ? 0.25 : -0.25);
       sprout(scene, h, 280);
       hands.push(h);
     }
     await wait(scene, slow(300));
     for (const h of hands) {
-      h.setTexture(ensureIcon(scene, 'undeadhand2', '#b36bff', false));
+      h.setTexture(ensureIcon(scene, 'undeadhand2', fed ? '#b36bff' : '#8a7f96', false));
       scene.tweens.add({ targets: h, y: h.y - 14, rotation: h.rotation * -1, duration: slow(160), yoyo: true });
     }
-    // 3) iskelet yerden fırlar: titreyerek yükselir, yer boyunca toz akar
+    // 3) iskelet yerden çıkar: beslenmiş hızlı ve güçlü, beslenmemiş yavaş ve titrek
     const dustTick = scene.time.addEvent({ delay: slow(110), repeat: 8, callback: () => dustCloud(scene, f.x, f.y, { n: 3, spread: 120, rise: 90, size: [36, 70], life: 800 }) });
     playSfx(scene, 'thud');
-    await view.riseFromGround(900, 5);
+    await view.riseFromGround(fed ? 900 : 1100, fed ? 5 : 8);
     dustTick.remove();
-    flash(scene, '#b36bff', 0.28, 380);
-    void ring(scene, f.x, f.y, { r: 170, flat: 0.34, n: 30, colors: ['#ffffff', '#b872ff'], dur: 480, size: 12 });
-    dustCloud(scene, f.x, f.y, { n: 10, spread: 150, rise: 140 });
-    shake(scene, 200, 0.006);
+    if (fed) {
+      flash(scene, '#b36bff', 0.28, 380);
+      void ring(scene, f.x, f.y, { r: 170, flat: 0.34, n: 30, colors: ['#ffffff', '#b872ff'], dur: 480, size: 12 });
+      if (o.empowered) {
+        // beslenmiş: göz ve aura yanar (mor ışık patlaması gövdeden yükselir)
+        view.setEmpowered(true);
+        const b = spot(view);
+        burst(scene, b.x, b.y, { colors: ['#e3ccff', '#b872ff', '#5a2a9c'], n: 16, speed: [60, 220], gravity: -120, life: [500, 900], size: [8, 14] });
+        view.ring('#b872ff', 1);
+      }
+    } else {
+      // beslenmemiş: sönük, gri bir halka; parlama yok
+      void ring(scene, f.x, f.y, { r: 120, flat: 0.34, n: 20, colors: ['#98a2b4', '#5b6579'], dur: 420, size: 10 });
+    }
+    dustCloud(scene, f.x, f.y, { n: fed ? 10 : 6, spread: 150, rise: 140 });
+    shake(scene, 200, fed ? 0.006 : 0.003);
     scene.tweens.add({ targets: hands, scaleY: 0.02, alpha: 0, duration: slow(380), onComplete: () => { for (const h of hands) h.destroy(); } });
     scene.tweens.add({ targets: [dim, glow], alpha: 0, duration: slow(700), onComplete: () => { dim.destroy(); glow.destroy(); } });
     await wait(scene, slow(120));

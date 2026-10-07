@@ -64,7 +64,9 @@ export type PassiveEffect =
   /** Büyü zırhının engellediği büyü hasarı `threshold` birikince tüm takıma `mana` MP verilir. */
   | { type: 'manaOverflow'; threshold: number; mana: number }
   /** Kullanıcının KENDİ zırhının `pct` kadarı, kendine ve 1 yarıçaplı (artı şekli) komşu dostlara bonus zırh olur; bir birim en fazla `maxStacks` kaynaktan alır. */
-  | { type: 'armorAura'; pct: number; maxStacks: number };
+  | { type: 'armorAura'; pct: number; maxStacks: number }
+  /** Opportunist (Cutthroat): hasar verdiği hedefin üzerinde `statuses` listesindeki durumlardan biri varsa verilen hasar x(1 + bonus) (tüm vuruşlar; kritik ayrıca son çarpan). */
+  | { type: 'bonusVsStatus'; statuses: StatusKind[]; bonus: number };
 
 export interface PassiveDef {
   id: string;
@@ -93,6 +95,8 @@ export interface CombatantData {
   attributes: Attributes;
   /** Class'ın primary statı (toplam stat 30 kuralı ve primary bonusu yalnızca class'larda). */
   primary?: Attribute;
+  /** true: oyuncuya görünmez (takım seçimi ve wiki dışı; debug ve galeri yine erişir). */
+  hidden?: boolean;
   /** true: test amaçlı class (AOE şekil test karakteri): rastgele takım havuzundan ve denge simülasyonundan HARİÇ; takım seçiminde/debug'da seçilebilir, wiki/galeride görünür. */
   testOnly?: boolean;
   /** Sınıfın özel kaynağı: 'rage' ise birim Rage barıyla (0-formulas.rage.max) savaşa başlar; yoksa Rage yoktur. */
@@ -103,6 +107,8 @@ export interface CombatantData {
   accuracyBase?: number;
   /** Türev stat'ları doğrudan ezmek için (ör. çağrılan birimin canı). */
   overrides?: Partial<Stats>;
+  /** Çağrı varyantları (yalnızca çağrılar; bkz. SummonVariants): ceset tüketen çağrıda beslenmiş / beslenmemiş hâlin stat çarpanı. */
+  variants?: SummonVariants;
   tags?: string[];
   /** data/ai.json profil adı (yapay zeka bu karakteri nasıl oynatır). */
   ai?: string;
@@ -125,6 +131,8 @@ export interface CombatantDef {
   primary?: Attribute;
   /** true: test amaçlı class (rastgele havuz ve denge simülasyonu dışı). */
   testOnly?: boolean;
+  /** true: oyuncuya görünmez (takım seçimi ve wiki dışı). */
+  hidden?: boolean;
   stats: Stats;
   /** Rage'li class: Rage barının üst sınırı (formulas.json > rage.max); Rage'siz class'ta tanımsız. */
   maxRage?: number;
@@ -132,11 +140,42 @@ export interface CombatantDef {
   tags?: string[];
   ai?: string;
   passive?: PassiveDef;
+  /** Çağrı varyantları (CombatantData.variants aynen). */
+  variants?: SummonVariants;
+}
+
+/** Çağrı varyantı: `mult` can (maks can) ve hasar statlarına (str, int; Str'den gelen düz can yenilenmesi dahil) uygulanan çarpan. */
+export interface SummonVariant {
+  mult: number;
+}
+
+/**
+ * Ceset tüketen çağrının (Raise Dead) iki hâli: `fed` = ceset tüketildi (beslenmiş, `empowered`), `unfed` = ceset yoktu. Birim verisindeki taban statlar
+ * (overrides dahil) x mult; yuvarlama: can tam sayıya, statlar 0,1'e (Math.round). Ceset tüketmeyen çağrılarda varyant uygulanmaz (taban statlar).
+ */
+export interface SummonVariants {
+  fed: SummonVariant;
+  unfed: SummonVariant;
+}
+
+/** Ceset durumu: revivable = diriltilebilir (Resurrection), consumed = tüketildi (Raise Dead), artık diriltilemez ve yuvası rezerve değildir. */
+export type CorpseState = 'revivable' | 'consumed';
+
+/** Ölü (çağrı olmayan) birimin cesedi: `battle.corpses(side)` / `battle.corpseOf(uid)`. */
+export interface Corpse {
+  uid: string;
+  slot: number;
+  side: Side;
+  state: CorpseState;
 }
 
 export type Element = 'physical' | 'fire' | 'ice' | 'holy' | 'dark' | 'nature' | 'arcane';
 
-export type SkillTarget = 'empty_tile' | 'single_enemy' | 'all_enemies' | 'area_enemies' | 'column_enemies' | 'everyone' | 'random_enemies' | 'single_ally' | 'dead_ally' | 'all_allies' | 'self';
+/**
+ * Hedef türleri. Eski `column_enemies` kaldırıldı (şerit = `area_enemies` + `area: { shape: 'column' }`); veride kalırsa veri doğrulaması
+ * (skillAreaProblem, tests/content.test.ts) reddeder.
+ */
+export type SkillTarget = 'empty_tile' | 'single_enemy' | 'all_enemies' | 'area_enemies' | 'area_any' | 'everyone' | 'random_enemies' | 'single_ally' | 'dead_ally' | 'all_allies' | 'self';
 
 /**
  * Bahis (gamble): hasar etkisi atılmadan önce kullanıcı kaynağından (can ya da MP) bir miktarı BAHSE koyar ve bir zar atılır (seed'li RNG, skill başına bir kez).
@@ -184,6 +223,8 @@ export type SkillEffectKind =
       repeatChance?: number;
       /** Bahis: kaynak harcayarak daha fazla hasar (yukarıda BetSpec). */
       bet?: BetSpec;
+      /** true: bu hasarın HER vuruşu kritiktir (kritik zarı atılmaz, kritik çarpanı uygulanır); isabet zarı normal atılır (iska olabilir). Backstab. */
+      guaranteedCrit?: boolean;
     }
   | { type: 'heal'; scale: Attribute; power: number }
   /** Düşmüş bir dostu bulunduğu yerde diriltir: maks canının/manasının bu oranlarıyla (hedef 'dead_ally'). */
@@ -191,29 +232,34 @@ export type SkillEffectKind =
   /** Tur bazlı şifa: hedefin sonraki `turns` turunun başında `power` kadar iyileştirir. */
   | { type: 'hot'; scale: Attribute; power: number; turns: number }
   | { type: 'shield'; scale: Attribute; power: number; shieldType?: 'magic'; /** Kullanıcının kalan MP'si başına eklenen kalkan. */ bonusPerMana?: number; /** true: kalkan hedefe değil kullanıcının kendisine gider (ör. Shield Bash). */ self?: boolean }
-  | { type: 'summon'; unit: string; lifespan?: number; /** true: birim düşmanın tahtasına çağrılır (sahibi yine kullanıcının tarafı). */ onEnemyBoard?: boolean }
+  /**
+   * Birim kullanıcının KENDİ tahtasında boş bir yuvaya çağrılır. `consumeCorpse`: çağırmadan önce karşı taraftaki tüketilebilir (revivable, çağrı olmayan)
+   * düşman cesetlerinden EN SON öleni (eşitlikte küçük yuva) tüketir (ceset `consumed` olur, artık diriltilemez); ceset tüketildiyse birim `fed` varyantıyla
+   * (beslenmiş, `empowered`), yoksa `unfed` varyantıyla gelir (birim tanımındaki `variants`; bkz. CombatantData.variants).
+   */
+  | { type: 'summon'; unit: string; lifespan?: number; consumeCorpse?: boolean }
   | { type: 'manaBurn'; amount: number; /** Yakılan mananın bu oranı kullanıcıya geri verilir. */ gainRatio?: number }
   /** Kullanıcı `turns` tur boyunca düşmanların tek hedefli skill'lerinin hedefi olmak zorunda. */
   | { type: 'taunt'; turns: number; /** Taunt'lı karakter maks canının bu oranı kadar can kaybederse taunt biter. */ breakRatio?: number; /** Taunt sürerken taunt'lı olmayan dostların aldığı hasar bu çarpanla çarpılır (ör. 0.5 = yarı hasar). */ allyDamageMult?: number }
   /** Hedef dost `turns` tur boyunca aldığı hasarın `share` kadarını kullanıcıya aktarır. */
   | { type: 'guard'; turns: number; share: number }
-  /** Hasar alan (hedefler arasında vurulan) birimlere ya da `self` ise kullanıcıya süreli durum (buff/debuff) verir. */
-  | { type: 'status'; status: StatusKind; turns: number; self?: boolean }
+  /**
+   * Hasar alan (hedefler arasında vurulan) birimlere ya da `self` ise kullanıcıya süreli durum (buff/debuff) verir.
+   * `chance` (0-1, yoksa 1): her alıcı için BAĞIMSIZ zar (seed'li RNG; alıcı başına bir sayı). `cause`: durumun görsel nedeni, `status` olayına aynen yazılır
+   * (ör. 'vines': sarmaşıkla yere bağlanma; UI 'rooted' görseli seçer).
+   */
+  | { type: 'status'; status: StatusKind; turns: number; self?: boolean; chance?: number; cause?: string }
   /** Vurulan (hasar yoksa tüm) hedeflerin HER BİRİNE ağırlıklı zarla seçilen tek bir durum verir (seed'li RNG). */
   | { type: 'randomStatus'; options: RandomStatusOption[] }
   /** Skill'in kapsadığı hücrelere `turns` turluk yer etkisi (zehir, yanan zemin...) bırakır. */
   | { type: 'ground'; ground: string; turns: number; scale: Attribute; power: number }
   /** Kullanıcı kendine maks canının `ratio` kadarını hasar verir (canı en az 1 kalır). */
-  | { type: 'selfDamage'; ratio: number }
-  /**
-   * Kullanıcıya `turns` turluk dikenli durum (thorns): kullanıcıya YAKIN DÖVÜŞ (motion 'melee') vuruşu isabet edince saldırgan,
-   * scale statı x power kadar sabit fiziksel hasar alır (zırh etkiler; isabet/kritik/sapma yok). Yansıma yansımayı tetiklemez.
-   */
-  | { type: 'thorns'; turns: number; scale: Attribute; power: number };
+  | { type: 'selfDamage'; ratio: number };
 
 /**
  * `side`: 'everyone' hedefli skill'lerde etkinin hangi tarafa gideceği (varsayılan: hasar/mana yakma/durum düşmana, şifa/kalkan/koruma dosta).
  */
+/** `area_any` hedefli skill'lerde de aynı alan: etki yalnızca alandaki o taraftaki birimlere (kullanıcıya göre dost/düşman) uygulanır (Smoke Bomb). */
 export type SkillEffect = SkillEffectKind & { side?: 'allies' | 'enemies' };
 
 export interface SkillCost {
@@ -257,6 +303,12 @@ export interface SkillAiCond {
   minTargetHpToDamage?: number;
   /** Ana hedefe eksik mana ekinin ham hasar içindeki payı en az bu (bonusPerMissingMana). */
   minMissingManaShare?: number;
+  /** Seçenek (area_any) en az bu kadar DOSTU kapsıyor (kendi tahtasına atılan alan). */
+  minAllyTargets?: number;
+  /** Ana hedefe beklenen hasar (isabet dahil) / hedefin maks canı en az bu (tek vuruşta canının büyük kısmı gider). */
+  minTargetMaxHpShare?: number;
+  /** Ana hedef, normal yakın dövüşün erişemediği bir sırada (ön sıranın gerisinde, korunan arka saf). */
+  targetBehindFront?: boolean;
 }
 
 /** Skill'in YZ bağlamı: `requires` hepsi, `anyOf` (doluysa) en az biri sağlanmalı; sağlanmazsa skill yalnızca öldürücü vuruşta seçilebilir. */
@@ -296,6 +348,12 @@ export interface SkillDef {
   ai?: SkillAiHint;
   /** true: yakın dövüş skill'i olsa da kullanıcının ön sırada olma şartı aranmaz (ileride dash/charge gibi skill'ler için). */
   ignoreFrontRow?: boolean;
+  /**
+   * true (Backstab): yalnızca ARKASI BOŞ hedef seçilebilir: hedefin hemen arkasındaki hücre (bir sıra daha derin, aynı şerit, hedefin tahtasında)
+   * tahtanın içinde olmalı ve üzerinde CANLI birim olmamalı (ceset / ölü dostun ayrılmış yuvası engel sayılmaz). Hedef en arka sıradaysa kullanılamaz.
+   * skillUsed olayı `behindSlot`/`behindBoard` (görsel ışınlanma hücresi) ve `from` (kullanıcının dönüş hücresi) taşır; gerçek yer değiştirme yok.
+   */
+  requiresOpenBehind?: boolean;
   /** true: yakın dövüş skill'i menzil sınırı olmadan (ön sıra kuralı olmadan) herhangi bir düşmana gider (charge/dash). */
   ignoreReach?: boolean;
   /** Yakın dövüş menzili bonusu (satır): kullanıcı ön sıranın bu kadar gerisinden de vurabilir ve düşmanın bu kadar fazla ön sırasına ulaşır. */
@@ -316,25 +374,43 @@ export interface SkillDef {
    */
   splash?: { pattern: 'perpendicular'; mult?: number };
   /**
-   * target 'area_enemies': oyuncu bir ANCHOR hücre seçer (boş hücre de olabilir). Eski biçim `{ radius }`: radius 1 = merkez + önü/arkası/sağı/solu (artı şekli);
-   * radius 2 = öne/arkaya/sağa/sola 2'şer + çaprazlara 1'er. Yeni biçim `{ shape }` (hücre kümesi şekilleri, bkz. area-shape.ts): row | column | rect | plus.
+   * target 'area_enemies' / 'area_any' (zorunlu): oyuncu bir ANCHOR hücre seçer (boş hücre de olabilir); şekil (hücre kümesi, bkz. area-shape.ts) row | column | rect | plus | x.
+   * 'area_any': anchor KENDİ ya da KARŞI tahtada olabilir (Smoke Bomb); etkiler `side` ile dost/düşmana ayrılır.
+   * İsteğe bağlı `stages`: şeklin hücreleri aşamalara bölünür, vuruşlar aşama sırasıyla gelir (olaylarda `stage`).
    */
   area?: AreaDef;
 }
 
-/** Alan şekilleri (area-shape.ts): row = hedefin SIRASI (aynı derinlik), column = hedefin ŞERİDİ, rect = rows x cols dikdörtgen (anchor sol-alt köşe), plus = hedef + 4 yön komşusu. */
-export type AreaShapeKind = 'row' | 'column' | 'rect' | 'plus';
+/**
+ * Alan şekilleri (area-shape.ts): row = hedefin SIRASI (aynı derinlik), column = hedefin ŞERİDİ, rect = rows x cols dikdörtgen (boyutu 3+ olan eksende
+ * fare hücresi ortada, diğer eksenlerde sol-alt köşe), plus = hedef + 4 yön komşusu, x = hedef + 4 ÇAPRAZ komşu.
+ */
+export type AreaShapeKind = 'row' | 'column' | 'rect' | 'plus' | 'x';
+
+/**
+ * Aşamalı vuruş (staged): şeklin hücreleri hangi eksende aşamalara bölünür.
+ * row = sıra sıra (aynı derinlik bir aşama; varsayılan ön sıradan arkaya, yani saldırgandan uzağa);
+ * column = şerit şerit (varsayılan ekranda yukarıdan aşağıya); distance = anchor hücreye uzaklık halkaları (varsayılan merkezden dışarı).
+ */
+export type AreaStageKind = 'row' | 'column' | 'distance';
 
 export interface AreaDef {
-  /** Eski biçim: merkez + yarıçap (shape yoksa). */
-  radius?: 1 | 2;
-  shape?: AreaShapeKind;
-  /** rect: dikdörtgenin sıra (derinlik) sayısı. */
+  shape: AreaShapeKind;
+  /** rect: dikdörtgenin sıra (derinlik) sayısı, 1..formation.rows. */
   rows?: number;
-  /** rect: dikdörtgenin şerit sayısı. */
+  /** rect: dikdörtgenin şerit sayısı, 1..formation.lanes. */
   cols?: number;
   /** rect: fare hücresinin dikdörtgendeki köşesi (şimdilik yalnızca ekranda sol-alt). */
   anchor?: 'bottom_left';
+  /** Aşamalı vuruş ekseni (yoksa tüm hücreler aynı anda, tek aşama). */
+  stages?: AreaStageKind;
+  /** true: aşama sırası ters (row: arkadan öne; column: aşağıdan yukarı; distance: dıştan merkeze). */
+  reverse?: boolean;
+  /**
+   * Anchor (merkez) hücredeki birim hasar etkilerinden bu kadar KEZ vurulur (varsayılan 1; her vuruş ayrı isabet/hasar/kritik zarı).
+   * X şekli: "X çizilirken ortadan iki kez geçilir" = 2. Hasar dışı etkiler (durum vb.) bir kez uygulanır.
+   */
+  hitsAtCenter?: number;
 }
 
 /** Bir hücrenin ekran konumu (dizin, 0 tabanlı): col = soldan sağa (derinlik ekseni), row = yukarıdan aşağıya (şerit ekseni). */
@@ -414,7 +490,11 @@ export type BattleMode = 'turns' | 'test';
 
 export type Side = 'party' | 'enemy';
 
-export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns';
+/**
+ * Durum türleri. 'thorns' (eski Thorn Shield) motorda ve veride KALDIRILDI (madde 222); ad yalnızca src/game/scenes/BattleScene.ts eski bir
+ * `e.status === 'thorns'` karşılaştırması yaptığı için tür listesinde duruyor (ui-dev silince buradan da silinecek). Hiçbir skill/durum tanımı onu üretmez.
+ */
+export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns' | 'blinded' | 'shrouded';
 
 /** data/statuses.json girişi: veriyle tanımlı buff/debuff. */
 export interface StatusDef {
@@ -429,6 +509,10 @@ export interface StatusDef {
   skipTurn?: boolean;
   /** true: bu durum bir birime uygulandığı AN o birimin kendi taunt'ı silinir (kontrol/CC durumu; şu an yalnızca Stun). Yeni durum eklemek tek satır. */
   breaksTaunt?: boolean;
+  /** İsabete (accuracy) eklenen miktar (ör. Blinded -0,30). battle.effectiveStats uygular; hit şansı yine [0, hit.max] arasına sıkıştırılır. */
+  accuracyDelta?: number;
+  /** Kaçınmaya (evasion) eklenen miktar (ör. Shrouded +0,20; Dex'in evasionMax sınırı bu eke uygulanmaz). */
+  evasionDelta?: number;
 }
 
 /** data/grounds.json girişi: yerde kalan etki türü. */
@@ -465,7 +549,7 @@ export interface Status {
   turns: number;
   /** Durumu uygulayan birimin uid'si. */
   source: string;
-  /** regen: tur başına iyileştirme miktarı; thorns: yansıyan sabit hasar (zırhtan önce). */
+  /** regen: tur başına iyileştirme miktarı. */
   amount?: number;
   /** taunt: taunt'lı olmayan dostların aldığı hasarın çarpanı (taunt sürerken). */
   allyMult?: number;
@@ -511,6 +595,8 @@ export interface Combatant {
   passive?: PassiveDef;
   /** Bu birimi çağıran birim (çağrılanlarda). */
   owner?: string;
+  /** Ceset tüketen çağrıda: true = beslenmiş (ceset tüketildi, `fed` varyantı; UI mor parıltı), false = beslenmemiş (`unfed`). Diğer birimlerde tanımsız. */
+  empowered?: boolean;
   /** Pasifin biriktirdiği değer (ör. manaOverflow'da engellenen büyü hasarı). */
   charge: number;
   /** Sıra sayacı: her tikte SPD kadar dolar, eşiğe ulaşınca oynar. */
@@ -522,10 +608,44 @@ export interface Combatant {
   maxRage?: number;
 }
 
-/** Motorun UI'a yayınladığı olay akışı. UI yalnızca bunları dinler. */
-export type BattleEvent =
+/** Aşamalı alan skill'inin bir aşaması (skillUsed.stages): o aşamanın hücreleri (boşlar dahil) ve vurulacak birimler. Dizin = aşama numarası. */
+export interface AreaStage {
+  cells: number[];
+  targets: string[];
+}
+
+/**
+ * Motorun UI'a yayınladığı olay akışı. UI yalnızca bunları dinler.
+ * `stage`: aşamalı (area.stages) alan skill'inde, o aşamanın vuruşu sırasında çıkan HER olay (damage, dodge, miss, status, ground, ölüm,
+ * lifesteal şifası, pasif...) aşama numarasını taşır (0 = ilk aşama). Olaylar aşama sırasıyla gelir; aşama gecikmesi/animasyonu UI işidir.
+ */
+export type BattleEvent = BattleEventBody & { stage?: number };
+
+type BattleEventBody =
   | { type: 'battleStart'; seed: number; combatants: Combatant[] }
-  | { type: 'skillUsed'; actor: string; skill: string; targets: string[]; /** Alan/şerit skill'inde seçilen merkez (anchor) hücre. */ center?: number; /** Alan skill'inde seçilen anchor hücre (center ile aynı). */ anchor?: number; /** Alan/şerit skill'inde kapsanan TÜM hücreler (boş olanlar dahil, yuva sırasıyla; hedef tahtasında). */ cells?: number[] }
+  | {
+      type: 'skillUsed';
+      actor: string;
+      skill: string;
+      targets: string[];
+      /** Alan skill'inde seçilen merkez (anchor) hücre. */
+      center?: number;
+      /** Alan skill'inde seçilen anchor hücre (center ile aynı). */
+      anchor?: number;
+      /** Alan skill'inde kapsanan TÜM hücreler (boş olanlar dahil, yuva sırasıyla; hedef tahtasında). */
+      cells?: number[];
+      /** Yalnızca aşamalı alan skill'inde: aşamalar sırayla (dizin = sonraki olaylardaki `stage`); her aşamanın hücreleri ve hedefleri. */
+      stages?: AreaStage[];
+      /** area_any skill'inde alanın atıldığı tahta (kendi ya da karşı taraf); diğer alan skill'lerinde hep karşı tahta (alan yok). */
+      board?: Side;
+      /**
+       * requiresOpenBehind (Backstab): kullanıcının GÖRSEL olarak ışınlandığı hücre (hedefin hemen arkası) ve tahtası; `from` kullanıcının
+       * kendi (dönüş) hücresi. Görsel: arkaya ışınlan, vur, geri dön. Gerçek yer değiştirme YOK (formasyon değişmez).
+       */
+      behindSlot?: number;
+      behindBoard?: Side;
+      from?: number;
+    }
   | { type: 'resource'; actor: string; resource: 'mp' | 'hp'; amount: number; after: number }
   | {
       type: 'damage';
@@ -551,9 +671,13 @@ export type BattleEvent =
   /** amount negatifse kalkan tüketildi (ör. Shield Crush). */
   | { type: 'shield'; source: string; target: string; amount: number; shieldAfter: number; magicShieldAfter: number; magic: boolean }
   | { type: 'manaBurn'; source: string; target: string; amount: number; mpAfter: number }
-  | { type: 'status'; target: string; status: StatusKind; turns: number; source: string }
+  /** `cause`: skill etkisinin görsel nedeni (ör. 'vines' = sarmaşıkla yere bağlandı; UI 'rooted' görseli). Yoksa sıradan durum. */
+  | { type: 'status'; target: string; status: StatusKind; turns: number; source: string; cause?: string }
   | { type: 'statusEnd'; target: string; status: StatusKind; broken?: boolean }
-  | { type: 'summon'; actor: string; combatant: Combatant }
+  /** `empowered`: yalnızca ceset tüketen çağrıda (Raise Dead): true = ceset tüketildi, beslenmiş (fed) çağrı; false = beslenmemiş (unfed). `combatant.empowered` aynı. */
+  | { type: 'summon'; actor: string; combatant: Combatant; empowered?: boolean }
+  /** Bir ceset tüketildi (Raise Dead): `uid` ölü birim, `by` tüketen, `slot` cesedin yuvası, `side` cesedin tarafı. Ceset artık `consumed`: diriltilemez, yuvası rezerve değil. */
+  | { type: 'corpseConsumed'; uid: string; by: string; slot: number; side: Side }
   | { type: 'despawn'; target: string }
   /** Düşmüş bir birim olduğu yerde dirildi. */
   | { type: 'revive'; source: string; target: string; hpAfter: number; mpAfter: number }
@@ -572,7 +696,8 @@ export type BattleEvent =
   /** Yerde kalan bir etki bırakıldı / bitti. */
   | { type: 'ground'; id: string; ground: string; board: Side; slots: number[]; turns: number }
   | { type: 'groundEnd'; id: string }
-  | { type: 'death'; target: string }
+  /** `corpse`: true = ölen birim ceset bıraktı (çağrı değil; `battle.corpseOf(uid)` durumu 'revivable'); çağrının ölümünde false. */
+  | { type: 'death'; target: string; corpse?: boolean }
   | { type: 'battleEnd'; winner: Side };
 
 /**
@@ -601,7 +726,7 @@ export interface GlobalSkillDef {
 
 /** Bir birimin yapabileceği tek bir eylem (battle.act girdisi; yapay zeka seçimi de bu şekle çevrilir). */
 export type BattleAction =
-  | { kind: 'skill'; skillId: string; targetUid?: string; slot?: number }
+  | { kind: 'skill'; skillId: string; targetUid?: string; slot?: number; /** area_any: anchor hücrenin tahtası (yoksa karşı taraf; `targetUid` canlı birimse onun tahtası, `tile:<yuva>` ise kendi tahtası). */ board?: Side }
   | { kind: 'global'; id: string; slot?: number; /** Move Tile: slot yerine `tile:<yuva>` kimliği de kabul edilir. */ targetUid?: string };
 
 /** battle.listActions satırı: bir eylem ve şu an kullanılabilir olup olmadığı. */

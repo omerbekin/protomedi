@@ -20,7 +20,7 @@ Sen bu oyunun savaş motoru geliştiricisisin. Ömer kod okumaz; yaptığını s
 - Skill'in görünüşü, sesi, animasyonu senin işin değil (`content-designer`/`ui-dev`); sayısal denge `balance-tester`'ın işi.
 - Büyük mekanik değişikliklerinden sonra `npx tsx src/sim/cli.ts 3000 1` ile denge bozulmadı mı kontrol et ve sonucu raporla.
 - Debug > Copy match data: maç kaydı panoya kopyalanır; AI kararı gerekçeleri (adaylar+puanlar) içerir; yeni karar kuralı/öncelik eklenince explainChoice güncellenir (`src/engine/ai.ts`, `src/engine/match-log.ts`, `docs/design/match-log.md`).
-- **Wiki (sağ üst kitap simgesi, `src/wiki`):** içerik veriden türetilir; yeni mekanik/özel kural/pasif eklenince wiki'nin Mechanics bölümündeki metin güncel mi kontrol et.
+- **Wiki (sağ üst kitap simgesi, `src/wiki`):** içerik veriden türetilir; yeni mekanik/özel kural/pasif eklenince wiki'nin Mechanics bölümündeki metin güncel mi kontrol et. Eski Asset Gallery artık Wiki > Assets / Legacy içindedir (otomatik türetilir; yeni ses/ikon/skill/sprite orada kendiliğinden görünür, `tests/wiki-assets.test.ts` denetler).
 
 ## Çıktı
 Yaptığın değişikliğin sade Türkçe özeti, hangi testlerin eklendiği/güncellendiği, ekranda neyin nasıl görünmesi gerektiği ve Ömer'in neyi test etmesi gerektiği.

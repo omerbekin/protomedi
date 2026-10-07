@@ -6,6 +6,7 @@
   "logo": "geometerlogo",
   "role": "AOE Test",
   "testOnly": true,
+  "hidden": true,
   "frontPriority": 7,
   "attributes": {
     "str": 3,

@@ -1,7 +1,7 @@
-import { iconUrl } from '../ui/dom-icons';
-import { STAT_COLOR, STAT_ICON, STAT_LABEL } from '../ui/stat-icons';
-import type { Catalog, CharacterEntry } from './catalog';
-import { applyFilter, chipBar, h, openLightbox, searchable, type SectionApi } from './dom';
+import { iconUrl } from '../../ui/dom-icons';
+import { STAT_COLOR, STAT_ICON, STAT_LABEL } from '../../ui/stat-icons';
+import type { Catalog, CharacterEntry } from '../../gallery/catalog';
+import { applyFilter, chipBar, h, openLightbox, searchable, type SectionApi } from '../../gallery/dom';
 
 const ATTRS = ['str', 'int', 'dex', 'luck'] as const;
 const STAT_ROWS = [
@@ -17,7 +17,7 @@ const STAT_ROWS = [
 
 const num = (v: number): string => (Number.isInteger(v) ? String(v) : v.toFixed(1));
 
-/** CHARACTERS: class'lar ve çağrılar: tam boy sprite, kafa avatarı, logo, renk, statlar, skill ikonları, pasif; eski sürümler altta. */
+/** CHARACTER ART: class'lar ve çağrılar: tam boy sprite, kafa avatarı, logo, renk, statlar, skill ikonları, pasif. Gizli class'lar 'Hidden' etiketiyle. Eski sürümler Legacy bölümünde. */
 export function mountCharacters(cat: Catalog): SectionApi {
   const root = h('section', { class: 'section', attrs: { id: 'characters' } });
   const countEl = h('span', { class: 'count' });
@@ -53,6 +53,7 @@ export function mountCharacters(cat: Catalog): SectionApi {
             h('h3', { class: 'char-name', text: c.name, style: { color: c.color } }),
             h('span', { class: 'badge', text: c.kind === 'summon' ? 'summon' : 'class' }),
             c.testOnly ? h('span', { class: 'badge bad', text: 'TEST', title: 'Test class: left out of random teams' }) : null,
+            c.hidden ? h('span', { class: 'badge bad', text: 'Hidden', title: 'Hidden developer class: not in the wiki class list or team selection; kept as an animation reference' }) : null,
             ...c.missing.map((m) => h('span', { class: 'badge bad', text: `no ${m} (placeholder)` })),
             ...c.tags.map((t) => h('span', { class: 'badge', text: t }))),
           h('div', { class: 'small row' }, h('span', { class: 'swatch', style: { background: c.color } }), h('span', { class: 'mono', text: c.color }), h('span', { class: 'muted', text: `primary: ${c.primary ? STAT_LABEL[c.primary as keyof typeof STAT_LABEL] : 'none'} - id: ${c.id}` })),
@@ -60,7 +61,7 @@ export function mountCharacters(cat: Catalog): SectionApi {
           h('div', { class: 'stats' }, ...stats),
           h('div', { class: 'skillrow' }, ...c.skills.map((s) => h('span', { class: 'skillchip', title: s.name }, h('img', { class: 'icon32 pixelated', attrs: { src: iconUrl(s.icon, c.color), alt: '' } }), h('span', { class: 'small', text: s.name })))),
           passive)),
-      `${c.id} ${c.name} ${c.kind} ${c.primary ?? ''} ${c.skills.map((s) => s.name).join(' ')} ${c.passive?.name ?? ''} ${c.tags.join(' ')}`,
+      `${c.id} ${c.name} ${c.kind} ${c.primary ?? ''} ${c.skills.map((s) => s.name).join(' ')} ${c.passive?.name ?? ''} ${c.tags.join(' ')} ${c.hidden ? 'hidden developer' : ''}`,
       c.kind,
     );
   };
@@ -71,37 +72,21 @@ export function mountCharacters(cat: Catalog): SectionApi {
     refresh();
   });
 
-  // --- eski sürümler ---
-  const withOld = cat.characters.filter((c) => c.oldSprites.length > 0);
-  const old = h('div', { class: 'cards small-cards' });
-  for (const c of withOld)
-    old.append(searchable(h('article', { class: 'card' }, h('div', { class: 'card-title', text: c.name }), h('div', { class: 'old-row' }, ...c.oldSprites.map((s) => h('figure', {}, img(s.url, `${c.name} old ${s.anim} (assets/sprites_old/${c.spriteId}/${s.anim}.png)`, 'sprite old'), h('figcaption', { class: 'small muted', text: s.anim }))))), `old ${c.id} ${c.name} previous version`));
-
-  const orphan = cat.orphans;
-  const orphanCount = orphan.sprites.length + orphan.avatars.length + orphan.old.length;
-
   const refresh = (): number => {
     const n = applyFilter(grid, query, group);
-    applyFilter(old, query);
     countEl.textContent = `${n} / ${cat.characters.length}`;
     return n;
   };
 
   root.append(
-    h('div', { class: 'section-head' }, h('h2', { text: 'Characters' }), countEl, h('span', { class: 'muted small', text: 'Classes (data/classes) and summons (data/summons)' })),
+    h('div', { class: 'section-head' }, h('h2', { text: 'Character art' }), countEl, h('span', { class: 'muted small', text: 'Full-body sprite, head avatar and logo of every class and summon. Old versions are in Legacy.' })),
     chips,
     grid,
-    h('h3', { class: 'sub', text: 'Old versions' }),
-    h('p', { class: 'note', text: 'Previous sprite backups from assets/sprites_old. Not used by the game.' }),
-    withOld.length ? old : h('p', { class: 'muted small', text: 'No old versions.' }),
-    ...(orphanCount
-      ? [h('div', {}, h('h3', { class: 'sub', text: 'Unlinked files' }), h('p', { class: 'note', text: `Files with no matching class/summon: ${[...orphan.sprites.map((s) => `sprites/${s}`), ...orphan.avatars.map((s) => `avatars/${s}.png`), ...orphan.old.map((s) => `sprites_old/${s}`)].join(', ')}` }))]
-      : []),
   );
 
   return {
     id: 'characters',
-    title: 'Characters',
+    title: 'Character art',
     total: cat.characters.length,
     root,
     setQuery: (q) => {

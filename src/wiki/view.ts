@@ -9,6 +9,8 @@ import { STAT_COLOR } from '../ui/stat-icons';
 import type { MiniShape } from '../ui/shape-diagram';
 import { buildWiki } from './catalog';
 import type { WikiArticle, WikiBlock, WikiCatalog, WikiElement, WikiGround, WikiSkill, WikiStatus, WikiUnit } from './catalog';
+import { WIKI_ALIASES } from './assets/nav';
+import { assetSections, setNavigator, skillArt, unitArt } from './assets/sections';
 import { wikiFiles } from './files';
 import './wiki.css';
 
@@ -36,6 +38,10 @@ interface Section {
   total: number;
   root: HTMLElement;
   setQuery: (q: string) => number;
+  /** Bölüm açılınca çağrılır (Assets: ağır parçaları tembel kurar). */
+  onShow?: () => void;
+  /** Sol menüde girintili alt bölüm (Assets altındakiler). */
+  sub?: boolean;
 }
 
 // ---------------------------------------------------------------- parçalar
@@ -52,9 +58,11 @@ function table(head: string[], rows: string[][]): HTMLElement {
   return h('div', { class: 'wk-tablewrap' }, h('table', { class: 'wk-table' }, h('thead', {}, h('tr', {}, ...head.map((c) => h('th', { text: c })))), h('tbody', {}, ...rows.map((r) => h('tr', {}, ...r.map((c) => h('td', { text: c })))))));
 }
 
-/** AOE şekil şeması: 4x3 mini ızgara; boyalı hücreler vurulur, elmas imlecin gösterdiği (anchor) hücredir. */
+/** AOE şekil şeması: herhangi RxC mini ızgara (savaştaki hücre plakası diliyle); boyalı hücreler vurulur, beyaz çerçeveli hücre imlecin gösterdiği (anchor) hücredir. */
 function shapeGrid(m: MiniShape): HTMLElement {
-  return h('div', { class: 'wk-shape', style: { '--cols': String(m.cols) }, title: 'Shape preview: the painted cells are hit; the diamond is the cell you point at' }, ...m.cells.map((c) => h('span', { class: `wk-sc${c.on ? ' on' : ''}${c.anchor ? ' anchor' : ''}` })));
+  const grid = h('div', { class: 'wk-shape', style: { '--cols': String(m.cols) }, title: `Shape preview: the painted cells are hit; the white-framed cell is the one you point at${m.cells.some((c) => c.hits && c.hits > 1) ? '; the center cell is struck twice (x2)' : ''}` }, ...m.cells.map((c) => h('span', { class: `wk-sc${c.on ? ' on' : ''}${c.on && c.stage && c.stage > 1 ? ` s${Math.min(3, c.stage)}` : ''}${c.anchor ? ' anchor' : ''}${c.hits && c.hits > 1 ? ' hits' : ''}`, ...(c.hits && c.hits > 1 ? { attrs: { 'data-hits': `x${c.hits}` } } : {}) })));
+  // Either-side skills (area_any: Smoke Bomb) carry a short note next to the grid
+  return m.note ? h('span', { class: 'wk-shape-wrap' }, h('span', { class: 'wk-shape-note', text: m.note }), grid) : grid;
 }
 
 function articleCard(a: WikiArticle): HTMLElement {
@@ -83,7 +91,8 @@ function skillBlock(s: WikiSkill): HTMLElement {
     h('div', { class: 'wk-skill-body' },
       h('div', { class: 'wk-skill-name' }, h('b', { text: s.name }), ...s.elements.map((e) => h('span', { class: 'wk-el', text: e, style: { color: ELEMENT_COLOR[e] ?? '#fff', 'border-color': ELEMENT_COLOR[e] ?? '#fff' } }))),
       meta,
-      h('ul', { class: 'wk-lines' }, ...s.lines.map((t, i) => h('li', { text: t, style: lineColor(s.kinds[i]) ? { color: lineColor(s.kinds[i])! } : {} })))));
+      h('ul', { class: 'wk-lines' }, ...s.lines.map((t, i) => h('li', { text: t, style: lineColor(s.kinds[i]) ? { color: lineColor(s.kinds[i])! } : {} }))),
+      skillArt(s.id)));
 }
 
 function unitCard(u: WikiUnit): HTMLElement {
@@ -107,7 +116,8 @@ function unitCard(u: WikiUnit): HTMLElement {
         h('div', { class: 'wk-attrs' }, ...attrs),
         h('div', { class: 'wk-stats' }, ...derived),
         u.passive ? h('div', { class: 'wk-passive' }, icon(u.passive.icon, u.color, 'wk-icon big'), h('div', {}, h('b', { text: `Passive: ${u.passive.name}` }), h('div', { class: 'muted', text: u.passive.text }))) : h('div', { class: 'muted small', text: 'No passive' }),
-        h('div', { class: 'wk-skills' }, ...u.skills.map(skillBlock)))),
+        h('div', { class: 'wk-skills' }, ...u.skills.map(skillBlock)),
+        unitArt(u.id))),
     u.search,
   );
 }
@@ -226,6 +236,7 @@ export class WikiPanel {
       simpleSection('mechanics', 'STATS & MECHANICS', 'muscle', cat.mechanics.length, articleGroups(cat.mechanics)),
       statusesSection(cat),
       elementsSection(cat),
+      ...assetSections(),
     ];
 
     this.search = h('input', { class: 'wk-search', attrs: { type: 'search', placeholder: 'Search the wiki (class, skill, status...)', 'aria-label': 'Search the wiki', autocomplete: 'off' } });
@@ -242,7 +253,7 @@ export class WikiPanel {
     const nav = h('nav', { class: 'wk-nav' });
     for (const s of this.sections) {
       const count = h('span', { class: 'wk-navcount' });
-      const b = h('button', { class: 'wk-navbtn', attrs: { type: 'button' }, on: { click: () => this.show(s.id) } }, h('img', { class: 'pixelated', attrs: { src: iconUrl(s.icon, '#ffe29a'), alt: '' } }), h('span', { class: 'wk-navtitle', text: s.title }), count);
+      const b = h('button', { class: `wk-navbtn${s.sub ? ' sub' : ''}`, attrs: { type: 'button' }, on: { click: () => this.show(s.id) } }, h('img', { class: 'pixelated', attrs: { src: iconUrl(s.icon, '#ffe29a'), alt: '' } }), h('span', { class: 'wk-navtitle', text: s.title }), count);
       this.navButtons.set(s.id, b);
       this.navCounts.set(s.id, count);
       nav.append(b);
@@ -257,6 +268,12 @@ export class WikiPanel {
     root.append(toggle, this.overlay);
 
     window.addEventListener('keydown', (e) => this.onKey(e), true);
+    setNavigator((id, q) => {
+      this.search.value = q;
+      this.query = q;
+      this.refresh();
+      this.show(id);
+    });
     this.show('start');
     this.refresh();
   }
@@ -277,12 +294,15 @@ export class WikiPanel {
     else this.hooks.onClose();
   }
 
-  /** Bölüme geç (id: start, classes, skills, mechanics, statuses, elements). */
+  /** Bölüme geç (id: start, classes, skills, mechanics, statuses, elements, assets, sounds, animations, icons, art, palette, legacy; 'gallery' = assets). Bilinmeyen id: başlangıç. */
   show(id: string): void {
+    id = WIKI_ALIASES[id] ?? id;
+    if (!this.sections.some((s) => s.id === id)) id = 'start';
     this.active = id;
     for (const s of this.sections) s.root.hidden = s.id !== id;
     for (const [k, b] of this.navButtons) b.classList.toggle('active', k === id);
     this.content.scrollTop = 0;
+    this.sections.find((s) => s.id === id)?.onShow?.();
   }
 
   private refresh(): void {
