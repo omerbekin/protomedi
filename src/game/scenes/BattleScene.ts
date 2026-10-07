@@ -16,7 +16,7 @@ import { BattleStats, showResultScreen } from '../result-screen';
 import type { ResultScreen } from '../result-screen';
 import { debugState, effectiveTimeScale, tweaksSummary } from '../debug-state';
 import { testMode, testModeSummary } from '../test-mode';
-import { LONG_PRESS_MS, LONG_PRESS_SLOP, UnitSelection, isSelectModifier, pickUnitAt } from '../unit-select';
+import { LONG_PRESS_MS, LONG_PRESS_SLOP, UNIT_SELECT_EVENT, UnitSelection, isSelectModifier, pickUnitAt } from '../unit-select';
 import { VFX, corpseDrainFx, groundArea, meleeApproach, summonFx } from '../vfx';
 import type { VfxKind } from '../../ui/vfx-kinds';
 import { skillMiniGrid } from '../../ui/shape-diagram';
@@ -356,6 +356,7 @@ export class BattleScene extends Phaser.Scene {
 
   private applySelectionFrames(): void {
     for (const v of this.views.values()) v.setSelected(this.unitSel.has(v.combatant.uid));
+    window.dispatchEvent(new Event(UNIT_SELECT_EVENT)); // an open Debug > Unit tab redraws its selection list
   }
 
   /** Toggle the selection of a unit (Ctrl+click); the newest selection is also the Debug > Unit target. */

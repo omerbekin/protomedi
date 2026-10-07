@@ -25,6 +25,7 @@ import { newSeed } from '../game/seed';
 import { DEFAULT_VARIANT, SPRITE_VARIANTS, getSpriteVariant, setSpriteVariant, variantLabel } from '../game/sprite-variants';
 import { debugButton, debugHeading, debugSection, type DebugMenu } from './debug-menu';
 import { QUICK_TAB } from './debug-layout';
+import { UNIT_SELECT_EVENT } from '../game/unit-select';
 import { DEFAULT_TEST_SIZE, buildTestBattleData, clampTeam, placeClass, removeSlot, resizeTeam, setTestSwitches, testClassIds, testMode, testModeSummary, type TestSide } from '../game/test-mode';
 import { copyMatchData } from './match-copy';
 import { isFullscreen, toggleFullscreen } from './fullscreen';
@@ -78,6 +79,9 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     if (b) Object.assign(b.battle.debug, debugState.flags);
   };
   const applyTiming = (): void => battle()?.applyDebugTiming();
+
+  // A Ctrl+click selection change refreshes the open Unit tab (the highlighted units)
+  if (typeof window !== 'undefined') window.addEventListener(UNIT_SELECT_EVENT, () => debug.refresh());
 
   // ===== Battle =====
   debug.register({

@@ -3,6 +3,9 @@
  * Seçim bilgi/inceleme ve debug Unit araçlarının hedefidir; skill hedeflemeyi ve sıra işleyişini etkilemez.
  */
 
+/** Seçim değişince window'a gönderilen olay (debug menüsü kendini yeniler). */
+export const UNIT_SELECT_EVENT = 'proto-unit-select';
+
 /** Seçim tuşu basılı mı (Ctrl; Mac'te Cmd)? */
 export const isSelectModifier = (e: { ctrlKey?: boolean; metaKey?: boolean } | null | undefined): boolean => !!e && (!!e.ctrlKey || !!e.metaKey);
 
