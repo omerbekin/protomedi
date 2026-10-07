@@ -874,15 +874,17 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     const b = battle();
     if (b && b.mode !== mode) b.scene.restart({ seed: b.seed, mode }); // same seed and teams, only the mode changes
   };
-  // The first time the tab opens: Test mode on, and all three switches on (afterwards the switches below are yours to change)
-  debug.onTabOpen('Test Mode', () => {
-    if (testMode.autoEnabled) return;
-    testMode.autoEnabled = true;
-    BattleScene.freeMp = true;
-    setTestSwitches(true);
-    applyTestSwitches();
+  // Opening the tab changes nothing; the first time the Test mode button turns it on, all three switches turn on too
+  // (afterwards the switches below are yours to change)
+  const enableTestMode = (): void => {
+    if (!testMode.autoEnabled) {
+      testMode.autoEnabled = true;
+      BattleScene.freeMp = true;
+      setTestSwitches(true);
+      applyTestSwitches();
+    }
     setMode('test');
-  });
+  };
   debug.register({
     id: 'test.enable',
     icon: 'flask',
@@ -891,7 +893,7 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     label: () => (battle()?.mode === 'test' ? 'Test mode: on' : 'Test mode: off'),
     on: () => battle()?.mode === 'test',
     hint: 'On: no turn order, every unit can act at any time (the battle restarts with the same teams). Off: normal turn-based battle',
-    run: () => setMode(battle()?.mode === 'test' ? 'turns' : 'test'),
+    run: () => (battle()?.mode === 'test' ? setMode('turns') : enableTestMode()),
   });
   debug.register({
     id: 'test.unlimited-mp',

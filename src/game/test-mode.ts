@@ -15,11 +15,11 @@ export interface TestModeState {
   /** Düzenlenen taraf ve o taraftaki seçili yuva (null: yeni class eklenir). */
   side: TestSide;
   slot: number | null;
-  /** Sekme ilk açıldığında Test Mode kendiliğinden açıldı mı (sonra elle kapatılırsa bir daha zorlanmaz). */
+  /** "Test mode" düğmesiyle ilk açılışta anahtarlar açıldı mı (sonra elle kapatılırsa bir daha zorlanmaz). Sekmeyi açmak hiçbir şeyi değiştirmez. */
   autoEnabled: boolean;
 }
 
-/** Anahtarlar genel olarak KAPALI başlar (normal oyun etkilenmez); Test Mode sekmesi ilk açıldığında hepsi açılır (debug-tools.ts). */
+/** Anahtarlar genel olarak KAPALI başlar (normal oyun etkilenmez); "Test mode" düğmesi ilk kez açtığında hepsi açılır (debug-tools.ts). */
 /** Varsayılan takım: oyun varsayılanı (5 + 5). */
 export const DEFAULT_TEST_SIZE = 5;
 

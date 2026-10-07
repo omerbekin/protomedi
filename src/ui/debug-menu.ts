@@ -7,6 +7,9 @@
 import { DEFAULT_ACTION_ICON, DOCK_GROUPS, DOCK_HINT, DOCK_KEYS, QUICK_TAB, SECTION_ICONS, TAB_ICONS, dockBadge, dockTooltip, labelBadge, labelBase, type DockBadge, type DockGroup } from './debug-layout';
 import { iconUrl } from './dom-icons';
 
+/** Sekme çubuğundaki kısa etiketler (dar ızgara hücresine sığsın; tam ad düğmenin ipucunda). */
+const TAB_LABELS: Record<string, string> = { 'Speed & View': 'View', 'Test Mode': 'Test', Characters: 'Chars' };
+
 /** Quick sekmesine girecek eylemin bölümü ve sırası (sekmedeki asıl yeri `tab`/`section` olarak kalır). */
 export interface DockSpec {
   /** Quick sekmesindeki bölüm ve bölüm içi sıra. */
@@ -298,7 +301,11 @@ export class DebugMenu {
       b.className = `debug-tab${t === this.tab ? ' on' : ''}`;
       const ic = TAB_ICONS[t];
       if (ic) b.append(iconImg(ic, 'debug-tab-icon'));
-      b.append(document.createTextNode(t));
+      const label = document.createElement('span');
+      label.className = 'debug-tab-label';
+      label.textContent = TAB_LABELS[t] ?? t;
+      b.title = t;
+      b.append(label);
       b.addEventListener('click', () => {
         this.setTab(t);
         this.render();

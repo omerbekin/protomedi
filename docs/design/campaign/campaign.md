@@ -34,6 +34,13 @@ Oyun içi metinler İngilizce, açıklamalar Türkçe. Sayılar (düşman sayıs
 | 3 | **Tutorial takımı Ashford'da ayrılır**; orada **3 kişilik yeni takım** kurulur; **Valdren Keep'te 4. karakter**; 5. karakterin ne zaman geleceği **açık**. |
 | 4 | Castle Morvane baştan sis altında adı ve silüetiyle **görünür** (onaylandı). |
 
+### Ömer kararları (v4)
+| # | Karar |
+|---|---|
+| 1 | Ashford'da yeni takım **11 sınıfın tamamından serbestçe** seçilir; tutorial sınıfları da seçilebilir. İleri not: "sonra belki havuzu daraltırız". |
+| 2 | **4. karakter Valdren Keep'ten AYRILIRKEN katılır.** 5. karakter hâlâ açık. |
+| 3 | Yazısız harita arka planı geldi: `assets/campaign/valdoria-bg.webp` (1672x941). Düğüm konumları bu görsele göre yeniden ölçüldü (3.1, 6.1). |
+
 ---
 
 ## 0. Mevcut oyun nasıl çalışıyor (okuma notları)
@@ -70,7 +77,7 @@ Main Menu -> New Campaign -> Normal / Ironman -> "Choose your hero" (1 tutorial 
   -> Map: Mill Road (1) savaş -> Ravenwood (2): ikinci karakter katılır, savaş
   -> Ruined Watchtower (3) elit savaş -> ilk seçim açılır
   -> Ashford Village (4): tutorial biter, tutorial takımı veda eder, 3 kişilik yeni takım kurulur (ilk seçilen = lider) -> rota seçimi
-  -> ... Valdren Keep (7): 4. karakter katılır
+  -> ... Valdren Keep (7): şehirden ayrılırken 4. karakter katılır
   -> ... Valdren Keep (7, birleşme + seçim) -> ... King's Bridge (9, birleşme, boss)
   -> Ashen Plain (10, seçim) -> ... Castle Morvane (12, birleşme, final boss) -> "Valdoria Conquered"
 ```
@@ -110,28 +117,53 @@ Giriş metni (New Campaign, İngilizce): *"The Ash Curse spreading from Castle M
 
 ## 3. Valdoria haritası: veri modeli
 
-### 3.1 Düğümler (v2)
-Konum: görsel koordinatının oranı (x/2000, y/1250). Etiketsiz arka plan gelince debug "Edit node positions" aracıyla yeniden ölçülecek. **Değişenler kalın.**
+### 3.1 Düğümler (v2; konumlar v4)
+Konum: **yazısız arka planın** (`assets/campaign/valdoria-bg.webp`, 1672x941) oranı (x/1672, y/941), rozet merkezi. **Değişenler kalın.**
+
+**v4 konum ölçümü:** Arka plan referans haritanın yazısız yeniden çizimi ama aynı ölçekte değil. Su/orman/kar maskeleriyle hizalama yapıldı: referans pikseli ≈ (1,20 x arka plan x − 4, 1,27 x arka plan y − 6). Yani arka plan yatayda referansın tamamını kapsıyor; dikeyde biraz basılmış ve referansın en alttaki ~60 pikseli (bölge başlıklarının olduğu şerit) dışarıda kalmış. Bütün düğümler bu dönüşümle taşındı (y değerleri ~0,03-0,04 aşağı kaydı). Üst üste çizimle kontrol edildi: kıyı, orman, nehir, bataklık ve dağlar referansla örtüşüyor. Tek elle düzeltme: **10 Ashen Plain** tam nehrin üstüne düşüyordu, nehrin doğu kıyısına alındı (0,873/0,495 -> 0,886/0,505). İnce ayar ileride debug "Edit node positions" aracıyla yapılır.
+
+**Arazi kontrolü:**
+| Düğüm | Arka planda nerede | Uygun mu |
+|---|---|---|
+| 1 Mill Road | kıyıdaki tarla yaması | evet (değirmen, tarla) |
+| 2 Ravenwood | büyük batı ormanının içi | evet |
+| 3 Ruined Watchtower | orman kuzey kenarı, tepelerin eteği | evet |
+| 4 Ashford Village | ormanın doğusundaki tarlaların kenarı | evet |
+| 5A Dwarven Mine | **bataklık gölcüklerinin kenarı, nehir yanı** | **hayır** (maden dağda olmalı) |
+| 5B Iron Pass | iki karlı tepe arasındaki geçit eteği | evet |
+| 6A Witch's Hut | bataklığın güney kenarı | evet (cadı + bataklık) |
+| 6B Misty Marsh | **dağ eteği, kuru çayır** | **hayır** (bataklık yok) |
+| 7 Valdren Keep | nehir kenarı, tarlaların ortası | evet |
+| 8A St. Brann's Abbey | doğu ormanının güneyi, tepelerin eteği | evet |
+| 8B Mercenary Camp | nehrin güneyindeki tarlalar | evet |
+| 8C Black Cathedral | güneydoğu ormanının kuzey kenarı | evet |
+| 9 King's Bridge | tam nehrin üstü | evet (köprü) |
+| 10 Ashen Plain | nehrin doğu kıyısı, açık çayır | evet; ama arka planda kül rengi ova yok: kodla gri-kül ton katmanı önerilir |
+| 11A Dragon's Spine | karlı dağların güney yamacı | evet |
+| 11B Siege Line | dağ eteğinde açık arazi | evet |
+| 12 Castle Morvane | yüksek karlı zirveler | evet |
+
+**Arazi uyuşmazlığı (Mine/Marsh):** Referansta Misty Marsh bataklığın, Dwarven Mine dağ eteğinin yanındaydı. Ömer'in istediği yer değiştirme bu ikisini ters araziye koyuyor (maden bataklıkta, bataklık dağ eteğinde). Belgede Ömer'in kararı korunuyor; çözüm önerisi 10. bölüm soru 1'de.
 
 | No | Türkçe (referans) | **English name** | Type | **English subtitle** | Battle? | Region | x | y |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Değirmen Yolu | **Mill Road** | battle (start) | Start · Battle | evet | I | 0.144 | 0.804 |
-| 2 | Kuzgun Ormanı | **Ravenwood** | battle | Battle · Outlaw Pack | evet | I | 0.275 | 0.690 |
-| 3 | Yıkık Gözcü Kulesi | **Ruined Watchtower** | elite | Elite · Bandit Chief | evet | I | 0.338 | 0.560 |
-| 4 | Ashford Köyü | **Ashford Village** | town | Town · Rest, Recruits | hayır | I | 0.413 | 0.610 |
-| **5A** | **Cüce Madeni** (eski 6B) | **Dwarven Mine** | **treasure (guarded)** | **Treasure · Guarded** | **evet** | II | 0.494 | 0.765 |
-| 5B | Demir Geçit | **Iron Pass** | battle | Battle · Ambush | evet | II | 0.451 | 0.470 |
-| 6A | Cadı Kulübesi | **Witch's Hut** | event | Event · Cursed Merchant | hayır | II | 0.565 | 0.814 |
-| **6B** | **Sisli Bataklık** (eski 5A) | **Misty Marsh** | event | Event | hayır | II | 0.542 | 0.470 |
-| 7 | Valdren Kalesi | **Valdren Keep** | town (city) | City · Rest, Recruits | hayır | II | 0.625 | 0.602 |
-| **8A** | Aziz Brann Manastırı | **St. Brann's Abbey** | **treasure (guarded)** | **Treasure · Relic Vault** | **evet** | II | 0.706 | 0.430 |
-| 8B | Paralı Asker Kampı | **Mercenary Camp** | battle | Battle · Gold | evet | II | 0.725 | 0.661 |
-| 8C | Kara Katedral | **Black Cathedral** | elite | Elite · The Undying | evet | II | 0.719 | 0.774 |
-| 9 | Kral Köprüsü | **King's Bridge** | boss | Boss · The Bridge Warden | evet | II | 0.811 | 0.560 |
-| 10 | Kül Ovası | **Ashen Plain** | battle | Battle · Cursed Ground | evet | III | 0.874 | 0.468 |
-| 11A | Ejder Sırtı | **Dragon's Spine** | elite | Elite · Hidden Entrance | evet | III | 0.837 | 0.299 |
-| 11B | Kuşatma Hattı | **Siege Line** | battle | Battle | evet | III | 0.951 | 0.419 |
-| 12 | Morvane Kalesi | **Castle Morvane** | boss (final) | Final Boss | evet | III | 0.925 | 0.158 |
+| 1 | Değirmen Yolu | **Mill Road** | battle (start) | Start · Battle | evet | I | 0.146 | 0.846 |
+| 2 | Kuzgun Ormanı | **Ravenwood** | battle | Battle · Outlaw Pack | evet | I | 0.276 | 0.727 |
+| 3 | Yıkık Gözcü Kulesi | **Ruined Watchtower** | elite | Elite · Bandit Chief | evet | I | 0.339 | 0.591 |
+| 4 | Ashford Köyü | **Ashford Village** | town | Town · Rest, Recruits | hayır | I | 0.414 | 0.643 |
+| **5A** | **Cüce Madeni** (eski 6B) | **Dwarven Mine** | **treasure (guarded)** | **Treasure · Guarded** | **evet** | II | 0.494 | 0.805 |
+| 5B | Demir Geçit | **Iron Pass** | battle | Battle · Ambush | evet | II | 0.452 | 0.497 |
+| 6A | Cadı Kulübesi | **Witch's Hut** | event | Event · Cursed Merchant | hayır | II | 0.565 | 0.856 |
+| **6B** | **Sisli Bataklık** (eski 5A) | **Misty Marsh** | event | Event | hayır | II | 0.542 | 0.497 |
+| 7 | Valdren Kalesi | **Valdren Keep** | town (city) | City · Rest, Recruits | hayır | II | 0.625 | 0.635 |
+| **8A** | Aziz Brann Manastırı | **St. Brann's Abbey** | **treasure (guarded)** | **Treasure · Relic Vault** | **evet** | II | 0.706 | 0.455 |
+| 8B | Paralı Asker Kampı | **Mercenary Camp** | battle | Battle · Gold | evet | II | 0.725 | 0.696 |
+| 8C | Kara Katedral | **Black Cathedral** | elite | Elite · The Undying | evet | II | 0.719 | 0.815 |
+| 9 | Kral Köprüsü | **King's Bridge** | boss | Boss · The Bridge Warden | evet | II | 0.810 | 0.591 |
+| 10 | Kül Ovası | **Ashen Plain** | battle | Battle · Cursed Ground | evet | III | 0.886 | 0.505 |
+| 11A | Ejder Sırtı | **Dragon's Spine** | elite | Elite · Hidden Entrance | evet | III | 0.836 | 0.318 |
+| 11B | Kuşatma Hattı | **Siege Line** | battle | Battle | evet | III | 0.950 | 0.443 |
+| 12 | Morvane Kalesi | **Castle Morvane** | boss (final) | Final Boss | evet | III | 0.924 | 0.170 |
 
 Değişikliklerin gerekçesi:
 - **Yer değiştirme:** Dwarven Mine alt dala (5A konumu), Misty Marsh üst dala (6B konumu) geçti. Düğüm kimlikleri konuma bağlı kaldı (5A/6B), bağlantılar aynı.
@@ -192,34 +224,34 @@ Sonuç: **her rotada 9 savaş** (v1'de 7-9 arasıydı), 3 savaşsız durak, en f
   "title": "Valdoria",
   "subtitle": "Campaign Map",
   "blurb": "From Mill Road to Castle Morvane: 17 stops, 3 choice points, 12 stops per run.",
-  "background": "valdoria",
+  "background": "assets/campaign/valdoria-bg.webp",
   "start": "1",
   "stopsPerRun": 12,
   "visibility": 2,
   "alwaysVisible": ["12"],
   "regions": [
-    { "id": "I",   "title": "I · The Borderlands",       "tagline": "Begins at Mill Road, splits at Ashford", "label": [0.09, 0.92], "battleBackground": "border-road" },
-    { "id": "II",  "title": "II · Valdren Vale",          "tagline": "Three roads, one bridge",                "label": [0.51, 0.92], "battleBackground": "valley-field" },
-    { "id": "III", "title": "III · The Northern Heights", "tagline": "From the Ashen Plain to Morvane's gate", "label": [0.64, 0.05], "battleBackground": "ashen-heights" }
+    { "id": "I",   "title": "I · The Borderlands",       "tagline": "Begins at Mill Road, splits at Ashford", "label": [0.092, 0.967], "battleBackground": "border-road" },
+    { "id": "II",  "title": "II · Valdren Vale",          "tagline": "Three roads, one bridge",                "label": [0.510, 0.967], "battleBackground": "valley-field" },
+    { "id": "III", "title": "III · The Northern Heights", "tagline": "From the Ashen Plain to Morvane's gate", "label": [0.640, 0.057], "battleBackground": "ashen-heights" }
   ],
   "nodes": [
-    { "id": "1",   "type": "battle",   "name": "Mill Road",         "subtitle": "Start · Battle",           "region": "I",   "pos": [0.144, 0.804], "encounter": "mill_road_thugs", "start": true, "teaches": "turn_order", "partyCap": 1 },
-    { "id": "2",   "type": "battle",   "name": "Ravenwood",         "subtitle": "Battle · Outlaw Pack",     "region": "I",   "pos": [0.275, 0.690], "encounter": "ravenwood_pack", "recruit": { "offer": 3, "pick": 1, "when": "before" }, "teaches": "area_attacks", "partyCap": 2 },
-    { "id": "3",   "type": "elite",    "name": "Ruined Watchtower", "subtitle": "Elite · Bandit Chief",     "region": "I",   "pos": [0.338, 0.560], "encounter": "watchtower_chief", "teaches": "elites_and_choices" },
-    { "id": "4",   "type": "town",     "name": "Ashford Village",   "subtitle": "Town · Rest, Recruits",    "region": "I",   "pos": [0.413, 0.610], "heal": 1.0, "endsTutorial": true, "newCompany": { "size": 3, "leader": "firstPick" }, "partyCap": 3 },
-    { "id": "5A",  "type": "treasure", "name": "Dwarven Mine",      "subtitle": "Treasure · Guarded",       "region": "II",  "pos": [0.494, 0.765], "encounter": "mine_wardens", "treasure": "dwarven_mine" },
-    { "id": "5B",  "type": "battle",   "name": "Iron Pass",         "subtitle": "Battle · Ambush",          "region": "II",  "pos": [0.451, 0.470], "encounter": "iron_pass_ambush" },
-    { "id": "6A",  "type": "event",    "name": "Witch's Hut",       "subtitle": "Event · Cursed Merchant",  "region": "II",  "pos": [0.565, 0.814], "event": "witchs_hut" },
-    { "id": "6B",  "type": "event",    "name": "Misty Marsh",       "subtitle": "Event",                    "region": "II",  "pos": [0.542, 0.470], "event": "misty_marsh" },
-    { "id": "7",   "type": "town",     "name": "Valdren Keep",      "subtitle": "City · Rest, Recruits",    "region": "II",  "pos": [0.625, 0.602], "city": true, "heal": 1.0, "recruit": { "offer": 3, "pick": 1 }, "partyCap": 4 },
-    { "id": "8A",  "type": "treasure", "name": "St. Brann's Abbey", "subtitle": "Treasure · Relic Vault",   "region": "II",  "pos": [0.706, 0.430], "encounter": "vault_keepers", "treasure": "relic_vault" },
-    { "id": "8B",  "type": "battle",   "name": "Mercenary Camp",    "subtitle": "Battle · Gold",            "region": "II",  "pos": [0.725, 0.661], "encounter": "mercenary_camp" },
-    { "id": "8C",  "type": "elite",    "name": "Black Cathedral",   "subtitle": "Elite · The Undying",      "region": "II",  "pos": [0.719, 0.774], "encounter": "black_cathedral" },
-    { "id": "9",   "type": "boss",     "name": "King's Bridge",     "subtitle": "Boss · The Bridge Warden", "region": "II",  "pos": [0.811, 0.560], "encounter": "bridge_warden" },
-    { "id": "10",  "type": "battle",   "name": "Ashen Plain",       "subtitle": "Battle · Cursed Ground",   "region": "III", "pos": [0.874, 0.468], "encounter": "ashen_plain" },
-    { "id": "11A", "type": "elite",    "name": "Dragon's Spine",    "subtitle": "Elite · Hidden Entrance",  "region": "III", "pos": [0.837, 0.299], "encounter": "dragons_spine" },
-    { "id": "11B", "type": "battle",   "name": "Siege Line",        "subtitle": "Battle",                   "region": "III", "pos": [0.951, 0.419], "encounter": "siege_line" },
-    { "id": "12",  "type": "boss",     "name": "Castle Morvane",    "subtitle": "Final Boss",               "region": "III", "pos": [0.925, 0.158], "encounter": "lord_morvane", "final": true }
+    { "id": "1",   "type": "battle",   "name": "Mill Road",         "subtitle": "Start · Battle",           "region": "I",   "pos": [0.146, 0.846], "encounter": "mill_road_thugs", "start": true, "teaches": "turn_order", "partyCap": 1 },
+    { "id": "2",   "type": "battle",   "name": "Ravenwood",         "subtitle": "Battle · Outlaw Pack",     "region": "I",   "pos": [0.276, 0.727], "encounter": "ravenwood_pack", "recruit": { "offer": 3, "pick": 1, "when": "before" }, "teaches": "area_attacks", "partyCap": 2 },
+    { "id": "3",   "type": "elite",    "name": "Ruined Watchtower", "subtitle": "Elite · Bandit Chief",     "region": "I",   "pos": [0.339, 0.591], "encounter": "watchtower_chief", "teaches": "elites_and_choices" },
+    { "id": "4",   "type": "town",     "name": "Ashford Village",   "subtitle": "Town · Rest, Recruits",    "region": "I",   "pos": [0.414, 0.643], "heal": 1.0, "endsTutorial": true, "newCompany": { "size": 3, "leader": "firstPick" }, "partyCap": 3 },
+    { "id": "5A",  "type": "treasure", "name": "Dwarven Mine",      "subtitle": "Treasure · Guarded",       "region": "II",  "pos": [0.494, 0.805], "encounter": "mine_wardens", "treasure": "dwarven_mine" },
+    { "id": "5B",  "type": "battle",   "name": "Iron Pass",         "subtitle": "Battle · Ambush",          "region": "II",  "pos": [0.452, 0.497], "encounter": "iron_pass_ambush" },
+    { "id": "6A",  "type": "event",    "name": "Witch's Hut",       "subtitle": "Event · Cursed Merchant",  "region": "II",  "pos": [0.565, 0.856], "event": "witchs_hut" },
+    { "id": "6B",  "type": "event",    "name": "Misty Marsh",       "subtitle": "Event",                    "region": "II",  "pos": [0.542, 0.497], "event": "misty_marsh" },
+    { "id": "7",   "type": "town",     "name": "Valdren Keep",      "subtitle": "City · Rest, Recruits",    "region": "II",  "pos": [0.625, 0.635], "city": true, "heal": 1.0, "recruit": { "offer": 3, "pick": 1, "when": "leave" }, "partyCap": 4 },
+    { "id": "8A",  "type": "treasure", "name": "St. Brann's Abbey", "subtitle": "Treasure · Relic Vault",   "region": "II",  "pos": [0.706, 0.455], "encounter": "vault_keepers", "treasure": "relic_vault" },
+    { "id": "8B",  "type": "battle",   "name": "Mercenary Camp",    "subtitle": "Battle · Gold",            "region": "II",  "pos": [0.725, 0.696], "encounter": "mercenary_camp" },
+    { "id": "8C",  "type": "elite",    "name": "Black Cathedral",   "subtitle": "Elite · The Undying",      "region": "II",  "pos": [0.719, 0.815], "encounter": "black_cathedral" },
+    { "id": "9",   "type": "boss",     "name": "King's Bridge",     "subtitle": "Boss · The Bridge Warden", "region": "II",  "pos": [0.810, 0.591], "encounter": "bridge_warden" },
+    { "id": "10",  "type": "battle",   "name": "Ashen Plain",       "subtitle": "Battle · Cursed Ground",   "region": "III", "pos": [0.886, 0.505], "encounter": "ashen_plain" },
+    { "id": "11A", "type": "elite",    "name": "Dragon's Spine",    "subtitle": "Elite · Hidden Entrance",  "region": "III", "pos": [0.836, 0.318], "encounter": "dragons_spine" },
+    { "id": "11B", "type": "battle",   "name": "Siege Line",        "subtitle": "Battle",                   "region": "III", "pos": [0.950, 0.443], "encounter": "siege_line" },
+    { "id": "12",  "type": "boss",     "name": "Castle Morvane",    "subtitle": "Final Boss",               "region": "III", "pos": [0.924, 0.170], "encounter": "lord_morvane", "final": true }
   ],
   "edges": [
     { "from": "1",  "to": "2",   "style": "solid" },
@@ -248,7 +280,7 @@ Sonuç: **her rotada 9 savaş** (v1'de 7-9 arasıydı), 3 savaşsız durak, en f
 - Bir düğüm "savaşlı"dır: `encounter` alanı varsa (battle/elite/boss ve guarded treasure). K1/K2 testleri buna bakar.
 - Seçim ve birleşme noktası veride işaretlenmez, graftan çıkar (çıkış > 1 / giriş > 1); testler sayıları (3 ve 3) doğrular.
 - Kenara isteğe bağlı `"path": [[x,y], ...]` ara noktaları; yoksa hafif kavisli eğri.
-- `partyCap` düğümde verilir ve o düğümden itibaren geçerlidir (bir sonraki `partyCap`'e kadar): Mill Road 1, Ravenwood 2, Ashford 3, Valdren Keep 4. 5. karakterin yeri açık (Ömer); geldiğinde ilgili düğüme `recruit` + `partyCap: 5` eklenir.
+- `partyCap` düğümde verilir ve o düğümden itibaren geçerlidir (bir sonraki `partyCap`'e kadar): Mill Road 1, Ravenwood 2, Ashford 3, Valdren Keep 4 (ayrılırken; `recruit.when`: `before` = düğüme varınca savaştan önce, `leave` = düğümden çıkarken). 5. karakterin yeri açık (Ömer); geldiğinde ilgili düğüme `recruit` + `partyCap: 5` eklenir.
 - `data/campaign/campaign.json` (provizyon): `{ "maps": ["valdoria"], "rules": { "carryHp": true, "victoryHeal": 0.2, "reviveRatio": 0.2, "bossVictoryHeal": 1.0, "maxSaves": { "normal": 5, "ironman": 1 } }, "starterPool": [11 sınıf], "companyPool": [11 sınıf], "recruitPool": [11 sınıf] }` (11 = rastgele havuzdaki oynanabilir sınıflar, Hexer dahil, Geometer hariç). `victoryHeal` ileride zorluk seviyesine göre değişebilir (`rules` zorluk başına ayrı blok olabilir).
 - `data/campaign/encounters.json` (bkz. 4), ileride `events.json`, `treasures.json`.
 
@@ -261,6 +293,7 @@ Sonuç: **her rotada 9 savaş** (v1'de 7-9 arasıydı), 3 savaşsız durak, en f
 6. Görsel 16:10, oyun 16:9 (arka plan 16:9 isteniyor).
 7. 10'un seçim rozeti 9'a yakın: rozet kendi etiketine bitişik konacak.
 8. Akış referansında Ashford 1. durak yazıyor (Ömer: dikkate alma; Ashford 4. durak).
+9. (v4) Yazısız arka planda Mine/Marsh yer değişimi araziyle çelişiyor (3.1 sonu); arka planda kül rengi ova yok (Ashen Plain).
 
 ---
 
@@ -287,13 +320,13 @@ Her durağın öğrettiği şey (borderlands-flow referansından, Ashford 4'e ta
 
 **Ashford Village'da veda ve yeni takım:**
 - Ashford'a varınca kısa bir veda kartı: tutorial karakterleri takımdan ayrılır (kadrodan tamamen çıkar).
-- Ardından **"Form your company"** ekranı: **3 karakter** seçilir. Öneri: 11 sınıftan **serbest** seçim (aday çekilişi değil): asıl sefer burada başlıyor, oyuncu istediği takımı kurabilmeli.
+- Ardından **"Form your company"** ekranı: **3 karakter**, **11 sınıfın tamamından serbestçe** seçilir (Ömer kararı v4; aday çekilişi yok). İleri not (Ömer): "sonra belki havuzu daraltırız" (ör. kilidi açılmış sınıflar ya da çekilmiş adaylar); veride `companyPool` alanı bunun için ayrı tutuluyor.
 - **Lider = yeni takımda ilk seçilen karakter** (Ömer'in "tutorial sonrası ilk karakter = lider" kararı). Ekranda ilk seçilen kartın üstüne taç konur; oyuncu taçı başka bir karta taşıyarak lideri değiştirebilir, ama yalnızca bu ekranda. Sonra lider sabittir.
-- **Tutorial sınıfları yeniden seçilebilir mi? Öneri: evet.** Tutorial'da oynanan sınıflar listede normal durur ("Played in the tutorial" küçük etiketiyle); seçilirse yeni bir karakter olarak gelir (tam can, aynı sınıf). Gerekçe: oyuncu tutorial'da sevdiği sınıfı kaybetmemeli; ceza gibi hissettirmemeli.
+- **Tutorial sınıfları yeniden seçilebilir (Ömer kararı v4).** Listede normal dururlar ("Played in the tutorial" küçük etiketiyle); seçilirse yeni bir karakter olarak gelir (tam can, aynı sınıf).
 - Yeni takım tam canla başlar (Ashford zaten tam iyileştirir).
 
 **Sonraki katılımlar:**
-- **Valdren Keep (7):** 3 aday kart (seed'li, kadroda olmayan sınıflardan) -> 1 seç. Takım 4.
+- **Valdren Keep (7), şehirden ayrılırken (Ömer kararı v4):** oyuncu şehir panelinde `Leave` deyince (ya da rota seçip yola çıkarken) kısa bir sahne: *"A volunteer catches up with you at the city gate."* -> 3 aday kart (seed'li, kadroda olmayan sınıflardan) -> 1 seç. Takım 4; yeni karakter tam canla gelir ve 8A/8B/8C savaşına girer. Rota kartındaki önizleme (sis kuralı) buna göre 4 kişilik takımı varsayar.
 - **5. karakter: AÇIK** (Ömer: şimdilik belli değil). Aday yerler: King's Bridge zaferi (Bölge III başlangıcı) ya da bir olay ödülü. Veride yer ayrıldı (`recruit` + `partyCap: 5`).
 - İleride: olay/hazine ödülü olarak karakter (ör. Witch's Hut'ta "cursed" bir aday).
 - Kadroda aynı sınıftan ikinci karakter yok (öneri; basitlik ve kimlik için).
@@ -302,7 +335,7 @@ Her durağın öğrettiği şey (borderlands-flow referansından, Ashford 4'e ta
 
 ### 4.3 Kadro ve aktif takım
 - **Roster** (kazanılmış karakterler) + **aktif takım** (savaşa girenler, o andaki sınır kadar).
-- Takım sınırı (provizyon, düğümdeki `partyCap`): **Mill Road 1 -> Ravenwood 2 (tutorial) -> Ashford 3 (yeni takım) -> Valdren Keep 4 -> 5: açık.** Motor 12'ye kadar destekliyor; 5 bugünkü dengenin ölçüldüğü boyut.
+- Takım sınırı (provizyon, düğümdeki `partyCap`): **Mill Road 1 -> Ravenwood 2 (tutorial) -> Ashford 3 (yeni takım) -> Valdren Keep'ten çıkarken 4 -> 5: açık.** Motor 12'ye kadar destekliyor; 5 bugünkü dengenin ölçüldüğü boyut.
 - Bu katılım düzeninde kadro sınırı aşmıyor (her katılım sınırı da bir artırıyor), yani şimdilik **yedek yok**: Party ekranı yalnızca dizilimi değiştirir. Yedek (bench) mekaniği ileride kadro sınırı aştığında (olay ödülü karakterler vb.) devreye girer: fazlası savaşa girmez, canı değişmez.
 - **Party ekranı** (haritada `Party` düğmesi, savaş dışında her an): roster kartları (avatar, sınıf, can çubuğu) + 4x3 dizilim ızgarası (bugünkü takım seçimiyle aynı hücre dili, sürükle-bırak). Lider tacı gösterilir.
 - Takım değiştirme her savaş arasında serbest (Ömer kararı); kasabada olmak gerekmez.
@@ -374,8 +407,10 @@ Anahtar `protomedi.campaign.v1` (tek JSON: `{ version, saves: [...] }`), her kay
 ### 6.1 Arka plan (Ömer: yazısız, etiketsiz, yüksek çözünürlük, 16:9)
 - Düğümler, rotalar (düz/kesik), etiket plakaları, bölge başlıkları, lejant, kartuş, sis **kodla** çizilir: tüm yazılar İngilizce ve değiştirilebilir.
 - **Patika izleri (öneri):** resimde patika OLMASIN; kod, her rotanın altına hafif, boyalı görünümlü bir toprak-patika dokusu (yumuşak kahverengi, düzensiz kenar, %35 opak) çizer, üstüne çizgi stilini koyar. Gerekçe: AI'nin çizdiği patikalar düğüm konumlarıyla hiçbir zaman tam örtüşmez; kodla çizilen iz her zaman hizalıdır ve sis/kapanan dallarla birlikte solabilir. (İstenirse prompt'taki "no roads" satırı "faint worn trails" ile değiştirilebilir, ama önerilmez.)
-- **Boyut:** ChatGPT'nin görsel üretimi 16:9'u doğrudan vermeyebilir (yatayda en geniş seçenek genelde 1536x1024, 3:2). Bu durumda en geniş yatay boyut istenir, önemli coğrafya ortadaki 16:9 bant içinde tutulur; sonra üstten/alttan kırpılıp (1536x864) bir yapay zeka büyütücüyle (ör. Upscayl / Real-ESRGAN, ücretsiz) 3840x2160'a büyütülür. Oyun 1920x1080 ama zoom 2x'e kadar çıktığı için 3840x2160 hedef. Dosya: `assets/backgrounds/campaign/valdoria.webp`; `assets/CREDITS.md`'ye kayıt.
-- Resim gelene kadar: kodla çizilmiş sade parşömen harita (yer tutucu); resim konunca otomatik onun yerine geçer.
+- **Geldi (v4):** `assets/campaign/valdoria-bg.webp`, **1672x941** (oran 1,777 = 16:9), RGB, yazısız. Kaynağı `assets/CREDITS.md`'ye yazılmalı (ChatGPT üretimi).
+- **Çözünürlük düşük:** 1920x1080 ekranda ~1,15 kat büyütülerek gösterilir (yumuşak/LINEAR filtre; piksel art değil, kabul edilebilir). Ama haritada 2x'e kadar zoom planlandığı için yakınlaşınca bulanıklaşır. **Öneri:** bir yapay zeka büyütücüyle (Upscayl / Real-ESRGAN, ücretsiz) 4 kat büyütüp 3840x2160'a indirmek; oran aynı kaldığı için düğüm konumları (oran) değişmez. O zamana kadar en fazla zoom 1,5x.
+- Kodla çizilen parşömen yer tutucu artık gerekmiyor; yalnızca dosya yüklenemezse (eksik asset) devreye girer.
+- Arka planda kül rengi bir ova yok: Ashen Plain (10) çevresine kodla yumuşak gri-kül ton katmanı (ve Bölge III'e hafif soğuk ton) önerilir.
 
 **ChatGPT prompt'u (referans görseli `valdoria-map-reference.webp` ekleyerek kullanılır):**
 ```
@@ -504,8 +539,8 @@ Kurallar (testlenecek): sınıflar `randomPool` içinde (Geometer yok), yuvalar 
 
 ---
 
-## 10. Ömer'e açık sorular (v3)
+## 10. Ömer'e açık sorular (v4)
 
-v2 soruları cevaplandı (bkz. "Ömer kararları (v3)"). Açık kalanlar:
-1. **Ashford'da yeni takım:** 3 karakter 11 sınıftan serbest mi seçilsin (öneri), yoksa çekilmiş aday kartlarından mı (ör. 5 adaydan 3)? Tutorial'da oynanan sınıflar da seçilebilsin mi (öneri: evet, yeni karakter olarak)?
-2. **5. karakter:** açık bıraktım; öneri yer King's Bridge zaferi (Bölge III'e girerken). Karar verene kadar Bölge III karşılaşmaları 4 kişilik takıma göre ayarlı.
+1. **Mine/Marsh ve arazi:** yer değiştirmeden sonra Dwarven Mine bataklıkta, Misty Marsh kuru dağ eteğinde duruyor. Seçenekler: (a) olduğu gibi kalsın, adlar araziye uydurulsun: 5A "Flooded Mine" (sular basmış cüce madeni), 6B "Misty Heights" (sisli yayla); (b) **konumları geri değiştir, rotadaki sırayı koru (öneri):** bataklık düğümü yine bataklıkta, maden yine dağda olur. Bu durumda alt dal Misty Marsh (5A) + Witch's Hut (6A), üst dal Iron Pass (5B) + Dwarven Mine (6B) olur; alt dalda savaş kalmayacağı için Misty Marsh "Battle · Bog Ambush" olur, Dwarven Mine "Treasure · Guarded" kalır (üst dalda 2 savaş, kural yine sağlanır). Hangisi?
+
+Önceki (v3) sorular cevaplandı (bkz. "Ömer kararları (v4)"); 5. karakterin yeri hâlâ açık (öneri: King's Bridge zaferi).

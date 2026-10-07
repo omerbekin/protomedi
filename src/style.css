@@ -261,14 +261,23 @@ body {
 
 .debug-tab {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 3px;
+}
+
+.debug-tab-label {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.1;
 }
 
 .debug-tab-icon {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   flex: none;
   image-rendering: pixelated;
 }
@@ -494,19 +503,19 @@ body {
   padding: 6px 10px;
 }
 
+/* Sekme çubuğu: eşit hücreli ızgara (5 sütun), ikon üstte, kısa etiket altta; satır kaymaz, düğme boyları eşit */
 .debug-tabs {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   margin: 10px 0 4px;
 }
 
 .debug-tab {
-  flex: 1 1 0;
-  min-width: 56px;
-  min-height: 44px;
-  padding: 4px 6px;
-  font: bold 13px system-ui, sans-serif;
+  min-width: 0;
+  min-height: 48px;
+  padding: 5px 2px 4px;
+  font: bold 11px system-ui, sans-serif;
   color: #8d99ae;
   background: #1c1d2e;
   border: 1px solid #4a4e69;
