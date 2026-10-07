@@ -6,7 +6,7 @@ Amaç: Ömer bir savaşı oynar/izler, **Debug > Copy match data** (ya da sonuç
 - Kayıt savaş başladığı andan itibaren tutulur (BattleScene'de her zaman açık; `debugState.matchLog`). Savaş bitmeden de kopyalanabilir ("o ana kadar"); `test` modunda da çalışır. Simülatörde (`npm run sim`) ve headless koşuda kayıt yoktur.
 - Kayıt motoru ve RNG'yi DEĞİŞTİRMEZ: motora yalnızca salt-okunur gözlemci (`Battle.observer`) bağlanır; AI açıklaması `chooseAction`'ın verdiği kararın izinden (`AiTrace`) okunur. `tests/match-log.test.ts` açıklama/kayıt açıkken ve kapalıyken savaşların birebir aynı olduğunu kilitler.
 - Boyut: varsayılan en çok ~190.000 karakter. Önce "compact" kademesi (dost/düşman yalnızca can, daha az aday); yine aşılırsa SONDAKİ hamleler kırpılır ve başlıkta `TRUNCATED`, sonda `[truncated: N later move(s) omitted]` yazar. Savaş sonu özeti (`## RESULT`) her zaman sondadır.
-- **Yeni karar kuralı/öncelik eklenince `explainChoice` (ve gerekirse `pickerView`/`noPickReason`) güncellenir.**
+- **Yeni karar kuralı / değer terimi eklenince `explainChoice` ve `ai-value.ts` güncellenir (madde 257: YZ TEK DEĞER TERAZİSİ; her terim aday satırında ayrı yazılır).**
 
 ## Biçim (v1)
 
@@ -26,9 +26,10 @@ before: <aktörün durumu: can, MP, rage, hız (spd), sayaç (ctr), zırh, coold
   foes: <canlı düşmanlar: can, kalkan sh/msh, MP, zırh ar, durumlar>
   allies: <canlı dostlar>
   between moves ...: <önceki hamleden bu hamleye kadar olanlar: yer hasarı, tur başı şifa/MP, biten durumlar>
-ai: profile ... | priorities kill > tactic > aoe > damage | focus lowest_ratio
-  WHY: <tek cümlelik özet: hangi öncelik, neden bu seçildi, bir sonraki en iyi aday>
-  steps: kill=PICKED ... ; ya da kill=none (neden) ; tactic=none (neden) ; aoe=none (neden) ; damage=PICKED ...
+ai: profile ... | decision: single value scale (one score per candidate, highest wins) | foe focus model lowest_ratio
+  rule: value scale (horizon 3 turns): score = damage + pressure + kill + save + ... - cost - cooldown; highest wins
+  WHY: Highest value (<etiket>): <seçilen> score N = <terim terim döküm>; next best <ikinci> score M = <döküm>
+  steps: value=PICKED <seçilen> score N (<etiket>)
   candidates:
     * <seçilen aday>  ... [chosen]
     - <puanlı ama kaybeden aday> ... score N [lost]
@@ -48,7 +49,7 @@ after: <aktörün sonraki durumu> ;; <etkilenen birimlerin sonraki durumu>
 ### AI aday satırı
 
 ```
-* Whirlwind hits 3 foe(s) dmg 33.7 hit 0.81 per [P2:Anti-Mage 19@0.81 LETHAL, P1:Warrior 14@0.83, ...] kills [P2:Anti-Mage] cost 7.5 net 26.2 score 24992.5 {hint} [lost]
+* Whirlwind hits 3 foe(s) dmg 33.7 hit 0.81 per [P2:Anti-Mage 19@0.81 LETHAL, ...] kills [P2:Anti-Mage] cost 7.5 SCORE 61.2 = damage 33.7 + kill 24.1 + pressure 10.9 + cost -7.5 [lost]
 ```
 
 | Alan | Anlamı |
@@ -56,20 +57,19 @@ after: <aktörün sonraki durumu> ;; <etkilenen birimlerin sonraki durumu>
 | `shape rect 2x3 @cell 4 -> cells [..]` | Alan (şekil) skill adayı (tüm alan skill'leri): şekil adı (`row`/`column`/`plus`/`rect RxC`; aşamalıysa `staged row` / `staged distance` eki), anchor hücre (boş olabilir), kapsanan tüm hücreler; ardından `hits N foe(s)`. Hamle başlığı: `(center cell 4 -> cells [..])`; skill satırında `area shape rect 2x3 staged row`. Aşamalı skill'in `result` satırları `[stage N]` önekiyle (aşama sırasıyla). X şekli `x center x2` (merkez 2 vuruş). İki tahtaya atılabilen alan (Smoke Bomb, `area_any`): aday satırında `@cell N (own side|foe side)`, kendi tarafında `covers N unit(s) [..]`, Blinded/Shrouded değeri `mitigation N` (önlenen beklenen hasar, can-eşdeğer); hamle başlığında `(center cell N on own/foe side -> cells [..])`. AI bağlam koşulları (blocked notu): `minAllyTargets`, `minTargetMaxHpShare`, `targetBehindFront` |
 | `hits N foe(s)` / `center cell` | Alan (AOE) skill'inde vurulan düşman sayısı ve merkez hücre; `per [...]` hedef başına beklenen hasar `ortalama@isabet`, `LETHAL` = bu vuruş canını bitirir |
 | `dmg` | Hedeflerin canı/kalkanıyla sınırlı TOPLAM beklenen hasar, isabet şansıyla çarpılmış (alan skill'inde tüm hedeflerin toplamı); `hit` ana hedefe isabet şansı |
-| `kills [...]` | Beklenen hasarı canını bitiren (ve isabet şansı `hit.aiKillMin` üstünde olan) düşmanlar |
+| `kills [...]` | Öldürme ihtimali en az %50 olan düşmanlar (ihtimal = isabet x P(hasar zarı >= can + emecek kalkan), kritik dalı dahil; `per [...]` satırında hedef başına `killChance`) |
 | `heal`, `selfheal`, `shield`, `burn`, `buff`, `revive` | Şifa, kendine şifa (lifesteal), kalkan, yakılan mana, self-buff net değeri, diriltme |
 | `cost` | MP/can bedelinin skora yansıyan ağırlıklı değeri (`ai.json` > `mpCostWeight`/`hpCostWeight`) |
-| `net` | genel değer - bedel (yedek seçim ve global skill kararları bunu kullanır) |
-| `score` | **Kazanan önceliğin kendi puanı** (kill: öldürülenlerin tehdidi x 1000 - bedel; damage: hasar + kendine şifa + 0,6 x mana yakma + curse - bedel; aoe: toplam hasar + curse - bedel...; `curse` yalnızca Hexer lanetlerinde 0'dan büyük). Yalnızca o önceliğin havuzundaki adaylarda bulunur; seçim en yüksek score'ludur |
+| `SCORE N = ...` | **Terazi puanı** (madde 257; `src/engine/ai-value.ts`, ayarlar `data/ai.json > value`): can-eşdeğer terimlerin toplamı. Terimler: `damage` (beklenen hasar), `pressure` (öldürmeyen hasarın hedefin kalan katkısından götürdüğü pay), `kill` (öldürme ihtimali x hedefin ufuk içindeki katkısı), `save` (bir sonraki turumuzdan önce ölecek dostu kurtarma: dostun katkısı + canı), `heal`, `shield` (emilmesi beklenen), `revive` (dirilenin ufuktaki katkısı, tur sayacı 0'dan; `-> rises on own cell N`), `control` (Stun/Slow/Haste/Wound/Fortify), `protect` (Taunt/Guard: yönlenen hasar + kurtarma - Defender'ın ölme riski), `summon` (vurabileceği yuva yoksa 0), `bond`, `curse`, `mitigation`, `cleanse`, `burn`, `tempo`, `buff` (saf self-buff), `cost` (eksi), `cooldown` (eksi: ultimate'a küçük bekleme bedeli). Seçim en yüksek SCORE |
 | `{...}` | etiketler: `hint` (skill'in `ai` bağlam ipucu var), `summon`, `empowered` (ceset tüketen çağrı: tüketilecek ceset var), `unfed` (ceset yok, çağrı zayıf gelir), `taunt`, `guard`, `selfBuff`, `hpCost` (aday düşük can kuralına (`minHpRatioForHpCost`) tabi: sabit can bedeli ya da can bahsi; oranlı can bedelli Wail of the Dead bu etiketi taşımaz, madde 247); çağrı adayında ayrıca `summonValue` (birimin en iyi ham hasarı x ömür x profil `summonValueShare`) |
 | `[chosen]` | seçildi |
-| `[lost]` | kazanan önceliğin havuzundaydı ama puanı daha düşük |
-| `[skipped: ...]` | kazanan önceliğin havuzu dışında (ör. "not on the focus target", "not in the pool of kill") |
-| `[blocked: ...]` | elendi: skill'in `ai` bağlam ipucu sağlanmadı (hangi koşul: `minTargets 2 (hits 1)`...) ya da MP başka bir skill için ayrıldı (`MP kept in reserve for X`) |
+| `[lost]` | pozitif puanlı ama seçilenden düşük |
+| `[skipped: no positive value]` | puanı pozitif değil |
+| `[blocked: ...]` | elendi: MP başka bir skill için ayrıldı (`MP kept in reserve for X`). Skill `ai` ipuçlarının requires/anyOf koşulları madde 257'den beri seçimi ENGELLEMEZ |
 
-Öncelik sırası profilden gelir (`data/ai.json`): `kill > tactic > aoe > damage` gibi. İlk uyan öncelik seçimi verir; sonrakiler denenmez. `steps` satırı her önceliğin neden uymadığını yazar (ör. `aoe=none (living foes 2 < aoeMinTargets 3)`). Hiçbiri uymazsa `fallback`.
+Sabit öncelik sırası YOK (madde 254 K1, madde 257): profilin `priorities` listesi yalnızca etikettir. Karar etiketi (`reason`: kill, heal, summon, shield, taunt, guard, burn, tactic, aoe, damage) seçilen adayın baskın terimidir; global skill kapısı bunu kullanır (öldürücü / işlevsel hamlede Rest/Skip/Move denenmez).
 
-Çağrı (`summon`) önceliği (madde 222, 230): ceset tüketen çağrıda (Raise Dead) tüketilecek düşman cesedi varsa en ucuz çağrı seçilir ve EN TEHLİKELİ ceset tüketilir; aday satırında `-> own cell N` (çağrı yuvası) ve `consumes E1:Paladin (danger 60.4: (threat 21 + best skill 22.8 Radiance) x HP 0.92 x reviver 1.5); other corpses E2:Mage danger 39.1` (seçilen ceset, puanı, gerekçesi ve seçilmeyen cesetler); karar satırında `corpse`; yoksa çağrı beslenmemiş gelir ve yalnızca `summonValue - cost` bu turun en iyi başka hamlesinin net değerinden düşük değilse seçilir (`steps` satırında `no corpse to consume (summon would be unfed): summon value X < best other move Y`). `result` satırları: `... consumes the corpse of E1:Defender (cell 1): it can no longer be revived`, `... summons Ps0:Skeleton EMPOWERED (fed: corpse consumed) (hp .., str .., own board cell 1)` ya da `unfed (no corpse to consume)`; ölüm satırında `DIED (leaves a revivable corpse)`; sebepli durumda `+stun 1t (from ..) [vines]`.
+Çağrı (madde 222, 230, 257): çağrının değeri `summon` terimidir (ufuktaki katkısı x yuvada vurabilirliği + düşman vuruşlarını üstüne çekmesi + Verdant Blessing; yakın dövüşçü çağrı vuramayacağı yuvadaysa 0, ölü dostun cesedinin hücresi de yuva olabilir). Ceset tüketen çağrıda (Raise Dead) EN TEHLİKELİ ceset tüketilir; aday satırında `-> own cell N` (çağrı yuvası) ve `consumes E1:Paladin (danger 60.4: (threat 21 + best skill 22.8 Radiance) x HP 0.92 x reviver 1.5); other corpses E2:Mage danger 39.1` (seçilen ceset, puanı, gerekçesi ve seçilmeyen cesetler); karar satırında `corpse`; yoksa çağrı beslenmemiş gelir ve yalnızca `summonValue - cost` bu turun en iyi başka hamlesinin net değerinden düşük değilse seçilir (`steps` satırında `no corpse to consume (summon would be unfed): summon value X < best other move Y`). `result` satırları: `... consumes the corpse of E1:Defender (cell 1): it can no longer be revived`, `... summons Ps0:Skeleton EMPOWERED (fed: corpse consumed) (hp .., str .., own board cell 1)` ya da `unfed (no corpse to consume)`; ölüm satırında `DIED (leaves a revivable corpse)`; sebepli durumda `+stun 1t (from ..) [vines]`.
 
 Kalkan kancaları, dispel, Dark Bond, yarım turn (madde 240, 241: kancalar her darbede tetiklenir): aday satırında `cleanse N` (Mana Barrier'ın dost debuff'larını silme değeri), `bond N` (Dark Bond'un bağ boyunca dosta gidecek beklenen lifesteal kopyası), `half-turn x0.5 tempo N` (yarım turn skill'i; tempo = 0,5 x bu turun en iyi tam turn hamlesi); kalkan kancalı kalkanın yakabileceği MP `burn` içinde. ROSTER skill satırında `turnCost 0.5` ve `excludeSelf`. `result` satırları: `P0:Warrior's Spell Ward (from P1:Anti-Mage) absorbed 12 from E0:Mage: burns 8 MP, dispels fortify` (kanca tetiği), `E0:Mage -fortify (DISPELLED by P0:Warrior [spell_ward])`, `... burns 8 MP of E0:Mage (now 40) [spell_ward]`, `... +2 MP (now 12) [mana_barrier]`, `P0:Warrior +dark_bond 3t (from P1:Undead) bond with P1:Undead`, `-dark_bond (bond broken)`, `P1:Undead heals P0:Warrior 6 (Dark Bond copy of life steal)`. Bağlam koşulu notları: `maxTargetHpRatio`, `minFoeMagicMp`, `minFoeBuffs`.
 
@@ -79,4 +79,6 @@ Global skill'ler (`global skills:` satırı): sınıf hamlesi öldürücü ya da
 
 ## Örnek soru ve cevap
 
-"Warrior (E1) neden Double Strike kullandı, Whirlwind değil?" -> kaydın `#32` bloğu: öncelik `kill` (ilk sıra) çalıştı; hem Double Strike hem Whirlwind Anti-Mage'i öldürüyor ama kill puanı `tehdit x 1000 - bedel`: Double Strike bedeli 0 (score 25000), Whirlwind 7,5 MP bedelli (24992,5), yani en ucuz öldürücü seçilir. AOE önceliğine (Whirlwind'in önceliği) hiç gelinmedi.
+"Warrior (E1) neden Double Strike kullandı, Whirlwind değil?" -> kaydın `#32` bloğu, `WHY` satırı: iki adayın da SCORE dökümü yazar (ör. Double Strike `damage 24.9 + kill 31.0 + pressure 3.1` = 59, Whirlwind `damage 18.2 + kill 31.0 + pressure 2.0 + cost -7.5` = 43.7): ikisi de Anti-Mage'i öldürüyor, Whirlwind'in ikinci hedefi zayıf ve MP bedeli var; en yüksek puanlı seçilir.
+
+Diriltme satırı: `* Resurrection -> P0:Warrior -> rises on own cell 3 cost 6 SCORE 69.9 = revive 75.9 + cost -6`; sonuç satırı `P1:Paladin revives P0:Warrior (hp 33, mp 9, cell 3; corpse was on cell 0)`.

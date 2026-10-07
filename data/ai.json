@@ -1,5 +1,33 @@
 {
   "_not": "Yapay zeka profilleri. priorities soldan sağa denenir; ilk uygun olan seçilir. kill: öldürebileceği biri varsa. heal: dostlardan biri healBelowRatio altındaysa. summon: yeterince çağrılmış birim yoksa. shield: kalkansız ve canı shieldBelowRatio altındaki dosta/kendine. aoe: en az aoeMinTargets düşman varsa herkese vuran skill. tactic: skill'in `ai` bağlam ipucu sağlanan (data/skills.json) seçenekler arasında en değerlisi: 4. skill'ler gibi güçlü skill'ler yalnızca doğru bağlamda (ör. Meteor en az 2 düşmana, Abyssal Cry yeterli canda ve tehdit varken) seçilir; saf self-buff'ın net değeri (savunma + hasar artışı - can/MP bedeli - kaçırılan saldırı) pozitif olmalı. damage: odak hedefe en verimli hasar. Skill'lerin `ai` ipuçları (data/skills.json) hangi bağlamda seçilebileceğini belirler; bağlam sağlanmıyorsa yalnızca öldürücü vuruşta seçilir. focus: lowest_hp (en az canlıya) veya lowest_ratio (can oranı en düşüğe). mpCostWeight/hpCostWeight: bedelin skora etkisi. minHpRatioForHpCost: SABİT can bedeli ya da can bahsi olan skill'ler için kullanıcının en az can oranı (öldürücü vuruş hariç); oranlı can bedeli (cost.ofCurrent, Wail of the Dead: anlık canın %20'si) bu kuraldan muaf (madde 247, Ömer kararı). taunt: kendinde taunt yoksa ve kullanılabiliyorsa taunt çek. guard: canı guardBelowRatio altındaki, korumasız dostu koru. vinewarden (Treant): uzak menzilli alan kontrolcüsü; Vine Snare skill ipucuyla (minTargets 2) tactic önceliğinde en az 2 düşmana değince, aksi halde Root Smash normal odak hedefe. summonValueShare: ceset tüketen çağrıda (Raise Dead) ceset YOKSA çağrı beslenmemiş gelir ve yalnızca tahmini değeri (birimin en iyi ham hasarı x ömür x summonValueShare) - bedel, bu turun en iyi başka hamlesinden düşük değilse çağrılır; ceset varsa (beslenmiş) hemen çağrılır. burn: en az burnMinTargets düşmanın yakılabilir manası varsa mana yak. GLOBAL SKILL'LER (global bloğu; src/engine/ai.ts chooseGlobal): Rest, Skip Turn ve Move Tile yalnızca TAKTİK DEĞER hesabıyla seçilir (değer = beklenen hasar/şifa/kalkan - bedel; 'şimdiki hamle' = global olmadan seçilecek hamle). Öldürücü ve işlevsel hamleler (şifa, çağrı, kalkan, taunt, guard, mana yakma) her zaman önce gelir; çağrılan birimler kullanmaz. REST: skill MP yüzünden yapılamıyorsa (MP oranı rest.mpBelowRatio altında) ya da en geç rest.lookaheadTurns tur sonra hazır olacak güçlü skill'e yetecek MP biriktirmek için; ertelenen skill değeri x futureValueShare, şimdiki hamleden en az minGainShare payı kadar fazla olmalı; tehlikede (can dangerHpRatio altında ve gelen hasar canın dangerIncomingShare katından fazla) denenmez. SKIP TURN: yapılacak değerli hamle yoksa ya da 1 tur sonra hazır olacak güçlü skill'e kıyasla şimdiki hamle değersizse (değer < skip.worthlessShare x skill değeri); üst üste sınırı global-skills.json'da. MOVE TILE: (1) kırılgan/menzilli (yakın dövüş skill'i olmayan) ya da yaralı (retreatHpRatio altı) birim yakın dövüşe açıkken engellenen hasar canın move.minAvoidShare payını geçiyorsa erişim dışındaki boş yuvaya; (2) yakın dövüşçü ön sırada olmadığı için melee yapamıyor ve öne boş yuva varsa; (3) zırh aurası taşıyan birim daha çok dostun bitişiğine geçerek beklenen hasarı minAuraGain kadar azaltacaksa. Üst üste Move yok; ölü dostun yuvasından kaçınılır. ASSASSIN (Cutthroat): kill > tactic > damage, focus lowest_ratio (yaralı hedef). Arka sıra/yaralı tercihi YAPAY AĞIRLIKLA değil skill ipuçlarıyla: Backstab (anyOf kill | minTargetMaxHpShare 0,5 | targetBehindFront: normal melee erişemeyen arka saf), Saltire Cut (minTargets 2), Smoke Bomb (anyOf minTargets 2 | minAllyTargets 2; değeri = Blinded/Shrouded ile önlenen beklenen hasar, ai.ts statusMitigation). Venom Edge ipuçsuz ana saldırı (damage). MADDE 240: cleanseValuePerTurn / cleanseSkipTurnMult / cleanseMinValue (caster): dost debuff silen (dispel) skill seçeneğinin değeri = silinecek her debuff için kalan tur x cleanseValuePerTurn (sıra kaybettiren Stun gibi durumlarda x cleanseSkipTurnMult); bu değer cleanseMinValue ve üstündeyse kalkan önceliği yaralı olmayan dosta da (Mana Barrier ile debuff temizlemek için) bakar. Kalkan kancası (onAbsorb.burnMana) değeri: büyü saldırganı olan düşmanın yakılabilecek MP'si burn olarak sayılır. Yarım turn (turnCost < 1) skill: değeri + (1 - turnCost) x bu turun en iyi tam turn hamlesinin net değeri (tempo; yalnızca turns modunda ve skill kendi değer üretiyorsa). Dark Bond değeri (bond): bağ süresince Undead'in beklenen lifesteal kazancı (en iyi saldırısının beklenen hasarı x lifesteal oranı x tur), bağlı dostun eksik canıyla (en az maks canın bondHpFloor payı; darkmage 0,3) sınırlı; madde 241: ayrıca Undead'in eksik canı + maks canının bondSelfFloor payı (0,15) ile sınırlı (canı doluyken can çalınmaz, kopya yalnızca gerçek iyileşme kadar); aynı anda başka bir bağ 1 turdan fazla sürüyorsa 0. Spell Ward ipucu (skills.json, madde 241 ölçümüyle): hedef dost (ya da kendisi) canı <= %45 (maxTargetHpRatio); antimage profili shieldBelowRatio 0,45 (eski 0,7: Ward hamle payı %22 ve Anti-Mage hasarı -%13'tü; 0,45 ile pay ~%12, dosta %69, hasar -%4). minFoeMagicMp / minFoeBuffs koşulları motorda duruyor (şu an kullanılmıyor). HEXER (docs/design/classes/hexer.md 6): kill > tactic > aoe > damage, focus lowest_ratio, yapay ağırlık yok; aday değerine Omen değeri eklenir: hamle yığını 3'e tamamlıyorsa (ya da Doom Mark patlatıyorsa) Doom'un beklenen hasarı ANINDA hasara (öldürme dahil), tamamlamıyorsa eklenen her Omen = LUCK x 0,6 x omenValueShare (0,85) ertelenmiş değer (curse) + Wither'ın beklenen tik toplamı. Doom Mark ipucu anyOf kill | minTargetStacks omen 2 (reserveMp 2), Jinx anyOf kill | minStatusMitigation 6 (Jinxed ile önlenen beklenen hasar: isabet -%20 + kritik 0, yalnızca hedefin sonraki saldırısı), Withering Curse minTargets 2.",
+  "_value": "DEĞER TERAZİSİ (madde 254/257, ai-priorities.md 6.1; src/engine/ai-value.ts): profil priorities listesi artık seçimi YÖNETMEZ, yalnızca etiket. Her aday tek can-eşdeğer puan alır: damage + pressure (öldürmeyen hasarın hedefin kalan katkısından götürdüğü pay x pressureShare) + kill (öldürme ihtimali x hedefin kalan katkısı x killWeight) + save (dost bir sonraki turumuzdan önce ölecekse ve hamle onu kurtarıyorsa: kalan katkı + can, x saveWeight) + heal + shield (emilmesi beklenen: dosta tur başı gelecek hasar x shieldRounds) + revive (dirilenin ufuktaki katkısı, tur sayacı 0'dan; hücrede işe yararlık; + dönen can x reviveHpShare; x reviveWeight) + control (Stun/Slow/Haste/Wound/Fortify) + protect (Taunt/Guard: yönlenen hasar x protectShare x süre + kurtarma - Defender'ın ölme riski) + summon (vurabileceği yuva yoksa 0) + bond + curse + mitigation + cleanse + burn x0,6 + tempo - bedel - cooldown bedeli (brüt x cooldown x cooldownCostShare). Kalan katkı = tur başı değer (en iyi skill ham değeri x contributionShare) x ufukta oynayacağı tur (hız ve tur sayacından; horizon = kendi turu). Düşman tahmini: her düşman kendi odak kuralıyla (focus) ulaşabildiği birimimize en iyi saldırısını yapar. difficulty: Easy/Medium/Hard (sefer başında seçilir, değişmez; madde 256): ŞİMDİLİK ETKİSİZ, hepsi Medium (tam terazi); fark Faz 5.",
+  "value": {
+    "horizon": 3,
+    "contributionShare": 0.6,
+    "killWeight": 1,
+    "pressureShare": 0.25,
+    "saveWeight": 1,
+    "reviveWeight": 1,
+    "reviveHpShare": 0.5,
+    "shieldRounds": 2,
+    "protectShare": 0.5,
+    "cooldownCostShare": 0.03,
+    "controlWeight": 1
+  },
+  "difficulty": {
+    "easy": {
+      "horizon": 1,
+      "note": "Faz 5: ufuk 1, en iyi 3 adaydan biri (belirleyici hata), kontrol/sinerji sayılmaz. ŞİMDİLİK Medium gibi oynar."
+    },
+    "medium": {
+      "horizon": 3,
+      "note": "Tam terazi (bugünkü davranış; sim ve denge bununla ölçülür)."
+    },
+    "hard": {
+      "horizon": 3,
+      "note": "Faz 5: takım düzeyinde odak (overkill yok), ultimate için fırsat bekleme. ŞİMDİLİK Medium gibi oynar."
+    }
+  },
   "defaultProfile": "aggressive",
   "profiles": {
     "vinewarden": {
@@ -173,8 +201,8 @@
       "hpCostWeight": 1,
       "minHpRatioForHpCost": 0.5,
       "summonValueShare": 0.75,
-      "bondHpFloor": 0.3,
-      "bondSelfFloor": 0.15
+      "bondHpFloor": 0.1,
+      "bondSelfFloor": 0.05
     },
     "gambler": {
       "priorities": [

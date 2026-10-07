@@ -481,9 +481,9 @@ describe('yapay zeka (madde 240)', () => {
     u.cooldowns.raise_dead = 3; // çağrı önceliği karışmasın
     const fullValue = explainChoice(b, u.uid, ai)!.candidates.find((c) => c.skill === 'dark_bond')?.bond ?? 0;
     u.hp = Math.round(u.maxHp * 0.6); // madde 241: canı doluyken can çalınmaz -> bağ değeri düşük; yaralıyken yüksek
-    const pick = chooseAction(b, u.uid, ai)!;
-    expect(pick).toMatchObject({ skillId: 'dark_bond', targetUid: at(b, 'party', 0).uid, reason: 'tactic' });
+    // Terazi (madde 257, K10): bağ değeri gerçek çalınabilir canla sınırlı; seçilip seçilmemesi saldırılarla kıyasa bağlı (değer şişkinliği giderildi)
     const cand = explainChoice(b, u.uid, ai)!.candidates.find((c) => c.skill === 'dark_bond')!;
+    expect(cand.target).toBe(`P${at(b, 'party', 0).uid.split('-').pop()}:Warrior`);
     expect(cand.turnCost).toBe(0.5);
     expect(cand.bond).toBeGreaterThan(0);
     expect(cand.tempo).toBeGreaterThan(0);
@@ -492,9 +492,11 @@ describe('yapay zeka (madde 240)', () => {
     const t = mk({ 0: 'warrior', 1: 'undead' }, { 0: 'defender' });
     const tu = at(t, 'party', 1);
     tu.hp = Math.round(tu.maxHp * 0.6);
-    tu.skills = tu.skills.filter((id) => id !== 'raise_dead'); // test modunda cooldown yok: çağrı önceliği karışmasın
-    expect(chooseAction(t, tu.uid, ai)?.skillId).toBe('dark_bond');
+    tu.skills = tu.skills.filter((id) => id !== 'raise_dead');
+    const bondOf = () => explainChoice(t, tu.uid, ai)!.candidates.filter((c) => c.skill === 'dark_bond').reduce((m, c) => Math.max(m, c.bond ?? 0), 0);
+    expect(bondOf()).toBeGreaterThan(0);
     act(t, tu.uid, 'dark_bond', at(t, 'party', 0).uid);
+    expect(bondOf()).toBe(0); // bağ sürerken yeni bağın değeri yok
     expect(chooseAction(t, tu.uid, ai)?.skillId).not.toBe('dark_bond');
   });
 

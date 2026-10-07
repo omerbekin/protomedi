@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, chooseAction, content } from '../src/engine';
+import { Battle, chooseAction, content, explainChoice } from '../src/engine';
 import type { AiConfig } from '../src/engine';
 import { legacySkill } from './legacy-skills';
 
@@ -40,8 +40,10 @@ describe('yapay zeka: öncelik 1 - öldürebiliyorsa öldür', () => {
   it('canı az olan birini öldürebilen skill\'i ve o hedefi seçer', () => {
     const b = testBattle();
     b.get(MAGE)!.hp = 5; // Archer'ın en ucuz atışı bile öldürür
-    const choice = chooseAction(b, E_ARCHER, ai);
-    expect(choice).toMatchObject({ targetUid: MAGE, reason: 'kill' });
+    const choice = chooseAction(b, E_ARCHER, ai)!;
+    // Terazi (madde 257): öldüren seçenekler arasında en değerlisi (alan skill'i Mage'i öldürüp başkalarına da vurabilir)
+    expect(choice.reason).toBe('kill');
+    expect(hitsOf(b, E_ARCHER, choice)).toContain(MAGE);
   });
 
   it('öldüremiyorsa kill önceliği devreye girmez', () => {
@@ -78,36 +80,49 @@ describe('yapay zeka: öncelik 1 - öldürebiliyorsa öldür', () => {
     b.get(UNDEAD)!.hp = 25; // oran düşük ama 20 can bedeli ödeyebilir
     b.get(E_MAGE)!.hp = 30; // Blood Rite 14*2.4-5 ≈ 28.6; Soul Drain 14-5=9. Sadece Blood Rite öldürür
     b.get(E_MAGE)!.hp = 20; // Mage kısa canlı: Blood Rite ortalaması 20 canı aşar
-    const choice = chooseAction(b, UNDEAD, ai);
-    expect(choice).toMatchObject({ skillId: 'blood_rite', targetUid: E_MAGE, reason: 'kill' });
+    // Terazi: can bedelli skill düşük canda da öldürücü vuruşta yasak değil (puanı pozitif, öldürme terimi taşır); seçim en yüksek puan
+    const ex = explainChoice(b, UNDEAD, ai)!;
+    const rite = ex.candidates.find((c) => c.skill === 'blood_rite' && c.target === 'E2:Mage')!;
+    expect(rite.kills).toContain('E2:Mage');
+    expect(rite.terms!.kill).toBeGreaterThan(0);
+    expect(rite.score!).toBeGreaterThan(0);
+    expect(ex.candidates.find((c) => c.verdict === 'chosen')!.score).toBe(Math.max(...ex.candidates.map((c) => c.score ?? -Infinity)));
   });
 });
 
 describe('yapay zeka: şifa, kalkan, çağrı', () => {
-  it('Druid, dostu eşiğin altındaysa onu iyileştirir (öldürecek kimse yokken)', () => {
+  // Terazi (madde 257): şifa "eşik altı" kuralıyla değil, kurtarma değeriyle: dost bir sonraki turumuzdan önce ölecekse ve şifa onu kurtarıyorsa
+  const duel = () => sturdy(new Battle(content.battleSetup('first-battle', 1, 'test', { party: ['archer'], enemies: ['warrior', 'archer', 'druid'] })));
+  const uidOf = (b: Battle, side: 'party' | 'enemy', defId: string) => b.combatants.find((c) => c.side === side && c.defId === defId)!.uid;
+
+  it('Druid, ölmek üzere olan (sıradaki vuruşla ölecek) ve şifayla kurtulacak dostunu iyileştirir', () => {
+    const b = duel();
+    const w = b.get(uidOf(b, 'enemy', 'warrior'))!;
+    w.hp = 8; // tek düşman (Archer) en az canlıyı vurur: 8 can ölür, Rejuvenate kurtarır
+    const choice = chooseAction(b, uidOf(b, 'enemy', 'druid'), ai);
+    expect(choice).toMatchObject({ skillId: 'rejuvenate', targetUid: w.uid, reason: 'heal' });
+  });
+
+  it('kurtarılacak dost, düşmanın vuracağı (en yaralı) dosttur', () => {
+    const b = duel();
+    b.get(uidOf(b, 'enemy', 'warrior'))!.hp = 50;
+    const archer = b.get(uidOf(b, 'enemy', 'archer'))!;
+    archer.hp = 8;
+    expect(chooseAction(b, uidOf(b, 'enemy', 'druid'), ai)?.targetUid).toBe(archer.uid);
+  });
+
+  it('saldırıları zayıfken Treant çağırır (çağrının ufuktaki katkısı + Verdant Blessing)', () => {
     const b = testBattle();
-    b.get(E_WARRIOR)!.hp = 20; // 20/110 < 0.5
-    const choice = chooseAction(b, E_DRUID, ai);
-    expect(choice).toMatchObject({ skillId: 'rejuvenate', targetUid: E_WARRIOR, reason: 'heal' });
+    Object.assign(b.get(E_DRUID)!.stats, { int: 1, str: 1, dex: 1 }); // Druid'in kendi vuruşları değersiz; Treant'ın gücü kendi statlarından
+    const ex = explainChoice(b, E_DRUID, ai)!;
+    expect(ex.candidates.find((c) => c.skill === 'summon_treant')!.terms!.summon).toBeGreaterThan(0);
+    expect(chooseAction(b, E_DRUID, ai)).toMatchObject({ skillId: 'summon_treant', reason: 'summon' });
   });
 
-  it('en yaralı dostu seçer', () => {
-    const b = testBattle();
-    b.get(E_WARRIOR)!.hp = 50;
-    b.get(E_ARCHER)!.hp = 10;
-    expect(chooseAction(b, E_DRUID, ai)?.targetUid).toBe(E_ARCHER);
-  });
-
-  it('kimsenin canı eşiğin altında değilse şifa harcamaz; Treant çağırır', () => {
-    const choice = chooseAction(testBattle(), E_DRUID, ai);
-    expect(choice).toMatchObject({ skillId: 'summon_treant', reason: 'summon' });
-  });
-
-  it('zaten çağrılmış Treant yaşıyorsa tekrar çağırmaz, saldırır', () => {
+  it('zaten çağrılmış Treant yaşıyorsa tekrar çağırmaz (çağrı sınırı: değeri 0)', () => {
     const b = testBattle();
     b.useSkill(E_DRUID, 'summon_treant');
     const choice = chooseAction(b, E_DRUID, ai);
-    expect(choice?.reason).toBe('damage');
     expect(choice?.skillId).not.toBe('summon_treant');
   });
 
@@ -124,16 +139,18 @@ describe('yapay zeka: şifa, kalkan, çağrı', () => {
     expect(chooseAction(b, E_WARRIOR, ai)?.reason).not.toBe('shield');
   });
 
-  it('Mage yaralı bir dostuna Mana Barrier verir', () => {
-    const b = testBattle();
-    b.get(E_ARCHER)!.hp = 30; // 30/75 < 0.75
-    expect(chooseAction(b, E_MAGE, ai)).toMatchObject({ skillId: 'mana_barrier', targetUid: E_ARCHER, reason: 'shield' });
+  it('Mage, sıradaki vuruşla ölecek ve kalkanla kurtulacak dostuna Mana Barrier verir', () => {
+    const b = sturdy(new Battle(content.battleSetup('first-battle', 1, 'test', { party: ['archer'], enemies: ['mage', 'archer'] })));
+    const ally = b.combatants.find((c) => c.side === 'enemy' && c.defId === 'archer')!;
+    ally.hp = 8;
+    const mage = b.combatants.find((c) => c.side === 'enemy' && c.defId === 'mage')!;
+    expect(chooseAction(b, mage.uid, ai)).toMatchObject({ skillId: 'mana_barrier', targetUid: ally.uid, reason: 'shield' });
   });
 
-  it('Paladin (healer) yaralı dostunu iyileştirir', () => {
+  it('Paladin yaralı dostu varken Radiance (dosta şifa + düşmana hasar) seçer', () => {
     const b = testBattle();
     b.get(WARRIOR)!.hp = 30;
-    expect(chooseAction(b, PALADIN, ai)).toMatchObject({ reason: 'heal' }); // Radiance: herkesi iyileştirir (ve düşmana vurur)
+    expect(chooseAction(b, PALADIN, ai)?.skillId).toBe('radiance');
   });
 });
 
@@ -149,14 +166,9 @@ describe('yapay zeka: hasar tercihleri', () => {
     b.get(WARRIOR)!.hp = 0;
     b.get(PALADIN)!.hp = 0; // 2 düşman kaldı (eşik 3)
     const choice = chooseAction(b, E_MAGE, ai)!;
-    // AoE önceliği (eşik 3) çalışmaz; Meteor'un bağlamı (>= 2 hedef) boş hücre anchor'la (iki düşmanın ortak komşusu) sağlanabilir: o zaman 'tactic'
-    expect(choice.reason).not.toBe('aoe');
-    if (choice.reason === 'tactic') {
-      expect(choice.skillId).toBe('meteor');
-      expect(hitsOf(b, E_MAGE, choice)).toHaveLength(2);
-    } else {
-      expect(choice.reason).toBe('damage');
-    }
+    // Terazi: alan skill'i yalnızca vurduğu hedeflerin toplamı tek hedefi geçiyorsa; seçildiyse iki düşmanı da vurur
+    if (b.isAreaSkill(choice.skillId)) expect(hitsOf(b, E_MAGE, choice)).toHaveLength(2);
+    else expect(choice.reason).toBe('damage');
   });
 
   it('tek hedefte en yaralı (can oranı en düşük) kişiye odaklanır', () => {
@@ -257,10 +269,13 @@ describe('yapay zeka: yeni sınıflar ve menzil/taunt kuralları', () => {
   };
   const uid = (b: Battle, side: 'party' | 'enemy', defId: string) => b.combatants.find((c) => c.side === side && c.defId === defId)!.uid;
 
-  it('Defender önce Taunt çeker (takımda korunacak biri varsa, kendinde yokken)', () => {
+  it('Defender, ölmek üzere olan dostunu Taunt ya da Guard ile korur (K6: korunan dostun değeri)', () => {
     const b = make(['warrior', 'mage', 'archer', 'paladin'], ['defender', 'warrior', 'archer', 'mage']);
-    const choice = chooseAction(b, uid(b, 'enemy', 'defender'), ai);
-    expect(choice).toMatchObject({ skillId: 'taunt', reason: 'taunt' });
+    const archer = b.get(uid(b, 'enemy', 'archer'))!;
+    archer.hp = Math.round(archer.maxHp * 0.12);
+    const choice = chooseAction(b, uid(b, 'enemy', 'defender'), ai)!;
+    expect(['taunt', 'guard']).toContain(choice.skillId);
+    if (choice.skillId === 'guard') expect(choice.targetUid).toBe(archer.uid);
   });
 
   it('Taunt zaten aktifse tekrar çekmez; başka bir şey yapar', () => {
@@ -273,10 +288,16 @@ describe('yapay zeka: yeni sınıflar ve menzil/taunt kuralları', () => {
   it('Defender yaralı bir dostunu (kendisi değil) Guard ile korur', () => {
     const b = make(['warrior', 'mage', 'archer', 'paladin'], ['defender', 'warrior', 'archer', 'mage']);
     const d = uid(b, 'enemy', 'defender');
-    b.useSkill(d, 'taunt'); // taunt öncelikli olduğundan önce onu harca
     const archer = b.get(uid(b, 'enemy', 'archer'))!;
-    archer.hp = Math.round(archer.maxHp * 0.5);
+    archer.hp = Math.round(archer.maxHp * 0.12); // ölmek üzere: Guard (hasarın yarısını üstlenir) kurtarır
+    const skills = b.get(d)!.skills;
+    b.get(d)!.skills = skills.filter((x) => x !== 'taunt'); // Taunt da kurtarabilirdi: yalnızca Guard sınansın
     expect(chooseAction(b, d, ai)).toMatchObject({ skillId: 'guard', targetUid: archer.uid, reason: 'guard' });
+    // Taunt sürerken tek hedefli saldırılar zaten Defender'a gider: Guard'ın kurtarma terimi kalmaz
+    b.get(d)!.skills = skills;
+    b.useSkill(d, 'taunt');
+    const g = explainChoice(b, d, ai)!.candidates.find((c) => c.skill === 'guard' && c.target === 'E2:Archer');
+    if (g) expect(g.terms?.save).toBeUndefined();
   });
 
   it('zaten korunan dostu tekrar korumaz', () => {
@@ -289,10 +310,13 @@ describe('yapay zeka: yeni sınıflar ve menzil/taunt kuralları', () => {
     expect(chooseAction(b, d, ai)?.reason).not.toBe('guard');
   });
 
-  it('Anti-Mage, birden çok düşmanın manası varken Drain Field ile toplu mana yakar', () => {
+  it('Anti-Mage: Drain Field adayının değeri yakılan manayı içerir (burn terimi); en değerli seçenek seçilir', () => {
     const b = make(['antimage', 'warrior', 'archer', 'mage'], ['warrior', 'mage', 'druid', 'archer']);
-    const choice = chooseAction(b, uid(b, 'party', 'antimage'), ai);
-    expect(choice).toMatchObject({ skillId: 'drain_field', reason: 'burn' });
+    const ex = explainChoice(b, uid(b, 'party', 'antimage'), ai)!;
+    const drain = ex.candidates.filter((c) => c.skill === 'drain_field');
+    expect(Math.max(...drain.map((c) => c.terms?.burn ?? 0))).toBeGreaterThan(0);
+    const top = Math.max(...ex.candidates.map((c) => c.score ?? -Infinity));
+    expect(ex.candidates.find((c) => c.verdict === 'chosen')!.score).toBe(top);
   });
 
   it('düşmanların manası yoksa Drain Field seçmez; hasar skill\'ine geçer', () => {
@@ -326,8 +350,9 @@ describe('yapay zeka: yeni sınıflar ve menzil/taunt kuralları', () => {
     const b = make(['warrior', 'mage', 'archer', 'paladin'], ['defender', 'warrior', 'archer', 'mage']);
     const mage = b.get(uid(b, 'enemy', 'mage'))!;
     mage.hp = 1;
-    const choice = chooseAction(b, uid(b, 'party', 'archer'), ai);
-    expect(choice).toMatchObject({ targetUid: mage.uid, reason: 'kill' });
+    const choice = chooseAction(b, uid(b, 'party', 'archer'), ai)!;
+    expect(choice.reason).toBe('kill');
+    expect(hitsOf(b, uid(b, 'party', 'archer'), choice)).toContain(mage.uid);
   });
 
   it('düşmanın taunt\'ı varken YZ yalnızca taunt\'lı birimi hedefler (tek hedefli skill\'lerde)', () => {

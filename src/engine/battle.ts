@@ -5,10 +5,10 @@ import { pickSideNeighbors } from './formation';
 import { betMultipliers, betStake } from './gamble';
 import { Rng } from './rng';
 import { damageSpecFor, type DamageEffect } from './spec';
-import { applySummonVariant, armorReduction, attributePower, hitOutcome } from './stats';
-import type { Corpse, CorpseChoice, CorpseState, DamageOrigin, Element } from './types';
+import { applySummonVariant, applyUnitModifiers, armorReduction, attributePower, hitOutcome } from './stats';
+import type { Attribute, Corpse, CorpseChoice, CorpseState, DamageOrigin, Element } from './types';
 import { advanceTurn, predictQueue, turnProgress, type TurnSlot } from './turn-order';
-import type { ActionInfo, AreaStage, BattleAction, BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GlobalSkillDef, GroundDef, GroundEffect, ShieldHook, Side, SkillDef, SkillEffect, Status, StatusDef } from './types';
+import type { ActionInfo, AreaStage, BattleAction, BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GlobalSkillDef, GroundDef, GroundEffect, ShieldHook, Side, SkillDef, SkillEffect, Status, StatusDef, UnitSetup } from './types';
 
 export interface BattleSetup {
   seed: number;
@@ -31,6 +31,12 @@ export interface BattleSetup {
   maxSlots: { party: number; enemy: number };
   /** turns (varsayılan): hıza göre sıralı. test: sırasız, herkes istediği an oynar. */
   mode?: BattleMode;
+  /**
+   * Birim başına opsiyonel kurulum (party/enemies ile AYNI sırada; boş/eksik eleman = seçenek yok): güçlendirme/zayıflatma, özel ad, rütbe, başlangıç
+   * canı/MP'si, hazır çağrı. Verilmezse savaş birebir eskisi gibidir (aynı seed = aynı savaş). Bkz. UnitSetup, docs/design/combat.md > Savaş kurulum seçenekleri.
+   */
+  partyUnits?: (UnitSetup | undefined)[];
+  enemyUnits?: (UnitSetup | undefined)[];
 }
 
 /** Debug: hasar çarpanı ve kritik/kaçınma zorlaması (varsayılan: 1, auto, auto = oyun kuralı aynen). */
@@ -167,6 +173,8 @@ export class Battle {
   /** Başlangıç cooldown'u olan birimler: ilk turunun başında azalmayacak skill'ler (uid -> skill id'leri). */
   private readonly initialHold = new Map<string, Set<string>>();
   private groundCount = 0;
+  /** Tur başına birden çok eylemli birimin (actionsPerTurn) bu turda kalan ek eylemi (uid -> sayı); turu başlayınca yazılır. */
+  private readonly actionsLeft = new Map<string, number>();
   /** Yerde duran (süreli) etkiler. */
   readonly ground: GroundEffect[] = [];
 
@@ -177,8 +185,8 @@ export class Battle {
     this.rng = new Rng(setup.seed);
     this.tieFirst = (Math.imul(setup.seed >>> 0, 2654435761) >>> 16) % 2 === 0 ? 'party' : 'enemy';
     this.combatants = [
-      ...setup.party.map((d, i) => createCombatant(d, 'party', setup.partySlots?.[i] ?? i, `party-${i}`)),
-      ...setup.enemies.map((d, i) => createCombatant(d, 'enemy', setup.enemySlots?.[i] ?? i, `enemy-${i}`)),
+      ...setup.party.map((d, i) => createSetupCombatant(d, 'party', setup.partySlots?.[i] ?? i, `party-${i}`, setup.partyUnits?.[i], setup.formulas)),
+      ...setup.enemies.map((d, i) => createSetupCombatant(d, 'enemy', setup.enemySlots?.[i] ?? i, `enemy-${i}`, setup.enemyUnits?.[i], setup.formulas)),
     ];
     // Başlangıç cooldown'u (initialCooldown): yalnızca turns modunda ve class birimlerinde; test modunda cooldown zaten yok
     if (this.mode === 'turns') for (const c of this.combatants) this.applyInitialCooldowns(c);
@@ -331,10 +339,15 @@ export class Battle {
     return damageRange(Battle.scaleOnly(doom.scale, statValue), this.effectiveStats(target), spec, this.setup.formulas);
   }
 
+  /** Doom hesabındaki ölçek statı: birimin stat değeri x skill gücü çarpanı (birim güçlendirmesi powerMult; normalde 1). Önizleme de bunu kullanır. */
+  static doomStat(c: Pick<Combatant, 'stats'>, scale: Attribute): number {
+    return c.stats[scale] * (c.stats.spellPowerMult ?? 1);
+  }
+
   /** Yığına yazılan snapshot: ekleyenin doom ölçek statı, geçerli kritik şansı ve kritik çarpanı. */
   private stackSnapshot(actor: Combatant, kind: string): Pick<Status, 'snapStat' | 'snapCrit' | 'snapCritMult'> {
     const doom = this.statusDef(kind)?.doom;
-    return { snapStat: doom ? actor.stats[doom.scale] : 0, snapCrit: this.effectiveStats(actor).critChance, snapCritMult: actor.stats.critMult };
+    return { snapStat: doom ? Battle.doomStat(actor, doom.scale) : 0, snapCrit: this.effectiveStats(actor).critChance, snapCritMult: actor.stats.critMult };
   }
 
   /**
@@ -375,7 +388,7 @@ export class Battle {
     if (!doom || omens <= 0 || target.hp <= 0) return;
     const f = this.setup.formulas;
     const live = cause !== 'expire' && trigger !== undefined && trigger.hp > 0;
-    const statValue = live ? trigger!.stats[doom.scale] : (status.snapStat ?? 0);
+    const statValue = live ? Battle.doomStat(trigger!, doom.scale) : (status.snapStat ?? 0);
     const critChance = live ? this.effectiveStats(trigger!).critChance : (status.snapCrit ?? 0);
     const critMult = live ? trigger!.stats.critMult : (status.snapCritMult ?? f.attributes.critMult);
     const src = live ? trigger! : (this.get(status.source) ?? target);
@@ -830,7 +843,8 @@ export class Battle {
       danger *= cfg.reviverMult;
       parts.push(`x reviver ${cfg.reviverMult}`);
     }
-    const cellFree = !this.combatants.some((o) => o.hp > 0 && o.board === unit.board && o.slot === unit.slot);
+    // Madde 257: diriltme cesedin hücresine bağlı değil; tarafında boş bir hücre olması yeter
+    const cellFree = this.freeSlots(unit.side).length > 0;
     const reviver = cellFree ? this.livingByDepth(unit.side).find((c) => !c.summoned && c.uid !== unit.uid && canRevive(c)) : undefined;
     if (reviver) {
       danger *= cfg.revivableMult;
@@ -878,8 +892,37 @@ export class Battle {
     const t = this.get(targetUid);
     if (!actor || !t || t.side !== actor.side || t.hp > 0 || t.summoned) return 'Not a fallen ally';
     if (this.corpseState.get(t.uid) === 'consumed') return 'Corpse was consumed';
-    if (this.combatants.some((o) => o.hp > 0 && o.board === t.board && o.slot === t.slot)) return 'Cell is taken';
+    // Madde 257: cesedin hücresi dolu olabilir (dirilen seçilen BOŞ hücreye gelir); yalnızca kendi tarafında hiç boş hücre yoksa diriltilemez
+    if (this.freeSlots(actor.side).length === 0) return 'No free cell';
     return null;
+  }
+
+  /** Skill bir diriltme skill'i mi (revive etkisi; Resurrection): iki adımlı seçim = önce ölü dost (hedef), sonra boş hücre (reviveSlots). */
+  isReviveSkill(skillId: string): boolean {
+    return !!this.skill(skillId)?.effects.some((e) => e.type === 'revive');
+  }
+
+  /**
+   * Diriltme skill'inin dirilen dostu koyabileceği hücreler (madde 257): kullanıcının KENDİ tahtasındaki tüm boş (canlı birim olmayan) hücreler, küçükten
+   * büyüğe. Cesetler (kendi cesedi ya da başka bir ölü dostunki) hücreyi doldurmaz. Diriltme skill'i değilse boş.
+   */
+  reviveSlots(actorUid: string, skillId: string): number[] {
+    const actor = this.get(actorUid);
+    if (!actor || !this.isReviveSkill(skillId)) return [];
+    return this.freeSlots(actor.side);
+  }
+
+  /**
+   * Hedef seçilmiş diriltmenin varsayılan hücresi (YZ önerisi, UI ön seçimi, hücre verilmeyen eski çağrılar): ölünün kendi hücresi boşsa o; değilse ona en
+   * yakın boş hücre (sıra farkı + şerit farkı; eşitlikte öndeki, sonra küçük yuva). Boş hücre yoksa null.
+   */
+  reviveSlotFor(actorUid: string, skillId: string, targetUid: string): number | null {
+    const free = this.reviveSlots(actorUid, skillId);
+    const t = this.get(targetUid);
+    if (free.length === 0 || !t) return null;
+    if (free.includes(t.slot)) return t.slot;
+    const dist = (s: number) => Math.abs(this.rowOf(s) - this.rowOf(t.slot)) + Math.abs(this.laneOf(s) - this.laneOf(t.slot));
+    return [...free].sort((a, b) => dist(a) - dist(b) || this.rowOf(a) - this.rowOf(b) || a - b)[0]!;
   }
 
   /** Ceset kaydı: çağrı olmayan birim öldüğünde (revivable). */
@@ -897,14 +940,13 @@ export class Battle {
   }
 
   /**
-   * Çağrı skill'i için seçilebilecek yuvalar (madde 230): kullanıcının KENDİ tahtasındaki boş yuvalar, ölü dostun diriltme için ayrılmış yuvaları
-   * (fallenSlots) HARİÇ; küçükten büyüğe. Çağrı skill'i değilse boş.
+   * Çağrı skill'i için seçilebilecek yuvalar: kullanıcının KENDİ tahtasındaki tüm boş (canlı birim olmayan) yuvalar, küçükten büyüğe. Madde 257
+   * (ai-priorities K7 / Faz 4): ölü dostun cesedinin hücresi artık AYRILMIŞ DEĞİL; çağrı (ör. Skeleton) cesedin üstüne gelebilir, çünkü Resurrection
+   * dirilen dostu seçilen herhangi bir boş hücreye koyar. Çağrı skill'i değilse boş.
    */
   summonSlots(actorUid: string, skillId: string): number[] {
     if (!this.get(actorUid) || !this.needsSlotChoice(skillId)) return [];
-    const board = this.summonBoard(actorUid, skillId);
-    const reserved = new Set(this.fallenSlots(board));
-    return this.freeSlots(board).filter((s) => !reserved.has(s));
+    return this.freeSlots(this.summonBoard(actorUid, skillId));
   }
 
   /** Çağrının varsayılan (yapay zeka) yuvası: summonSlots içinden; yakın dövüşçü çağrı en öndeki, diğerleri en arkadaki yuvaya. Yer yoksa null. */
@@ -967,9 +1009,10 @@ export class Battle {
       case 'all_allies':
         return this.livingByDepth(actor.side);
       case 'dead_ally':
-        // Düşmüş dostlar (çağrılar hariç); cesedi tüketildiyse (Raise Dead) ya da yuvası başka bir birim tarafından doldurulduysa diriltilemez
+        // Düşmüş dostlar (çağrılar hariç); cesedi tüketildiyse (Raise Dead) diriltilemez. Madde 257: cesedin hücresinde canlı birim (ör. Skeleton) olması
+        // ENGEL DEĞİL: Resurrection önce ölüyü, sonra kendi tarafında boş bir hücreyi seçer (reviveSlots); boş hücre yoksa canUse 'No free cell'.
         return this.combatants
-          .filter((c) => c.side === actor.side && c.board === c.side && c.hp <= 0 && !c.summoned && this.corpseState.get(c.uid) !== 'consumed' && !this.combatants.some((o) => o.hp > 0 && o.board === c.board && o.slot === c.slot))
+          .filter((c) => c.side === actor.side && c.board === c.side && c.hp <= 0 && !c.summoned && this.corpseState.get(c.uid) !== 'consumed')
           .sort((x, y) => x.slot - y.slot);
       case 'everyone':
         return [...this.livingByDepth(actor.side), ...this.livingByDepth(opposite(actor.side))];
@@ -1055,6 +1098,8 @@ export class Battle {
       const reason = skill.target === 'dead_ally' ? this.noReviveReason(actor) : skill.requiresOpenBehind ? 'No target with room behind it' : skill.excludeSelf ? (skill.effects.some((e) => e.type === 'guard') ? 'No ally to guard' : 'No other ally') : 'No target in reach';
       return { ok: false, reason };
     }
+    // Diriltme (madde 257): dirilen kendi tarafında seçilen BOŞ hücreye gelir; hiç boş hücre yoksa kullanılamaz
+    if (this.isReviveSkill(skillId) && this.reviveSlots(actorUid, skillId).length === 0) return { ok: false, reason: 'No free cell' };
     return { ok: true };
   }
 
@@ -1248,9 +1293,8 @@ export class Battle {
     if (!debug) {
       const can = this.canUse(actorUid, skillId);
       if (!can.ok) return can;
-      if (slot !== undefined && this.needsSlotChoice(skillId) && !this.summonSlots(actorUid, skillId).includes(slot)) {
-        return { ok: false, reason: this.fallenSlots(this.summonBoard(actorUid, skillId)).includes(slot) ? 'That cell is reserved for a fallen ally' : 'Invalid slot' };
-      }
+      if (slot !== undefined && this.needsSlotChoice(skillId) && !this.summonSlots(actorUid, skillId).includes(slot)) return { ok: false, reason: 'Invalid slot' };
+      if (slot !== undefined && this.isReviveSkill(skillId) && !this.reviveSlots(actorUid, skillId).includes(slot)) return { ok: false, reason: 'That cell is not free' };
     }
     // Ceset tüketen çağrı (Raise Dead, madde 230): oyuncu cesedi seçer (ceset varken zorunlu); debug oynatmada seçilmezse YZ önerisi (en tehlikeli)
     let corpseUid: string | undefined;
@@ -1330,6 +1374,14 @@ export class Battle {
         splashUids.add(s.uid);
       }
     }
+    // Diriltme (madde 257): dirilen dostun hücresi = seçilen boş hücre (canUse/üstteki denetim geçerliliği sağladı); verilmezse varsayılan (reviveSlotFor:
+    // kendi hücresi boşsa o, değilse en yakın boş hücre). Debug oynatmada geçersiz hücre de varsayılana düşer.
+    let reviveSpot: number | null = null;
+    if (this.isReviveSkill(skillId) && targets[0] && targets[0].hp <= 0) {
+      const free = this.reviveSlots(actorUid, skillId);
+      reviveSpot = slot !== undefined && free.includes(slot) ? slot : this.reviveSlotFor(actorUid, skillId, targets[0].uid);
+      if (reviveSpot === null) return { ok: false, reason: 'No free cell' };
+    }
 
     const events: BattleEvent[] = [];
     // Aşamalı skill: aşama sürerken çıkan HER olay aşama numarasını taşır (stage)
@@ -1353,7 +1405,7 @@ export class Battle {
       ...(stageGroups ? { stages: stageGroups } : {}),
       ...(areaBoard && skill.target === 'area_any' ? { board: areaBoard } : {}),
       ...(backTarget && behind !== null ? { behindSlot: behind, behindBoard: backTarget.board, from: actor.slot } : {}),
-      ...(summonSpot !== null ? { slot: summonSpot } : {}),
+      ...(summonSpot !== null ? { slot: summonSpot } : reviveSpot !== null ? { slot: reviveSpot } : {}),
       ...(corpseUid ? { corpseUid } : {}),
       ...(this.turnCostOf(skill.id) < 1 ? { turnCost: this.turnCostOf(skill.id) } : {}),
     });
@@ -1441,6 +1493,11 @@ export class Battle {
         case 'revive':
           for (const target of ts) {
             if (target.hp > 0) continue;
+            // Madde 257: dirilen seçilen boş hücreye gelir (ceset hücresi dolu olabilir); hücre bu skill'de yalnızca ilk (seçilen) ölü için anlamlı
+            const from = target.slot;
+            const to = reviveSpot !== null && target === targets[0] ? reviveSpot : target.slot;
+            target.board = target.side;
+            target.slot = to;
             target.hp = Math.max(1, Math.round(target.maxHp * effect.hpRatio));
             target.mp = Math.round(target.maxMp * effect.mpRatio);
             target.shield = 0;
@@ -1451,7 +1508,7 @@ export class Battle {
             if (target.maxRage !== undefined) target.rage = 0;
             this.announcedDead.delete(target.uid);
             this.clearCorpse(target.uid);
-            emit({ type: 'revive', source: actor.uid, target: target.uid, hpAfter: target.hp, mpAfter: target.mp });
+            emit({ type: 'revive', source: actor.uid, target: target.uid, hpAfter: target.hp, mpAfter: target.mp, slot: to, from });
             // Diriltme sonrası yenilenme (veri: revive.regen): sonraki `turns` turunun başında maks canın `ratio`'su (sabit, kritiksiz; durum olayı cause 'revival')
             if (effect.regen && effect.regen.turns > 0 && effect.regen.ratio > 0) {
               const amount = Math.max(1, Math.round(target.maxHp * effect.regen.ratio));
@@ -1759,6 +1816,16 @@ export class Battle {
       if (this.winner) emit({ type: 'battleEnd', winner: this.winner });
     }
     this.observer?.after?.(actor.uid);
+    // Tur başına ek eylem (UnitModifiers.actionsPerTurn): skill / Rest / Move'dan sonra aynı birim aynı turda yeniden oynar (tur başı işlemleri yok).
+    // Skip Turn, sersemlik ve pas turu bitirir. Sayaç yalnızca turun SON eyleminde düşer.
+    const left = this.actionsLeft.get(actor.uid) ?? 0;
+    this.actionsLeft.delete(actor.uid);
+    const kind = this.lastKind.get(actor.uid);
+    if (this.mode === 'turns' && !this.winner && left > 0 && actor.hp > 0 && this.currentUid === actor.uid && (kind === 'skill' || kind === 'rest' || kind === 'move') && !actor.statuses.some((s) => this.statusDef(s.kind)?.skipTurn)) {
+      this.actionsLeft.set(actor.uid, left - 1);
+      emit({ type: 'turnStart', actor: actor.uid, queue: this.turnQueue(), extra: true });
+      return;
+    }
     if (this.mode === 'turns' && !this.winner) {
       actor.turnCounter -= this.setup.formulas.turn.threshold * turnCost;
       this.advance(emit);
@@ -1777,6 +1844,7 @@ export class Battle {
     const actor = next ? this.get(next.uid) : undefined;
     if (!next || !actor) return;
     this.speedBoost.delete(actor.uid); // Skip Turn desteği, birimin sıradaki turu başlayınca biter
+    if ((actor.actionsPerTurn ?? 1) > 1) this.actionsLeft.set(actor.uid, actor.actionsPerTurn! - 1);
     // Kendi turunun başında: bekleme süreleri 1 azalır
     const held = this.initialHold.get(actor.uid);
     this.initialHold.delete(actor.uid);
@@ -1868,6 +1936,7 @@ export class Battle {
     emit({ type: 'turnStart', actor: next.uid, queue: this.turnQueue() });
     if (skipThisTurn) {
       emit({ type: 'turnSkipped', actor: actor.uid, stunned: actor.hp > 0 });
+      this.actionsLeft.delete(actor.uid); // sersemlik tüm turu (ek eylemler dahil) yer
       this.finishAction(actor, emit);
     }
   }
@@ -2260,13 +2329,21 @@ export class Battle {
     return { ok: true, events: [] };
   }
 
-  /** Debug: düşmüş (çağrı olmayan) birimi, hücresi boşsa, maks canının `ratio` kadarıyla diriltir (debug aracı: tüketilmiş cesedi de diriltir; ceset kaydı silinir). */
+  /** Debug: düşmüş (çağrı olmayan) birimi (hücresi doluysa en yakın boş hücrede), maks canının `ratio` kadarıyla diriltir (debug aracı: tüketilmiş cesedi de diriltir; ceset kaydı silinir). */
   debugRevive(uid: string, ratio = 1): ActionResult {
     const c = this.get(uid);
     if (!c || c.hp > 0) return { ok: false, reason: 'Unit is not dead' };
     if (this.winner) return { ok: false, reason: 'Battle is over' };
     if (c.summoned) return { ok: false, reason: 'Summons cannot be revived' };
-    if (this.combatants.some((o) => o.hp > 0 && o.board === c.board && o.slot === c.slot)) return { ok: false, reason: 'Cell is taken' };
+    // Madde 257: hücresi doluysa en yakın boş hücrede dirilir (Resurrection'ın varsayılan hücre kuralı); hiç boş hücre yoksa olmaz
+    const free = this.freeSlots(c.side);
+    if (free.length === 0) return { ok: false, reason: 'No free cell' };
+    const from = c.slot;
+    if (c.board !== c.side || !free.includes(c.slot)) {
+      const dist = (s: number) => Math.abs(this.rowOf(s) - this.rowOf(c.slot)) + Math.abs(this.laneOf(s) - this.laneOf(c.slot));
+      c.board = c.side;
+      c.slot = [...free].sort((a, b) => dist(a) - dist(b) || this.rowOf(a) - this.rowOf(b) || a - b)[0]!;
+    }
     c.hp = Math.max(1, Math.round(c.maxHp * ratio));
     c.mp = Math.round(c.maxMp * ratio);
     c.shield = 0;
@@ -2277,7 +2354,7 @@ export class Battle {
     if (c.maxRage !== undefined) c.rage = 0;
     this.announcedDead.delete(c.uid);
     this.clearCorpse(c.uid);
-    this.record({ type: 'revive', source: c.uid, target: c.uid, hpAfter: c.hp, mpAfter: c.mp });
+    this.record({ type: 'revive', source: c.uid, target: c.uid, hpAfter: c.hp, mpAfter: c.mp, slot: c.slot, from });
     return { ok: true, events: [] };
   }
 
@@ -2406,6 +2483,30 @@ function createCombatant(def: CombatantDef, side: Side, slot: number, uid: strin
     cooldowns: {},
     ...(def.maxRage !== undefined ? { rage: 0, maxRage: def.maxRage } : {}),
   };
+}
+
+/**
+ * Savaş kurulumundaki birim (UnitSetup opsiyonel): güçlendirme tanıma uygulanır (statlar formüllerle yeniden türetilir), sonra özel ad / rütbe /
+ * başlangıç canı ve MP'si / hazır çağrı bayrağı yazılır. `unit` yoksa ya da boşsa createCombatant ile birebir aynı birim döner. Rastgelelik kullanmaz.
+ */
+function createSetupCombatant(baseDef: CombatantDef, side: Side, slot: number, uid: string, unit: UnitSetup | undefined, formulas: Formulas): Combatant {
+  if (!unit) return createCombatant(baseDef, side, slot, uid);
+  const mods = unit.modifiers;
+  const c = createCombatant(applyUnitModifiers(baseDef, mods, formulas), side, slot, uid);
+  if (unit.displayName) c.displayName = unit.displayName;
+  if (unit.tier) c.tier = unit.tier;
+  if (mods && Object.keys(mods).length > 0) c.modifiers = { ...mods, ...(mods.attrMult ? { attrMult: { ...mods.attrMult } } : {}), ...(mods.attrAdd ? { attrAdd: { ...mods.attrAdd } } : {}) };
+  const actions = Math.floor(mods?.actionsPerTurn ?? 1);
+  if (actions > 1) c.actionsPerTurn = actions;
+  const finite = (v: number | undefined): v is number => v !== undefined && Number.isFinite(v);
+  // Başlangıç canı: mutlak değer öncelikli; ölü başlanamaz (en az 1), maks canı aşmaz
+  const hp = finite(unit.startHp) ? unit.startHp : finite(unit.startHpRatio) ? c.maxHp * unit.startHpRatio : undefined;
+  if (hp !== undefined) c.hp = Math.max(1, Math.min(c.maxHp, Math.round(hp)));
+  const mp = finite(unit.startMp) ? unit.startMp : finite(unit.startMpRatio) ? c.maxMp * unit.startMpRatio : undefined;
+  if (mp !== undefined) c.mp = Math.max(0, Math.min(c.maxMp, Math.round(mp)));
+  // Hazır çağrı (ör. düşman Skeleton): çağrı kuralları, sahipsiz ve süresiz
+  if (unit.summoned) c.summoned = true;
+  return c;
 }
 
 function cloneCombatant(c: Combatant): Combatant {

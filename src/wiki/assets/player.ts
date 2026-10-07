@@ -7,7 +7,7 @@
 import { h } from '../../gallery/dom';
 
 /** Gömme sayfasının adresi (göreli: dev sunucuda ve build'de çalışır). */
-export const embedUrl = (skillId?: string): string => `./gallery.html?embed=1${skillId ? `&skill=${encodeURIComponent(skillId)}` : ''}`;
+export const embedUrl = (skillId?: string, ver?: 'v1' | 'v2'): string => `./gallery.html?embed=1${skillId ? `&skill=${encodeURIComponent(skillId)}` : ''}${ver ? `&ver=${ver}` : ''}`;
 
 export interface Player {
   el: HTMLIFrameElement;
@@ -21,9 +21,10 @@ export interface Player {
 let current: Player | null = null;
 
 /** İframe yaratır; yüksekliği içerik bildirdikçe ayarlanır. `exclusive`: açılınca öncekini kapatır. */
-export function createPlayer(skillId: string | undefined, exclusive = true): Player {
+/** `ver`: sahnedeki tüm class'ları yalnızca bu oynatıcıda o sürüme çeker (Wiki > Assets > Versions karşılaştırması). */
+export function createPlayer(skillId: string | undefined, exclusive = true, ver?: 'v1' | 'v2'): Player {
   if (exclusive) current?.destroy();
-  const el = h('iframe', { class: 'stage-iframe', attrs: { src: embedUrl(skillId), title: 'Animation preview', allow: 'autoplay', loading: 'lazy' } });
+  const el = h('iframe', { class: 'stage-iframe', attrs: { src: embedUrl(skillId, ver), title: 'Animation preview', allow: 'autoplay', loading: 'lazy' } });
   let loaded = false;
   let pending: string | null = null;
   const onMessage = (e: MessageEvent): void => {

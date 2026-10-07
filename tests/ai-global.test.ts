@@ -169,6 +169,8 @@ describe('YZ Skip Turn: yapılacak anlamlı hamle yokken ya da 1 tur sonra hazı
     const aimed = content.skills.aimed_shot!;
     a.cooldowns = { aimed_shot: 1, arrow_rain: 9, piercing_arrow: 9 };
     a.mp = aimed.cost.amount - a.stats.mpRegen; // yalnızca bedelsiz Quick Shot yapılabilir; bir tur sonra Aimed Shot yetecek
+    // Terazi (madde 257): Quick Shot'ın Haste'i de değerdir (Aimed Shot'a daha çabuk varır); Haste zaten üstündeyse yalnızca zayıf vuruş kalır
+    a.statuses.push({ kind: 'haste', turns: 5, source: a.uid });
     expect(pick(b, 'party-0', classOnly)?.skillId).toBe('quick_shot');
     expect(pick(b, 'party-0')).toMatchObject({ skillId: 'skip_turn', reason: 'skip' });
     // skill 2+ tur sonra hazırsa beklemek değer katmaz
@@ -190,6 +192,7 @@ describe('YZ Move Tile: kırılgan birimi geri çek, yakın dövüşçüyü öne
   it('menzilli (kırılgan) birim ön sıradayken düşman yakın dövüşçüsü büyük tehdit ise arkadaki BOŞ yuvaya çekilir (erişim dışı)', () => {
     const b = until(mk({ 0: 'archer', 3: 'paladin' }, { 0: 'warrior' }), 'party-0');
     b.get('enemy-0')!.cooldowns = { charge: 3 }; // Charge menzil/ön sıra tanımaz: geri çekilmek onu engellemez, bu yüzden bekletilir
+    b.get('party-0')!.hp = Math.round(b.get('party-0')!.maxHp * 0.5); // O3 (madde 254): tam canla geri çekilme yok
     const choice = pick(b, 'party-0');
     expect(choice).toMatchObject({ skillId: 'move_tile', reason: 'move' });
     expect(b.freeTiles('party-0')).toContain(choice!.slot);
@@ -203,6 +206,7 @@ describe('YZ Move Tile: kırılgan birimi geri çek, yakın dövüşçüyü öne
   it('hareket sonrası üst üste Move seçilmez (salınım yok); birim arkadayken tekrar çekilmez', () => {
     const b = until(mk({ 0: 'archer', 3: 'paladin' }, { 0: 'warrior' }), 'party-0');
     b.get('enemy-0')!.cooldowns = { charge: 3 };
+    b.get('party-0')!.hp = Math.round(b.get('party-0')!.maxHp * 0.5);
     b.applyChoice('party-0', pick(b, 'party-0'));
     until(b, 'party-0');
     expect(b.lastActionOf('party-0')).toBe('move');
@@ -245,6 +249,7 @@ describe('YZ Move Tile: kırılgan birimi geri çek, yakın dövüşçüyü öne
       const b = until(mk({ 0: 'warrior', 3: 'paladin' }, { 0: 'warrior' }), 'party-0');
       const w = b.get('party-0')!;
       w.hp = Math.round(w.maxHp * ratio);
+      w.cooldowns = { charge: 3 }; // terazi: Charge'ın Stun'ı tek tehdidi durdurup kurtarırdı (o daha değerli); burada yalnızca kaçmak/vurmak
       Object.assign(b.get('enemy-0')!.stats, { str: 60 });
       b.get('enemy-0')!.cooldowns = { charge: 3 };
       return b;
@@ -259,6 +264,10 @@ describe('YZ Move Tile: kırılgan birimi geri çek, yakın dövüşçüyü öne
     const mkB = (party: Record<number, string>) => {
       const b = until(mk(party, { 0: 'warrior', 1: 'mage', 2: 'archer' }), 'party-0');
       b.get('party-0')!.statuses.push({ kind: 'taunt', turns: 3, source: 'party-0' });
+      // Terazi: Defender'ın saldırısı değersiz olsun (güçsüz; düşmanlar zaten yavaş) ki aura hareketi sınansın
+      Object.assign(b.get('party-0')!.stats, { str: 1 });
+      for (const c of b.combatants.filter((x) => x.side === 'party' && x.uid !== 'party-0')) c.statuses.push({ kind: 'guard', turns: 9, source: 'party-0' });
+      for (const e of b.combatants.filter((c) => c.side === 'enemy')) e.statuses.push({ kind: 'slow', turns: 9, source: 'x' });
       return b;
     };
     const b = mkB({ 0: 'defender', 2: 'mage', 4: 'archer' });
@@ -283,6 +292,7 @@ describe('YZ Move Tile: kırılgan birimi geri çek, yakın dövüşçüyü öne
     const b = until(mk({ 0: 'archer', 3: 'paladin', 6: 'warrior' }, { 0: 'warrior' }), 'party-0');
     b.get('enemy-0')!.cooldowns = { charge: 3 };
     b.debugKill('party-2', false); // arka sıradaki Warrior düştü: yuvası (6) ölü dost yuvası
+    b.get('party-0')!.hp = Math.round(b.get('party-0')!.maxHp * 0.5);
     const choice = pick(b, 'party-0');
     expect(choice).toMatchObject({ skillId: 'move_tile' });
     expect(b.fallenSlots('party')).toEqual([6]);

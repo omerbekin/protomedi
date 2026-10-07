@@ -1,0 +1,21 @@
+{
+  "_not": "Olay ve hazine metinleri (MVP: YER TUTUCU; mekanik etki yok). Oyun içi metin İngilizce. İleride seçenekli olaylar ve gerçek ödüller (docs/design/campaign/campaign.md 6.4).",
+  "events": {
+    "witchs_hut": {
+      "title": "Witch's Hut",
+      "text": "A crooked hut leans over the black water. The old woman inside sells charms that smell of ash and promises that smell worse. She studies your company, laughs, and lets you pass. (Events with choices are coming soon.)"
+    }
+  },
+  "treasures": {
+    "dwarven_mine": {
+      "title": "Dwarven Mine",
+      "text": "The wardens have fallen. Deep in the mine you find a sealed dwarven chest.",
+      "reward": "Recovered: Dwarven ore (rewards coming soon)"
+    },
+    "relic_vault": {
+      "title": "St. Brann's Abbey",
+      "text": "Beyond the vault keepers lies the abbey's relic vault, untouched for a hundred years.",
+      "reward": "Recovered: A saint's relic (rewards coming soon)"
+    }
+  }
+}

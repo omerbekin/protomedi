@@ -99,3 +99,31 @@ export function slotHoverTip(p: { unitName: string; hp: number; empowered: boole
   rows.push({ text: 'Click to raise it here', tone: 'info' });
   return { title: `Raise ${p.unitName}`, rows };
 }
+
+// ---------------------------------------------------------------- Resurrection (madde 257): aynı iki adımlı akış
+// Adım 1 = diriltilecek ölü DOST (choices: battle.validTargets ile ölü dostlar; danger/why kullanılmaz), adım 2 = kendi tarafında BOŞ hücre
+// (slots: battle.reviveSlots). Cesedin hücresinde canlı birim (ör. Skeleton) olsa da ölü seçilebilir. Aynı fonksiyonlar (startRaiseFlow, pickCorpse,
+// pickSlot, backRaiseFlow, reconcileRaiseFlow) kullanılır; yalnızca metinler farklı. Cast: useSkill(uid, skill, corpseUid (= dirilecek dost), slot).
+
+/** Resurrection ipucu şeridi metni. */
+export function reviveFlowHint(flow: RaiseFlow, allyName?: string): { step: string; text: string } {
+  if (flow.step === 'corpse') return { step: 'Step 1/2', text: 'Choose a fallen ally to revive' };
+  return { step: 'Step 2/2', text: `Choose an empty cell where ${allyName ?? 'the ally'} rises` };
+}
+
+/** Tooltip: 1. adımda ölü dostun üstüne gelince. `taken`: cesedin hücresinde şu an duran birimin adı (varsa; diriltmeye engel değil). */
+export function reviveCorpseTip(p: { name: string; hp: number; mp: number; taken: string | null }): { title: string; rows: Array<{ text: string; tone: 'info' | 'good' | 'muted' | 'bad' }> } {
+  const rows: Array<{ text: string; tone: 'info' | 'good' | 'muted' | 'bad' }> = [{ text: `Rises with ${p.hp} HP, ${p.mp} MP`, tone: 'good' }];
+  if (p.taken) rows.push({ text: `${p.taken} stands on the corpse: you will choose another empty cell`, tone: 'muted' });
+  rows.push({ text: 'Click to choose this ally', tone: 'info' });
+  return { title: `Revive ${p.name}`, rows };
+}
+
+/** Tooltip: 2. adımda boş hücrenin üstüne gelince. `ownCell`: ölünün düştüğü hücre. */
+export function reviveSlotTip(p: { name: string; row: number; ownCell: boolean }): { title: string; rows: Array<{ text: string; tone: 'info' | 'good' | 'muted' | 'bad' }> } {
+  const rows: Array<{ text: string; tone: 'info' | 'good' | 'muted' | 'bad' }> = [];
+  if (p.ownCell) rows.push({ text: 'Where it fell', tone: 'muted' });
+  rows.push({ text: `Row ${p.row + 1}${p.row === 0 ? ' (front)' : ''}`, tone: 'muted' });
+  rows.push({ text: 'Click to revive it here', tone: 'info' });
+  return { title: `${p.name} rises here`, rows };
+}

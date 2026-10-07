@@ -148,7 +148,7 @@ describe('debug: birim araçları', () => {
     expect(b.winner).toBeNull();
   });
 
-  it('reviveAll ölüleri diriltir; hücresi dolu olan diriltilemez', () => {
+  it('reviveAll ölüleri diriltir; hücresi dolu olan en yakın boş hücrede dirilir (madde 257)', () => {
     const b = mk();
     b.debugKill('party-0');
     b.debugKill('party-1');
@@ -156,8 +156,11 @@ describe('debug: birim araçları', () => {
     expect(b.living('party')).toHaveLength(b.combatants.filter((c) => c.side === 'party' && !c.summoned).length);
     b.debugKill('party-0');
     const dead = b.get('party-0')!;
+    const at = dead.slot;
     b.combatants.push({ ...dead, uid: 'x', hp: 5, summoned: true });
-    expect(b.debugRevive('party-0')).toMatchObject({ ok: false, reason: 'Cell is taken' });
+    expect(b.debugRevive('party-0')).toMatchObject({ ok: true });
+    expect(b.get('party-0')!.slot).not.toBe(at);
+    expect(b.freeSlots('party')).not.toContain(b.get('party-0')!.slot);
   });
 
   it('debugFill takımın canını/manasını doldurur; cooldown temizlenir', () => {

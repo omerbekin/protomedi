@@ -149,6 +149,102 @@ export interface CombatantDef {
   passive?: PassiveDef;
   /** Çağrı varyantları (CombatantData.variants aynen). */
   variants?: SummonVariants;
+  /** Veri dosyasındaki türev stat ezmeleri (CombatantData.overrides aynen; birim güçlendirmesi statları yeniden türetirken korunur). */
+  overrides?: Partial<Stats>;
+  /** Sınıfa özel taban isabet (CombatantData.accuracyBase aynen; yoksa formulas.json). */
+  accuracyBase?: number;
+}
+
+/**
+ * Savaş kurulumunda birime verilen güçlendirme/zayıflatma (sefer: tutorial zayıf düşmanları, elitler, boss). Hepsi opsiyonel; verilmeyen alan etkisizdir.
+ * Uygulama sırası (src/engine/stats.ts > applyUnitModifiers): temel statlar (str/int/dex/luck) x statMult x attrMult[stat] + attrAdd[stat] (0,1'e yuvarlanır,
+ * negatif olmaz) -> TÜM türev değerler formüllerle yeniden hesaplanır (can, MP, hız, yenilenmeler, kritik, isabet, kaçınma, primary bonusu; veri
+ * dosyasındaki `overrides` sabit kalır) -> maks can x hpMult (yuvarlanır, en az 1) -> zırh + armorAdd, büyü zırhı + magicArmorAdd (en az 0) -> skill gücü
+ * x powerMult. Hasar ölçekleme kuralı korunur: hasar hâlâ skill statının yüzdesidir; stat çarpanı statı, powerMult statın gücünü (hasar, şifa, kalkan,
+ * yer etkisi, DoT, Doom) büyütür.
+ */
+export interface UnitModifiers {
+  /** Maks can çarpanı (statlardan türetilen can üzerine, en son). Ör. 0,5 tutorial, 1,8 elit, 6 dev boss. */
+  hpMult?: number;
+  /** Dört temel statın (str, int, dex, luck) ortak çarpanı; türev değerler (can, hız, kritik...) buna göre yeniden hesaplanır. Ör. 0,7 / 1,15. */
+  statMult?: number;
+  /** Stat bazında ek çarpan (statMult ile çarpılır). Ör. { dex: 0.5 } = yavaş dev. */
+  attrMult?: Partial<Attributes>;
+  /** Stat bazında düz ek (çarpanlardan sonra). Ör. { str: 3 }. */
+  attrAdd?: Partial<Attributes>;
+  /** Skill gücü çarpanı (Stats.spellPowerMult): birimin hasar, şifa, kalkan, yer etkisi, DoT ve Doom miktarı bu kadar çarpılır. Ör. 0,8 / 1,2. */
+  powerMult?: number;
+  /** Fiziksel zırha düz ek (negatif = zayıflatma; sonuç en az 0). */
+  armorAdd?: number;
+  /** Büyü zırhına düz ek (negatif = zayıflatma; sonuç en az 0). */
+  magicArmorAdd?: number;
+  /** Çizim boyutu çarpanı (yalnızca görsel; Combatant.spriteScale). Ör. 1,4 final boss, 2 dev boss. */
+  spriteScale?: number;
+  /**
+   * Tur başına eylem sayısı (dev boss; yoksa 1; tam sayıya indirilir). Birim kendi turunda bir skill / Rest / Move yaptıktan sonra, aynı turda yeniden oynar
+   * (ek `turnStart` olayı `extra: true` ile; tur başı işlemleri, yani bekleme/durum/yenilenme/zemin tikleri TEKRARLANMAZ). Skip Turn, sersemlik ya da pas
+   * turu bitirir. Yalnızca turns modunda.
+   */
+  actionsPerTurn?: number;
+}
+
+/** Birimin sefer rütbesi (arayüz çerçeve/rozet için; kural değiştirmez). */
+export type UnitTier = 'elite' | 'boss';
+
+/**
+ * Savaş kurulumunda tek birimin opsiyonel seçenekleri (BattleSetup.partyUnits / enemyUnits; content.battleSetup > teams.units).
+ * Hiçbiri verilmezse birim bugünkü haliyle birebir aynıdır.
+ */
+export interface UnitSetup {
+  /** Güçlendirme/zayıflatma (bkz. UnitModifiers). */
+  modifiers?: UnitModifiers;
+  /** Arayüzde gösterilecek özel ad (İngilizce, ör. 'Bandit Chief'); Combatant.displayName. Combatant.name sınıf adı olarak kalır. */
+  displayName?: string;
+  /** Rütbe (elite | boss); Combatant.tier. */
+  tier?: UnitTier;
+  /** Başlangıç canı (mutlak; [1, maks can] aralığına sıkıştırılır: ölü başlanamaz). startHpRatio'dan önceliklidir. */
+  startHp?: number;
+  /** Başlangıç canı oranı (0-1, maks cana göre; yuvarlanır, en az 1 can). */
+  startHpRatio?: number;
+  /** Başlangıç MP'si (mutlak; [0, maks MP]). startMpRatio'dan önceliklidir. */
+  startMp?: number;
+  /** Başlangıç MP oranı (0-1). */
+  startMpRatio?: number;
+  /**
+   * true: birim savaşa hazır bir ÇAĞRI olarak girer (ör. Skeleton/Treant düşman): çağrı kuralları geçerli (fazla hasar alır, global skill yok, ceset
+   * bırakmaz, başlangıç cooldown'u yok), sahibi ve süresi yoktur. content.battleSetup bunu `data/summons/` id'leri için kendisi verir.
+   */
+  summoned?: boolean;
+}
+
+/** Savaş sonu özetinde tek birim (src/engine/battle-summary.ts > battleSummary). */
+export interface UnitSummary {
+  uid: string;
+  side: Side;
+  /** Sınıf (ya da çağrı) id'si (Combatant.defId). */
+  classId: string;
+  name: string;
+  displayName?: string;
+  tier?: UnitTier;
+  slot: number;
+  hp: number;
+  maxHp: number;
+  /** hp / maxHp (0-1). */
+  hpRatio: number;
+  mp: number;
+  maxMp: number;
+  alive: boolean;
+  /** Çağrı mı (savaşta çağrılan ya da hazır çağrı olarak kurulan). Sefer can taşırken çağrıları atlar. */
+  summoned: boolean;
+  /** Ölü çağrı olmayan birimin cesedi: revivable / consumed (Raise Dead tüketti). Canlıda ve çağrıda yok. */
+  corpse?: CorpseState;
+}
+
+/** Savaş sonu özeti (saf): kazanan (bitmediyse null), oynanan tur sayısı ve her birim. */
+export interface BattleSummary {
+  winner: Side | null;
+  turnsTaken: number;
+  units: UnitSummary[];
 }
 
 /** Çağrı varyantı: `mult` can (maks can) ve hasar statlarına (str, int; Str'den gelen düz can yenilenmesi dahil) uygulanan çarpan. */
@@ -247,7 +343,8 @@ export type SkillEffectKind =
     }
   | { type: 'heal'; scale: Attribute; power: number }
   /**
-   * Düşmüş bir dostu bulunduğu yerde diriltir: maks canının/manasının bu oranlarıyla (hedef 'dead_ally').
+   * Düşmüş bir dostu diriltir: maks canının/manasının bu oranlarıyla (hedef 'dead_ally'). Madde 257: iki adım: önce ölü dost, sonra kendi tarafında
+   * BOŞ bir hücre (battle.reviveSlots; useSkill'in `slot` parametresi; verilmezse reviveSlotFor: kendi hücresi boşsa o, değilse en yakın boş hücre).
    * `regen` (isteğe bağlı): dirilen birim sonraki `turns` turunun başında maks canının `ratio` kadarını yeniler (durum 'regen', `cause: 'revival'`;
    * miktar diriltme anında sabitlenir, kritik yok, can maks'ı aşmaz; buff olduğu için Resilience etkilemez).
    */
@@ -764,6 +861,14 @@ export interface Combatant {
   /** Rage (yalnızca Rage'li class'ta; diğerlerinde tanımsız): mevcut değer ve üst sınır. Savaş başında 0. */
   rage?: number;
   maxRage?: number;
+  /** Savaş kurulumundan özel ad (UnitSetup.displayName; ör. 'Bandit Chief'). Arayüz varsa bunu, yoksa `name`'i gösterir. */
+  displayName?: string;
+  /** Savaş kurulumundan rütbe (UnitSetup.tier). */
+  tier?: UnitTier;
+  /** Uygulanmış güçlendirme/zayıflatma (UnitSetup.modifiers; arayüz bilgisi; statlar zaten bunlarla hesaplanmış). */
+  modifiers?: UnitModifiers;
+  /** Tur başına eylem sayısı (modifiers.actionsPerTurn > 1 ise; yoksa 1). */
+  actionsPerTurn?: number;
 }
 
 /** Aşamalı alan skill'inin bir aşaması (skillUsed.stages): o aşamanın hücreleri (boşlar dahil) ve vurulacak birimler. Dizin = aşama numarası. */
@@ -878,8 +983,11 @@ type BattleEventBody =
   /** Bir ceset tüketildi (Raise Dead): `uid` ölü birim, `by` tüketen, `slot` cesedin yuvası, `side` cesedin tarafı. Ceset artık `consumed`: diriltilemez, yuvası rezerve değil. */
   | { type: 'corpseConsumed'; uid: string; by: string; slot: number; side: Side }
   | { type: 'despawn'; target: string }
-  /** Düşmüş bir birim olduğu yerde dirildi. */
-  | { type: 'revive'; source: string; target: string; hpAfter: number; mpAfter: number }
+  /**
+   * Düşmüş bir birim dirildi. `slot`: dirildiği hücre (madde 257: Resurrection'da oyuncunun seçtiği BOŞ hücre; cesedin hücresi dolu olabilir), `from`:
+   * cesedin hücresi (aynıysa yerinde dirildi). Combatant.slot da güncellenir. Eski kayıtlarda ikisi de yok (yerinde).
+   */
+  | { type: 'revive'; source: string; target: string; hpAfter: number; mpAfter: number; slot?: number; from?: number }
   /** `cause`: kalkan kancası (ör. 'mana_barrier') verdiyse skill id'si; yoksa tur başı yenilenme / Rest / pasif. */
   | { type: 'mpRegen'; actor: string; amount: number; after: number; cause?: string }
   /** Rage değişimi (yalnızca Rage'li birim): delta + = kazanç (skill hasar verince), - = bedel (Abyssal Cry); after = yeni değer, max = üst sınır. */
@@ -890,7 +998,8 @@ type BattleEventBody =
   | { type: 'moved'; actor: string; from: number; to: number }
   /** Bir pasif tetiklendi (UI kısa bir yazı gösterir). */
   | { type: 'passive'; actor: string; passive: string; name: string }
-  | { type: 'turnStart'; actor: string; queue: string[] }
+  /** `extra`: tur başına birden çok eylemli birimin (UnitModifiers.actionsPerTurn) aynı turdaki ek eylemi; tur başı işlemleri yapılmadı. */
+  | { type: 'turnStart'; actor: string; queue: string[]; extra?: boolean }
   /** stunned: sersemlediği için oynayamadı; voluntary: Skip Turn global skill'i ile isteyerek geçti (speedBoost: sonraki tura kadar hız desteği, 1 = +%100; `battle.speedBoostOf(uid)` aynı değeri verir); ikisi de yoksa: yapacak hamlesi olmadığı için pas. */
   | { type: 'turnSkipped'; actor: string; stunned?: boolean; voluntary?: boolean; speedBoost?: number }
   /** Yerde kalan bir etki bırakıldı / bitti. */

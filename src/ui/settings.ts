@@ -1,5 +1,5 @@
 import { iconUrl } from './dom-icons';
-import { flowButtons, type FlowContext } from '../game/session-flow';
+import { flowButtons, mainMenuButton, type FlowContext } from '../game/session-flow';
 import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from './fullscreen';
 
 /**
@@ -15,6 +15,8 @@ export interface SettingsHooks {
     context: () => FlowContext;
     newGame: () => void;
     teamSelect: () => void;
+    /** Main Menu row (campaign + quick battle); hidden on the main menu itself. */
+    mainMenu?: () => void;
   };
 }
 
@@ -143,6 +145,8 @@ export class SettingsMenu {
     const teamBtn = mkBtn('Go');
     const newRow = mkRow('dice', 'New Game', newBtn);
     const teamRow = mkRow('team', 'Team Select', teamBtn);
+    const menuBtn = mkBtn('Go');
+    const menuRow = mkRow('frame', 'Main Menu', menuBtn);
 
     const confirmBox = document.createElement('div');
     confirmBox.className = 'settings-confirm';
@@ -175,6 +179,7 @@ export class SettingsMenu {
     };
     newBtn.addEventListener('click', () => ask(flow.newGame));
     teamBtn.addEventListener('click', () => ask(flow.teamSelect));
+    menuBtn.addEventListener('click', () => flow.mainMenu && ask(flow.mainMenu));
     yes.addEventListener('click', () => {
       const action = pending;
       if (action) run(action);
@@ -187,8 +192,9 @@ export class SettingsMenu {
       const f = flowButtons(flow.context());
       newRow.hidden = !f.newGame;
       teamRow.hidden = !f.teamSelect;
+      menuRow.hidden = !flow.mainMenu || !mainMenuButton(flow.context());
     };
-    this.panel.append(newRow, teamRow, confirmBox);
+    this.panel.append(newRow, teamRow, menuRow, confirmBox);
     this.refreshFlow();
   }
 

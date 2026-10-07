@@ -1,0 +1,4 @@
+{
+  "_not": "Geometer - SÜRÜM 2 SESLERİ (boş iskelet; content-designer doldurur). Şema data/audio.json > sfx ile aynı (katmanlar: tone, noise, voice, pluck). Anahtar = v1 ses adı (aynı adla yazılan ses, Geometer v2 seçiliyken v1'in yerine çalar); yeni adlar da eklenebilir (v2 efekti c.sfx('yeniAd') ile çalar). Bu sahibin v1 sesleri: chalkDraw, runeFlare, ruleSnap, stampSlam. Kılavuz: docs/design/art-v2.md",
+  "sfx": {}
+}

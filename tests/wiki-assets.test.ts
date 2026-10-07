@@ -146,8 +146,8 @@ describe('Wiki > Legacy: kullanılmayan / eski her şey OTOMATİK türetilir', (
 });
 
 describe('Wiki sol menüsü: Assets ve Legacy bölümleri', () => {
-  it('Assets genel bakış + Sounds, Animations, Icons, Character art, Palette ve Legacy bölümleri tanımlı', () => {
-    expect(ASSET_NAV.map((n) => n.id)).toEqual(['assets', 'sounds', 'animations', 'icons', 'art', 'palette', 'legacy']);
+  it('Assets genel bakış + Sounds, Animations, Icons, Character art, Palette, Versions ve Legacy bölümleri tanımlı', () => {
+    expect(ASSET_NAV.map((n) => n.id)).toEqual(['assets', 'sounds', 'animations', 'icons', 'art', 'palette', 'versions', 'legacy']);
     for (const n of ASSET_NAV) {
       expect(n.title.length, n.id).toBeGreaterThan(0);
       expect(ICON_KINDS as readonly string[], `${n.id} ikonu`).toContain(n.icon);

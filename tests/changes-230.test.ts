@@ -50,19 +50,22 @@ describe('Raise Dead: YZ en tehlikeli cesedi seçer', () => {
     expect(b.corpseOf('enemy-2')?.state).toBe('revivable');
   });
 
-  it('formül: (tehdit + en iyi skill) x maks can / hpRef x diriltici x (diriltici yaşıyor ve yuva boşsa) diriltilebilir çarpanı', () => {
+  it('formül: (tehdit + en iyi skill) x maks can / hpRef x diriltici x (diriltici yaşıyor ve tarafında boş hücre varsa) diriltilebilir çarpanı', () => {
     const cfg = content.formulas.corpseDanger!;
     const b = mk({ 3: 'undead' }, { 0: 'warrior', 3: 'mage', 4: 'archer', 5: 'paladin' });
     b.debugKill('enemy-1', false); // Mage
     b.debugKill('enemy-2', false); // Archer
     const before = Object.fromEntries(b.corpseChoices('party-0', 'raise_dead').map((c) => [c.uid, c]));
     expect(before['enemy-1']!.why).toContain(`revivable by Paladin ${cfg.revivableMult}`);
-    // Mage'in yuvasına canlı bir birim girerse (yuva dolu) diriltilemez: çarpan kalkar
+    // Madde 257: Mage'in yuvasına canlı bir birim girse de diriltilebilir (başka boş hücreye): çarpan KALIR
     b.get('enemy-0')!.slot = b.get('enemy-1')!.slot;
+    expect(Object.fromEntries(b.corpseChoices('party-0', 'raise_dead').map((c) => [c.uid, c]))['enemy-1']!.why).toContain('revivable');
+    // diriltici (Paladin) düşünce çarpan kalkar
+    b.debugKill('enemy-3', false);
     const after = Object.fromEntries(b.corpseChoices('party-0', 'raise_dead').map((c) => [c.uid, c]));
     expect(after['enemy-1']!.why).not.toContain('revivable');
     expect(after['enemy-1']!.danger).toBeCloseTo(before['enemy-1']!.danger / cfg.revivableMult, 0);
-    expect(after['enemy-2']!.danger).toBe(before['enemy-2']!.danger);
+    expect(after['enemy-2']!.danger).toBeCloseTo(before['enemy-2']!.danger / cfg.revivableMult, 0);
     // en tehlikeli seçilir (corpseChoices argmax'ı)
     const top = [...b.corpseChoices('party-0', 'raise_dead')].sort((x, y) => y.danger - x.danger || x.slot - y.slot)[0]!;
     expect(b.corpseToConsume('party-0')?.uid).toBe(top.uid);
@@ -104,11 +107,14 @@ describe('Raise Dead: YZ en tehlikeli cesedi seçer', () => {
       b.debugKill('enemy-2', false);
     tough(b);
       if (mode === 'turns') waitTurn(b, 'party-1');
+      // Terazi: Raise Dead seçilip seçilmemesi değerine bağlı; seçildiğinde (ya da adayında) tüketilecek ceset en tehlikelisi
+      const cand = explainChoice(b, 'party-1', ai)!.candidates.find((c) => c.skill === 'raise_dead')!;
+      expect(cand.corpse?.unit).toBe('E1:Paladin');
       const choice = chooseAction(b, 'party-1', ai)!;
-      expect(choice.corpseUid).toBe('enemy-1');
-      const r = b.applyChoice('party-1', choice);
+      if (choice.skillId === 'raise_dead') expect(choice.corpseUid).toBe('enemy-1');
+      const r = b.applyChoice('party-1', { skillId: 'raise_dead', slot: cand.summonSlot, corpseUid: 'enemy-1' });
       expect(r.ok).toBe(true);
-      if (r.ok) expect(ofType(r.events, 'skillUsed')[0]).toMatchObject({ corpseUid: 'enemy-1', slot: choice.slot });
+      if (r.ok) expect(ofType(r.events, 'skillUsed')[0]).toMatchObject({ corpseUid: 'enemy-1', slot: cand.summonSlot });
     }
   });
 });

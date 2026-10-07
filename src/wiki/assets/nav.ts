@@ -9,6 +9,7 @@ export const ASSET_NAV = [
   { id: 'icons', title: 'ICONS', icon: 'frame', sub: true },
   { id: 'art', title: 'CHARACTER ART', icon: 'helm', sub: true },
   { id: 'palette', title: 'PALETTE & UI', icon: 'drop', sub: true },
+  { id: 'versions', title: 'VERSIONS', icon: 'swap', sub: true },
   { id: 'legacy', title: 'LEGACY', icon: 'skull', sub: true },
 ] as const;
 

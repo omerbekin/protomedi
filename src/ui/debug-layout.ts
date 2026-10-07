@@ -53,8 +53,10 @@ export const TAB_ICONS: Record<string, string> = {
   Rolls: 'dice',
   'Speed & View': 'hourglass',
   Setup: 'gear',
+  Campaign: 'boot',
   'Test Mode': 'flask',
   Characters: 'team',
+  Versions: 'swap',
   Data: 'clipboard',
 };
 
@@ -65,6 +67,9 @@ export const SECTION_ICONS: Record<string, string> = {
   Rules: 'gear',
   Team: 'team',
   Tools: 'wand',
+  Map: 'boot',
+  Progress: 'next',
+  Saves: 'clipboard',
   Menu: 'frame',
   Display: 'eye',
   'Battle setup': 'restart',

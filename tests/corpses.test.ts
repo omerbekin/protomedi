@@ -150,13 +150,20 @@ describe('Raise Dead: kendi tarafına çağrı + ceset tüketimi', () => {
     expect(c.needsCorpseChoice('party-1', 'raise_dead')).toBe(false);
   });
 
-  it('summonSlots: kendi tahtasındaki boş yuvalar, ölü dostun ayrılmış yuvası HARİÇ; o yuvaya çağrı reddedilir', () => {
+  it('summonSlots (madde 257, Faz 4): kendi tahtasındaki TÜM boş yuvalar; ölü dostun cesedinin üstüne de çağrılır, dost yine diriltilebilir', () => {
     const b = mk();
-    b.debugKill('party-0', false); // party-0 yuvası 0: diriltme için ayrılmış
-    expect(b.fallenSlots('party')).toEqual([0]);
-    expect(b.summonSlots('party-1', 'raise_dead')).toEqual(b.freeSlots('party').filter((s) => s !== 0));
-    expect(b.summonSlots('party-1', 'raise_dead')).not.toContain(0);
-    expect(b.useSkill('party-1', 'raise_dead', undefined, 0)).toEqual({ ok: false, reason: 'That cell is reserved for a fallen ally' });
+    b.debugKill('party-0', false); // party-0 (Warrior) yuva 0'da düştü
+    expect(b.fallenSlots('party')).toEqual([0]); // Move için hâlâ ayrılmış (freeTiles)
+    expect(b.summonSlots('party-1', 'raise_dead')).toEqual(b.freeSlots('party'));
+    expect(b.summonSlots('party-1', 'raise_dead')).toContain(0);
+    const sk = ofType(act(b, 'party-1', 'raise_dead', undefined, 0), 'summon')[0]!.combatant;
+    expect(sk.slot).toBe(0); // Skeleton cesedin üstünde
+    expect(b.validTargets('party-2', 'resurrection').map((c) => c.uid)).toEqual(['party-0']); // ceset hâlâ diriltilebilir
+    const ev = act(b, 'party-2', 'resurrection', 'party-0'); // hücre verilmezse en yakın boş hücre
+    const rv = ofType(ev, 'revive')[0]!;
+    expect(rv.from).toBe(0);
+    expect(rv.slot).not.toBe(0);
+    expect(b.get('party-0')!.slot).toBe(rv.slot);
     expect(b.summonSlots('party-1', 'bone_throw')).toEqual([]); // çağrı değil
   });
 

@@ -619,6 +619,57 @@ body {
   color: #8d99ae;
 }
 
+/* Debug > Versions: class başına satır (avatar + ad + sürüm menüsü) */
+.debug-version-list {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.debug-version-row {
+  display: grid;
+  grid-template-columns: 40px 1fr minmax(118px, auto);
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 2px 6px;
+  background: #1c1d2e;
+  border-radius: 4px;
+}
+
+.debug-version-row.all {
+  grid-template-columns: 1fr minmax(118px, auto);
+  background: #26283d;
+}
+
+.debug-version-avatar {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: #0e0f18;
+}
+
+.debug-version-name {
+  font: bold 14px Georgia, serif;
+  color: #edf2f4;
+}
+
+.debug-select {
+  min-height: 44px;
+  padding: 4px 6px;
+  font: 13px system-ui, sans-serif;
+  color: #edf2f4;
+  background: #14151f;
+  border: 1px solid #3d405b;
+  border-radius: 4px;
+}
+
+.debug-select.on {
+  border-color: #ffd23f;
+  color: #ffd23f;
+}
+
 .debug-inline {
   display: flex;
   gap: 6px;

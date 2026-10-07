@@ -4867,7 +4867,7 @@ const backstab = async (c: VfxCtx) => {
  * ipi (iki iplik + ruh pırıltıları) çekilir, Undead mor halkayla emer. Promise ip Undead'e varınca çözülür (çağrı efekti arkadan gelir).
  */
 export async function corpseDrainFx(scene: Phaser.Scene, corpse: { x: number; y: number }, caster: CombatantView | undefined): Promise<void> {
-  playSfx(scene, 'soulDrain');
+  playSfx(scene, 'soulDrain', 'undead');
   // kemik tozu ve kıymıklar
   dustCloud(scene, corpse.x, corpse.y, { n: 6, spread: 70, rise: 60, size: [34, 60], tint: 0xd9d4c0, life: 1000 });
   for (let i = 0; i < 5; i++) {
@@ -5023,8 +5023,8 @@ export async function summonFx(scene: Phaser.Scene, unitId: string, view: Combat
     scene.tweens.add({ targets: circle, angle: 120, alpha: 0, duration: slow(1500), onComplete: () => circle.destroy() });
     cracks(scene, f.x, f.y, { len: fed ? 240 : 150, n: fed ? 12 : 7, dur: 1500 });
     shake(scene, fed ? 700 : 400, fed ? 0.004 : 0.0025);
-    playSfx(scene, 'earthCrack');
-    playSfx(scene, 'graveMoan');
+    playSfx(scene, 'earthCrack', 'undead');
+    playSfx(scene, 'graveMoan', 'undead');
     if (fed) burst(scene, f.x, f.y - 6, { colors: ['#b872ff', '#5a2a9c', '#a8ebff'], n: 14, speed: [20, 90], angle: [-Math.PI, 0], gravity: -90, life: [700, 1200], size: [10, 18] });
     else burst(scene, f.x, f.y - 6, { colors: ['#8a7f96', '#5b6579'], n: 6, speed: [20, 70], angle: [-Math.PI, 0], gravity: -60, life: [600, 1000], size: [8, 14] });
     dustCloud(scene, f.x, f.y, { n: fed ? 6 : 4, spread: 90, rise: 70, size: [40, 70] });
@@ -5034,7 +5034,7 @@ export async function summonFx(scene: Phaser.Scene, unitId: string, view: Combat
     burst(scene, f.x, f.y - 10, { colors: ['#4a2e1a', '#8c5a2b', '#5b6579', '#98a2b4'], n: fed ? 26 : 14, speed: [140, fed ? 480 : 320], angle: [-Math.PI, 0], gravity: 900, life: [500, 1000], size: [10, 22] });
     void ring(scene, f.x, f.y, { r: fed ? 220 : 150, flat: 0.34, n: 40, colors: fed ? ['#b872ff', '#5a2a9c', '#98a2b4'] : ['#98a2b4', '#5b6579'], dur: 560, size: 12 });
     shake(scene, 260, fed ? 0.008 : 0.005);
-    playSfx(scene, 'boneClatter');
+    playSfx(scene, 'boneClatter', 'undead');
     const hands: Phaser.GameObjects.Image[] = [];
     for (const dx of fed ? [-62, 58, -26, 30] : [-50, 44]) {
       const h = sprite(scene, 'undeadhand', fed ? '#b36bff' : '#8a7f96', f.x + dx, f.y + 6, 150, view.container.depth + 2).setRotation(dx < 0 ? 0.25 : -0.25);
@@ -5048,7 +5048,7 @@ export async function summonFx(scene: Phaser.Scene, unitId: string, view: Combat
     }
     // 3) iskelet yerden çıkar: beslenmiş hızlı ve güçlü, beslenmemiş yavaş ve titrek
     const dustTick = scene.time.addEvent({ delay: slow(110), repeat: 8, callback: () => dustCloud(scene, f.x, f.y, { n: 3, spread: 120, rise: 90, size: [36, 70], life: 800 }) });
-    playSfx(scene, 'thud');
+    playSfx(scene, 'thud', 'undead');
     await view.riseFromGround(fed ? 900 : 1100, fed ? 5 : 8);
     dustTick.remove();
     if (fed) {
@@ -5071,7 +5071,7 @@ export async function summonFx(scene: Phaser.Scene, unitId: string, view: Combat
     scene.tweens.add({ targets: [dim, glow], alpha: 0, duration: slow(700), onComplete: () => { dim.destroy(); glow.destroy(); } });
     await wait(scene, slow(120));
   } else if (unitId === 'treant') {
-    playSfx(scene, 'woodCreak');
+    playSfx(scene, 'woodCreak', 'druid');
     for (const dx of [-70, -34, 0, 34, 70]) {
       const r = sprite(scene, 'roots', '#7ed957', f.x + dx, f.y + 14, 132, DEPTH + 20);
       sprout(scene, r, 300);
@@ -5082,7 +5082,7 @@ export async function summonFx(scene: Phaser.Scene, unitId: string, view: Combat
     dustCloud(scene, f.x, f.y, { n: 12, spread: 140, rise: 150, tint: 0x9a7c52 });
     shake(scene, 300, 0.005);
     await wait(scene, slow(260));
-    playSfx(scene, 'thud');
+    playSfx(scene, 'thud', 'druid');
     await view.riseFromGround(700, 3);
     dustCloud(scene, f.x, f.y, { n: 8, spread: 120, rise: 110, tint: 0x9a7c52 });
     shake(scene, 160, 0.005);
@@ -5092,3 +5092,49 @@ export async function summonFx(scene: Phaser.Scene, unitId: string, view: Combat
     await wait(scene, slow(400));
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// SÜRÜM 2 (src/game/art-v2/<classId>/vfx.ts) için yardımcı takımı: v2 efektleri bunları ikinci parametre `k` olarak alır
+// (src/game/vfx-versions.ts ekler: k.v1, k.v2Sprite, k.Phaser). v1 efektlerinin davranışı değişmez; bu yalnızca dışa açma.
+
+/** v1 efekt yardımcıları ve renk takımları (v2 efektleri yeniden kullanır). */
+export const VFX_BASE_KIT = {
+  DEPTH,
+  FLOOR_FX,
+  SNAP,
+  PX,
+  snap,
+  rnd,
+  pick,
+  wait,
+  spot,
+  feet,
+  avgX,
+  dirTo,
+  slow,
+  color,
+  sprite,
+  grow,
+  sprout,
+  counter,
+  burst,
+  ring,
+  flash,
+  shake,
+  travel,
+  arcSlash,
+  hit,
+  cracks,
+  dustCloud,
+  stunStars,
+  softTexture,
+  playUntilHit,
+  hitsAt,
+  meleeApproach,
+  quadOf,
+  cellMid,
+  inQuad,
+  fillCells,
+  colors: { FIRE, ICE, HOLY, VOID, NATURE, BONE, BLOOD, DUST, WOOD },
+};
+export type { BurstOpts, RingOpts };

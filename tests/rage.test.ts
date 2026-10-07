@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, chooseAction, content, describeSkill } from '../src/engine';
+import { Battle, chooseAction, content, describeSkill, explainChoice } from '../src/engine';
 import type { AiConfig, BattleEvent, BattleMode } from '../src/engine';
 
 /**
@@ -236,7 +236,7 @@ describe('Rage: harcama (Abyssal Cry)', () => {
     expect(chooseAction(rich, 'party-0', classOnly)).toMatchObject({ skillId: 'abyssal_cry', reason: 'tactic' });
   });
 
-  it('skill bağlamı minSelfRage koşulu: Rage yetmezse sağlanmaz (veriye bağlı)', () => {
+  it('skill bağlamı minSelfRage koşulu artık seçimi engellemez (terazi, madde 257); Rage bedelli skill Rage yetmezse kullanılamaz', () => {
     // Rage koşullu sentetik ipucu: whirlwind yalnızca Rage >= 90 iken bağlamı sağlar
     const setup = content.battleSetup('random-battle', 1, 'test', { party: cells({ 0: 'warrior', 1: 'paladin' }), enemies: cells({ 0: 'archer', 1: 'mage' }) }, false);
     setup.skills = { ...setup.skills, whirlwind: { ...setup.skills.whirlwind!, ai: { requires: { minSelfRage: 90 } } } };
@@ -244,10 +244,12 @@ describe('Rage: harcama (Abyssal Cry)', () => {
     for (const u of c.combatants) Object.assign(u.stats, { critChance: 0, accuracy: 10, evasion: 0 });
     c.get('party-0')!.mp = 100;
     c.get('party-0')!.skills = c.get('party-0')!.skills.filter((s) => s !== 'abyssal_cry'); // Abyssal Cry ile yarışmasın
-    c.get('party-0')!.rage = 95;
-    expect(chooseAction(c, 'party-0', classOnly)).toMatchObject({ skillId: 'whirlwind', reason: 'tactic' });
     c.get('party-0')!.rage = 10;
-    expect(chooseAction(c, 'party-0', classOnly)?.skillId).not.toBe('whirlwind');
+    const ex = explainChoice(c, 'party-0', classOnly)!;
+    expect(ex.candidates.filter((x) => x.skill === 'whirlwind').every((x) => x.verdict !== 'blocked')).toBe(true);
+    c.get('party-0')!.skills = c.get('party-0')!.skills.filter((s) => s !== 'charge');
+    const choice = chooseAction(c, 'party-0', classOnly)!;
+    expect(choice.score).toBe(Math.max(...explainChoice(c, 'party-0', classOnly)!.candidates.map((x) => x.score ?? -Infinity)));
   });
 });
 

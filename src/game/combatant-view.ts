@@ -6,6 +6,7 @@ import { debugState } from './debug-state';
 import { formatHit, hitColor } from './hit-format';
 import { type DamageTags, FLOAT_ICON_TINT, damageIconKind, floatStyle, floatTimes, placeFloat, rowLayout, type FloatKind } from './float-text';
 import { ensureIcon } from './icons';
+import { SHARED_KEY } from './asset-versions';
 import { SERIF } from './ui-frame';
 
 /** floatText seçenekleri: tür (tipografi) ve rakamın solundaki/sağındaki küçük ikon (piksel ikon adı). */
@@ -303,7 +304,7 @@ export class CombatantView {
           const dir = debuff ? 1 : -1;
           const cx = dir * (hpBar.width / 2 + 8 + size / 2 + (i % 4) * (size + 6));
           const cy = Math.floor(i / 4) * (size + 4);
-          const icon = this.scene.add.image(cx, cy, ensureIcon(this.scene, bd.icon, bd.color, false)).setDisplaySize(size, size);
+          const icon = this.scene.add.image(cx, cy, ensureIcon(this.scene, bd.icon, bd.color, false, SHARED_KEY)).setDisplaySize(size, size); // durum/zemin rozeti: Shared sürümü
           const label = this.scene.add.text(cx + size / 2, cy + size / 2, bd.text, textStyle(18, bd.color)).setOrigin(1, 0.5);
           this.statusBox.add([icon, label]);
           if (bd.turns) this.statusBox.add(this.scene.add.image(label.x - label.width - 8, label.y, hourglass).setDisplaySize(15, 15));
@@ -864,11 +865,19 @@ export class CombatantView {
     this.container.setAlpha(0);
   }
 
-  /** Diriltme: düşmüş birim olduğu yerde canlanır. */
-  revive(hp: number, mp: number): void {
+  /**
+   * Diriltme: düşmüş birim canlanır. `at` verilirse (madde 257: Resurrection seçilen BOŞ hücreye diriltir) görünmezken o hücreye ışınlanır ve orası
+   * yeni "evi" olur; verilmezse olduğu yerde.
+   */
+  revive(hp: number, mp: number, at?: { x: number; y: number }): void {
     this.fallen = false;
     this.setGlow(null);
     this.scene.tweens.killTweensOf(this.container);
+    if (at) {
+      this.homeX = at.x;
+      this.baseY = at.y;
+      this.container.setX(at.x).setDepth(at.y);
+    }
     this.container.setY(this.baseY).setAlpha(0);
     this.setHp(hp, false);
     this.setMp(mp, false);

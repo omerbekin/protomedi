@@ -1,0 +1,36 @@
+{
+  "_not": "Sefer kuralları (PROVİZYON sayılar; denge balance-tester'ın işi). Metinler oyun içi (İngilizce). docs/design/campaign/campaign.md v5.",
+  "maps": ["valdoria"],
+  "rules": {
+    "carryHp": true,
+    "victoryHeal": 0.2,
+    "reviveRatio": 0.2,
+    "bossVictoryHeal": 1.0,
+    "maxSaves": { "normal": 5, "ironman": 1 },
+    "slots": 3
+  },
+  "_difficulty": "Genel zorluk (Ömer kararı, madde 256): sefer başında seçilir, sonra DEĞİŞMEZ (kayıtta saklanır). Şimdilik yalnızca yapay zeka zorluğunu taşır (savaş kurulumuna 'ai' değeri iletilir; engine-dev AI girdisini hazırlıyor). İleride savaş zorluğu, loot miktarı vb. alanlar buraya eklenir.",
+  "defaultDifficulty": "medium",
+  "difficulties": {
+    "easy": { "name": "Easy", "ai": "easy", "text": "Enemies make more mistakes." },
+    "medium": { "name": "Medium", "ai": "medium", "text": "The intended challenge." },
+    "hard": { "name": "Hard", "ai": "hard", "text": "Enemies play their best." }
+  },
+  "starterPool": ["warrior", "defender", "archer", "cutthroat", "mage", "druid", "paladin", "undead", "antimage", "gambler", "hexer"],
+  "companyPool": ["warrior", "defender", "archer", "cutthroat", "mage", "druid", "paladin", "undead", "antimage", "gambler", "hexer"],
+  "recruitPool": ["warrior", "defender", "archer", "cutthroat", "mage", "druid", "paladin", "undead", "antimage", "gambler", "hexer"],
+  "texts": {
+    "intro": "The Ash Curse spreading from Castle Morvane in the north swallows a little more of Valdoria each day. Your journey begins on Mill Road, on the western coast, and ends at Morvane's gate. Each stop is an encounter. You may only take one of the roads leading on from where you stand, and there is no turning back.",
+    "farewell": "Your escort has brought word of the Ash Curse to Ashford. They stay behind to hold the village. A new company must carry the fight north.",
+    "volunteer": "A volunteer catches up with you at the city gate.",
+    "recruitBefore": "A wanderer on the road offers to join you. Choose one companion.",
+    "townRest": "Your company rests by the fire. Everyone is back to full health.",
+    "complete": "The Ash Curse is broken. Valdoria is free again."
+  },
+  "tips": {
+    "1": "Faster fighters act more often. Watch the turn bar at the top.",
+    "2": "Enemies packed together? Area attacks hit every one of them.",
+    "3": "Elites are tougher than common foes. Beat the chief to open the roads beyond Ashford.",
+    "4": "You can see two stops ahead. Choose your road: the others will close."
+  }
+}

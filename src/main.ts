@@ -3,9 +3,11 @@ import layout from '../data/battle-layout.json';
 import { audioSettings, playSfxOn } from './game/audio';
 import { BattleScene } from './game/scenes/BattleScene';
 import { TeamSelectScene } from './game/scenes/TeamSelectScene';
+import { MainMenuScene } from './game/scenes/MainMenuScene';
+import { CampaignMapScene } from './game/scenes/CampaignMapScene';
 import { DebugMenu } from './ui/debug-menu';
 import { DEBUG_INFO_TAB, DEBUG_TABS, registerDebugTools } from './ui/debug-tools';
-import { flowContext, startNewGame, startTeamSelect } from './game/session-flow';
+import { flowContext, startMainMenu, startNewGame, startTeamSelect } from './game/session-flow';
 import { SettingsMenu } from './ui/settings';
 import { createFullscreenButton } from './ui/fullscreen';
 import { installViewport, parseRotateMode } from './ui/viewport';
@@ -16,9 +18,13 @@ import './style.css';
 // Geliştirme sunucusunda sekme adı canlı olmadığını belirtir (canlı sürüm: ProtoMedi).
 if (import.meta.env.DEV) document.title = 'ProtoMedi (dev - NOT LIVE)';
 
-// Normal açılış: takım seçim ekranı. Adreste ?seed=123 varsa seçimi atlayıp o seed'in rastgele takımlarıyla doğrudan savaş
-// (hata ayıklama / tekrar oynatma için).
-const skipSelect = new URLSearchParams(window.location.search).has('seed');
+// Normal açılış: ana menü (Continue / New Campaign / Load Game / Quick Battle). Adreste ?seed=123 varsa menüyü atlayıp o seed'in
+// rastgele takımlarıyla doğrudan savaş (hata ayıklama / tekrar oynatma için); ?campaign=1 doğrudan sefer haritasını açar (geliştirme).
+const params = new URLSearchParams(window.location.search);
+const skipSelect = params.has('seed');
+const openCampaign = !skipSelect && params.has('campaign');
+const otherScenes = [TeamSelectScene, BattleScene, MainMenuScene, CampaignMapScene];
+const firstScene = skipSelect ? BattleScene : openCampaign ? CampaignMapScene : MainMenuScene;
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -29,7 +35,7 @@ const game = new Phaser.Game({
   antialias: true,
   // Oran korunarak (FIT) görünür alanın en büyük 16:9 kısmı; yerleşim/döndürme src/ui/viewport.ts
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: skipSelect ? [BattleScene, TeamSelectScene] : [TeamSelectScene, BattleScene],
+  scene: [firstScene, ...otherScenes.filter((sc) => sc !== firstScene)],
 });
 
 // Dev only: lets the browser console inspect the running game (window.__game)
@@ -48,7 +54,7 @@ new SettingsMenu(document.getElementById('ui-root')!, {
   },
   preview: () => playSfxOn((game.sound as unknown as { context?: AudioContext }).context, 'stunChime'),
   // New Game / Team Select (an unfinished battle asks for confirmation first)
-  flow: { context: () => flowContext(game), newGame: () => startNewGame(game), teamSelect: () => startTeamSelect(game) },
+  flow: { context: () => flowContext(game), newGame: () => startNewGame(game), teamSelect: () => startTeamSelect(game), mainMenu: () => startMainMenu(game) },
 });
 
 // --- Fullscreen button (top right, next to the wiki); hidden where the browser has no Fullscreen API (iPhone: shows an Add to Home Screen hint) ---

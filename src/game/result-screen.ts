@@ -58,6 +58,15 @@ export interface ResultScreenOptions {
   matchData?: () => { text: string; moves: number } | null;
   /** Debug önizlemesi: gerçek savaş bitmedi; "Close" düğmesi + Esc ile kapanır. */
   preview?: boolean;
+  /** Sefer savaşı: New Game / Team Select yerine bu düğmeler (Continue, Load Last Save, Load Game, Main Menu). Enter = ilk düğme. */
+  actions?: ResultAction[];
+}
+
+/** Sonuç ekranının özel düğmesi (sefer bağlamı: src/game/campaign-session.ts). */
+export interface ResultAction {
+  label: string;
+  primary?: boolean;
+  run: () => void;
 }
 
 export interface ResultScreen {
@@ -237,14 +246,22 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   const buttons = scene.add.container(0, 0).setAlpha(0);
   const bw = 400;
   const bh = 84;
-  if (o.preview) {
+  // Sefer savaşı: özel düğmeler (yan yana, ortalı); önizlemede yok sayılır
+  const actions = !o.preview && o.actions?.length ? o.actions.map((a) => ({ ...a, run: once(a.run) })) : null;
+  if (actions) {
+    const aw = actions.length > 2 ? 360 : bw;
+    const gap = 40;
+    const x0 = W / 2 - ((actions.length - 1) * (aw + gap)) / 2;
+    actions.forEach((a, i) => buttons.add(makeMenuButton(scene, x0 + i * (aw + gap), by, aw, bh, a.label, a.run, { primary: !!a.primary, size: a.primary ? 38 : 32 }).container));
+  } else if (o.preview) {
     buttons.add(makeMenuButton(scene, W / 2 - 220, by, bw, bh, 'Close preview', () => destroy(), { primary: true, size: 36 }).container);
     buttons.add(makeMenuButton(scene, W / 2 + 220, by, bw, bh, 'Team Select', teamSelect, { size: 36 }).container);
   } else {
     buttons.add(makeMenuButton(scene, W / 2 - 220, by, bw, bh, 'New Game', newGame, { primary: true, size: 40 }).container);
     buttons.add(makeMenuButton(scene, W / 2 + 220, by, bw, bh, 'Team Select', teamSelect, { size: 36 }).container);
   }
-  const hint = serif(scene, W / 2, by + bh / 2 + 28, o.preview ? 'Preview  -  Enter or Esc closes' : 'Enter: New Game     Esc: Team Select', 18, hex(0x8d7d5f), { bold: false, stroke: 2, spacing: 1 }).setOrigin(0.5);
+  const hintText = actions ? `Enter: ${actions[0]!.label}` : o.preview ? 'Preview  -  Enter or Esc closes' : 'Enter: New Game     Esc: Team Select';
+  const hint = serif(scene, W / 2, by + bh / 2 + 28, hintText, 18, hex(0x8d7d5f), { bold: false, stroke: 2, spacing: 1 }).setOrigin(0.5);
   buttons.add(hint);
   if (o.matchData) {
     const matchData = o.matchData;
@@ -264,9 +281,11 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
     if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || debugState.uiPaused || e.defaultPrevented) return;
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (o.preview) destroy();
+      if (actions) actions[0]!.run();
+      else if (o.preview) destroy();
       else newGame();
     } else if (e.key === 'Escape') {
+      if (actions) return;
       if (o.preview) destroy();
       else teamSelect();
     }

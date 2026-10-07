@@ -1,4 +1,4 @@
-import type { Attribute, Attributes, CombatantData, CombatantDef, Formulas, Stats, SummonVariants } from './types';
+import type { Attribute, Attributes, CombatantData, CombatantDef, Formulas, Stats, SummonVariants, UnitModifiers } from './types';
 
 /** Primary bonusu aktif mi: primary stat, dört statın en yükseğine eşit veya üstündeyse (eşitlik dahil). */
 export function isPrimaryActive(attrs: Attributes, primary: Attribute | undefined): boolean {
@@ -93,7 +93,68 @@ export function buildDef(data: CombatantData, formulas: Formulas): CombatantDef 
     ...(data.ai ? { ai: data.ai } : {}),
     ...(data.passive ? { passive: data.passive } : {}),
     ...(data.variants ? { variants: { fed: { ...data.variants.fed }, unfed: { ...data.variants.unfed } } } : {}),
+    ...(data.overrides ? { overrides: { ...data.overrides } } : {}),
+    ...(data.accuracyBase !== undefined ? { accuracyBase: data.accuracyBase } : {}),
   };
+}
+
+const ATTRS: Attribute[] = ['str', 'int', 'dex', 'luck'];
+
+/** Güçlendirmenin statları/görseli değiştiren bir alanı var mı (yoksa tanım aynen kullanılır). */
+export function hasUnitModifiers(mods: UnitModifiers | undefined): boolean {
+  if (!mods) return false;
+  const nonOne = (v: number | undefined) => v !== undefined && v !== 1;
+  const nonZero = (v: number | undefined) => v !== undefined && v !== 0;
+  return (
+    nonOne(mods.hpMult) ||
+    nonOne(mods.statMult) ||
+    nonOne(mods.powerMult) ||
+    nonZero(mods.armorAdd) ||
+    nonZero(mods.magicArmorAdd) ||
+    mods.spriteScale !== undefined ||
+    ATTRS.some((k) => nonOne(mods.attrMult?.[k]) || nonZero(mods.attrAdd?.[k]))
+  );
+}
+
+/**
+ * Birim güçlendirmesi/zayıflatması uygulanmış tanım (saf; bkz. UnitModifiers). Temel statlar ölçeklenir, türev değerler `deriveStats` ile AYNI
+ * formüllerle yeniden hesaplanır (veri `overrides`'ı sabit kalır), sonra maks can, zırhlar ve skill gücü ayarlanır. Değişiklik yoksa tanım aynen döner.
+ * Motor (Battle kurucusu) bu fonksiyonu kullanır; yapay zeka ve önizleme birimin statlarını okuduğu için güçlendirme onlara da yansır.
+ */
+export function applyUnitModifiers(def: CombatantDef, mods: UnitModifiers | undefined, formulas: Formulas): CombatantDef {
+  if (!mods || !hasUnitModifiers(mods)) return def;
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+  const attributes = { ...def.attributes };
+  for (const k of ATTRS) {
+    const v = def.attributes[k] * (mods.statMult ?? 1) * (mods.attrMult?.[k] ?? 1) + (mods.attrAdd?.[k] ?? 0);
+    attributes[k] = Math.max(0, r1(v));
+  }
+  const derived = deriveStats(
+    {
+      id: def.id,
+      name: def.name,
+      spriteId: def.spriteId,
+      color: def.color,
+      logo: def.logo,
+      frontPriority: def.frontPriority,
+      attributes,
+      ...(def.primary ? { primary: def.primary } : {}),
+      armor: def.stats.armor,
+      magicArmor: def.stats.magicArmor,
+      ...(def.accuracyBase !== undefined ? { accuracyBase: def.accuracyBase } : {}),
+      ...(def.overrides ? { overrides: def.overrides } : {}),
+      skills: def.skills,
+    },
+    formulas,
+  );
+  const stats: Stats = {
+    ...derived,
+    hp: Math.max(1, Math.round(derived.hp * (mods.hpMult ?? 1))),
+    armor: Math.max(0, derived.armor + (mods.armorAdd ?? 0)),
+    magicArmor: Math.max(0, derived.magicArmor + (mods.magicArmorAdd ?? 0)),
+    spellPowerMult: (derived.spellPowerMult ?? 1) * (mods.powerMult ?? 1),
+  };
+  return { ...def, attributes, stats, ...(mods.spriteScale !== undefined ? { spriteScale: mods.spriteScale } : {}) };
 }
 
 /** Çağrı varyantının stat çarpanı (varyant yoksa 1). */

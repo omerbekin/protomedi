@@ -67,7 +67,7 @@ describe('Raise Dead akışı: ceset varken iki adım', () => {
     b.debugKill('enemy-0', false);
     b.debugKill('enemy-1', false);
     expect(b.useSkill('party-1', 'raise_dead', undefined, undefined, undefined, 'enemy-0').ok).toBe(true); // enemy-0 tüketildi
-    b.debugKill('party-0', false); // ölü dost: yuvası ayrılır
+    b.debugKill('party-0', false); // ölü dost: madde 257'den beri yuvası çağrılara AÇIK (cesedin üstüne çağrılabilir)
     const inp = inputs(b);
     expect(inp.choices.map((c) => c.uid)).toEqual(['enemy-1']);
     const flow0 = startRaiseFlow(inp)!;
@@ -75,11 +75,11 @@ describe('Raise Dead akışı: ceset varken iki adım', () => {
     expect(consumed).toEqual({ kind: 'invalid', reason: 'Corpse was consumed' });
     expect(pickCorpse(flow0, inp, 'nobody')).toEqual({ kind: 'invalid', reason: 'Invalid corpse' });
     const flow = state(pickCorpse(flow0, inp, 'enemy-1'));
-    expect(pickSlot(flow, inp, b.get('party-0')!.slot).kind).toBe('invalid'); // ölü dostun ayrılmış yuvası summonSlots'ta yok
+    expect(pickSlot(flow, inp, b.get('party-0')!.slot)).toEqual({ kind: 'cast', slot: b.get('party-0')!.slot, corpseUid: 'enemy-1' }); // ölü dostun cesedinin üstü
     expect(pickSlot(flow, inp, b.get('party-1')!.slot).kind).toBe('invalid'); // dolu yuva
-    expect(inp.slots).not.toContain(b.get('party-0')!.slot);
-    // motor da aynı kuralı uygular
-    expect(b.useSkill('party-1', 'raise_dead', undefined, b.get('party-0')!.slot, undefined, 'enemy-1').ok).toBe(false);
+    expect(inp.slots).toContain(b.get('party-0')!.slot);
+    // motor da aynı kuralı uygular: dolu yuva reddedilir
+    expect(b.useSkill('party-1', 'raise_dead', undefined, b.get('party-1')!.slot, undefined, 'enemy-1').ok).toBe(false);
   });
 
   it('seçili ceset sonradan seçilemez olursa adım 1 düşer; ceset kalmazsa tek adıma geçer; yuva kalmazsa akış biter', () => {

@@ -537,15 +537,16 @@ describe('Yapay zeka (hexer profili)', () => {
     const b = big(sure(arena([['hexer', 4]], [['warrior', 0]]), 500));
     const h = P(b, 4);
     const w = E(b, 0);
-    expect(chooseAction(b, h.uid, NO_GLOBAL)?.skillId).not.toBe('doom_mark');
+    const doomScore = () => explainChoice(b, h.uid, NO_GLOBAL)!.candidates.find((x) => x.skill === 'doom_mark')!.score!;
+    const before = doomScore();
     cast(b, h.uid, 'evil_eye', w.uid);
     cast(b, h.uid, 'evil_eye', w.uid);
+    // Terazi (madde 257): Doom Mark'ın değeri Omen yığınıyla büyür (ultimate genelde hemen kullanılabilir; K5)
+    expect(doomScore()).toBeGreaterThan(before);
     expect(chooseAction(b, h.uid, NO_GLOBAL)).toMatchObject({ skillId: 'doom_mark', targetUid: w.uid });
     const ex = explainChoice(b, h.uid, NO_GLOBAL)!;
     const c = ex.candidates.find((x) => x.skill === 'doom_mark')!;
     expect(c.notes!.join(' ')).toContain('detonate 3 omen x1.5');
-    const blockedNote = explainChoice(sure(arena([['hexer', 4]], [['warrior', 0]])), 'party-0', NO_GLOBAL)!.candidates.find((x) => x.skill === 'doom_mark')!.note ?? '';
-    expect(blockedNote).toContain('minTargetStacks omen 2 (has 0)');
   });
 
   it('(2) 2 Omen\'li yaralı hedef, Evil Eye + otomatik Doom öldürüyor -> bedelsiz Evil Eye (kill önceliği, en ucuz)', () => {
@@ -556,9 +557,11 @@ describe('Yapay zeka (hexer profili)', () => {
     cast(b, h.uid, 'evil_eye', w.uid);
     w.hp = 25;
     const ch = chooseAction(b, h.uid, NO_GLOBAL)!;
-    expect(ch).toMatchObject({ skillId: 'evil_eye', targetUid: w.uid, reason: 'kill' });
+    expect(ch.reason).toBe('kill');
     const ex = explainChoice(b, h.uid, NO_GLOBAL)!;
-    expect(ex.candidates.find((x) => x.verdict === 'chosen')!.notes!.join(' ')).toContain('omens 2->3 DOOM');
+    const eye = ex.candidates.find((x) => x.skill === 'evil_eye' && x.target === ex.final!.target)!;
+    expect(eye.notes!.join(' ')).toContain('omens 2->3 DOOM');
+    expect(eye.kills.length).toBe(1); // bedelsiz Evil Eye + otomatik Doom öldürür (aday terazide; alan skill'i de öldürüp daha çok vurabilir)
   });
 
   it('(3) ön sırada 2+ düşman -> Withering Curse; tek düşman -> seçilmez', () => {
@@ -571,11 +574,14 @@ describe('Yapay zeka (hexer profili)', () => {
   it('(4) güçlü büyücüye (Mage) Jinx; yalnızca düşük hasarlı rakip varsa Jinx seçilmez', () => {
     const b = big(sure(arena([['hexer', 4]], [['mage', 9]]), 500));
     Object.assign(E(b, 9).stats, { accuracy: content.classes.mage!.stats.accuracy, critChance: content.classes.mage!.stats.critChance }); // gerçek isabet/kritik: Jinx'in önleyeceği değer
-    expect(chooseAction(b, P(b, 4).uid, NO_GLOBAL)).toMatchObject({ skillId: 'jinx', targetUid: E(b, 9).uid });
+    // Terazi: Jinx'in değeri önlediği beklenen hasardır (mitigation); güçlü büyücüde zayıfa göre çok daha yüksek
     const ex = explainChoice(b, P(b, 4).uid, NO_GLOBAL)!;
-    expect(ex.candidates.find((x) => x.skill === 'jinx')!.notes!.join(' ')).toContain('mitigation');
+    const strongJinx = ex.candidates.find((x) => x.skill === 'jinx')!;
+    expect(strongJinx.notes!.join(' ')).toContain('mitigation');
     const weak = big(sure(arena([['hexer', 4]], [['mage', 9]]), 500));
     Object.assign(E(weak, 9).stats, { int: 1, str: 1, dex: 1, accuracy: content.classes.mage!.stats.accuracy, critChance: content.classes.mage!.stats.critChance });
+    const weakJinx = explainChoice(weak, P(weak, 4).uid, NO_GLOBAL)!.candidates.find((x) => x.skill === 'jinx')!;
+    expect(strongJinx.terms!.mitigation!).toBeGreaterThan((weakJinx.terms?.mitigation ?? 0) * 3);
     expect(chooseAction(weak, P(weak, 4).uid, NO_GLOBAL)?.skillId).not.toBe('jinx');
   });
 

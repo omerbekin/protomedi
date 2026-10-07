@@ -4,6 +4,7 @@ import { content, describePassive, describeSkill, describeStat, primaryBonusInfo
 import type { CombatantDef, Teams } from '../../engine';
 import { backgroundKey, hasBackground, preloadAssets } from '../assets';
 import { ensureIcon, ensureSkillIcon } from '../icons';
+import { ownerOfUnit } from '../asset-versions';
 import { PRIMARY_GOLD, STAT_COLOR, STAT_ICON, STAT_LABEL } from '../../ui/stat-icons';
 import { initialSizes, newSeed } from '../seed';
 import { buildBackdrop, buildTip, classAvatar, ensureGlow, fitText, fx, goldText, makeMenuButton, placeTip, serif } from '../menu-ui';
@@ -593,7 +594,7 @@ export class TeamSelectScene extends Phaser.Scene {
       const info = describeSkill(sk, s, f, content.summons, { statuses: content.statuses, grounds: content.grounds });
       rows.push([`${info.name}  -  ${info.cost}${(sk.cooldown ?? 0) > 0 ? `, cd ${sk.cooldown}` : ''}`, '#cdbf9f']);
     }
-    return { title: def.name, titleHex: '#ffe29a', icon: ensureIcon(this, def.logo, def.color, false), badge: `${archetypeOf(def)} - ${rangeOf(def)}`, rows, width: 470 };
+    return { title: def.name, titleHex: '#ffe29a', icon: ensureIcon(this, def.logo, def.color, false, ownerOfUnit(def.id)), badge: `${archetypeOf(def)} - ${rangeOf(def)}`, rows, width: 470 };
   }
 
   private buildCard(def: CombatantDef, cx: number, cy: number, scale: number): CardView {
@@ -634,7 +635,7 @@ export class TeamSelectScene extends Phaser.Scene {
     medal.fillStyle(0x120c07, 1).fillCircle(px + 4, py + ps - 6, 19);
     medal.lineStyle(3, GOLD.edge, 1).strokeCircle(px + 4, py + ps - 6, 19);
     medal.lineStyle(1, GOLD.light, 0.8).strokeCircle(px + 4, py + ps - 6, 15);
-    add(this.add.image(px + 4, py + ps - 6, ensureIcon(this, def.logo, def.color, false)).setDisplaySize(26, 26));
+    add(this.add.image(px + 4, py + ps - 6, ensureIcon(this, def.logo, def.color, false, ownerOfUnit(def.id))).setDisplaySize(26, 26));
 
     // TEST ribbon for test classes (bottom-right corner of the avatar plate)
     if (isTestClass(def)) {
@@ -721,14 +722,14 @@ export class TeamSelectScene extends Phaser.Scene {
         const pg = add(this.add.graphics());
         pg.fillStyle(0x1a1008, 1).fillCircle(ix + iconSize / 2, iy + iconSize / 2, iconSize / 2);
         pg.lineStyle(2, GOLD.light, 1).strokeCircle(ix + iconSize / 2, iy + iconSize / 2, iconSize / 2 - 1);
-        add(this.add.image(ix + iconSize / 2, iy + iconSize / 2, ensureIcon(this, p.icon, def.color, false)).setDisplaySize(21, 21));
+        add(this.add.image(ix + iconSize / 2, iy + iconSize / 2, ensureIcon(this, p.icon, def.color, false, ownerOfUnit(def.id))).setDisplaySize(21, 21));
         regions.push({
           x: ix,
           y: iy,
           w: iconSize,
           h: iconSize,
           key: `passive:${def.id}`,
-          tip: () => ({ title: p.name, titleHex: '#ffe29a', icon: ensureIcon(this, p.icon, def.color, false), badge: 'Passive', rows: [[describePassive(p, def.stats, content.formulas)]], width: 420 }),
+          tip: () => ({ title: p.name, titleHex: '#ffe29a', icon: ensureIcon(this, p.icon, def.color, false, ownerOfUnit(def.id)), badge: 'Passive', rows: [[describePassive(p, def.stats, content.formulas)]], width: 420 }),
         });
       }
       ix += iconSize + gap;
@@ -945,7 +946,7 @@ export class TeamSelectScene extends Phaser.Scene {
     medal.fillStyle(0x120c07, 1).fillCircle(colX, hh - 26, 16);
     medal.lineStyle(2, GOLD.edge, 1).strokeCircle(colX, hh - 26, 16);
     body.add(medal);
-    body.add(this.add.image(colX, hh - 26, ensureIcon(this, def.logo, def.color, false)).setDisplaySize(22, 22));
+    body.add(this.add.image(colX, hh - 26, ensureIcon(this, def.logo, def.color, false, ownerOfUnit(def.id))).setDisplaySize(22, 22));
     // Hover glow + remove mark
     const hov = this.add.graphics().setAlpha(0);
     drawQuadTile(hov, rectQuad(-hw, -hh, SLOT_W, SLOT_H), 'hover', side === 'party' ? 'ally' : 'enemy');

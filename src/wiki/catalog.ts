@@ -6,6 +6,8 @@
  * Mechanics bölümündeki ilgili metin güncel mi kontrol edilmelidir (CLAUDE.md kuralı).
  */
 import { sortByPrimary } from '../game/class-order';
+import campaignConfig from '../../data/campaign/campaign.json';
+import campaignMap from '../../data/campaign/valdoria.json';
 import layout from '../../data/battle-layout.json';
 import { applySummonVariant, content, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, TARGET_TEXT } from '../engine';
 import { TARGET_BADGE } from '../engine/skill-info';
@@ -525,7 +527,7 @@ export function buildMechanics(): WikiArticle[] {
     article('corpses', 'Special rules', 'Corpses', 'skull', [
       p('When a unit of a team falls, it leaves a corpse on its cell. Summoned units leave no corpse, not even when they fall together with their summoner.'),
       list(
-        'Revivable: the corpse can be brought back with a revive skill. Its cell stays reserved for it (allies cannot move onto it and summons cannot appear on it).',
+        'Revivable: the corpse can be brought back with a revive skill. Allies cannot move onto its cell, but a summon (a Skeleton, a Treant) can appear on it: the corpse can still be revived, onto another empty cell.',
         'Consumed: the corpse was devoured and can never be revived. Its cell is free again for moving and summoning.',
       ),
       p(`Skills that consume corpses: ${skillsWith((e) => e.type === 'summon' && !!e.consumeCorpse).join(', ') || 'none yet'}. Choose a fallen foe to consume, then choose where the summon rises on your own side: the consumed corpse can never be revived and the summon comes empowered. While a fallen foe lies on the field you must consume one (you decide which); with no fallen foe you only choose the cell and the summon comes weaker (unfed). The AI consumes the most dangerous foe: the one worth the most to its team if revived (its threat and best skill, its max HP, more if it can revive others itself or if a living reviver could bring it back).`),
@@ -537,7 +539,8 @@ export function buildMechanics(): WikiArticle[] {
       p(`Skills that summon: ${skillsWith((e) => e.type === 'summon').join(', ') || 'none yet'}. Damage dealt by a summon still counts for its owner's passives.`),
     ]),
     article('revive', 'Special rules', 'Resurrection', 'ankh', [
-      p('A revive skill brings a fallen ally back on the cell where it fell, with a share of its max HP and MP. It cannot target living units, and it cannot target an ally whose corpse was consumed (see Corpses).'),
+      p('A revive skill is aimed in two steps: first choose the fallen ally, then choose an empty cell on your own side where it rises, with a share of its max HP and MP. It does not matter whether something now stands on its corpse (for example a summon): any empty cell will do. With no empty cell on your side the skill cannot be used. It cannot target living units, and it cannot target an ally whose corpse was consumed (see Corpses). The revived ally starts with an empty turn bar.'),
+      p('The AI weighs a resurrection like any other move: what the revived ally will do over the next turns (its first turn comes later because its turn bar starts empty), against healing a living ally whose turn is close or hitting the foe who is about to strike. It picks the cell where the ally is most useful and safest (a melee fighter in front, a caster or archer at the back).'),
       list(...Object.values(content.skills).flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'revive' }> => e.type === 'revive').map((e) => `${s.name}: revives at ${pct(e.hpRatio)} HP and ${pct(e.mpRatio)} MP${e.regen ? `; then regenerates ${pct(e.regen.ratio)} of its max HP at the start of each of its next ${e.regen.turns} turns` : ''}.`))),
       p(`Skills that revive: ${skillsWith((e) => e.type === 'revive').join(', ') || 'none yet'}.`),
     ]),
@@ -587,6 +590,25 @@ export function buildMechanics(): WikiArticle[] {
       p(`Taunt: ${skillsWith((e) => e.type === 'taunt').join(', ') || 'none'}. Guard: ${skillsWith((e) => e.type === 'guard').join(', ') || 'none'}. Mana burn: ${skillsWith((e) => e.type === 'manaBurn').join(', ') || 'none'}.`),
     ]),
   );
+  // Sefer (campaign-dev): sayılar data/campaign/campaign.json ve harita verisinden
+  {
+    const r = campaignConfig.rules;
+    const m = campaignMap;
+    out.push(
+      article('campaign', 'Campaign', 'Campaign', 'boot', [
+        p(`The campaign is a journey across ${m.title.charAt(0)}${m.title.slice(1).toLowerCase()}: ${m.nodes.length} stops on the map, but each run visits ${m.stopsPerRun}. Start it from the main menu (New Campaign). Quick Battle is the old single-battle mode.`),
+        list(
+          'Roads: a solid line is the only way on; a dashed line is a branching route. At a choice point (gold ring) you pick one road and the others close for this journey. Roads meet again further on.',
+          `Fog: you see the next stop in full (name, type, enemies) and the stop after it by type and name only; anything further is under fog. The final castle is always visible as your goal.`,
+          'Stops: Battle, Elite (a stronger leader), Boss, Guarded treasure (a battle, then a chest), Event (a short story stop) and Town (rest and recruits).',
+          'Your party: you start alone, a companion joins in the forest, and at the first village the escort stays behind and you form a new company of three from every class. The first hero you pick leads; the leader walks in front on the map. Another hero joins when you leave the city.',
+          `Health carries over between battles. After a victory survivors regain ${Math.round(r.victoryHeal * 100)}% of their maximum HP and fallen heroes get up with ${Math.round(r.reviveRatio * 100)}%; after a boss everyone is fully healed; towns heal everyone. Mana starts full in every battle.`,
+          `Saving: there are ${r.slots} campaign slots, one journey each, and every journey keeps its own saves. Normal saves after every victory and whenever you press Save on the map (up to ${r.maxSaves.normal} saves per journey; the oldest is replaced). Ironman keeps a single save, written only after a victory. If you are defeated, you go back to your last save.`,
+          `Difficulty: Easy, Medium or Hard, chosen when the journey starts; it cannot be changed later. For now it sets how well the enemies play.`,
+        ),
+      ]),
+    );
+  }
   return out;
 }
 

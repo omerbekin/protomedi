@@ -1,14 +1,17 @@
 import Phaser from 'phaser';
 import type { SkillDef } from '../engine';
-import { GRID, INTERNAL_TOKEN_VALUES, shadeColor, spriteCells } from './pixel-art';
+import { GRID, INTERNAL_TOKEN_VALUES, shadeColor } from './pixel-art';
+import { resolveSprite } from './art-registry';
+import { ownerOfSkill } from './asset-versions';
 
 /**
- * Piksel art ikon dokuları. Çizimler src/game/pixel-art.ts motoruyla 32x32'lik ızgaralara çizilir (otomatik kontur + ışık/gölge);
- * burada 1:1 Phaser dokusuna çevrilir ve NEAREST filtreyle keskin gösterilir.
+ * Piksel art ikon dokuları. Çizimler src/game/pixel-art.ts motoruyla ızgaralara çizilir (otomatik kontur + ışık/gölge);
+ * burada 1:1 Phaser dokusuna çevrilir ve NEAREST filtreyle keskin gösterilir. Sürüm farkında (src/game/art-registry.ts):
+ * `owner` verilirse o class'ın seçili sürümü (v1 64x64 / v2 varsayılan 128x128) kullanılır; çağıranlar `setDisplaySize` ile
+ * boyut verdiği için yüksek çözünürlüklü doku ekranda aynı yeri kaplar. v1 doku anahtarları değişmedi.
  */
 const UNIT = 1;
-const FRAME = 6; // çerçeveli skill ikonu: 3 piksel çerçeve + 3 piksel boşluk
-const FRAME_GRID = GRID + FRAME * 2;
+const FRAME = 6; // çerçeveli skill ikonu (64'lükte): 3 piksel çerçeve + 3 piksel boşluk
 
 const iconKey = (kind: string, hex: string, framed: boolean) => `icon:${kind}:${hex}:${framed ? 'f' : 'n'}`;
 
@@ -16,15 +19,21 @@ const css = (v: number) => `#${v.toString(16).padStart(6, '0')}`;
 
 /**
  * Bir ikon türünün dokusunu (yoksa) üretir ve anahtarını döndürür. `framed`: koyu zemin ve renkli çerçeve (skill ikonu);
- * çerçevesiz: yalnızca sembol (stat, logo, rozet). Bilinmeyen tür düz bir kareye düşer.
+ * çerçevesiz: yalnızca sembol (stat, logo, rozet). Bilinmeyen tür düz bir kareye düşer. `owner`: sürüm sahibi (class id ya da
+ * 'shared'); verilmezse daima v1.
  */
-export function ensureIcon(scene: Phaser.Scene, kind: string, hex: string, framed = true): string {
-  const key = iconKey(kind, hex, framed);
+export function ensureIcon(scene: Phaser.Scene, kind: string, hex: string, framed = true, owner?: string | null): string {
+  const art = resolveSprite(kind, owner);
+  const key = iconKey(art.key, hex, framed);
   if (scene.textures.exists(key)) return key;
+  const S = art.size;
+  const q = S / GRID;
   const cells =
-    spriteCells(kind) ?? Array.from({ length: GRID }, (_, y) => Array.from({ length: GRID }, (_, x) => ({ t: x > 15 && x < 48 && y > 15 && y < 48 ? 'a' : '.', s: 0 })));
+    art.cells() ?? Array.from({ length: S }, (_, y) => Array.from({ length: S }, (_, x) => ({ t: x > S / 4 - 1 && x < (S * 3) / 4 && y > S / 4 - 1 && y < (S * 3) / 4 ? 'a' : '.', s: 0 })));
   const pal = INTERNAL_TOKEN_VALUES(hex);
-  const size = framed ? FRAME_GRID : GRID;
+  const frame = Math.round(FRAME * q);
+  const frameGrid = S + frame * 2;
+  const size = framed ? frameGrid : S;
   const tex = scene.textures.createCanvas(key, size * UNIT, size * UNIT);
   if (!tex) return key;
   const ctx = tex.getContext();
@@ -35,17 +44,18 @@ export function ensureIcon(scene: Phaser.Scene, kind: string, hex: string, frame
   };
   if (framed) {
     const accent = css(pal.a!);
-    const cut = 6; // köşe kesiği
-    for (let y = 0; y < FRAME_GRID; y++)
-      for (let x = 0; x < FRAME_GRID; x++) {
-        const dx = Math.min(x, FRAME_GRID - 1 - x);
-        const dy = Math.min(y, FRAME_GRID - 1 - y);
+    const cut = Math.round(6 * q); // köşe kesiği
+    const border = Math.round(3 * q);
+    for (let y = 0; y < frameGrid; y++)
+      for (let x = 0; x < frameGrid; x++) {
+        const dx = Math.min(x, frameGrid - 1 - x);
+        const dy = Math.min(y, frameGrid - 1 - y);
         if (dx + dy < cut) continue;
-        if (dx < 3 || dy < 3) px(x, y, accent);
+        if (dx < border || dy < border) px(x, y, accent);
         else px(x, y, '#1a1410', 0.92);
       }
   }
-  const off = framed ? FRAME : 0;
+  const off = framed ? frame : 0;
   cells.forEach((row, y) => {
     row.forEach((cell, x) => {
       if (cell.t === '.') return;
@@ -59,5 +69,5 @@ export function ensureIcon(scene: Phaser.Scene, kind: string, hex: string, frame
   return key;
 }
 
-/** Skill ikonu: skill'in `fx` renginde, çerçeveli. */
-export const ensureSkillIcon = (scene: Phaser.Scene, skill: SkillDef): string => ensureIcon(scene, skill.icon, skill.fx, true);
+/** Skill ikonu: skill'in `fx` renginde, çerçeveli; sahibinin (class / çağıran class) seçili sürümüyle. */
+export const ensureSkillIcon = (scene: Phaser.Scene, skill: SkillDef): string => ensureIcon(scene, skill.icon, skill.fx, true, ownerOfSkill(skill.id));

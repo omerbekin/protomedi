@@ -454,14 +454,15 @@ describe('Cutthroat yapay zekası (assassin): bağlam ipuçları, determinizm', 
     expect(ch2?.skillId).not.toBe('backstab');
   });
 
-  it('Backstab bağlamı sağlanmazsa (ön saftaki sağlam hedef, öldürmüyor, canının yarısını almıyor) seçilmez', () => {
+  it('Backstab terazide: bağlam ipucu engellemez (madde 257); en yüksek puanlı seçenek seçilir, puan cooldown bedelini içerir', () => {
     const b = turnArena([['cutthroat', 0]], [['defender', 1]], ['venom_edge', 'backstab'])!;
     const d = b.get('enemy-0')!;
     d.hp = d.maxHp = 2000;
-    const ch = chooseAction(b, b.currentUid!, NO_GLOBAL);
-    expect(ch?.skillId).toBe('venom_edge');
     const ex = explainChoice(b, b.currentUid!, NO_GLOBAL)!;
-    expect(ex.candidates.find((x) => x.skill === 'backstab')?.verdict).toBe('blocked');
+    const bs = ex.candidates.find((x) => x.skill === 'backstab')!;
+    expect(bs.verdict).not.toBe('blocked');
+    expect(bs.terms!.cooldown).toBeLessThan(0);
+    expect(ex.candidates.find((x) => x.verdict === 'chosen')!.score).toBe(Math.max(...ex.candidates.map((x) => x.score ?? -Infinity)));
   });
 
   it('Saltire Cut: X en az 2 düşmanı kapsayınca seçilir; tek düşman varken seçilmez', () => {
@@ -470,11 +471,11 @@ describe('Cutthroat yapay zekası (assassin): bağlam ipuçları, determinizm', 
     expect(ch?.skillId).toBe('x_cut');
     expect(ch?.slot).toBe(4); // merkez çift vuruş + 4 çapraz
     expect(b.applyChoice(b.currentUid!, ch).ok).toBe(true);
-    // tek düşman: bağlam yok (blocked); Venom Edge oynanır (yalnızca başka hiçbir şey yoksa ipuçsuz seçenek son çare olurdu)
+    // tek düşman: X yalnızca o düşmanı vurur; terazi daha değerli seçeneği seçer (X'in değeri vurulanların toplamı)
     const c = turnArena([['cutthroat', 0]], WAR(4), ['venom_edge', 'x_cut'])!;
     const ex = explainChoice(c, c.currentUid!, NO_GLOBAL)!;
-    expect(ex.candidates.filter((x) => x.skill === 'x_cut').every((x) => x.verdict === 'blocked')).toBe(true);
-    expect(ex.final?.skill).toBe('venom_edge');
+    expect(ex.candidates.filter((x) => x.skill === 'x_cut').every((x) => x.enemyHits <= 1)).toBe(true);
+    expect(ex.candidates.find((x) => x.verdict === 'chosen')!.score).toBe(Math.max(...ex.candidates.map((x) => x.score ?? -Infinity)));
   });
 
   it('Smoke Bomb: 2x2 alanda >= 2 tehlikeli düşman -> düşman tarafına; seçim uygulanır ve Blinded verir', () => {
@@ -501,7 +502,7 @@ describe('Cutthroat yapay zekası (assassin): bağlam ipuçları, determinizm', 
     const ch = chooseAction(b, b.currentUid!, NO_GLOBAL);
     expect(ch?.skillId).not.toBe('smoke_bomb');
     const ex = explainChoice(b, b.currentUid!, NO_GLOBAL)!;
-    for (const c of ex.candidates.filter((x) => x.skill === 'smoke_bomb')) expect(c.verdict).toBe('blocked');
+    for (const c of ex.candidates.filter((x) => x.skill === 'smoke_bomb')) expect(c.verdict).not.toBe('chosen');
   });
 
   it('karar açıklaması (match-log): Smoke Bomb adayında tahta ve koruma değeri; X adayında şekil satırı', () => {

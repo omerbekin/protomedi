@@ -13,12 +13,13 @@ import { clampSize } from '../team-select-model';
 import { GOLD, SERIF, cornerOrnaments, ensureGrain, frameRect, glowRect, gradientRect, makeBadge, makePanel } from '../ui-frame';
 import { playSfx } from '../audio';
 import { BattleStats, showResultScreen } from '../result-screen';
-import type { ResultScreen } from '../result-screen';
+import type { ResultAction, ResultScreen } from '../result-screen';
 import { debugState, effectiveTimeScale, tweaksSummary } from '../debug-state';
 import { testMode, testModeSummary } from '../test-mode';
 import { LONG_PRESS_MS, LONG_PRESS_SLOP, UNIT_SELECT_EVENT, UnitSelection, isSelectModifier, pickUnitAt } from '../unit-select';
-import { VFX, corpseDrainFx, groundArea, meleeApproach, summonFx } from '../vfx';
-import type { VfxKind } from '../../ui/vfx-kinds';
+import { corpseDrainFx, groundArea, meleeApproach, summonFx } from '../vfx';
+import { resolveSkillVfx, skillSfxAllowed } from '../vfx-versions';
+import { SHARED_KEY, ownerOfSkill, ownerOfUnit } from '../asset-versions';
 import { skillMiniGrid } from '../../ui/shape-diagram';
 import type { MiniShape } from '../../ui/shape-diagram';
 import { drawCellTiles, drawMiniShape, miniShapeSize } from '../shape-draw';
@@ -31,7 +32,7 @@ import type { Pt } from '../shape-geometry';
 import { cellKey, corpseMarkPos, corpseTip, empoweredLine, summonPreviewLine, visibleCorpseMarks } from '../corpse-marks';
 import type { CorpseState } from '../corpse-marks';
 import { createCorpseMarker } from '../corpse-marker';
-import { backRaiseFlow, corpseHoverTip, pickCorpse, pickSlot, raiseFlowHint, reconcileRaiseFlow, slotHoverTip, startRaiseFlow } from '../raise-dead-flow';
+import { backRaiseFlow, corpseHoverTip, pickCorpse, pickSlot, raiseFlowHint, reconcileRaiseFlow, reviveCorpseTip, reviveFlowHint, reviveSlotTip, slotHoverTip, startRaiseFlow } from '../raise-dead-flow';
 import type { RaiseFlow, RaiseInputs } from '../raise-dead-flow';
 import type { CorpseMarker } from '../corpse-marker';
 import { isDeltaStat, previewStatusText, statDir, statSources } from '../stat-delta';
@@ -47,6 +48,15 @@ export interface BattleSceneData {
   /** Rastgele takım boyutları (1-12); yoksa önceki savaşın / adresin boyutu (varsayılan 5-5). */
   partySize: number;
   enemySize: number;
+  /** Sefer savaşı (campaign-dev): sonuç ekranı düğmeleri seferden gelir; yoksa hızlı savaş (Quick Battle). */
+  campaign?: CampaignBattleHooks;
+  /** Sefer genel zorluğu (yapay zeka): TODO(engine-dev) AI girdisi gelince motora iletilecek; şimdilik yalnızca saklanır. */
+  difficulty?: 'easy' | 'medium' | 'hard';
+}
+
+/** Sefer bağlamı: savaş bitince sonuç ekranının düğmeleri (Continue / Load Last Save / Load Game / Main Menu). src/game/campaign-session.ts */
+export interface CampaignBattleHooks {
+  resultActions(victory: boolean, battle: Battle): ResultAction[];
 }
 
 /** Üç küçük global eylem düğmesinin (Rest / Skip Turn / Move) sütunu: 4 skill düğmesinin hemen sağında, tooltip plaketinin solunda. */
@@ -85,6 +95,10 @@ export class BattleScene extends Phaser.Scene {
   static freeMp = false;
   mode: BattleMode = 'turns';
   teams: Teams | undefined = undefined;
+  /** Sefer savaşı bağlamı (yalnızca sefer haritasından başlatılınca; her başlatmada verilmezse temizlenir). */
+  campaign: CampaignBattleHooks | undefined = undefined;
+  /** Sefer genel zorluğu (yalnızca sefer savaşında; bkz. BattleSceneData.difficulty). */
+  difficulty: 'easy' | 'medium' | 'hard' | undefined = undefined;
   /** Takım boyutları (rastgele takım çekilirken; savaş başlayınca gerçek boyuttan okunur). */
   partySize = initialSizes().party;
   enemySize = initialSizes().enemies;
@@ -157,6 +171,8 @@ export class BattleScene extends Phaser.Scene {
     this.showSlots = data.showSlots ?? this.showSlots;
     this.mode = data.mode ?? this.mode;
     if ('teams' in data) this.teams = data.teams;
+    this.campaign = data.campaign;
+    this.difficulty = data.difficulty;
     if (data.partySize !== undefined) this.partySize = clampSize(data.partySize);
     if (data.enemySize !== undefined) this.enemySize = clampSize(data.enemySize);
     this.moveMode = null;
@@ -583,7 +599,7 @@ export class BattleScene extends Phaser.Scene {
     this.clearSlotMarkers();
     this.clearAreaMarker();
     this.refreshGlows();
-    if (this.battle.needsSlotChoice(skill)) this.showSlotMarkers(actor, skill);
+    if (this.battle.needsSlotChoice(skill) || this.battle.isReviveSkill(skill)) this.showSlotMarkers(actor, skill); // Raise Dead / Resurrection: two-step flow
     else if (this.battle.needsTargetChoice(skill)) this.showTargetCells(actor, skill);
     // Skills without a target choice (all enemies, self, ...) show their effect on everyone affected right away
     else {
@@ -862,6 +878,10 @@ export class BattleScene extends Phaser.Scene {
   private suppressAutoSelect: string | null = null;
 
   private raiseInputs(actor: string, skill: string): RaiseInputs {
+    // Resurrection (madde 257): step 1 = a fallen ALLY (its cell may be taken), step 2 = an empty cell of your side
+    if (this.battle.isReviveSkill(skill)) {
+      return { choices: this.battle.validTargets(actor, skill).map((c) => ({ uid: c.uid, slot: c.slot, name: c.name, danger: 0, why: '' })), slots: this.battle.reviveSlots(actor, skill) };
+    }
     return { choices: this.battle.corpseChoices(actor, skill), slots: this.battle.summonSlots(actor, skill) };
   }
 
@@ -871,7 +891,7 @@ export class BattleScene extends Phaser.Scene {
     const ctx = this.raiseCtx;
     const flow = this.raiseFlow;
     if (ctx && flow?.twoStep && this.selected && this.playerCanAct) {
-      for (const c of this.battle.corpseChoices(ctx.actor, ctx.skill)) {
+      for (const c of this.raiseInputs(ctx.actor, ctx.skill).choices) {
         if (flow.step === 'corpse') want.set(c.uid, 'hint');
         else if (c.uid === flow.corpseUid) want.set(c.uid, 'selected');
       }
@@ -933,11 +953,16 @@ export class BattleScene extends Phaser.Scene {
     this.clearSlotMarkers();
     this.clearAreaMarker();
     this.hideInfoTip();
+    if (this.battle.isReviveSkill(ctx.skill)) {
+      this.renderReviveFlow(ctx, flow, inp);
+      return;
+    }
     const own = this.battle.summonBoard(ctx.actor, ctx.skill);
     const foe: 'party' | 'enemy' = own === 'party' ? 'enemy' : 'party';
     const ownTone: CellTone = 'ally';
     const skill = content.skills[ctx.skill];
-    const reserved = this.battle.fallenSlots(own).filter((s) => this.battle.freeSlots(own).includes(s));
+    // Madde 257: a fallen ally's cell is no longer reserved for summons (they may rise on the corpse), so this list is normally empty
+    const reserved = this.battle.fallenSlots(own).filter((s) => this.battle.freeSlots(own).includes(s) && !inp.slots.includes(s));
     const chosen = flow.corpseUid ? inp.choices.find((c) => c.uid === flow.corpseUid) : undefined;
     const consumed = new Set([...this.uiCorpses].filter(([, st]) => st === 'consumed').map(([uid]) => uid));
     const info = (title: string, rows: Array<{ text: string; tone: 'info' | 'good' | 'muted' | 'bad' }>, icon: string, badge: string): void => {
@@ -1048,10 +1073,82 @@ export class BattleScene extends Phaser.Scene {
     this.refreshConsumeHint();
   }
 
+  /**
+   * Resurrection (madde 257), same feel as Raise Dead: STEP 1 = your fallen allies are ally-tone plates (a cell taken by a summon is still pickable: the
+   * ally will rise elsewhere); STEP 2 = your empty cells are ally-tone plates, the chosen ally's corpse keeps a bright framed plate. Esc / 'Back' undoes.
+   */
+  private renderReviveFlow(ctx: { actor: string; skill: string }, flow: RaiseFlow, inp: RaiseInputs): void {
+    const own = this.battle.get(ctx.actor)!.side;
+    const skill = content.skills[ctx.skill];
+    const revive = skill?.effects.find((e) => e.type === 'revive');
+    const chosen = flow.corpseUid ? inp.choices.find((c) => c.uid === flow.corpseUid) : undefined;
+    const hint = reviveFlowHint(flow, chosen?.name);
+    const info = (title: string, rows: Array<{ text: string; tone: 'info' | 'good' | 'muted' | 'bad' }>): void => {
+      const hex = { info: colors.selected, good: colors.heal, muted: colors.muted, bad: colors.lethal };
+      this.hideInfoTip();
+      this.placeInfoTip(this.makeInfo(title, colors.text, skill ? ensureSkillIcon(this, skill) : ensureIcon(this, 'ankh', '#c9a853', true), rows.map((r): [string, string] => [r.text, hex[r.tone]]), hint.step || 'Revive'));
+    };
+    const standing = (slot: number) => this.battle.combatants.find((u) => u.hp > 0 && u.board === own && u.slot === slot);
+    if (flow.step === 'corpse') {
+      this.showBasePlates([{ board: own, specs: inp.choices.map((c) => ({ slot: c.slot, state: 'selectable' as const, tone: 'ally' as const })) }]);
+      this.bindCellZones([own], {
+        twoTap: false,
+        canPick: (_b, slot) => inp.choices.some((c) => c.slot === slot),
+        onHover: (b, slot) => {
+          const c = slot === null ? undefined : inp.choices.find((x) => x.slot === slot);
+          if (!c) {
+            this.clearAreaMarker();
+            this.hideInfoTip();
+            return;
+          }
+          this.showPlates(b, [{ slot: c.slot, state: 'ally' }]);
+          const u = this.battle.get(c.uid);
+          const hp = u && revive?.type === 'revive' ? Math.max(1, Math.round(u.maxHp * revive.hpRatio)) : 0;
+          const mp = u && revive?.type === 'revive' ? Math.round(u.maxMp * revive.mpRatio) : 0;
+          const tip = reviveCorpseTip({ name: c.name, hp, mp, taken: standing(c.slot)?.name ?? null });
+          info(tip.title, tip.rows);
+        },
+        onPick: (_b, slot) => {
+          const c = inp.choices.find((x) => x.slot === slot);
+          if (!c) return;
+          const res = pickCorpse(flow, inp, c.uid);
+          if (res.kind === 'state') {
+            this.raiseFlow = res.flow;
+            this.renderRaiseFlow();
+          }
+        },
+      });
+    } else {
+      const corpseCell = chosen && !inp.slots.includes(chosen.slot) ? [{ slot: chosen.slot, state: 'anchor' as const, tone: 'ally' as const }] : [];
+      this.showBasePlates([{ board: own, specs: [...inp.slots.map((slot) => ({ slot, state: (chosen?.slot === slot ? 'anchor' : 'selectable') as 'anchor' | 'selectable', tone: 'ally' as const })), ...corpseCell] }]);
+      this.bindCellZones([own], {
+        twoTap: false,
+        canPick: (_b, slot) => inp.slots.includes(slot),
+        onHover: (b, slot) => {
+          if (slot === null || !inp.slots.includes(slot)) {
+            this.clearAreaMarker();
+            if (slot !== null && chosen && slot === chosen.slot) info(`Chosen: ${chosen.name}`, [{ text: `${standing(slot)?.name ?? 'Someone'} stands on the corpse: choose an empty cell`, tone: 'muted' }, { text: 'Esc / Back to choose another ally', tone: 'info' }]);
+            else this.hideInfoTip();
+            return;
+          }
+          this.showPlates(b, [{ slot, state: 'hover', tone: 'ally' }]);
+          const tip = reviveSlotTip({ name: chosen?.name ?? 'The ally', row: this.battle.rowOf(slot), ownCell: chosen?.slot === slot });
+          info(tip.title, tip.rows);
+        },
+        onPick: (_b, slot) => {
+          const res = pickSlot(flow, inp, slot);
+          if (res.kind === 'cast' && res.corpseUid) this.perform(ctx.actor, ctx.skill, res.corpseUid, res.slot);
+        },
+      });
+    }
+    this.drawFlowStrip(flow, '', hint);
+    this.refreshConsumeHint();
+  }
+
   /** The hint strip under the turn bar: 'Step 1/2  Choose a corpse to consume' (step 2 also has a 'Back' chip for touch). */
-  private drawFlowStrip(flow: RaiseFlow, unitName: string): void {
+  private drawFlowStrip(flow: RaiseFlow, unitName: string, given?: { step: string; text: string }): void {
     this.flowStrip?.destroy(true);
-    const hint = raiseFlowHint(flow, unitName);
+    const hint = given ?? raiseFlowHint(flow, unitName);
     const items: Phaser.GameObjects.GameObject[] = [];
     const style = { fontFamily: SERIF, fontSize: '26px', fontStyle: 'bold', stroke: '#0c0805', strokeThickness: 3 };
     const stepTxt = hint.step ? this.add.text(0, 0, hint.step, { ...style, color: '#f2b84a' }).setOrigin(0, 0.5) : undefined;
@@ -1408,7 +1505,7 @@ export class BattleScene extends Phaser.Scene {
     if (reason) rows.push([reason, colors.lethal]);
     else if (def.kind === 'move') rows.push(['Click, then pick an empty cell (Esc cancels)', colors.targetHighlight]);
     if (def.kind === 'move' && this.battle.fallenSlots(actor.side).length > 0) rows.push(["A fallen ally's cell stays reserved for their resurrection", colors.muted]);
-    this.placeInfoTip(this.makeInfo(info.name, colors.text, ensureIcon(this, def.icon, GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e', true), rows, info.targetBadge, [{ text: info.cost, hex: colors.muted }]));
+    this.placeInfoTip(this.makeInfo(info.name, colors.text, ensureIcon(this, def.icon, GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e', true, SHARED_KEY), rows, info.targetBadge, [{ text: info.cost, hex: colors.muted }]));
   }
 
   /** The three small global buttons: a column at the right end of the command panel (they never touch the 4 skill buttons). */
@@ -1435,7 +1532,7 @@ export class BattleScene extends Phaser.Scene {
       };
       paint(false);
       const accent = GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e';
-      const icon = this.add.image(x + w / 2, y + h / 2, ensureIcon(this, def.icon, accent, false)).setDisplaySize(34, 34).setAlpha(enabled ? 1 : 0.35);
+      const icon = this.add.image(x + w / 2, y + h / 2, ensureIcon(this, def.icon, accent, false, SHARED_KEY)).setDisplaySize(34, 34).setAlpha(enabled ? 1 : 0.35);
       const bg = this.add.rectangle(x, y, w, h, 0x000000, 0.001).setOrigin(0, 0).setInteractive({ useHandCursor: enabled });
       bg.on('pointerover', () => this.showGlobalTip(actor, id));
       bg.on('pointerout', () => {
@@ -1533,7 +1630,8 @@ export class BattleScene extends Phaser.Scene {
   private onCombatantTap(view: CombatantView): void {
     if (this.selected && this.playerCanAct) {
       const { actor, skill } = this.selected;
-      if (this.battle.validTargets(actor, skill).some((c) => c.uid === view.combatant.uid)) {
+      // Resurrection (madde 257) is aimed with its two-step cell flow only (the cell is part of the choice)
+      if (!this.battle.isReviveSkill(skill) && this.battle.validTargets(actor, skill).some((c) => c.uid === view.combatant.uid)) {
         this.perform(actor, skill, view.combatant.uid);
         return;
       }
@@ -1791,7 +1889,7 @@ export class BattleScene extends Phaser.Scene {
       const px = sx + 84;
       items.push(
         this.add.circle(px + 20, p.y + 30, 20, color(colors.button)).setStrokeStyle(3, color(colors.tooltipBorder)),
-        this.add.image(px + 20, p.y + 30, ensureIcon(this, c.passive.icon, c.color, false)).setDisplaySize(26, 26),
+        this.add.image(px + 20, p.y + 30, ensureIcon(this, c.passive.icon, c.color, false, ownerOfUnit(c.defId))).setDisplaySize(26, 26),
         this.add.text(px + 20, p.y + 54, c.passive.name, { ...textStyle(13, colors.muted), strokeThickness: 3, wordWrap: { width: 64 }, align: 'center' }).setOrigin(0.5, 0),
       );
     }
@@ -1964,9 +2062,9 @@ export class BattleScene extends Phaser.Scene {
           this.announce(def.kind === 'rest' ? `${who} uses Rest` : def.kind === 'skip' ? `${who} skips the turn` : `${who} moves`);
         }
         if (def?.kind === 'rest') {
-          playSfx(this, 'gasp');
+          playSfx(this, 'gasp', SHARED_KEY);
           view?.ring(colors.mpFill, 0.9);
-        } else if (def?.kind === 'skip') playSfx(this, 'fistWhoosh');
+        } else if (def?.kind === 'skip') playSfx(this, 'fistWhoosh', SHARED_KEY);
         await this.wait(slow(120));
         return;
       }
@@ -1975,7 +2073,7 @@ export class BattleScene extends Phaser.Scene {
         const c = this.battle.get(e.actor);
         if (view && c) {
           const to = this.cellPos(c.board, e.to);
-          playSfx(this, 'armorRun');
+          playSfx(this, 'armorRun', SHARED_KEY);
           await view.moveTo(to.x, to.y);
         }
         this.refreshCommands();
@@ -2038,7 +2136,12 @@ export class BattleScene extends Phaser.Scene {
         this.uiCorpses.delete(e.target); // revived: its corpse mark is gone
         this.refreshCorpseMarks();
         if (this.rageShown.has(e.target)) this.setRageShown(e.target, 0);
-        this.views.get(e.target)?.revive(e.hpAfter, e.mpAfter);
+        {
+          // Madde 257: Resurrection may raise the ally on another (empty) cell than its corpse
+          const back = this.battle.get(e.target);
+          const moved = e.slot !== undefined && e.from !== undefined && e.slot !== e.from && back;
+          this.views.get(e.target)?.revive(e.hpAfter, e.mpAfter, moved ? this.cellPos(back.side, e.slot!) : undefined);
+        }
         await this.wait(slow(500));
         this.refreshCommands();
         return;
@@ -2202,8 +2305,11 @@ export class BattleScene extends Phaser.Scene {
     if (targets.length === 0 && !(center !== undefined && offensive)) return;
 
     // Piksel art skill efekti (src/game/vfx.ts): varsa genel hareket yerine o oynar
-    const vfx = skill.vfx ? VFX[skill.vfx as VfxKind] : undefined;
-    if (!vfx) for (const id of skill.sfx ?? []) playSfx(this, id); // efekti kodda olmayan skill'in sesleri başta çalar (Radiance)
+    // Sürüm farkında (debug > Versions): sahibinin v2'si seçiliyse ve karşılığı varsa v2 efekti/sesleri, yoksa v1 (src/game/vfx-versions.ts)
+    const resolved = resolveSkillVfx(skill);
+    const owner = resolved?.owner ?? ownerOfSkill(skill.id);
+    const vfx = resolved?.run;
+    if (!vfx) for (const id of skill.sfx ?? []) playSfx(this, id, owner); // efekti kodda olmayan skill'in sesleri başta çalar (Radiance)
     if (vfx) {
       const area = center !== undefined && this.battle.isAreaSkill(skillId);
       // Kapsanan hücreler hedef tahtasına göre (oyuncu tahtasında ayna doğru): olaydaki liste, yoksa tahtayla hesap
@@ -2235,7 +2341,7 @@ export class BattleScene extends Phaser.Scene {
         lunge: () => meleeApproach(this, actor, targets, area ? this.cellPos(board, center!) : undefined),
         windUp: (hex, anim = 'cast') => actor.windUp(hex, anim),
         sfx: (id) => {
-          if (skill.sfx?.includes(id)) playSfx(this, id);
+          if (skillSfxAllowed(skill, id, owner)) playSfx(this, id, owner);
         },
         gate: (skip, run, abort) => {
           this.abortHitGate();
@@ -2623,7 +2729,7 @@ export class BattleScene extends Phaser.Scene {
           const r = 17;
           const badge = [
             this.add.circle(cx + cellSize - r + 2, y + cellSize - r + 2, r, 0x000000, 0.8).setStrokeStyle(2, color(unit.color)),
-            this.add.image(cx + cellSize - r + 2, y + cellSize - r + 2, ensureIcon(this, unit.logo, unit.color, false)).setDisplaySize(r * 1.4, r * 1.4),
+            this.add.image(cx + cellSize - r + 2, y + cellSize - r + 2, ensureIcon(this, unit.logo, unit.color, false, ownerOfUnit(unit.defId))).setDisplaySize(r * 1.4, r * 1.4),
           ];
           if (isPast) {
             head.setAlpha(0.38).setTint(0x8a8a8a);
@@ -2761,7 +2867,7 @@ export class BattleScene extends Phaser.Scene {
     const passive = actor.passive!;
     const r = 36;
     const bg = this.add.circle(x + r, cy - 8, r, color(colors.button)).setStrokeStyle(4, color(colors.tooltipBorder));
-    const icon = this.add.image(x + r, cy - 8, ensureIcon(this, passive.icon, actor.color, false)).setDisplaySize(44, 44);
+    const icon = this.add.image(x + r, cy - 8, ensureIcon(this, passive.icon, actor.color, false, ownerOfUnit(actor.defId))).setDisplaySize(44, 44);
     const caption = this.add.text(x + r, cy + r - 2, 'PASSIVE', textStyle(14, colors.muted)).setOrigin(0.5, 0);
     bg.setInteractive();
     bg.on('pointerover', () => this.showPassiveTip(actor));
@@ -2773,7 +2879,7 @@ export class BattleScene extends Phaser.Scene {
     this.hideInfoTip();
     const passive = actor.passive;
     if (!passive) return;
-    this.placeInfoTip(this.makeInfo(passive.name, colors.targetHighlight, ensureIcon(this, passive.icon, actor.color, false), [[describePassive(passive, actor.stats, content.formulas)]], 'Passive'));
+    this.placeInfoTip(this.makeInfo(passive.name, colors.targetHighlight, ensureIcon(this, passive.icon, actor.color, false, ownerOfUnit(actor.defId)), [[describePassive(passive, actor.stats, content.formulas)]], 'Passive'));
   }
 
   /**
@@ -2809,7 +2915,7 @@ export class BattleScene extends Phaser.Scene {
       items.push(frameEdge);
 
       const nameY = avY + 11;
-      const logo = this.add.image(avX + 11, nameY, ensureIcon(this, actor.logo, actor.color, false)).setDisplaySize(15, 15);
+      const logo = this.add.image(avX + 11, nameY, ensureIcon(this, actor.logo, actor.color, false, ownerOfUnit(actor.defId))).setDisplaySize(15, 15);
       const nameText = this.add.text(avX + 22, nameY, actor.name, { fontFamily: SERIF, fontSize: '15px', fontStyle: 'bold', color: enemy ? colors.hpFillEnemy : '#f6e7c4', stroke: '#0c0805', strokeThickness: 3 }).setOrigin(0, 0.5);
       if (nameText.width > av - 28) nameText.setScale((av - 28) / nameText.width);
       items.push(logo, nameText);
@@ -2838,7 +2944,7 @@ export class BattleScene extends Phaser.Scene {
       items.push(frameEdge);
 
       const nameY = avY + 17;
-      const logo = this.add.image(avX + 18, nameY, ensureIcon(this, actor.logo, actor.color, false)).setDisplaySize(24, 24);
+      const logo = this.add.image(avX + 18, nameY, ensureIcon(this, actor.logo, actor.color, false, ownerOfUnit(actor.defId))).setDisplaySize(24, 24);
       const nameText = this.add.text(avX + 34, nameY, actor.name, { fontFamily: SERIF, fontSize: '22px', fontStyle: 'bold', color: enemy ? colors.hpFillEnemy : '#f6e7c4', stroke: '#0c0805', strokeThickness: 4 }).setOrigin(0, 0.5);
       if (nameText.width > av - 40) nameText.setScale((av - 40) / nameText.width);
       items.push(logo, nameText);
@@ -3014,6 +3120,7 @@ export class BattleScene extends Phaser.Scene {
       onTeamSelect: () => this.goToTeamSelect(),
       matchData: () => this.matchLogData(),
       preview,
+      actions: this.campaign && !preview ? this.campaign.resultActions(victory, this.battle) : undefined,
     });
   }
 }

@@ -149,7 +149,7 @@ function describeEventBody(battle: Battle, e: BattleEvent): string | null {
     case 'despawn':
       return `${L(e.target)} despawns`;
     case 'revive':
-      return `${L(e.source)} revives ${L(e.target)} (hp ${e.hpAfter}, mp ${e.mpAfter})`;
+      return `${L(e.source)} revives ${L(e.target)} (hp ${e.hpAfter}, mp ${e.mpAfter}${e.slot !== undefined ? `, cell ${e.slot}${e.from !== undefined && e.from !== e.slot ? `; corpse was on cell ${e.from}` : ''}` : ''})`;
     case 'mpRegen':
       return `${L(e.actor)} +${e.amount} MP (now ${e.after})${e.cause ? ` [${e.cause}]` : ''}`;
     case 'moved':
@@ -360,7 +360,7 @@ export class MatchLog {
       const s = c.stats;
       const prim = s.primary ? `${s.primary}${s.primaryActive ? ' (active)' : ' (inactive)'}${s.resilience ? ` resilience ${s.resilience}` : ''}${s.hunterMark ? ` hunterMark ${s.hunterMark}` : ''}${s.manaEcho ? ` manaEcho ${s.manaEcho}` : ''}${s.surviveChance ? ` surviveChance ${s.surviveChance}` : ''}` : 'none';
       lines.push(
-        `${unitLabel(c)} [${c.defId}] cell ${c.slot}${c.summoned ? ' (summon)' : ''} | STR ${s.str} INT ${s.int} DEX ${s.dex} LUCK ${s.luck} | maxHP ${c.maxHp} maxMP ${c.maxMp}${c.maxRage !== undefined ? ` maxRage ${c.maxRage}` : ''} spd ${s.spd} armor ${s.armor} marmor ${s.magicArmor} evasion ${r1(s.evasion * 100)}% accuracy ${r1(s.accuracy * 100)}% crit ${r1(s.critChance * 100)}% x${s.critMult} | regen hp ${s.hpRegen} mp ${s.mpRegen} | primary ${prim} | passive ${c.passive ? `${c.passive.name} ${JSON.stringify(c.passive.effect)}` : 'none'} | ai ${c.ai ?? 'default'} tags [${c.tags.join(',')}]`,
+        `${unitLabel(c)} [${c.defId}] cell ${c.slot}${c.summoned ? ' (summon)' : ''}${c.tier ? ` (${c.tier})` : ''}${c.modifiers ? ` mods ${JSON.stringify(c.modifiers)}` : ''} | STR ${s.str} INT ${s.int} DEX ${s.dex} LUCK ${s.luck} | maxHP ${c.maxHp} maxMP ${c.maxMp}${c.maxRage !== undefined ? ` maxRage ${c.maxRage}` : ''} spd ${s.spd} armor ${s.armor} marmor ${s.magicArmor} evasion ${r1(s.evasion * 100)}% accuracy ${r1(s.accuracy * 100)}% crit ${r1(s.critChance * 100)}% x${s.critMult} | regen hp ${s.hpRegen} mp ${s.mpRegen} | primary ${prim} | passive ${c.passive ? `${c.passive.name} ${JSON.stringify(c.passive.effect)}` : 'none'} | ai ${c.ai ?? 'default'} tags [${c.tags.join(',')}]`,
       );
       for (const id of c.skills) {
         const sk = b.skill(id);
@@ -460,7 +460,8 @@ const MAX_CANDIDATES = 8;
 function formatAi(ai: AiExplanation | { none: true }, compact: boolean): string[] {
   if ('none' in ai) return ['ai: (no explanation available)'];
   const out: string[] = [];
-  out.push(`ai: profile ${ai.profile} | priorities ${ai.priorities.join(' > ')} | focus ${ai.focusRule}`);
+  out.push(`ai: profile ${ai.profile} | decision: single value scale (one score per candidate, highest wins) | foe focus model ${ai.focusRule}`);
+  if (ai.winnerRule && !compact) out.push(`  rule: ${ai.winnerRule}`);
   out.push(`  WHY: ${ai.why}`);
   out.push(`  steps: ${ai.steps.map((s) => `${s.priority}=${s.result === 'picked' ? `PICKED ${s.detail}` : `none (${s.detail})`}`).join(' ; ')}`);
   out.push('  candidates:');
@@ -508,8 +509,9 @@ function candidateLine(c: AiExplanation['candidates'][number], withPer: boolean)
   if (c.summonValue !== undefined) parts.push(`summonValue ${c.summonValue}`);
   if (c.summonSlot !== undefined) parts.push(`-> own cell ${c.summonSlot}`);
   if (c.corpse) parts.push(`consumes ${c.corpse.unit} (danger ${c.corpse.danger}: ${c.corpse.why})${c.otherCorpses ? `; other corpses ${c.otherCorpses.map((x) => `${x.unit} danger ${x.danger}`).join(', ')}` : ''}`);
-  parts.push(`cost ${c.cost} net ${c.net}`);
-  if (c.score !== undefined) parts.push(`score ${c.score}`);
+  if (c.reviveSlot !== undefined) parts.push(`-> rises on own cell ${c.reviveSlot}`);
+  parts.push(`cost ${c.cost}`);
+  if (c.score !== undefined) parts.push(`SCORE ${c.score}${c.terms && Object.keys(c.terms).length > 0 ? ` = ${Object.entries(c.terms).map(([k, v]) => `${k} ${v}`).join(' + ')}` : ''}`);
   if (c.tags.length > 0) parts.push(`{${c.tags.join(',')}}`);
   parts.push(`[${c.verdict}${c.note ? `: ${c.note}` : ''}]`);
   return parts.join(' ');

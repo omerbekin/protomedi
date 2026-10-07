@@ -47,3 +47,6 @@ Kaynak: Ömer'in ChatGPT ile ürettirdiği iki Hexer görseli (1254x1254, arka p
 - Orijinaller: `source/characters-v2/hexer.webp|png` (kapüşonsuz, VARSAYILAN) ve `hexer-hood.webp|png` (kapüşonlu).
 - `sprites/hexer/idle.png` + `avatars/hexer.png` (kapüşonsuz); `sprites/hexer/idle-hood.png` + `avatars/hexer-hood.png` (kapüşonlu varyant). `tools/import-characters-v2.py --only hexer` ile üretildi; iki görünüm AYNI kırpma kutusunu kullanır (aynı ölçek ve ayak hizası).
 - Varyant altyapısı: `sprites/<id>/idle-<varyant>.png` + `avatars/<id>-<varyant>.png`; debug > Characters bölümünden seçilir. Sağa bakar.
+
+## Sefer haritası arka planı (campaign)
+Kaynak: Ömer'in ChatGPT ile ürettirdiği yazısız Valdoria haritası (`campaign/valdoria-bg.webp`, 1672x941, 16:9; referans: `docs/design/campaign/valdoria-map-reference.webp`, prompt `docs/design/campaign/campaign.md` 6.1). Lisans: Ömer'e ait. Harita sahnesi (`src/game/scenes/CampaignMapScene.ts`) ve ana menü arka planı olarak kullanılır; düğüm, yol, etiket ve sis üstüne kodla çizilir.

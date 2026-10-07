@@ -1,0 +1,161 @@
+{
+  "_not": "Sefer karşılaşmaları (PROVİZYON; docs/design/campaign/campaign.md 7.2). slot = sıra*3+şerit (0 en ön). mods = birim bazında güçlendirme/zayıflatma (motorun UnitModifiers'ı: hpMult, statMult, powerMult, spriteScale, actionsPerTurn...), name = özel ad (displayName), tier = elite | boss. 'fallback' = motor güçlendirmeyi desteklemezse oynanacak yedek takım (motor desteği geldi: şu an kullanılmıyor). fallbackOnly = yalnızca yedek olarak kullanılır. '(w)' tutorial zayıflatması 0.5/0.7, '+' elit lider 1.8/1.15, '++' bölge boss'u 2.5/1.25 (provizyon), '+++' final boss 3.0/1.35.",
+  "mill_road_thugs": {
+    "name": "Road Thugs",
+    "units": [
+      { "class": "warrior", "slot": 1, "name": "Road Thug", "mods": { "hpMult": 0.5, "statMult": 0.7 } },
+      { "class": "cutthroat", "slot": 0, "name": "Cutpurse", "mods": { "hpMult": 0.5, "statMult": 0.7 } }
+    ],
+    "fallback": "mill_road_thug_solo"
+  },
+  "mill_road_thug_solo": {
+    "name": "Road Thug",
+    "fallbackOnly": true,
+    "units": [{ "class": "warrior", "slot": 1, "name": "Road Thug" }]
+  },
+  "ravenwood_pack": {
+    "name": "Ravenwood Outlaws",
+    "units": [
+      { "class": "cutthroat", "slot": 0, "mods": { "hpMult": 0.5, "statMult": 0.7 } },
+      { "class": "warrior", "slot": 1, "mods": { "hpMult": 0.5, "statMult": 0.7 } },
+      { "class": "cutthroat", "slot": 2, "mods": { "hpMult": 0.5, "statMult": 0.7 } },
+      { "class": "archer", "slot": 6, "mods": { "hpMult": 0.5, "statMult": 0.7 } },
+      { "class": "archer", "slot": 8, "mods": { "hpMult": 0.5, "statMult": 0.7 } }
+    ],
+    "fallback": "ravenwood_pack_lite"
+  },
+  "ravenwood_pack_lite": {
+    "name": "Ravenwood Outlaws",
+    "fallbackOnly": true,
+    "units": [
+      { "class": "cutthroat", "slot": 0 },
+      { "class": "warrior", "slot": 1 },
+      { "class": "cutthroat", "slot": 2 }
+    ]
+  },
+  "watchtower_chief": {
+    "name": "The Bandit Chief",
+    "units": [
+      { "class": "warrior", "slot": 1, "name": "Bandit Chief", "tier": "elite", "mods": { "hpMult": 1.8, "statMult": 1.15 } },
+      { "class": "archer", "slot": 6, "mods": { "hpMult": 0.5, "statMult": 0.7 } },
+      { "class": "archer", "slot": 8, "mods": { "hpMult": 0.5, "statMult": 0.7 } }
+    ],
+    "fallback": "watchtower_chief_lite"
+  },
+  "watchtower_chief_lite": {
+    "name": "The Bandit Chief",
+    "fallbackOnly": true,
+    "units": [
+      { "class": "warrior", "slot": 1, "name": "Bandit Chief" },
+      { "class": "archer", "slot": 7 }
+    ]
+  },
+  "bog_ambush": {
+    "name": "Bog Lurkers",
+    "units": [
+      { "class": "warrior", "slot": 1 },
+      { "class": "druid", "slot": 6 },
+      { "class": "hexer", "slot": 8 }
+    ]
+  },
+  "iron_pass_ambush": {
+    "name": "Iron Pass Ambush",
+    "units": [
+      { "class": "cutthroat", "slot": 0 },
+      { "class": "cutthroat", "slot": 2 },
+      { "class": "archer", "slot": 7 }
+    ]
+  },
+  "mine_wardens": {
+    "name": "Mine Wardens",
+    "units": [
+      { "class": "defender", "slot": 0 },
+      { "class": "warrior", "slot": 1 },
+      { "class": "archer", "slot": 7 }
+    ]
+  },
+  "vault_keepers": {
+    "name": "Vault Keepers",
+    "units": [
+      { "class": "defender", "slot": 1 },
+      { "class": "paladin", "slot": 6 },
+      { "class": "antimage", "slot": 8 },
+      { "class": "paladin", "slot": 10 }
+    ]
+  },
+  "mercenary_camp": {
+    "name": "Sellswords",
+    "units": [
+      { "class": "warrior", "slot": 0 },
+      { "class": "defender", "slot": 1 },
+      { "class": "gambler", "slot": 4 },
+      { "class": "archer", "slot": 7 }
+    ]
+  },
+  "black_cathedral": {
+    "name": "The Undying Choir",
+    "units": [
+      { "class": "undead", "slot": 7, "name": "High Priest", "tier": "elite", "mods": { "hpMult": 1.8, "statMult": 1.15 } },
+      { "class": "undead", "slot": 6 },
+      { "class": "defender", "slot": 1 },
+      { "class": "hexer", "slot": 4 },
+      { "class": "mage", "slot": 10 }
+    ]
+  },
+  "bridge_warden": {
+    "name": "The Bridge Warden",
+    "units": [
+      { "class": "defender", "slot": 1, "name": "Bridge Warden", "tier": "boss", "boss": "giant", "mods": { "hpMult": 6, "statMult": 1.5, "spriteScale": 2, "actionsPerTurn": 2 } }
+    ],
+    "fallback": "bridge_warden_escort"
+  },
+  "bridge_warden_escort": {
+    "name": "The Bridge Warden",
+    "fallbackOnly": true,
+    "units": [
+      { "class": "defender", "slot": 1, "name": "Bridge Warden", "mods": { "hpMult": 2.5, "statMult": 1.25 } },
+      { "class": "archer", "slot": 6 },
+      { "class": "archer", "slot": 8 },
+      { "class": "paladin", "slot": 10 }
+    ]
+  },
+  "ashen_plain": {
+    "name": "Ashen Revenants",
+    "units": [
+      { "class": "warrior", "slot": 0 },
+      { "class": "warrior", "slot": 2 },
+      { "class": "undead", "slot": 7 },
+      { "class": "mage", "slot": 6 }
+    ]
+  },
+  "dragons_spine": {
+    "name": "Cult of the Drake",
+    "units": [
+      { "class": "mage", "slot": 7, "name": "Drake Priest", "tier": "elite", "mods": { "hpMult": 1.8, "statMult": 1.15 } },
+      { "class": "mage", "slot": 6 },
+      { "class": "druid", "slot": 8 },
+      { "class": "cutthroat", "slot": 0 },
+      { "class": "cutthroat", "slot": 2 }
+    ]
+  },
+  "siege_line": {
+    "name": "Morvane's Vanguard",
+    "units": [
+      { "class": "defender", "slot": 0 },
+      { "class": "defender", "slot": 2 },
+      { "class": "warrior", "slot": 1 },
+      { "class": "archer", "slot": 6 },
+      { "class": "archer", "slot": 8 }
+    ]
+  },
+  "lord_morvane": {
+    "name": "Lord Morvane",
+    "units": [
+      { "class": "undead", "slot": 7, "name": "Lord Morvane", "tier": "boss", "mods": { "hpMult": 3.0, "statMult": 1.35, "spriteScale": 1.4 } },
+      { "class": "defender", "slot": 1 },
+      { "class": "warrior", "slot": 0 },
+      { "class": "paladin", "slot": 10 },
+      { "class": "antimage", "slot": 6 }
+    ]
+  }
+}

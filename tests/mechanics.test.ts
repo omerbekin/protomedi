@@ -1285,7 +1285,7 @@ describe('Paladin: Resurrection', () => {
     expect(b.useSkill('party-1', 'resurrection', 'enemy-0').ok).toBe(false); // düşman
   });
 
-  it('yuvası başka bir birimce doldurulduysa diriltilemez; çağrılar diriltilemez', () => {
+  it('yuvası başka bir birimce doldurulsa da diriltilebilir (madde 257: seçilen boş hücreye); çağrılar diriltilemez', () => {
     const b = grid(cells({ 0: 'druid', 2: 'paladin' }), cells({ 0: 'archer' }));
     fall(b, 'party-0');
     const sk = ofType(act(b, 'party-1', 'resurrection', 'party-0'), 'revive').length; // druid düştü, yuva boş: dirilir
@@ -1294,11 +1294,17 @@ describe('Paladin: Resurrection', () => {
     const treant = ofType(act(c, 'party-0', 'summon_treant', undefined, 1), 'summon')[0]!.combatant.uid;
     c.get(treant)!.hp = 0; // çağrı düştü
     expect(c.validTargets('party-1', 'resurrection')).toEqual([]);
-    // druid düşer, yuvasına başka birim (düşman çağrısı gibi) oturursa diriltilemez
+    // warrior düşer, yuvasına başka birim oturur: yine hedef; seçilen boş hücrede dirilir, dolu hücre reddedilir
     const d = grid(cells({ 0: 'warrior', 2: 'paladin' }), cells({ 0: 'archer' }));
     fall(d, 'party-0');
     d.combatants.push({ ...d.get('enemy-0')!, uid: 'x', side: 'party', board: 'party', slot: 0, summoned: false, hp: 10 });
-    expect(d.validTargets('party-1', 'resurrection')).toEqual([]);
+    expect(d.validTargets('party-1', 'resurrection').map((u) => u.uid)).toEqual(['party-0']);
+    expect(d.useSkill('party-1', 'resurrection', 'party-0', 0)).toEqual({ ok: false, reason: 'That cell is not free' });
+    expect(d.useSkill('party-1', 'resurrection', 'party-0', 2)).toEqual({ ok: false, reason: 'That cell is not free' }); // Paladin'in hücresi
+    const r = d.useSkill('party-1', 'resurrection', 'party-0', 7);
+    expect(r.ok).toBe(true);
+    expect(d.get('party-0')).toMatchObject({ slot: 7, board: 'party' });
+    expect(d.get('party-0')!.hp).toBeGreaterThan(0);
   });
 
   it('diriltilen birim sırada yeniden oynar; savaş sonu kontrolü tekrar işler', () => {

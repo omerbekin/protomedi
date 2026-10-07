@@ -1,0 +1,84 @@
+{
+  "_not": "Anti-Mage - SÜRÜM 2 SESLERİ. Felsefe: zırhlı büyü avcısı: çelik kılıç savuruşu ('vuş' + metal), kesilen büyünün cızırtısı (tremolo'lu tiz gürültü), mananın emilmesi (aşağı süzülen dar bant 'şlurp'), boşluk = hava basıncı (alçak geçiren gürültü + kısa alçak gövde darbesi), rün tabletleri = taş/çelik tıkırtısı. Çan/sinüs çınlaması YOK. Yeni adlar (swordWhoosh, tabletClack, wardLock) yalnızca v2 efektlerinde. Kılavuz: docs/design/art-v2.md",
+  "sfx": {
+    "swordWhoosh": {
+      "gain": 2.223,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 300, "f1": 1400, "q": 1, "attack": 0.06, "decay": 0.14, "gain": 0.9 },
+        { "type": "noise", "filter": "bandpass", "f0": 2600, "f1": 3800, "q": 3, "attack": 0.05, "decay": 0.1, "gain": 0.2, "at": 0.03 },
+        { "type": "tone", "wave": "sawtooth", "f0": 70, "f1": 120, "attack": 0.06, "decay": 0.14, "gain": 0.12, "filter": { "type": "lowpass", "f": 250, "q": 0.7 } }
+      ]
+    },
+    "manaSizzle": {
+      "gain": 0.96,
+      "layers": [
+        { "type": "noise", "filter": "lowpass", "f0": 3000, "f1": 600, "q": 0.7, "attack": 0.001, "decay": 0.08, "gain": 0.8 },
+        { "type": "tone", "wave": "sine", "f0": 140, "f1": 55, "attack": 0.002, "decay": 0.15, "gain": 0.55 },
+        { "type": "noise", "filter": "bandpass", "f0": 2600, "f1": 2000, "q": 5, "attack": 0.001, "decay": 0.09, "gain": 0.25, "tremHz": 60, "tremDepth": 0.8 },
+        { "type": "noise", "filter": "highpass", "f0": 3500, "f1": 3500, "q": 0.7, "attack": 0.01, "decay": 0.35, "gain": 0.35, "at": 0.02, "tremHz": 71, "tremDepth": 0.95 },
+        { "type": "noise", "filter": "bandpass", "f0": 1800, "f1": 700, "q": 3, "attack": 0.01, "decay": 0.3, "gain": 0.3, "at": 0.03, "tremHz": 37, "tremDepth": 0.9 }
+      ]
+    },
+    "energySlurp": {
+      "gain": 3.69,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 2400, "f1": 300, "q": 2.5, "attack": 0.03, "decay": 0.5, "gain": 0.55, "tremHz": 14, "tremDepth": 0.5 },
+        { "type": "noise", "filter": "bandpass", "f0": 1000, "f1": 180, "q": 1.5, "attack": 0.05, "decay": 0.45, "gain": 0.35, "at": 0.05 },
+        { "type": "noise", "filter": "lowpass", "f0": 220, "f1": 140, "q": 0.7, "attack": 0.01, "decay": 0.18, "gain": 0.4, "at": 0.35 }
+      ]
+    },
+    "voidSuction": {
+      "gain": 4.017,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 2000, "f1": 300, "q": 2, "attack": 0.45, "decay": 0.5, "gain": 0.55, "tremHz": 8, "tremDepth": 0.5 },
+        { "type": "noise", "filter": "lowpass", "f0": 120, "f1": 80, "q": 0.7, "attack": 0.35, "decay": 0.8, "gain": 0.5 },
+        { "type": "noise", "filter": "bandpass", "f0": 500, "f1": 500, "q": 6, "attack": 0.3, "decay": 0.7, "gain": 0.3, "tremHz": 5, "tremDepth": 0.6 }
+      ]
+    },
+    "voidPulse": {
+      "gain": 0.952,
+      "layers": [
+        { "type": "tone", "wave": "sine", "f0": 80, "f1": 40, "attack": 0.02, "decay": 0.45, "gain": 0.8 },
+        { "type": "noise", "filter": "lowpass", "f0": 600, "f1": 200, "q": 0.7, "attack": 0.01, "decay": 0.4, "gain": 0.6 },
+        { "type": "noise", "filter": "bandpass", "f0": 220, "f1": 140, "q": 3, "attack": 0.02, "decay": 0.45, "gain": 0.35, "tremHz": 11, "tremDepth": 0.6 }
+      ]
+    },
+    "wardHum": {
+      "gain": 1.584,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 350, "f1": 350, "q": 7, "attack": 0.2, "decay": 0.9, "gain": 0.55, "tremHz": 6, "tremDepth": 0.4 },
+        { "type": "noise", "filter": "lowpass", "f0": 140, "f1": 140, "q": 0.7, "attack": 0.2, "decay": 0.9, "gain": 0.45 },
+        { "type": "noise", "filter": "bandpass", "f0": 1800, "f1": 1300, "q": 4, "attack": 0.001, "decay": 0.04, "gain": 0.6, "at": 0.25 },
+        { "type": "noise", "filter": "bandpass", "f0": 1500, "f1": 1100, "q": 4, "attack": 0.001, "decay": 0.04, "gain": 0.5, "at": 0.33 },
+        { "type": "tone", "wave": "sine", "f0": 90, "f1": 60, "attack": 0.002, "decay": 0.1, "gain": 0.35, "at": 0.25 }
+      ]
+    },
+    "implode": {
+      "gain": 0.66,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 300, "f1": 3200, "q": 1.2, "attack": 0.2, "decay": 0.02, "gain": 0.55 },
+        { "type": "tone", "wave": "sine", "f0": 110, "f1": 32, "attack": 0.002, "decay": 0.45, "gain": 1, "at": 0.22 },
+        { "type": "noise", "filter": "lowpass", "f0": 2500, "f1": 150, "q": 0.7, "attack": 0.002, "decay": 0.3, "gain": 0.85, "at": 0.22 },
+        { "type": "noise", "filter": "highpass", "f0": 3500, "f1": 3500, "q": 0.7, "attack": 0.001, "decay": 0.1, "gain": 0.4, "at": 0.22 },
+        { "type": "noise", "filter": "bandpass", "f0": 4000, "f1": 2500, "q": 3, "attack": 0.002, "decay": 0.2, "gain": 0.25, "at": 0.24, "tremHz": 70, "tremDepth": 0.9 }
+      ]
+    },
+    "tabletClack": {
+      "gain": 8.16,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 1500, "f1": 1300, "q": 5, "attack": 0.001, "decay": 0.03, "gain": 0.6 },
+        { "type": "noise", "filter": "bandpass", "f0": 1300, "f1": 1100, "q": 5, "attack": 0.001, "decay": 0.03, "gain": 0.5, "at": 0.06 },
+        { "type": "noise", "filter": "bandpass", "f0": 1700, "f1": 1400, "q": 5, "attack": 0.001, "decay": 0.03, "gain": 0.55, "at": 0.13 },
+        { "type": "noise", "filter": "lowpass", "f0": 400, "f1": 300, "q": 0.7, "attack": 0.001, "decay": 0.05, "gain": 0.3 }
+      ]
+    },
+    "wardLock": {
+      "gain": 0.9,
+      "layers": [
+        { "type": "tone", "wave": "sine", "f0": 120, "f1": 60, "attack": 0.002, "decay": 0.14, "gain": 0.6 },
+        { "type": "noise", "filter": "bandpass", "f0": 700, "f1": 400, "q": 2, "attack": 0.005, "decay": 0.25, "gain": 0.45, "tremHz": 9, "tremDepth": 0.5 },
+        { "type": "noise", "filter": "highpass", "f0": 3000, "f1": 3000, "q": 0.7, "attack": 0.001, "decay": 0.15, "gain": 0.2 }
+      ]
+    }
+  }
+}

@@ -109,7 +109,7 @@ describe('debug menüsü: bölümlü yapı', () => {
 
   it('wikide bulunan bilgi/galeri öğeleri debug menüsünde yok (Sounds sekmesi, assets/wiki düğmeleri, ses listesi)', () => {
     expect(DEBUG_TABS).not.toContain('Sounds');
-    expect(DEBUG_TABS).toEqual(['Quick', 'Battle', 'Unit', 'Skills', 'Rolls', 'Speed & View', 'Setup', 'Test Mode', 'Characters', 'Data']);
+    expect(DEBUG_TABS).toEqual(['Quick', 'Battle', 'Unit', 'Skills', 'Rolls', 'Speed & View', 'Setup', 'Campaign', 'Test Mode', 'Characters', 'Versions', 'Data']);
     expect(DEBUG_INFO_TAB).toBe('Data');
     const ids = [...actions.map((a) => a.id), ...panels.map((p) => p.id)];
     for (const gone of ['tools.sounds', 'tools.assets-wiki', 'ui.wiki', 'panel.sounds', 'panel.assets-wiki-link']) expect(ids, gone).not.toContain(gone);

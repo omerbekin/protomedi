@@ -237,7 +237,8 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
     } else if (e.type === 'heal') {
       add(`Heal ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)})${who}`);
     } else if (e.type === 'revive') {
-      add(`Revives the ally where it fell with ${pct(e.hpRatio)} HP and ${pct(e.mpRatio)} MP`);
+      add(`Choose a fallen ally, then choose an empty cell on your side: it rises there with ${pct(e.hpRatio)} HP and ${pct(e.mpRatio)} MP (even if something now stands on its corpse)`);
+      add('Needs at least one empty cell on your side; the revived ally starts with an empty turn bar');
       if (e.regen && e.regen.turns > 0 && e.regen.ratio > 0) add(`Then regenerates ${pct(e.regen.ratio)} of its max HP at the start of each of its next ${e.regen.turns} turns`);
     } else if (e.type === 'hot') {
       add(`Heal ${raw(e.scale, e.power)} per turn for ${e.turns} turns`);

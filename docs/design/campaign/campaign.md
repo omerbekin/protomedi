@@ -1,6 +1,6 @@
 # Sefer (Campaign) Tasarımı: Valdoria
 
-Durum: **TASLAK v3 (yalnızca belge; kod yazılmadı).** Yazan: campaign-dev. v1: 2026-10-07; v2: aynı gün, Ömer'in cevapları ve iki yeni referansla; v3: Ömer'in v2 sorularına cevaplarıyla (can, Ironman, Ashford'da takım değişimi, Morvane görünürlüğü).
+Durum: **v5; aşama 1 (MVP) KODLANDI (2026-10-07, madde 255):** `src/campaign/`, `data/campaign/`, `MainMenuScene`, `CampaignMapScene`, debug > Campaign, wiki > Campaign. Savaş bağlantısı engine-dev'in madde 251 arayüzüyle (güçlendirme, özel ad, rütbe, eksik canla başlama; yedek takımlar artık kullanılmıyor). Yazan: campaign-dev. v1: 2026-10-07; v2: aynı gün, Ömer'in cevapları ve iki yeni referansla; v3: Ömer'in v2 sorularına cevaplarıyla (can, Ironman, Ashford'da takım değişimi, Morvane görünürlüğü).
 
 Ömer'in isteği: "Böyle bir görsel var (Valdoria sefer haritası). Benim karakterlerden biri bunun üstünde yürüyecek ve sıradaki map'e gidecek. Orada farklı düşmanlarla karşılaşacağız. Bu map full İngilizce olacak. Progress sistemini ele alacak, battle mantığına karışmayacak."
 
@@ -22,7 +22,7 @@ Oyun içi metinler İngilizce, açıklamalar Türkçe. Sayılar (düşman sayıs
 | 6 | Boss: **ikisi de** (güçlendirilmiş lider + eskort VE tek dev düşman). |
 | 7 | Valdoria'dan sonra harita: **şimdilik yok**. |
 | 8 | Ana menü: **evet**. |
-| Harita | Dwarven Mine ile Misty Marsh **yer değiştirir**; **savaşsız akış kalmayacak**; St. Brann's Abbey **hazine** olur. |
+| Harita | Dwarven Mine ile Misty Marsh **yer değiştirir** (v5'te arazi nedeniyle geri alındı, Ömer seçimi b); **savaşsız akış kalmayacak**; St. Brann's Abbey **hazine** olur. |
 
 ### Ömer kararları (v3)
 | # | Karar |
@@ -40,6 +40,11 @@ Oyun içi metinler İngilizce, açıklamalar Türkçe. Sayılar (düşman sayıs
 | 1 | Ashford'da yeni takım **11 sınıfın tamamından serbestçe** seçilir; tutorial sınıfları da seçilebilir. İleri not: "sonra belki havuzu daraltırız". |
 | 2 | **4. karakter Valdren Keep'ten AYRILIRKEN katılır.** 5. karakter hâlâ açık. |
 | 3 | Yazısız harita arka planı geldi: `assets/campaign/valdoria-bg.webp` (1672x941). Düğüm konumları bu görsele göre yeniden ölçüldü (3.1, 6.1). |
+
+### Ömer kararları (v5)
+| # | Karar |
+|---|---|
+| 1 | Mine/Marsh için seçenek (b): konumlar geri alındı. Alt yol: 5A Misty Marsh "Battle · Bog Ambush" + 6A Witch's Hut (event). Üst yol: 5B Iron Pass (battle) + 6B Dwarven Mine "Treasure · Guarded". Alt yolu seçen rotalarda 9, üst yolu seçenlerde 10 savaş. |
 
 ---
 
@@ -129,10 +134,10 @@ Konum: **yazısız arka planın** (`assets/campaign/valdoria-bg.webp`, 1672x941)
 | 2 Ravenwood | büyük batı ormanının içi | evet |
 | 3 Ruined Watchtower | orman kuzey kenarı, tepelerin eteği | evet |
 | 4 Ashford Village | ormanın doğusundaki tarlaların kenarı | evet |
-| 5A Dwarven Mine | **bataklık gölcüklerinin kenarı, nehir yanı** | **hayır** (maden dağda olmalı) |
+| 5A Misty Marsh | bataklık gölcüklerinin kenarı, nehir yanı | evet (v5) |
 | 5B Iron Pass | iki karlı tepe arasındaki geçit eteği | evet |
 | 6A Witch's Hut | bataklığın güney kenarı | evet (cadı + bataklık) |
-| 6B Misty Marsh | **dağ eteği, kuru çayır** | **hayır** (bataklık yok) |
+| 6B Dwarven Mine | karlı tepelerin eteği | evet (v5) |
 | 7 Valdren Keep | nehir kenarı, tarlaların ortası | evet |
 | 8A St. Brann's Abbey | doğu ormanının güneyi, tepelerin eteği | evet |
 | 8B Mercenary Camp | nehrin güneyindeki tarlalar | evet |
@@ -143,7 +148,7 @@ Konum: **yazısız arka planın** (`assets/campaign/valdoria-bg.webp`, 1672x941)
 | 11B Siege Line | dağ eteğinde açık arazi | evet |
 | 12 Castle Morvane | yüksek karlı zirveler | evet |
 
-**Arazi uyuşmazlığı (Mine/Marsh):** Referansta Misty Marsh bataklığın, Dwarven Mine dağ eteğinin yanındaydı. Ömer'in istediği yer değiştirme bu ikisini ters araziye koyuyor (maden bataklıkta, bataklık dağ eteğinde). Belgede Ömer'in kararı korunuyor; çözüm önerisi 10. bölüm soru 1'de.
+**Arazi uyuşmazlığı (Mine/Marsh): ÇÖZÜLDÜ (v5).** v2'deki yer değişimi maden bataklığa, bataklık dağ eteğine düşürüyordu; Ömer (b)'yi seçti: konumlar geri alındı (Misty Marsh 5A bataklıkta, Dwarven Mine 6B dağ eteğinde), Misty Marsh pusu savaşı oldu.
 
 | No | Türkçe (referans) | **English name** | Type | **English subtitle** | Battle? | Region | x | y |
 |---|---|---|---|---|---|---|---|---|
@@ -151,10 +156,10 @@ Konum: **yazısız arka planın** (`assets/campaign/valdoria-bg.webp`, 1672x941)
 | 2 | Kuzgun Ormanı | **Ravenwood** | battle | Battle · Outlaw Pack | evet | I | 0.276 | 0.727 |
 | 3 | Yıkık Gözcü Kulesi | **Ruined Watchtower** | elite | Elite · Bandit Chief | evet | I | 0.339 | 0.591 |
 | 4 | Ashford Köyü | **Ashford Village** | town | Town · Rest, Recruits | hayır | I | 0.414 | 0.643 |
-| **5A** | **Cüce Madeni** (eski 6B) | **Dwarven Mine** | **treasure (guarded)** | **Treasure · Guarded** | **evet** | II | 0.494 | 0.805 |
+| 5A | Sisli Bataklık | **Misty Marsh** | **battle** | **Battle · Bog Ambush** | **evet** | II | 0.494 | 0.805 |
 | 5B | Demir Geçit | **Iron Pass** | battle | Battle · Ambush | evet | II | 0.452 | 0.497 |
 | 6A | Cadı Kulübesi | **Witch's Hut** | event | Event · Cursed Merchant | hayır | II | 0.565 | 0.856 |
-| **6B** | **Sisli Bataklık** (eski 5A) | **Misty Marsh** | event | Event | hayır | II | 0.542 | 0.497 |
+| 6B | Cüce Madeni | **Dwarven Mine** | **treasure (guarded)** | **Treasure · Guarded** | **evet** | II | 0.542 | 0.497 |
 | 7 | Valdren Kalesi | **Valdren Keep** | town (city) | City · Rest, Recruits | hayır | II | 0.625 | 0.635 |
 | **8A** | Aziz Brann Manastırı | **St. Brann's Abbey** | **treasure (guarded)** | **Treasure · Relic Vault** | **evet** | II | 0.706 | 0.455 |
 | 8B | Paralı Asker Kampı | **Mercenary Camp** | battle | Battle · Gold | evet | II | 0.725 | 0.696 |
@@ -166,8 +171,9 @@ Konum: **yazısız arka planın** (`assets/campaign/valdoria-bg.webp`, 1672x941)
 | 12 | Morvane Kalesi | **Castle Morvane** | boss (final) | Final Boss | evet | III | 0.924 | 0.170 |
 
 Değişikliklerin gerekçesi:
-- **Yer değiştirme:** Dwarven Mine alt dala (5A konumu), Misty Marsh üst dala (6B konumu) geçti. Düğüm kimlikleri konuma bağlı kaldı (5A/6B), bağlantılar aynı.
-- **Dwarven Mine = "Treasure · Guarded":** değişiklikten sonra alt dal (Mine + Witch's Hut) tamamen savaşsız kalıyordu (K1 ihlali; 4 kasaba + 5A + 6A + 7 şehir = 4 savaşsız durak art arda, K2 ihlali). Madeni koruyanlarla savaş, sonra sandık. Witch's Hut olay olarak kaldı (dalın tek "hikâye" durağı).
+- **Mine/Marsh (v5, Ömer seçimi b):** v2'deki yer değişimi geri alındı, çünkü yazısız arka planda maden bataklığa, bataklık kuru dağ eteğine düşüyordu. Misty Marsh yine bataklıkta (5A, alt yol), Dwarven Mine yine dağ eteğinde (6B, üst yol). Bağlantılar aynı.
+- **Misty Marsh = "Battle · Bog Ambush":** alt yol (Marsh + Witch's Hut) savaşsız kalmasın diye (K1) bataklık bir pusu savaşı oldu; Witch's Hut olay olarak kaldı (dalın "hikâye" durağı).
+- **Dwarven Mine = "Treasure · Guarded":** madeni koruyanlarla savaş, sonra sandık. Üst yolda Iron Pass ile birlikte 2 savaş.
 - **St. Brann's Abbey = "Treasure · Relic Vault" (guarded):** Ömer'in isteğiyle hazine oldu. Saf hazine olsaydı 6A/6B (olay) -> 7 (şehir) -> 8A (hazine) = 3 savaşsız durak art arda olurdu (K2 ihlali, iki dalda da). Bu yüzden kutsal emanet mahzenini koruyan bekçilerle savaş + sandık. Manastırın savaşı 8C elitten hafif tutulur: "düşük risk, emanet ödülü" rotası.
 - Kasabaların alt başlığında "Merchant" yerine **"Recruits"**: takım burada büyür (bkz. 4); tüccar ileride eklenince "Rest, Recruits, Merchant" olur.
 
@@ -197,25 +203,25 @@ Diğer İngilizce metinler: **VALDORIA** / **Campaign Map** / *From Mill Road to
 
 Seçim noktaları (çıkış > 1): 4, 7, 10. Birleşme noktaları (giriş > 1): 7, 9, 12. Dallar arası çapraz geçiş yok.
 
-### 3.3 Rota tablosu (12 rota, v2)
-Her rota: 1, 2, 3, 4, 5x, 6x, 7, 8x, 9, 10, 11x, 12 = **12 durak** (2 x 3 x 2 = 12 rota). Sabit savaşlar: 1, 2, 3 (elit), 9 (boss), 10, 12 (final boss) = 6. Her dalda tam bir savaş: alt dal 5A (guarded), üst dal 5B; 8A (guarded) / 8B / 8C (elit); 11A (elit) / 11B.
+### 3.3 Rota tablosu (12 rota, v5)
+Her rota: 1, 2, 3, 4, 5x, 6x, 7, 8x, 9, 10, 11x, 12 = **12 durak** (2 x 3 x 2 = 12 rota). Sabit savaşlar: 1, 2, 3 (elit), 9 (boss), 10, 12 (final boss) = 6. Dal savaşları: **alt dal 1** (5A Misty Marsh; 6A Witch's Hut olay), **üst dal 2** (5B Iron Pass + 6B Dwarven Mine korunan hazine); 8A (guarded) / 8B / 8C (elit) birer; 11A (elit) / 11B birer.
 
-| # | Rota | Savaş | Elit | Savaşsız duraklar | En uzun savaşsız seri |
-|---|---|---|---|---|---|
-| 1 | 5A-6A · 8A · 11A | 9 | 2 (3, 11A) | 4, 6A, 7 | 2 (6A-7) |
-| 2 | 5A-6A · 8A · 11B | 9 | 1 | 4, 6A, 7 | 2 |
-| 3 | 5A-6A · 8B · 11A | 9 | 2 | 4, 6A, 7 | 2 |
-| 4 | 5A-6A · 8B · 11B | 9 | 1 | 4, 6A, 7 | 2 |
-| 5 | 5A-6A · 8C · 11A | 9 | 3 | 4, 6A, 7 | 2 |
-| 6 | 5A-6A · 8C · 11B | 9 | 2 | 4, 6A, 7 | 2 |
-| 7 | 5B-6B · 8A · 11A | 9 | 2 | 4, 6B, 7 | 2 (6B-7) |
-| 8 | 5B-6B · 8A · 11B | 9 | 1 | 4, 6B, 7 | 2 |
-| 9 | 5B-6B · 8B · 11A | 9 | 2 | 4, 6B, 7 | 2 |
-| 10 | 5B-6B · 8B · 11B | 9 | 1 | 4, 6B, 7 | 2 |
-| 11 | 5B-6B · 8C · 11A | 9 | 3 | 4, 6B, 7 | 2 |
-| 12 | 5B-6B · 8C · 11B | 9 | 2 | 4, 6B, 7 | 2 |
+| # | Rota | Savaş | Elit | Korunan hazine | Savaşsız duraklar | En uzun savaşsız seri |
+|---|---|---|---|---|---|---|
+| 1 | 5A-6A · 8A · 11A | 9 | 2 | 1 | 4, 6A, 7 | 2 (6A-7) |
+| 2 | 5A-6A · 8A · 11B | 9 | 1 | 1 | 4, 6A, 7 | 2 (6A-7) |
+| 3 | 5A-6A · 8B · 11A | 9 | 2 | 0 | 4, 6A, 7 | 2 (6A-7) |
+| 4 | 5A-6A · 8B · 11B | 9 | 1 | 0 | 4, 6A, 7 | 2 (6A-7) |
+| 5 | 5A-6A · 8C · 11A | 9 | 3 | 0 | 4, 6A, 7 | 2 (6A-7) |
+| 6 | 5A-6A · 8C · 11B | 9 | 2 | 0 | 4, 6A, 7 | 2 (6A-7) |
+| 7 | 5B-6B · 8A · 11A | 10 | 2 | 2 | 4, 7 | 1 |
+| 8 | 5B-6B · 8A · 11B | 10 | 1 | 2 | 4, 7 | 1 |
+| 9 | 5B-6B · 8B · 11A | 10 | 2 | 1 | 4, 7 | 1 |
+| 10 | 5B-6B · 8B · 11B | 10 | 1 | 1 | 4, 7 | 1 |
+| 11 | 5B-6B · 8C · 11A | 10 | 3 | 1 | 4, 7 | 1 |
+| 12 | 5B-6B · 8C · 11B | 10 | 2 | 1 | 4, 7 | 1 |
 
-Sonuç: **her rotada 9 savaş** (v1'de 7-9 arasıydı), 3 savaşsız durak, en fazla 2 savaşsız durak art arda: K1 ve K2 sağlanıyor. Rotaları ayıran şey artık savaş sayısı değil **risk/ödül**: elit sayısı 1-3, hazine sayısı 0-2 (5A ve 8A korunan hazine).
+Sonuç (v5): **alt yol (5A-6A) 9 savaş, üst yol (5B-6B) 10 savaş.** Alt yolda 3 savaşsız durak (en fazla 2 art arda: 6A-7), üst yolda 2 (art arda en fazla 1). Her dalda en az bir savaş (K1) ve hiçbir rotada 2'den fazla savaşsız durak art arda yok (K2): kurallar sağlanıyor. Risk/ödül: alt yol bir savaş eksik + Witch's Hut olayı; üst yol bir savaş fazla ama Dwarven Mine hazinesi. Elit 1-3, korunan hazine 0-2 (6B ve 8A).
 
 ### 3.4 Taslak JSON (`data/campaign/valdoria.json`)
 ```json
@@ -239,10 +245,10 @@ Sonuç: **her rotada 9 savaş** (v1'de 7-9 arasıydı), 3 savaşsız durak, en f
     { "id": "2",   "type": "battle",   "name": "Ravenwood",         "subtitle": "Battle · Outlaw Pack",     "region": "I",   "pos": [0.276, 0.727], "encounter": "ravenwood_pack", "recruit": { "offer": 3, "pick": 1, "when": "before" }, "teaches": "area_attacks", "partyCap": 2 },
     { "id": "3",   "type": "elite",    "name": "Ruined Watchtower", "subtitle": "Elite · Bandit Chief",     "region": "I",   "pos": [0.339, 0.591], "encounter": "watchtower_chief", "teaches": "elites_and_choices" },
     { "id": "4",   "type": "town",     "name": "Ashford Village",   "subtitle": "Town · Rest, Recruits",    "region": "I",   "pos": [0.414, 0.643], "heal": 1.0, "endsTutorial": true, "newCompany": { "size": 3, "leader": "firstPick" }, "partyCap": 3 },
-    { "id": "5A",  "type": "treasure", "name": "Dwarven Mine",      "subtitle": "Treasure · Guarded",       "region": "II",  "pos": [0.494, 0.805], "encounter": "mine_wardens", "treasure": "dwarven_mine" },
+    { "id": "5A",  "type": "battle",   "name": "Misty Marsh",       "subtitle": "Battle · Bog Ambush",      "region": "II",  "pos": [0.494, 0.805], "encounter": "bog_ambush" },
     { "id": "5B",  "type": "battle",   "name": "Iron Pass",         "subtitle": "Battle · Ambush",          "region": "II",  "pos": [0.452, 0.497], "encounter": "iron_pass_ambush" },
     { "id": "6A",  "type": "event",    "name": "Witch's Hut",       "subtitle": "Event · Cursed Merchant",  "region": "II",  "pos": [0.565, 0.856], "event": "witchs_hut" },
-    { "id": "6B",  "type": "event",    "name": "Misty Marsh",       "subtitle": "Event",                    "region": "II",  "pos": [0.542, 0.497], "event": "misty_marsh" },
+    { "id": "6B",  "type": "treasure", "name": "Dwarven Mine",      "subtitle": "Treasure · Guarded",       "region": "II",  "pos": [0.542, 0.497], "encounter": "mine_wardens", "treasure": "dwarven_mine" },
     { "id": "7",   "type": "town",     "name": "Valdren Keep",      "subtitle": "City · Rest, Recruits",    "region": "II",  "pos": [0.625, 0.635], "city": true, "heal": 1.0, "recruit": { "offer": 3, "pick": 1, "when": "leave" }, "partyCap": 4 },
     { "id": "8A",  "type": "treasure", "name": "St. Brann's Abbey", "subtitle": "Treasure · Relic Vault",   "region": "II",  "pos": [0.706, 0.455], "encounter": "vault_keepers", "treasure": "relic_vault" },
     { "id": "8B",  "type": "battle",   "name": "Mercenary Camp",    "subtitle": "Battle · Gold",            "region": "II",  "pos": [0.725, 0.696], "encounter": "mercenary_camp" },
@@ -293,7 +299,7 @@ Sonuç: **her rotada 9 savaş** (v1'de 7-9 arasıydı), 3 savaşsız durak, en f
 6. Görsel 16:10, oyun 16:9 (arka plan 16:9 isteniyor).
 7. 10'un seçim rozeti 9'a yakın: rozet kendi etiketine bitişik konacak.
 8. Akış referansında Ashford 1. durak yazıyor (Ömer: dikkate alma; Ashford 4. durak).
-9. (v4) Yazısız arka planda Mine/Marsh yer değişimi araziyle çelişiyor (3.1 sonu); arka planda kül rengi ova yok (Ashen Plain).
+9. (v4) Arka planda kül rengi ova yok (Ashen Plain). Mine/Marsh arazi çelişkisi v5'te çözüldü.
 
 ---
 
@@ -467,8 +473,9 @@ Yuva = sıra*3+şerit (0 en ön). `(w)` = tutorial zayıflatması (`hpMult 0.5, 
 | 1 Mill Road | `mill_road_thugs` | Road Thugs | 1 | 2 | Warrior (w) (1), Cutthroat (w) (0) | 1 vs 1: Warrior (1) |
 | 2 Ravenwood | `ravenwood_pack` | Ravenwood Outlaws | 2 | 5 | Cutthroat (w) (0), Warrior (w) (1), Cutthroat (w) (2), Archer (w) (6), Archer (w) (8): ön sıra dolu, alan saldırısına davet | 2 vs 3: ön sıra 0, 1, 2 |
 | 3 Ruined Watchtower | `watchtower_chief` | The Bandit Chief | 2 | 3 | **Bandit Chief** Warrior+ (1), Archer (w) (6), Archer (w) (8) | 2 vs 2: Warrior (1), Archer (7) |
-| 5A Dwarven Mine | `mine_wardens` | Mine Wardens | 3 | 3 | Defender (0), Warrior (1), Archer (7) | aynı |
+| 5A Misty Marsh | `bog_ambush` | Bog Lurkers | 3 | 3 | Warrior (1), Druid (6), Hexer (8) (Witch's Hut'un hizmetkârları; ileride hazır Treant + "ambush") | aynı |
 | 5B Iron Pass | `iron_pass_ambush` | Iron Pass Ambush | 3 | 3 | Cutthroat (0), Cutthroat (2), Archer (7) | aynı (pusu ileride) |
+| 6B Dwarven Mine | `mine_wardens` | Mine Wardens | 3 | 3 | Defender (0), Warrior (1), Archer (7) | aynı |
 | 8A St. Brann's Abbey | `vault_keepers` | Vault Keepers | 4 | 4 | Defender (1), Paladin (6), Anti-Mage (8), Paladin (10) | aynı |
 | 8B Mercenary Camp | `mercenary_camp` | Sellswords | 4 | 4 | Defender (1), Warrior (0), Gambler (4), Archer (7) | aynı |
 | 8C Black Cathedral | `black_cathedral` | The Undying Choir | 4 | 5 | **High Priest** Undead+ (7), Undead (6), Defender (1), Hexer (4), Mage (10) (+ ileride 2 hazır Skeleton) | lidersiz aynı |
@@ -539,8 +546,12 @@ Kurallar (testlenecek): sınıflar `randomPool` içinde (Geometer yok), yuvalar 
 
 ---
 
-## 10. Ömer'e açık sorular (v4)
+## 9.1 Madde 256 kararları (uygulandı)
+- **Kayıt:** 3 sefer yuvası; her yuvada o seferin kendi kayıtları (Normal en fazla 5, Ironman 1). Load Game önce yuva, sonra kayıtlar; Continue en son oynanan yuva. 5.2'deki "en fazla 5" artık yuva başınadır.
+- **Genel zorluk:** Easy / Medium / Hard, sefer başında seçilir, sonra değişmez (`campaign.json > difficulties`; şimdilik yalnızca yapay zeka zorluğu; ileride savaş zorluğu, loot).
+- **5. karakter:** açık (karar beklenmiyor); takım şimdilik en fazla 4.
+- **Tutorial düşmanlarının gücü:** şimdilik olduğu gibi; sınıfların kendi dengesi bitince sefer moblarına göre ayarlanacak (balance-tester).
 
-1. **Mine/Marsh ve arazi:** yer değiştirmeden sonra Dwarven Mine bataklıkta, Misty Marsh kuru dağ eteğinde duruyor. Seçenekler: (a) olduğu gibi kalsın, adlar araziye uydurulsun: 5A "Flooded Mine" (sular basmış cüce madeni), 6B "Misty Heights" (sisli yayla); (b) **konumları geri değiştir, rotadaki sırayı koru (öneri):** bataklık düğümü yine bataklıkta, maden yine dağda olur. Bu durumda alt dal Misty Marsh (5A) + Witch's Hut (6A), üst dal Iron Pass (5B) + Dwarven Mine (6B) olur; alt dalda savaş kalmayacağı için Misty Marsh "Battle · Bog Ambush" olur, Dwarven Mine "Treasure · Guarded" kalır (üst dalda 2 savaş, kural yine sağlanır). Hangisi?
+## 10. Ömer'e açık sorular (v5)
 
-Önceki (v3) sorular cevaplandı (bkz. "Ömer kararları (v4)"); 5. karakterin yeri hâlâ açık (öneri: King's Bridge zaferi).
+Açık soru yok. Açık kalan tek konu: 5. karakterin ne zaman katılacağı (öneri: King's Bridge zaferi, Bölge III'e girerken).

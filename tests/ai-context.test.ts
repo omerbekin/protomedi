@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, chooseAction, content, previewSkill } from '../src/engine';
+import { Battle, chooseAction, content, explainChoice, previewSkill } from '../src/engine';
 import type { AiConfig, BattleSetup } from '../src/engine';
 
 /**
- * Yapay zeka bağlam testleri: her 4. skill (ve Judgment) için "koşul sağlanınca seçilir, sağlanmayınca seçilmez".
- * Bağlam kuralları veride (data/skills.json > skill.ai); karar saf ve belirleyicidir.
+ * Yapay zeka bağlam testleri: her 4. skill (ve Judgment) için "değerliyse seçilir, değilse seçilmez". Madde 257'den beri karar TEK DEĞER TERAZİSİ
+ * (src/engine/ai-value.ts): skill `ai` ipuçlarının requires/anyOf koşulları seçimi engellemez (yalnızca reserveMp sürer); beklentiler terazinin
+ * sonucudur. Karar saf ve belirleyicidir.
  */
 /** Bağlam kuralları global skill'siz YZ ile ölçülür (global skill kuralları: tests/ai-global.test.ts). */
 const ai: AiConfig = { ...content.aiConfig, global: undefined };
@@ -28,9 +29,9 @@ const ENEMY_FRONT_TRIO = { 0: 'warrior', 3: 'warrior', 1: 'warrior' }; // yan ya
 const choose = (b: Battle, uid = 'party-0') => chooseAction(b, uid, ai);
 
 describe('YZ bağlam: Mage - Meteor', () => {
-  it('alan en az 2 düşmanı vuruyorsa Meteor seçilir (bağlamsal; "tactic")', () => {
+  it('alan en az 2 düşmanı vuruyorsa Meteor seçilir (vurulanların toplamı en yüksek değer)', () => {
     const b = mk({ 0: 'mage' }, ENEMY_FRONT_TRIO);
-    expect(choose(b)).toMatchObject({ skillId: 'meteor', reason: 'tactic' });
+    expect(choose(b)).toMatchObject({ skillId: 'meteor', reason: 'aoe' });
   });
 
   it('tek düşman varken (öldürmüyorsa) Meteor seçilmez', () => {
@@ -44,17 +45,20 @@ describe('YZ bağlam: Mage - Meteor', () => {
 describe('YZ bağlam: Archer - Aimed Shot', () => {
   it('zırhlı, yüksek canlı hedefe (Defender) Aimed Shot seçilir', () => {
     const b = mk({ 0: 'archer' }, { 0: 'defender' });
-    expect(choose(b)).toMatchObject({ skillId: 'aimed_shot', targetUid: 'enemy-0', reason: 'tactic' });
+    expect(choose(b)).toMatchObject({ skillId: 'aimed_shot', targetUid: 'enemy-0' });
   });
 
-  it('zırhsız ve (hasara göre) az canlı hedefe seçilmez', () => {
-    const b = mk({ 0: 'archer' }, { 0: 'mage' });
-    const mage = b.get('enemy-0')!;
-    mage.stats.armor = 0;
-    const avg = previewSkill(b, 'party-0', 'aimed_shot', 'enemy-0')[0]!.damage!.avg;
-    mage.hp = Math.round(avg * 1.5); // öldürmez, ama can/hasar < hint eşiği
-    expect(mage.hp).toBeGreaterThan(avg);
-    expect(choose(b)?.skillId).not.toBe('aimed_shot');
+  it('turns modunda ultimate\'a küçük cooldown bedeli eklenir (K5); test modunda yok', () => {
+    const t = mk({ 0: 'archer' }, { 0: 'mage' }, 'turns');
+    while (t.currentUid !== 'party-0') t.skipTurn();
+    t.get('party-0')!.cooldowns = {};
+    t.get('party-0')!.mp = t.get('party-0')!.maxMp;
+    const aimed = explainChoice(t, 'party-0', ai)!.candidates.find((c) => c.skill === 'aimed_shot')!;
+    expect(aimed.terms!.cooldown).toBeLessThan(0);
+    const free = explainChoice(t, 'party-0', ai)!.candidates.find((c) => c.skill === 'quick_shot')!;
+    expect(free.terms!.cooldown).toBeUndefined();
+    const test = explainChoice(mk({ 0: 'archer' }, { 0: 'mage' }), 'party-0', ai)!.candidates.find((c) => c.skill === 'aimed_shot')!;
+    expect(test.terms!.cooldown).toBeUndefined();
   });
 
   it('öldürebiliyorsa Aimed Shot da aday (bağlam: kill)', () => {
@@ -72,10 +76,11 @@ describe('YZ bağlam: Archer - Aimed Shot', () => {
 describe('YZ bağlam: Defender - Fist Crush', () => {
   const taunting = (b: Battle) => b.get('party-0')!.statuses.push({ kind: 'taunt', turns: 3, source: 'party-0' });
 
-  it('karşıda en az 3 düşman varsa Fist Crush seçilir', () => {
+  it('karşıda en az 3 düşman varsa Fist Crush seçilir (Tremor Slam\'in Slow\'u zaten varken)', () => {
     const b = mk({ 0: 'defender', 1: 'warrior' }, { 0: 'warrior', 1: 'mage', 2: 'archer', 4: 'druid' });
-    taunting(b); // taunt önceliği kapalı: yalnızca bağlam sınanır
-    expect(choose(b)).toMatchObject({ skillId: 'fist_crush', reason: 'tactic' });
+    taunting(b); // Taunt zaten açık
+    for (const e of b.combatants.filter((c) => c.side === 'enemy')) e.statuses.push({ kind: 'slow', turns: 9, source: 'x' }); // Slow değeri yok
+    expect(choose(b)).toMatchObject({ skillId: 'fist_crush' });
   });
 
   it('karşıda 3\'ten az düşman varsa seçilmez', () => {
@@ -100,7 +105,7 @@ describe('YZ bağlam: Paladin - Radiance / Judgment', () => {
 
   it('kümelenmiş düşmana (alanda en az 2) Judgment seçilir; tek düşmana seçilmez', () => {
     const many = mk({ 0: 'paladin', 1: 'warrior' }, ENEMY_FRONT_TRIO);
-    expect(choose(many)).toMatchObject({ skillId: 'judgment', reason: 'tactic' });
+    expect(choose(many)).toMatchObject({ skillId: 'judgment' });
     const one = mk({ 0: 'paladin', 1: 'warrior' }, { 0: 'warrior' });
     expect(choose(one)?.skillId).not.toBe('judgment');
   });
@@ -146,7 +151,7 @@ describe('YZ bağlam: Gambler - All In', () => {
   const longBattle = (hint = content.skills.all_in!.ai!) => (hint.anyOf?.find((c) => c.minBattleTurns !== undefined)?.minBattleTurns ?? 0) + 1;
 
   it('MP yüksek ve savaş uzadıysa All In seçilir', () => {
-    expect(choose(gambler(1, longBattle()))).toMatchObject({ skillId: 'all_in', reason: 'tactic' });
+    expect(choose(gambler(1, longBattle()))).toMatchObject({ skillId: 'all_in' });
   });
 
   it('MP düşükken seçilmez (bahis küçük kalır)', () => {
@@ -154,8 +159,10 @@ describe('YZ bağlam: Gambler - All In', () => {
     expect(choose(gambler(low, longBattle()))?.skillId).not.toBe('all_in');
   });
 
-  it('savaşın başında ve hedef öldürülemiyorsa seçilmez', () => {
-    expect(choose(gambler(1, 0))?.skillId).not.toBe('all_in');
+  it('MP bahsinin beklenen kaybı bedele eklenir (terazi: bahis değeri kendinden; savaş turu koşulu yok)', () => {
+    const ex = explainChoice(gambler(1, 0), 'party-0', ai)!;
+    const allIn = ex.candidates.find((c) => c.skill === 'all_in')!;
+    expect(allIn.cost).toBeGreaterThan(content.skills.all_in!.cost.amount * ai.profiles.gambler!.mpCostWeight);
   });
 });
 
@@ -164,7 +171,7 @@ describe('YZ bağlam: Anti-Mage - Void Strike', () => {
     const drained = mk({ 0: 'antimage' }, { 0: 'mage' });
     drained.get('enemy-0')!.hp = drained.get('enemy-0')!.maxHp = 5000; // mana yakılmış hedef öldürülmesin: bağlam "tactic" olarak sınanır
     drained.get('enemy-0')!.mp = 0;
-    expect(choose(drained)).toMatchObject({ skillId: 'void_strike', reason: 'tactic' });
+    expect(choose(drained)).toMatchObject({ skillId: 'void_strike' });
     const full = mk({ 0: 'antimage' }, { 0: 'mage' });
     full.get('enemy-0')!.hp = full.get('enemy-0')!.maxHp = 5000;
     expect(choose(full)?.skillId).not.toBe('void_strike');
@@ -176,13 +183,14 @@ describe('YZ bağlam: Warrior - Abyssal Cry (can bedeli + %50 hasar azaltma)', (
   const war = (tweak?: (b: Battle) => void) => {
     const b = mk({ 0: 'warrior', 1: 'paladin', 2: 'druid' }, FOES);
     b.get('party-0')!.rage = b.get('party-0')!.maxRage; // Abyssal Cry Rage ister (bedel: rage)
+    b.get('party-0')!.mp = 0; // Charge (Stun) / Whirlwind yok: Abyssal Cry yalnızca bedelsiz Double Strike ile yarışsın
     tweak?.(b);
     return b;
   };
   const cry = content.skills.abyssal_cry!;
   const cost = () => (cry.effects.find((e) => e.type === 'selfDamage') as { ratio: number }).ratio;
 
-  it('mevcut mantık: yeterli canda ve tehdit varken seçilir (kill/aoe\'dan önce, "tactic")', () => {
+  it('yeterli canda ve tehdit varken seçilir (önlenen hasar + hasar artışı, en iyi saldırıdan büyük)', () => {
     expect(choose(war())).toMatchObject({ skillId: 'abyssal_cry', reason: 'tactic' });
   });
 
@@ -194,18 +202,9 @@ describe('YZ bağlam: Warrior - Abyssal Cry (can bedeli + %50 hasar azaltma)', (
     }
   });
 
-  it('bedeli ödeyip eşiğin üstünde kalacak kadar yüksek canda seçilir', () => {
-    const min = cry.ai!.requires!.minSelfHpRatioAfter!;
-    const b = war((x) => (x.get('party-0')!.hp = Math.ceil(x.get('party-0')!.maxHp * (min + cost() + 0.1))));
-    expect(choose(b)?.skillId).toBe('abyssal_cry');
-  });
-
-  it('tek başına (başka canlı dost yok) seçilmez', () => {
-    const b = war((x) => {
-      x.get('party-1')!.hp = 0;
-      x.get('party-2')!.hp = 0;
-    });
-    expect(choose(b)?.skillId).not.toBe('abyssal_cry');
+  it('bedeli ödedikten sonra gelecek vuruşlara dayanacak kadar canlıyken seçilir; dayanamayacaksa seçilmez (terazi: ölüm riski)', () => {
+    expect(choose(war())?.skillId).toBe('abyssal_cry'); // tam can: 5 düşmanın odağında olsa da dayanır
+    expect(choose(war((x) => (x.get('party-0')!.hp = Math.ceil(x.get('party-0')!.maxHp * (cost() + 0.05)))))?.skillId).not.toBe('abyssal_cry');
   });
 
   it('karşıda tek düşman varsa (tehdit yok) seçilmez', () => {
@@ -231,9 +230,12 @@ describe('YZ bağlam: Warrior - Abyssal Cry (can bedeli + %50 hasar azaltma)', (
     expect(choose(b)?.skillId).not.toBe('abyssal_cry');
   });
 
-  it('öldürebiliyorsa önce öldürür (öncelik sırası bozulmadı)', () => {
-    const b = war((x) => (x.get('enemy-0')!.hp = 1));
-    expect(choose(b)).toMatchObject({ reason: 'kill' });
+  it('öldürme seçeneği öldürme terimini taşır; seçim en yüksek puandır (sabit "önce öldür" yok, K1)', () => {
+    const b = war((x) => (x.get('enemy-1')!.hp = 1));
+    const ex = explainChoice(b, 'party-0', ai)!;
+    const killer = ex.candidates.find((c) => c.kills.includes('E1:Archer'))!;
+    expect(killer.terms!.kill).toBeGreaterThan(0);
+    expect(ex.candidates.find((c) => c.verdict === 'chosen')!.score).toBe(Math.max(...ex.candidates.map((c) => c.score ?? -Infinity)));
   });
 
   it('seçilirse gerçekten oynanır: can bedeli ödenir ve Fortified verilir', () => {
@@ -268,7 +270,10 @@ describe('YZ bağlam: MP ayırma ve genel özellikler', () => {
     while (free.currentUid !== 'party-0') free.skipTurn();
     a2.cooldowns.aimed_shot = 1;
     a2.mp = need + piercing - 1 - a2.stats.mpRegen;
-    expect(choose(free)?.skillId).toBe('piercing_arrow');
+    const pierce = explainChoice(free, 'party-0', ai)!.candidates.filter((c) => c.skill === 'piercing_arrow');
+    expect(pierce.length).toBeGreaterThan(0);
+    expect(pierce.every((c) => c.verdict !== 'blocked')).toBe(true); // ayırma yoksa engel yok (terazi seçer)
+    expect(explainChoice(b, 'party-0', ai)!.candidates.filter((c) => c.skill === 'piercing_arrow').every((c) => c.verdict === 'blocked')).toBe(true);
   });
 
   it('karar saf ve belirleyici: aynı durumda aynı seçim, savaş durumunu değiştirmez', () => {
@@ -280,7 +285,7 @@ describe('YZ bağlam: MP ayırma ve genel özellikler', () => {
     expect(JSON.stringify(b.combatants)).toBe(before);
   });
 
-  it('tüm 4. skill\'lerde ve Judgment\'ta bağlam ipucu (ai) tanımlı; yuva ağırlığı kalmadı', () => {
+  it('tüm 4. skill\'lerde ve Judgment\'ta bağlam ipucu (ai) tanımlı (artık yalnızca reserveMp ve açıklama); yuva ağırlığı kalmadı', () => {
     for (const cl of Object.values(content.classes).filter((c) => !c.testOnly)) {
       const id = cl.skills[3]!;
       if (cl.id === 'druid' || cl.id === 'undead') continue; // çağrılar: "summon" önceliği bağlamı verir (maxSummons, boş yer, MP)

@@ -305,7 +305,7 @@ function omenPreview(battle: Battle, actor: Combatant, skill: SkillDef, target: 
     const doom = def.doom;
     if (!doom || (!det && omens < max)) return undefined;
     const mult = det ? det.mult : 1;
-    const r = battle.doomRange(target, kind, omens, mult, actor.stats[doom.scale]);
+    const r = battle.doomRange(target, kind, omens, mult, actor.stats[doom.scale] * (actor.stats.spellPowerMult ?? 1)); // = Battle.doomStat
     if (!r) return undefined;
     const soak = doom.damageType === 'magic' ? p.magicShield + p.shield : p.shield;
     return { min: r.min, max: r.max, avg: r.avg, critMax: Math.round(r.max * actor.stats.critMult), critChance: battle.effectiveStats(actor).critChance, omens, mult, cause: det ? 'detonate' : 'complete', hpLoss: Math.min(p.hp, Math.max(0, r.avg - soak)) };

@@ -26,7 +26,7 @@ import type { AiConfig } from './ai';
 import type { BattleSetup } from './battle';
 import { Rng } from './rng';
 import { buildDef } from './stats';
-import type { BattleMode, CombatantData, CombatantDef, Formulas, GlobalSkillDef, GroundDef, SkillDef, StatusDef } from './types';
+import type { BattleMode, CombatantData, CombatantDef, Formulas, GlobalSkillDef, GroundDef, SkillDef, StatusDef, UnitSetup } from './types';
 
 export interface BattleDef {
   id: string;
@@ -103,6 +103,18 @@ export const DEFAULT_BATTLE = 'random-battle';
 export interface Teams {
   party: string[];
   enemies: string[];
+  /** Opsiyonel birim kurulumları (güçlendirme, özel ad, başlangıç canı...); bkz. TeamUnits. Yoksa savaş birebir eskisi gibidir. */
+  units?: TeamUnits;
+}
+
+/**
+ * Birim kurulumları (UnitSetup) taraf başına, ANAHTAR = verilen listedeki konum: `arrange` false iken (hücre listesi; BattleScene ve sefer böyle
+ * kurar) hücre/yuva numarası, `arrange` true iken sınıf listesindeki dizin (otomatik dizilimden önceki sıra). Dizi ya da { [anahtar]: UnitSetup } olabilir.
+ * Yalnızca o taraf için liste VERİLMİŞSE uygulanır (seed'le çekilen tarafa uygulanmaz).
+ */
+export interface TeamUnits {
+  party?: Record<number, UnitSetup | undefined> | (UnitSetup | undefined)[];
+  enemies?: Record<number, UnitSetup | undefined> | (UnitSetup | undefined)[];
 }
 
 /**
@@ -132,10 +144,15 @@ function lookup<T>(table: Record<string, T>, id: string, what: string): T {
  * Slot 0 en öndedir; yakın dövüşün menzili ve hedeflenme sırası buna göre belirlenir.
  */
 export function arrangeTeam(ids: string[]): string[] {
+  return arrangeOrder(ids).map((i) => ids[i]!);
+}
+
+/** arrangeTeam'in sırası, girdi dizinleri olarak (birim kurulumlarını dizilmiş listeye taşımak için). */
+function arrangeOrder(ids: string[]): number[] {
   return ids
     .map((id, i) => ({ id, i, melee: isMeleeClass(id) ? 0 : 1, p: (classes[id] ?? summons[id])?.frontPriority ?? 99 }))
     .sort((a, b) => a.melee - b.melee || a.p - b.p || a.i - b.i)
-    .map((x) => x.id);
+    .map((x) => x.i);
 }
 
 /**
@@ -268,8 +285,14 @@ export function randomCells(ids: string[], seed: number): string[] {
 export function battleSetup(battleId: string, seed: number, mode: BattleMode = 'turns', teams?: Partial<Teams> & TeamSizes, arrange = true): BattleSetup {
   const def = lookup(battles, battleId, 'Savaş');
   // Her taraf için {birim listesi, her birimin yuvası}. Birim sırası (uid'ler) girdi sırasıdır.
-  const layout = (ids: string[], slots: number[]) => ({ ids: ids.filter((_, i) => slots[i]! >= 0), slots: slots.filter((s) => s >= 0) });
-  const fromCells = (cells: string[]) => {
+  // keys: her birimin verilen listedeki konumu (hücre listesinde yuva, sınıf listesinde dizin): birim kurulumları (teams.units) bununla eşlenir
+  type Built = { ids: string[]; slots: number[]; keys?: number[] };
+  const layout = (ids: string[], slots: number[], keys?: number[]): Built => ({
+    ids: ids.filter((_, i) => slots[i]! >= 0),
+    slots: slots.filter((s) => s >= 0),
+    ...(keys ? { keys: keys.filter((_, i) => slots[i]! >= 0) } : {}),
+  });
+  const fromCells = (cells: string[]): Built => {
     const ids: string[] = [];
     const slots: number[] = [];
     cells.forEach((id, slot) => {
@@ -278,29 +301,47 @@ export function battleSetup(battleId: string, seed: number, mode: BattleMode = '
         slots.push(slot);
       }
     });
-    return { ids, slots };
+    return { ids, slots, keys: [...slots] };
   };
   const random = !!def.random;
   const rolled = teams?.party && teams.enemies ? undefined : rollTeams(battleId, seed, { partySize: teams?.partySize, enemySize: teams?.enemySize });
-  const build = (given: string[] | undefined, rolledIds: string[] | undefined, mix: number): { ids: string[]; slots: number[] } => {
+  const build = (given: string[] | undefined, rolledIds: string[] | undefined, mix: number): Built => {
     if (given) {
       if (!arrange) return fromCells(given); // hücre listesi (oyuncunun seçim ekranında elle dizdiği; dizin = yuva, '' = boş)
       // sınıf listesi: önce önceliğe göre sıralanır, sonra otomatik dizilir
-      const a = arrangeTeam(given.slice(0, CELL_COUNT));
-      return layout(a, defaultSlots(a));
+      const list = given.slice(0, CELL_COUNT);
+      const order = arrangeOrder(list);
+      const a = order.map((i) => list[i]!);
+      return layout(a, defaultSlots(a), order);
     }
     const ids = rolledIds ?? [];
     return layout(ids, random ? randomSlots(ids, seed ^ mix) : defaultSlots(ids));
   };
   const party = build(teams?.party, rolled?.party, 0x1111);
   const enemies = build(teams?.enemies, rolled?.enemies, 0x2222);
+  // Sınıf ya da (hazır çağrı olarak) data/summons birimi
+  const unitDef = (id: string): CombatantDef => classes[id] ?? lookup(summons, id, 'Class');
+  // Birim kurulumları: verilen kurulum + çağrı id'leri için summoned bayrağı. Hiçbir birimde kurulum yoksa alan hiç yazılmaz (eski davranış).
+  const unitsFor = (b: Built, given: TeamUnits['party']): (UnitSetup | undefined)[] | undefined => {
+    const out = b.ids.map((id, i) => {
+      const key = b.keys?.[i];
+      const u = key !== undefined && given ? (given as Record<number, UnitSetup | undefined>)[key] : undefined;
+      if (!classes[id] && summons[id]) return { summoned: true, ...(u ?? {}) };
+      return u;
+    });
+    return out.some((u) => u !== undefined) ? out : undefined;
+  };
+  const partyUnits = unitsFor(party, teams?.units?.party);
+  const enemyUnits = unitsFor(enemies, teams?.units?.enemies);
   return {
     seed,
     mode,
-    party: party.ids.map((id) => lookup(classes, id, 'Class')),
-    enemies: enemies.ids.map((id) => lookup(classes, id, 'Class')),
+    party: party.ids.map(unitDef),
+    enemies: enemies.ids.map(unitDef),
     partySlots: party.slots,
     enemySlots: enemies.slots,
+    ...(partyUnits ? { partyUnits } : {}),
+    ...(enemyUnits ? { enemyUnits } : {}),
     skills,
     globalSkills,
     statuses,

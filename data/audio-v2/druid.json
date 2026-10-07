@@ -1,0 +1,775 @@
+{
+  "_not": "Druid - SÜRÜM 2 SESLERİ (boş iskelet; content-designer doldurur). Şema data/audio.json > sfx ile aynı (katmanlar: tone, noise, voice, pluck). Anahtar = v1 ses adı (aynı adla yazılan ses, Druid v2 seçiliyken v1'in yerine çalar); yeni adlar da eklenebilir (v2 efekti c.sfx('yeniAd') ile çalar). Bu sahibin v1 sesleri: whipWind, whipCrack, leafRustle, rootsRumble, thud, chimeHeal, woodCreak, woodSmash, vineLash, rootGrip. Kılavuz: docs/design/art-v2.md",
+  "sfx": {
+    "whipWind": {
+      "gain": 1.73,
+      "layers": [
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 450,
+          "f1": 2400,
+          "q": 0.9,
+          "attack": 0.08,
+          "decay": 0.16,
+          "gain": 0.85
+        },
+        {
+          "type": "noise",
+          "filter": "highpass",
+          "f0": 5000,
+          "f1": 5000,
+          "q": 0.7,
+          "attack": 0.05,
+          "decay": 0.2,
+          "gain": 0.18,
+          "tremHz": 22,
+          "tremDepth": 0.8
+        }
+      ]
+    },
+    "whipCrack": {
+      "gain": 0.861,
+      "layers": [
+        {
+          "type": "noise",
+          "filter": "highpass",
+          "f0": 3000,
+          "f1": 3000,
+          "q": 0.7,
+          "attack": 0.0005,
+          "decay": 0.03,
+          "gain": 1
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2800,
+          "f1": 1500,
+          "q": 1.2,
+          "attack": 0.0005,
+          "decay": 0.05,
+          "gain": 0.8
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2200,
+          "f1": 1300,
+          "q": 0.8,
+          "attack": 0.002,
+          "decay": 0.18,
+          "gain": 0.28,
+          "at": 0.02
+        },
+        {
+          "type": "noise",
+          "filter": "lowpass",
+          "f0": 800,
+          "f1": 220,
+          "q": 0.7,
+          "attack": 0.001,
+          "decay": 0.06,
+          "gain": 0.45,
+          "at": 0.004
+        }
+      ]
+    },
+    "thornPierce": {
+      "gain": 7.432,
+      "layers": [
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 1900,
+          "f1": 1520,
+          "q": 3,
+          "attack": 0.001,
+          "decay": 0.016,
+          "gain": 0.6,
+          "at": 0
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2300,
+          "f1": 1840,
+          "q": 3,
+          "attack": 0.001,
+          "decay": 0.014,
+          "gain": 0.5,
+          "at": 0.022
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 1700,
+          "f1": 1360,
+          "q": 3,
+          "attack": 0.001,
+          "decay": 0.016,
+          "gain": 0.45,
+          "at": 0.05
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 620,
+          "f1": 420,
+          "q": 2,
+          "attack": 0.002,
+          "decay": 0.08,
+          "gain": 0.5,
+          "at": 0.01
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 420,
+          "f1": 300,
+          "q": 2,
+          "attack": 0.002,
+          "decay": 0.1,
+          "gain": 0.3,
+          "at": 0.06
+        }
+      ]
+    },
+    "leafRustle": {
+      "gain": 1.223,
+      "layers": [
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 6200,
+          "f1": 5000,
+          "q": 0.6,
+          "attack": 0.02,
+          "decay": 0.45,
+          "gain": 0.55,
+          "tremHz": 22,
+          "tremDepth": 0.75
+        },
+        {
+          "type": "noise",
+          "filter": "highpass",
+          "f0": 4600,
+          "f1": 4600,
+          "q": 0.6,
+          "attack": 0.02,
+          "decay": 0.36,
+          "gain": 0.3,
+          "tremHz": 17,
+          "tremDepth": 0.8,
+          "at": 0.1
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2600,
+          "f1": 2200,
+          "q": 0.7,
+          "attack": 0.03,
+          "decay": 0.3,
+          "gain": 0.25,
+          "tremHz": 13,
+          "tremDepth": 0.85,
+          "at": 0.05
+        }
+      ]
+    },
+    "rootsRumble": {
+      "gain": 1.948,
+      "layers": [
+        {
+          "type": "noise",
+          "filter": "lowpass",
+          "f0": 170,
+          "f1": 110,
+          "q": 0.7,
+          "attack": 0.1,
+          "decay": 0.9,
+          "gain": 0.95,
+          "tremHz": 9,
+          "tremDepth": 0.45
+        },
+        {
+          "type": "tone",
+          "wave": "sawtooth",
+          "f0": 50,
+          "f1": 38,
+          "attack": 0.1,
+          "decay": 0.95,
+          "gain": 0.4,
+          "filter": {
+            "type": "lowpass",
+            "f": 200,
+            "q": 0.7
+          }
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 650,
+          "f1": 480,
+          "q": 5,
+          "attack": 0.06,
+          "decay": 0.7,
+          "gain": 0.28,
+          "tremHz": 14,
+          "tremDepth": 0.9
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 3000,
+          "f1": 2500,
+          "q": 1,
+          "attack": 0.1,
+          "decay": 0.6,
+          "gain": 0.1,
+          "tremHz": 25,
+          "tremDepth": 0.8
+        }
+      ]
+    },
+    "thud": {
+      "gain": 1.013,
+      "layers": [
+        {
+          "type": "tone",
+          "wave": "sine",
+          "f0": 112,
+          "f1": 40,
+          "attack": 0.002,
+          "decay": 0.28,
+          "gain": 1
+        },
+        {
+          "type": "noise",
+          "filter": "lowpass",
+          "f0": 700,
+          "f1": 180,
+          "q": 0.7,
+          "attack": 0.002,
+          "decay": 0.2,
+          "gain": 0.65
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2400,
+          "f1": 1600,
+          "q": 0.8,
+          "attack": 0.01,
+          "decay": 0.25,
+          "gain": 0.14,
+          "at": 0.02,
+          "tremHz": 30,
+          "tremDepth": 0.75
+        }
+      ]
+    },
+    "chimeHeal": {
+      "gain": 2.009,
+      "layers": [
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 1300,
+          "f1": 850,
+          "q": 0.8,
+          "attack": 0.14,
+          "decay": 0.5,
+          "gain": 0.5
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 950,
+          "f1": 1450,
+          "q": 9,
+          "attack": 0.08,
+          "decay": 0.38,
+          "gain": 0.4,
+          "at": 0.12,
+          "tremHz": 22,
+          "tremDepth": 0.9
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 1500,
+          "f1": 2100,
+          "q": 9,
+          "attack": 0.06,
+          "decay": 0.3,
+          "gain": 0.28,
+          "at": 0.3,
+          "tremHz": 27,
+          "tremDepth": 0.9
+        },
+        {
+          "type": "noise",
+          "filter": "highpass",
+          "f0": 5000,
+          "f1": 5000,
+          "q": 0.6,
+          "attack": 0.05,
+          "decay": 0.4,
+          "gain": 0.22,
+          "at": 0.25,
+          "tremHz": 20,
+          "tremDepth": 0.8
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 6000,
+          "f1": 5200,
+          "q": 0.6,
+          "attack": 0.04,
+          "decay": 0.35,
+          "gain": 0.2,
+          "at": 0.42,
+          "tremHz": 24,
+          "tremDepth": 0.75
+        }
+      ]
+    },
+    "dewBreath": {
+      "gain": 1.047,
+      "layers": [
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 1600,
+          "f1": 1100,
+          "q": 1.2,
+          "attack": 0.18,
+          "decay": 0.42,
+          "gain": 0.7
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 700,
+          "f1": 550,
+          "q": 1.4,
+          "attack": 0.2,
+          "decay": 0.38,
+          "gain": 0.3
+        },
+        {
+          "type": "noise",
+          "filter": "highpass",
+          "f0": 4200,
+          "f1": 4200,
+          "q": 0.7,
+          "attack": 0.15,
+          "decay": 0.32,
+          "gain": 0.12
+        }
+      ]
+    },
+    "woodCreak": {
+      "gain": 7.639,
+      "layers": [
+        {
+          "type": "tone",
+          "wave": "sawtooth",
+          "f0": 96,
+          "f1": 70,
+          "attack": 0.1,
+          "decay": 0.9,
+          "gain": 0.5,
+          "filter": {
+            "type": "bandpass",
+            "f": 430,
+            "q": 5
+          },
+          "tremHz": 8,
+          "tremDepth": 0.6
+        },
+        {
+          "type": "tone",
+          "wave": "sawtooth",
+          "f0": 142,
+          "f1": 112,
+          "attack": 0.05,
+          "decay": 0.55,
+          "gain": 0.25,
+          "filter": {
+            "type": "bandpass",
+            "f": 720,
+            "q": 6
+          },
+          "at": 0.15,
+          "tremHz": 11,
+          "tremDepth": 0.5
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 900,
+          "f1": 700,
+          "q": 4,
+          "attack": 0.05,
+          "decay": 0.7,
+          "gain": 0.22,
+          "tremHz": 18,
+          "tremDepth": 0.9
+        },
+        {
+          "type": "noise",
+          "filter": "lowpass",
+          "f0": 160,
+          "f1": 120,
+          "q": 0.7,
+          "attack": 0.1,
+          "decay": 0.7,
+          "gain": 0.35
+        }
+      ]
+    },
+    "woodSmash": {
+      "gain": 0.942,
+      "layers": [
+        {
+          "type": "tone",
+          "wave": "sine",
+          "f0": 96,
+          "f1": 38,
+          "attack": 0.002,
+          "decay": 0.32,
+          "gain": 1
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 460,
+          "f1": 230,
+          "q": 1,
+          "attack": 0.001,
+          "decay": 0.22,
+          "gain": 0.8
+        },
+        {
+          "type": "tone",
+          "wave": "triangle",
+          "f0": 196,
+          "f1": 146,
+          "attack": 0.001,
+          "decay": 0.22,
+          "gain": 0.3,
+          "filter": {
+            "type": "bandpass",
+            "f": 220,
+            "q": 4
+          }
+        },
+        {
+          "type": "noise",
+          "filter": "lowpass",
+          "f0": 900,
+          "f1": 200,
+          "q": 0.7,
+          "attack": 0.001,
+          "decay": 0.12,
+          "gain": 0.5
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 1800,
+          "f1": 1440,
+          "q": 3,
+          "attack": 0.001,
+          "decay": 0.015,
+          "gain": 0.3,
+          "at": 0.03
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 1980,
+          "f1": 1584,
+          "q": 3,
+          "attack": 0.001,
+          "decay": 0.015,
+          "gain": 0.26,
+          "at": 0.06
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2160,
+          "f1": 1728,
+          "q": 3,
+          "attack": 0.001,
+          "decay": 0.015,
+          "gain": 0.21999999999999997,
+          "at": 0.1
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2340,
+          "f1": 1872,
+          "q": 3,
+          "attack": 0.001,
+          "decay": 0.015,
+          "gain": 0.18,
+          "at": 0.15
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2520,
+          "f1": 2016,
+          "q": 3,
+          "attack": 0.001,
+          "decay": 0.015,
+          "gain": 0.13999999999999999,
+          "at": 0.2
+        }
+      ]
+    },
+    "vineLash": {
+      "gain": 1.641,
+      "layers": [
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 700,
+          "f1": 2600,
+          "q": 1,
+          "attack": 0.03,
+          "decay": 0.1,
+          "gain": 0.6
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 1800,
+          "f1": 900,
+          "q": 1.4,
+          "attack": 0.001,
+          "decay": 0.05,
+          "gain": 0.7,
+          "at": 0.1
+        },
+        {
+          "type": "noise",
+          "filter": "lowpass",
+          "f0": 700,
+          "f1": 200,
+          "q": 0.7,
+          "attack": 0.001,
+          "decay": 0.09,
+          "gain": 0.6,
+          "at": 0.1
+        },
+        {
+          "type": "tone",
+          "wave": "sine",
+          "f0": 140,
+          "f1": 70,
+          "attack": 0.002,
+          "decay": 0.06,
+          "gain": 0.35,
+          "at": 0.1
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 3500,
+          "f1": 2500,
+          "q": 0.8,
+          "attack": 0.02,
+          "decay": 0.25,
+          "gain": 0.22,
+          "at": 0.08,
+          "tremHz": 30,
+          "tremDepth": 0.8
+        }
+      ]
+    },
+    "rootGrip": {
+      "gain": 11.111,
+      "layers": [
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 900,
+          "f1": 650,
+          "q": 10,
+          "attack": 0.05,
+          "decay": 0.4,
+          "gain": 0.55,
+          "tremHz": 18,
+          "tremDepth": 0.95
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 1400,
+          "f1": 1100,
+          "q": 8,
+          "attack": 0.05,
+          "decay": 0.3,
+          "gain": 0.32,
+          "at": 0.1,
+          "tremHz": 23,
+          "tremDepth": 0.95
+        },
+        {
+          "type": "tone",
+          "wave": "triangle",
+          "f0": 95,
+          "f1": 80,
+          "attack": 0.05,
+          "decay": 0.4,
+          "gain": 0.25,
+          "filter": {
+            "type": "bandpass",
+            "f": 300,
+            "q": 3
+          }
+        },
+        {
+          "type": "noise",
+          "filter": "lowpass",
+          "f0": 160,
+          "f1": 110,
+          "q": 0.7,
+          "attack": 0.05,
+          "decay": 0.35,
+          "gain": 0.4
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2500,
+          "f1": 2000,
+          "q": 4,
+          "attack": 0.001,
+          "decay": 0.015,
+          "gain": 0.3,
+          "at": 0.2
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2700,
+          "f1": 2160,
+          "q": 4,
+          "attack": 0.001,
+          "decay": 0.015,
+          "gain": 0.28,
+          "at": 0.28
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2300,
+          "f1": 1840,
+          "q": 4,
+          "attack": 0.001,
+          "decay": 0.015,
+          "gain": 0.25,
+          "at": 0.35
+        }
+      ]
+    },
+    "soilBurst": {
+      "gain": 1.188,
+      "layers": [
+        {
+          "type": "noise",
+          "filter": "lowpass",
+          "f0": 520,
+          "f1": 150,
+          "q": 0.7,
+          "attack": 0.002,
+          "decay": 0.26,
+          "gain": 0.85
+        },
+        {
+          "type": "tone",
+          "wave": "sine",
+          "f0": 90,
+          "f1": 40,
+          "attack": 0.003,
+          "decay": 0.18,
+          "gain": 0.55
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 1500,
+          "f1": 700,
+          "q": 1.2,
+          "attack": 0.001,
+          "decay": 0.12,
+          "gain": 0.45
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 1800,
+          "f1": 1440,
+          "q": 2,
+          "attack": 0.001,
+          "decay": 0.02,
+          "gain": 0.22,
+          "at": 0.1
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2170,
+          "f1": 1736,
+          "q": 2,
+          "attack": 0.001,
+          "decay": 0.02,
+          "gain": 0.22,
+          "at": 0.15
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2540,
+          "f1": 2032,
+          "q": 2,
+          "attack": 0.001,
+          "decay": 0.02,
+          "gain": 0.22,
+          "at": 0.19
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2010,
+          "f1": 1608,
+          "q": 2,
+          "attack": 0.001,
+          "decay": 0.02,
+          "gain": 0.22,
+          "at": 0.25
+        },
+        {
+          "type": "noise",
+          "filter": "bandpass",
+          "f0": 2380,
+          "f1": 1904,
+          "q": 2,
+          "attack": 0.001,
+          "decay": 0.02,
+          "gain": 0.22,
+          "at": 0.32
+        }
+      ]
+    }
+  }
+}

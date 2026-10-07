@@ -29,10 +29,12 @@ import { UNIT_SELECT_EVENT } from '../game/unit-select';
 import { DEFAULT_TEST_SIZE, buildTestBattleData, clampTeam, placeClass, removeSlot, resizeTeam, setTestSwitches, testClassIds, testMode, testModeSummary, type TestSide } from '../game/test-mode';
 import { copyMatchData } from './match-copy';
 import { isFullscreen, toggleFullscreen } from './fullscreen';
+import { registerCampaignDebug } from './debug-campaign';
 import { getRotateMode, setRotateMode } from './viewport';
+import { VERSIONS_TAB, registerVersionsPanel } from './debug-versions';
 
 /** Sekme sırası (menü bu sırayla gösterir). */
-export const DEBUG_TABS = [QUICK_TAB, 'Battle', 'Unit', 'Skills', 'Rolls', 'Speed & View', 'Setup', 'Test Mode', 'Characters', 'Data'];
+export const DEBUG_TABS = [QUICK_TAB, 'Battle', 'Unit', 'Skills', 'Rolls', 'Speed & View', 'Setup', 'Campaign', 'Test Mode', 'Characters', VERSIONS_TAB, 'Data'];
 /** Canlı bilgi paneli (Info) bu sekmededir. */
 export const DEBUG_INFO_TAB = 'Data';
 
@@ -72,6 +74,8 @@ const row = (...children: HTMLElement[]): HTMLElement => {
 };
 
 export function registerDebugTools({ game, debug }: Ctx): void {
+  // Sefer (campaign-dev): Campaign sekmesi
+  registerCampaignDebug(game, debug);
   /** The battle scene, only while a battle is actually running (not on the team selection screen). */
   const battle = (): BattleScene | null => (game.scene.isActive(BattleScene.KEY) ? (game.scene.getScene(BattleScene.KEY) as BattleScene) : null);
   const applyFlags = (): void => {
@@ -1030,6 +1034,17 @@ export function registerDebugTools({ game, debug }: Ctx): void {
       const note = noteLineText('Saved in this browser. Applies from the next battle or Team Select screen (use Restart battle); the wiki updates after the page is reloaded.');
       note.classList.add('dim');
       el.append(note);
+    },
+  });
+
+  // ===== Versions: art & sound version per class (v1 current / v2 redesign; src/game/asset-versions.ts, src/ui/debug-versions.ts) =====
+  registerVersionsPanel(debug, {
+    refreshBattle: () => battle()?.refreshCommandsNow(),
+    restartBattle: () => {
+      const b = battle();
+      if (!b) return false;
+      b.scene.restart({ seed: b.seed });
+      return true;
     },
   });
 

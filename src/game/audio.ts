@@ -1,5 +1,7 @@
 import type Phaser from 'phaser';
 import audioData from '../../data/audio.json';
+import { AUDIO_V2 } from './art-v2/audio-index';
+import { wantsV2 } from './asset-versions';
 
 /**
  * Ses efektleri: dosya kullanılmaz, WebAudio ile kodla sentezlenir. Her ses, `data/audio.json` içinde katmanlardan oluşur
@@ -334,15 +336,34 @@ export function synthSfx(ctx: BaseAudioContext, dest: AudioNode, def: SfxDef, t0
   return longest;
 }
 
-/** Bir ses efektini çalar (Phaser'ın ses yöneticisinin AudioContext'ini kullanır; tarayıcı kilidini Phaser açar). */
-export function playSfx(scene: Phaser.Scene, id: string): void {
-  playSfxOn((scene.sound as unknown as { context?: AudioContext }).context, id);
+/** Sahibin v2 ses dosyasındaki tarif (seçimden bağımsız; wiki karşılaştırması). */
+export const sfxV2Of = (owner: string, id: string): SfxDef | undefined => AUDIO_V2[owner]?.sfx[id];
+
+/**
+ * Sürüm farkında ses tarifi: `owner` (class id / 'shared') v2 seçiliyse ve v2 dosyasında bu ad varsa v2, yoksa v1 (data/audio.json).
+ * Sahipsiz çağrı daima v1. İkisi de yoksa undefined (sessiz).
+ */
+export function resolveSfx(id: string, owner?: string | null): SfxDef | undefined {
+  if (owner && wantsV2(owner, 'sfx')) {
+    const v2 = sfxV2Of(owner, id);
+    if (v2) return v2;
+  }
+  return SFX[id];
+}
+
+/** Bir ses efektini çalar (Phaser'ın ses yöneticisinin AudioContext'ini kullanır; tarayıcı kilidini Phaser açar). `owner`: sürüm sahibi. */
+export function playSfx(scene: Phaser.Scene, id: string, owner?: string | null): void {
+  playSfxOn((scene.sound as unknown as { context?: AudioContext }).context, id, owner);
 }
 
 /** Ham AudioContext üzerinden çalar (ayarlar panelinin deneme sesi de bunu kullanır). */
-export function playSfxOn(ctx: AudioContext | undefined, id: string): void {
+export function playSfxOn(ctx: AudioContext | undefined, id: string, owner?: string | null): void {
+  playSfxDef(ctx, resolveSfx(id, owner));
+}
+
+/** Verilen tarifi çalar (wiki'de v1 | v2 karşılaştırması: seçimden bağımsız belirli sürüm). */
+export function playSfxDef(ctx: AudioContext | undefined, def: SfxDef | undefined): void {
   if (!audioSettings.enabled || audioSettings.volume <= 0) return;
-  const def = SFX[id];
   if (!def || !ctx) return;
   void ctx.resume();
   const master = ctx.createGain();

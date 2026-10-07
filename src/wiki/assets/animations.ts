@@ -1,5 +1,6 @@
 import { content } from '../../engine';
 import { iconUrl } from '../../ui/dom-icons';
+import { ownerOfSkill } from '../../game/asset-versions';
 import type { AnimEntry, Catalog } from '../../gallery/catalog';
 import { applyFilter, chipBar, h, searchable, type SectionApi } from '../../gallery/dom';
 import { createPlayer, type Player } from './player';
@@ -56,7 +57,7 @@ export function mountAnimations(cat: Catalog): SectionApi {
           h(
             'div',
             { class: 'row' },
-            h('img', { class: 'icon pixelated', attrs: { src: iconUrl(a.icon, a.fx), alt: a.icon, width: '48', height: '48' } }),
+            h('img', { class: 'icon pixelated', attrs: { src: iconUrl(a.icon, a.fx, ownerOfSkill(a.skillId)), alt: a.icon, width: '48', height: '48' } }),
             h('div', { class: 'grow' }, h('div', { class: 'card-title', text: a.name }), h('div', { class: 'muted small', text: `${a.owner.name} - ${a.targetText}` })),
             a.hidden ? h('span', { class: 'badge bad', text: 'Hidden', title: 'Hidden developer class: not in the player\'s class list; kept as an animation reference' }) : null,
             h('button', { class: 'btn', text: 'Play', attrs: { type: 'button' }, title: `Play ${a.name} on the stage`, on: { click: () => play(a.skillId) } }),

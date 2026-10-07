@@ -8,7 +8,7 @@ import { DEFAULT_ACTION_ICON, DOCK_GROUPS, DOCK_HINT, DOCK_KEYS, QUICK_TAB, SECT
 import { iconUrl } from './dom-icons';
 
 /** Sekme çubuğundaki kısa etiketler (dar ızgara hücresine sığsın; tam ad düğmenin ipucunda). */
-const TAB_LABELS: Record<string, string> = { 'Speed & View': 'View', 'Test Mode': 'Test', Characters: 'Chars' };
+const TAB_LABELS: Record<string, string> = { 'Speed & View': 'View', 'Test Mode': 'Test', Characters: 'Chars', Versions: 'Ver' };
 
 /** Quick sekmesine girecek eylemin bölümü ve sırası (sekmedeki asıl yeri `tab`/`section` olarak kalır). */
 export interface DockSpec {

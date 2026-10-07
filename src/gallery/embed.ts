@@ -11,6 +11,7 @@ import { h } from './dom';
 import { Preview } from './preview';
 import { stageTeams } from './stage-teams';
 import { debugState } from '../game/debug-state';
+import { getVersion, ownerOfSkill, setAllVersions, setVersion, type AssetVersion } from '../game/asset-versions';
 import '../wiki/assets/assets.css';
 import './shell.css';
 
@@ -37,12 +38,29 @@ export function mountEmbed(params: URLSearchParams): void {
   const first = params.get('skill');
   if (first && content.skills[first]) select.value = first;
 
+  // --- sürüm (v1 mevcut / v2 yeni tasarım; src/game/asset-versions.ts): `ver=v1|v2` tüm class'ları yalnızca bu sayfada o sürüme çeker;
+  // seçici seçili skill'in sahibinin sürümünü (yalnızca bu sayfada, kaydetmeden) değiştirir
+  const verParam = params.get('ver');
+  if (verParam === 'v1' || verParam === 'v2') setAllVersions(verParam, false);
+  const verSel = h('select', { class: 'skill-select', attrs: { 'aria-label': 'Art version' }, title: 'Art and sound version of the class of this skill (only on this stage; debug > Versions saves it for the game)' });
+  for (const v of ['v1', 'v2'] as const) verSel.append(h('option', { text: v === 'v1' ? 'v1 (current)' : 'v2 (redesign)', attrs: { value: v } }));
+  const syncVer = (): void => {
+    verSel.value = getVersion(ownerOfSkill(select.value));
+  };
+  verSel.addEventListener('change', () => {
+    const owner = ownerOfSkill(select.value);
+    if (owner) setVersion(owner, verSel.value as AssetVersion, false);
+  });
+  select.addEventListener('change', syncVer);
+  syncVer();
+
   const slow = h('input', { attrs: { type: 'checkbox' } });
   const reset = h('input', { attrs: { type: 'checkbox', checked: '' } });
   reset.addEventListener('change', () => (debugState.galleryReset = reset.checked));
 
   const play = async (skillId: string): Promise<void> => {
     select.value = skillId;
+    syncVer();
     paintShape(hoverCell ?? chosenCell);
     preview.slow = slow.checked;
     status.textContent = `Playing ${content.skills[skillId]?.name ?? skillId}...`;
@@ -120,7 +138,7 @@ export function mountEmbed(params: URLSearchParams): void {
   root.className = 'wk-assets embed-root';
   root.append(
     h('div', { class: 'stage-frame' }, host),
-    h('div', { class: 'embed-bar' }, select, playBtn, h('label', { class: 'inline small' }, slow, ' Slow-motion (0.25x)'), h('label', { class: 'inline small', title: 'After each cast: revive the dead, remove summons, full HP/MP' }, reset, ' Reset after cast')),
+    h('div', { class: 'embed-bar' }, select, verSel, playBtn, h('label', { class: 'inline small' }, slow, ' Slow-motion (0.25x)'), h('label', { class: 'inline small', title: 'After each cast: revive the dead, remove summons, full HP/MP' }, reset, ' Reset after cast')),
     status,
     h('div', { class: 'small muted', text: 'Target cell (enemy side as on screen: front row on the left). Area skills: hover a cell to see the shape (numbers = hit stages).' }),
     h('div', { class: 'cellbar' }, cellAuto, grid),
