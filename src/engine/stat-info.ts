@@ -2,8 +2,8 @@ import { describePassive } from './skill-info';
 import { armorReduction } from './stats';
 import type { CombatantDef, Formulas, SkillDef, Stats } from './types';
 
-/** Arayüzde gösterilen stat türleri: 4 temel özellik, can/mana ve alt stat'lar (kritik çarpanı sabit olduğu için ayrı stat değildir). */
-export type StatKind = 'hp' | 'mp' | 'str' | 'int' | 'dex' | 'luck' | 'spd' | 'critChance' | 'accuracy' | 'evasion' | 'armor' | 'magicArmor';
+/** Arayüzde gösterilen stat türleri: 4 temel özellik, can/mana ve alt stat'lar (kritik çarpanı sabittir ama alt barda salt okunur satır olarak görünür; hpRegen/mpRegen tur başı yenilenmeler). */
+export type StatKind = 'hp' | 'mp' | 'str' | 'int' | 'dex' | 'luck' | 'spd' | 'critChance' | 'critMult' | 'accuracy' | 'evasion' | 'armor' | 'magicArmor' | 'hpRegen' | 'mpRegen';
 
 export interface StatInfo {
   title: string;
@@ -106,6 +106,33 @@ function describeStatBase(kind: StatKind, stats: Stats, f: Formulas): StatInfo {
       return { title: `Speed ${stats.spd}`, lines: [`Comes from Dexterity (+${num(a.spdPerDex)} per point)`, 'Decides how soon the unit acts: higher speed means more turns'] };
     case 'critChance':
       return { title: `Crit chance ${pct(stats.critChance, 1)}`, lines: [`Base ${pct(a.critChanceBase)}, +${pct(a.critChancePerLuck, 1)} per Luck`, `A crit multiplies the final damage or healing by a fixed x${num(a.critMult)}`, 'Applies to damage and healing, not shields'] };
+    case 'critMult':
+      return {
+        title: `Crit damage x${num(stats.critMult ?? a.critMult)}`,
+        lines: [
+          `Critical hits deal x${num(stats.critMult ?? a.critMult)} damage`,
+          'Fixed for every unit: Luck only raises the crit chance, never the multiplier',
+          'Applies to the final damage and healing of a crit, never to shields',
+        ],
+      };
+    case 'hpRegen':
+      return {
+        title: `HP regen ${Math.round(stats.hpRegen)}`,
+        lines: [
+          `Restores ${Math.round(stats.hpRegen)} HP at the start of each of its own turns`,
+          `Comes from Strength: +${num(a.hpRegenPerStr)} per point (now STR ${stats.str})`,
+          'Nothing happens at full HP',
+        ],
+      };
+    case 'mpRegen':
+      return {
+        title: `MP regen ${stats.mpRegen}`,
+        lines: [
+          `Restores ${stats.mpRegen} MP at the start of each of its own turns`,
+          `Comes from Intelligence: +${num(a.mpRegenPerInt)} per point (now INT ${stats.int}; 0 INT = none)`,
+          'Never goes above max MP',
+        ],
+      };
     case 'accuracy':
       return {
         title: `Accuracy ${pct(stats.accuracy)}`,

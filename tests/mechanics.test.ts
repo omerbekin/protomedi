@@ -1245,13 +1245,14 @@ describe('Paladin: Resurrection', () => {
     b.get(uid)!.hp = 0;
   };
 
-  const reviveData = () => content.skills.resurrection!.effects.find((e) => e.type === 'revive') as { hpRatio: number; mpRatio: number }; // oranlar veriden (denge ayarı: %50 -> %25)
+  const reviveData = () => content.skills.resurrection!.effects.find((e) => e.type === 'revive') as { hpRatio: number; mpRatio: number; regen?: { turns: number; ratio: number } }; // oranlar veriden (denge ayarı: %50 -> %25 -> %30, madde 230)
 
-  it('Blessing yerine Resurrection: düşmüş tek dostu hedefler, maks can ve manadan veriye bağlı oranla (Ömer kararı %25)', () => {
+  it('Blessing yerine Resurrection: düşmüş tek dostu hedefler, maks can ve manadan veriye bağlı oranla (Ömer kararı %30 + 2 tur %10 yenilenme)', () => {
     expect(content.classes.paladin!.skills.slice(0, 4)).toEqual(['holy_strike', 'resurrection', 'judgment', 'radiance']);
     expect(content.skills.resurrection).toMatchObject({ target: 'dead_ally' });
-    expect(reviveData().hpRatio).toBe(0.25); // Ömer kararı: dirilen max can ve manasının %25'i ile döner
-    expect(reviveData().mpRatio).toBe(0.25);
+    expect(reviveData().hpRatio).toBe(0.3); // Ömer kararı (madde 230): dirilen max can ve manasının %30'u ile döner
+    expect(reviveData().mpRatio).toBe(0.3);
+    expect(reviveData().regen).toEqual({ turns: 2, ratio: 0.1 });
   });
 
   it('düşmüş dostu olduğu yerde diriltir (veriye bağlı can ve mana oranı, durumlar temiz)', () => {
@@ -1267,7 +1268,8 @@ describe('Paladin: Resurrection', () => {
     expect(w.hp).toBe(Math.round(w.maxHp * hpRatio));
     expect(w.mp).toBe(Math.round(w.maxMp * mpRatio));
     expect(w.slot).toBe(slot);
-    expect(w.statuses).toEqual([]);
+    // eski durumlar (Wound) temizlenir; yalnızca diriltme yenilenmesi (regen, cause 'revival') kalır
+    expect(w.statuses.map((s) => [s.kind, s.cause])).toEqual(reviveData().regen ? [['regen', 'revival']] : []);
     expect(b.living('party').map((c) => c.uid)).toContain('party-0');
   });
 

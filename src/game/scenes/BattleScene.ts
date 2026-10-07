@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import layout from '../../../data/battle-layout.json';
 import { Battle, MatchLog, chooseAction, content, explainChoice, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, previewSkill, armorReduction } from '../../engine';
 import type { AreaStage, BattleEvent, BattleMode, Combatant, SkillDef, StatKind, Teams, TargetPreview } from '../../engine';
+import { type DamageTags } from '../float-text';
+import { ATTACK_STATS, DEFENSE_STATS, MAIN_STATS, rowCenters, statBlockMetrics, statRowText } from '../stat-columns';
 import { PRIMARY_GOLD, RAGE_COLOR, RAGE_ICON, STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON } from '../../ui/stat-icons';
 import { avatarTexture, backgroundKey, characterTexture, hasBackground, preloadAssets } from '../assets';
 import { CombatantView, color, slow, textStyle } from '../combatant-view';
@@ -26,6 +28,8 @@ import type { Pt } from '../shape-geometry';
 import { cellKey, corpseMarkPos, corpseTip, empoweredLine, summonPreviewLine, visibleCorpseMarks } from '../corpse-marks';
 import type { CorpseState } from '../corpse-marks';
 import { createCorpseMarker } from '../corpse-marker';
+import { backRaiseFlow, corpseHoverTip, pickCorpse, pickSlot, raiseFlowHint, reconcileRaiseFlow, slotHoverTip, startRaiseFlow } from '../raise-dead-flow';
+import type { RaiseFlow, RaiseInputs } from '../raise-dead-flow';
 import type { CorpseMarker } from '../corpse-marker';
 import { isDeltaStat, previewStatusText, statDir, statSources } from '../stat-delta';
 import { areaBoards, areaHoverSpecs, areaTone, blockedTargets } from '../target-cells';
@@ -270,6 +274,10 @@ export class BattleScene extends Phaser.Scene {
         this.cancelMove();
         return;
       }
+      if (e.key === 'Escape' && this.raiseFlow && this.selected) {
+        this.raiseBack();
+        return;
+      }
       const n = '1234'.indexOf(e.key) + 1;
       if (n === 0) return;
       const skillId = this.activeActor?.skills[n - 1];
@@ -451,6 +459,7 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     if (this.selected && this.selected.actor === actor.uid && this.battle.canUse(actor.uid, this.selected.skill).ok) return;
+    if (!this.selected && this.suppressAutoSelect === actor.uid) return; // Raise Dead was cancelled with Esc: nothing re-selects until the player picks a skill
     // Test modunda her karakter son kullandığı/seçtiği skill'de kalır (her seferinde ilk skill'e dönmez)
     const remembered = this.battle.mode === 'test' ? this.lastSkill.get(actor.uid) : undefined;
     const first = remembered && this.battle.canUse(actor.uid, remembered).ok ? remembered : actor.skills.find((id) => this.battle.canUse(actor.uid, id).ok);
@@ -459,6 +468,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private applySelection(actor: string, skill: string): void {
+    this.suppressAutoSelect = null;
     this.selected = { actor, skill };
     for (const v of this.views.values()) v.clearPreview();
     this.clearSlotMarkers();
@@ -668,7 +678,7 @@ export class BattleScene extends Phaser.Scene {
       if (want.has(uid)) continue;
       marker.remove();
       this.corpseMarkers.delete(uid);
-      if (this.consumeHint?.uid === uid) this.consumeHint = undefined;
+      this.flowMarks.delete(uid);
     }
     for (const [uid, c] of want) {
       if (this.corpseMarkers.has(uid)) continue;
@@ -694,39 +704,231 @@ export class BattleScene extends Phaser.Scene {
     this.refreshCorpseMarks(false);
   }
 
-  /** The corpse the selected summon skill (Raise Dead) will consume pulses softly; nothing pulses otherwise. */
-  private consumeHint?: { uid: string; marker: CorpseMarker };
+  // --- Raise Dead (madde 230): TWO-STEP choice. Step 1: which foe corpse to consume; step 2: where the summon rises. No corpse = step 2 only. ---
+  // The state machine is pure (raise-dead-flow.ts); this part only draws it. Mouse and touch: one click / tap per step (no two-tap confirm: a step
+  // can be undone with Esc, the 'Back' chip, or by clicking the chosen corpse again, and nothing is spent before the cell is picked).
+
+  private raiseFlow: RaiseFlow | null = null;
+  private raiseCtx?: { actor: string; skill: string };
+  private flowStrip?: Phaser.GameObjects.Container;
+  private flowMarks = new Map<string, 'hint' | 'selected'>();
+  private suppressAutoSelect: string | null = null;
+
+  private raiseInputs(actor: string, skill: string): RaiseInputs {
+    return { choices: this.battle.corpseChoices(actor, skill), slots: this.battle.summonSlots(actor, skill) };
+  }
+
+  /** Corpse marks: step 1 = every pickable corpse pulses softly; step 2 = the chosen corpse is big and pulses, the rest rest. */
   private refreshConsumeHint(): void {
-    const sel = this.selected;
-    const uid = sel && this.playerCanAct && this.battle.needsSlotChoice(sel.skill) ? this.battle.summonPreview(sel.actor, sel.skill).corpse?.uid : undefined;
-    const marker = uid ? this.corpseMarkers.get(uid) : undefined;
-    if (this.consumeHint && this.consumeHint.marker !== marker) {
-      this.consumeHint.marker.setConsumeHint(false);
-      this.consumeHint = undefined;
+    const want = new Map<string, 'hint' | 'selected'>();
+    const ctx = this.raiseCtx;
+    const flow = this.raiseFlow;
+    if (ctx && flow?.twoStep && this.selected && this.playerCanAct) {
+      for (const c of this.battle.corpseChoices(ctx.actor, ctx.skill)) {
+        if (flow.step === 'corpse') want.set(c.uid, 'hint');
+        else if (c.uid === flow.corpseUid) want.set(c.uid, 'selected');
+      }
     }
-    if (uid && marker && !this.consumeHint) {
-      marker.setConsumeHint(true);
-      this.consumeHint = { uid, marker };
+    for (const [uid, mode] of [...this.flowMarks]) {
+      if (want.get(uid) === mode) continue;
+      this.corpseMarkers.get(uid)?.setConsumeHint(false);
+      this.flowMarks.delete(uid);
+    }
+    for (const [uid, mode] of want) {
+      if (this.flowMarks.get(uid) === mode) continue;
+      const marker = this.corpseMarkers.get(uid);
+      if (!marker) continue;
+      if (mode === 'selected') marker.setSelected(true);
+      else marker.setConsumeHint(true);
+      this.flowMarks.set(uid, mode);
     }
   }
 
-  /** Summon skills: the free cells of the chosen side are selectable plates (the player picks where the unit appears). */
+  /** Summon skills: starts the choice (corpse step first when there is a corpse, otherwise the cell step directly). */
   private showSlotMarkers(actorUid: string, skillId: string): void {
-    const actor = this.battle.get(actorUid);
-    if (!actor) return;
-    const board = this.battle.summonBoard(actorUid, skillId);
-    const free = this.battle.freeSlots(board);
-    const tone: CellTone = board === actor.side ? 'ally' : 'enemy';
-    this.showBasePlates([{ board, specs: free.map((slot) => ({ slot, state: 'selectable' as const, tone })) }]);
-    this.bindCellZones([board], {
-      twoTap: false,
-      canPick: (_b, slot) => free.includes(slot),
-      onHover: (b, slot) => {
-        if (slot !== null && free.includes(slot)) this.showPlates(b, [{ slot, state: 'hover', tone }]);
-        else this.clearAreaMarker();
-      },
-      onPick: (_b, slot) => this.perform(actorUid, skillId, actorUid, slot),
-    });
+    this.raiseCtx = { actor: actorUid, skill: skillId };
+    this.raiseFlow = startRaiseFlow(this.raiseInputs(actorUid, skillId));
+    if (!this.raiseFlow) return; // no free slot: the button is pale (canUse says 'No free slot') and nothing opens
+    this.renderRaiseFlow();
+  }
+
+  /** Esc / 'Back': a chosen corpse goes back to step 1; otherwise the skill choice is cancelled (nothing re-selects by itself). */
+  private raiseBack(): void {
+    const flow = this.raiseFlow;
+    const ctx = this.raiseCtx;
+    if (!flow || !ctx) return;
+    const res = backRaiseFlow(flow);
+    if (res.kind === 'state') {
+      this.raiseFlow = res.flow;
+      this.renderRaiseFlow();
+      return;
+    }
+    const actor = ctx.actor;
+    this.hideInfoTip();
+    this.hideUnitTip();
+    this.clearSelection();
+    this.suppressAutoSelect = actor;
+    this.refreshCommands();
+  }
+
+  /** Draws the current step: plates, pointer zones, marks and the hint strip. */
+  private renderRaiseFlow(): void {
+    const ctx = this.raiseCtx;
+    const actor = ctx ? this.battle.get(ctx.actor) : undefined;
+    if (!ctx || !actor || !this.raiseFlow) return;
+    const inp = this.raiseInputs(ctx.actor, ctx.skill);
+    const flow = reconcileRaiseFlow(this.raiseFlow, inp);
+    if (!flow) {
+      this.clearSelection();
+      return;
+    }
+    this.raiseFlow = flow;
+    this.clearSlotMarkers();
+    this.clearAreaMarker();
+    this.hideInfoTip();
+    const own = this.battle.summonBoard(ctx.actor, ctx.skill);
+    const foe: 'party' | 'enemy' = own === 'party' ? 'enemy' : 'party';
+    const ownTone: CellTone = 'ally';
+    const skill = content.skills[ctx.skill];
+    const reserved = this.battle.fallenSlots(own).filter((s) => this.battle.freeSlots(own).includes(s));
+    const chosen = flow.corpseUid ? inp.choices.find((c) => c.uid === flow.corpseUid) : undefined;
+    const consumed = new Set([...this.uiCorpses].filter(([, st]) => st === 'consumed').map(([uid]) => uid));
+    const info = (title: string, rows: Array<{ text: string; tone: 'info' | 'good' | 'muted' | 'bad' }>, icon: string, badge: string): void => {
+      const hex = { info: colors.selected, good: '#c58bff', muted: colors.muted, bad: colors.lethal };
+      this.hideInfoTip();
+      this.placeInfoTip(this.makeInfo(title, colors.text, icon === 'skill' && skill ? ensureSkillIcon(this, skill) : ensureIcon(this, 'ankh', '#c9a853', true), rows.map((r): [string, string] => [r.text, hex[r.tone]]), badge));
+    };
+    const previewOf = (corpseUid?: string, slot?: number) => this.battle.summonPreview(ctx.actor, ctx.skill, corpseUid, slot);
+    const unitName = previewOf().unit?.name ?? 'Skeleton';
+    const badge = raiseFlowHint(flow, unitName).step || 'Raise';
+
+    if (flow.step === 'corpse') {
+      // STEP 1: the pickable corpses of the foe board are enemy-tone plates; consumed corpses are pale
+      const consumedHere = [...consumed].flatMap((uid) => {
+        const c = this.battle.get(uid);
+        return c && c.board === foe ? [c.slot] : [];
+      });
+      this.showBasePlates([
+        {
+          board: foe,
+          specs: [
+            ...inp.choices.map((c) => ({ slot: c.slot, state: 'selectable' as const, tone: 'enemy' as const })),
+            ...consumedHere.filter((s) => !inp.choices.some((c) => c.slot === s)).map((slot) => ({ slot, state: 'invalid' as const })),
+          ],
+        },
+      ]);
+      this.bindCellZones([foe], {
+        twoTap: false,
+        canPick: (_b, slot) => inp.choices.some((c) => c.slot === slot),
+        onHover: (b, slot) => {
+          const c = slot === null ? undefined : inp.choices.find((x) => x.slot === slot);
+          if (c) {
+            this.showPlates(b, [{ slot: c.slot, state: 'enemy' }]);
+            const sp = previewOf(c.uid);
+            const tip = corpseHoverTip(c, sp.unit ? { unitName: sp.unit.name, hp: sp.unit.stats.hp } : null);
+            info(tip.title, tip.rows, 'corpse', badge);
+          } else if (slot !== null && consumedHere.includes(slot)) {
+            this.showPlates(b, [{ slot, state: 'invalid' }]);
+            const gone = [...consumed].map((uid) => this.battle.get(uid)).find((u) => u && u.board === b && u.slot === slot);
+            info(`Fallen: ${gone?.name ?? 'Unit'} (corpse consumed)`, [{ text: 'Corpse was consumed', tone: 'bad' }], 'corpse', badge);
+          } else {
+            this.clearAreaMarker();
+            this.hideInfoTip();
+          }
+        },
+        onPick: (_b, slot) => {
+          const c = inp.choices.find((x) => x.slot === slot);
+          if (!c) return;
+          const res = pickCorpse(flow, inp, c.uid, consumed);
+          if (res.kind === 'state') {
+            this.raiseFlow = res.flow;
+            this.renderRaiseFlow();
+          }
+        },
+      });
+    } else {
+      // STEP 2: your free cells are ally-tone plates; the chosen corpse keeps a bright framed plate on the foe board (clicking it undoes the choice)
+      const groups: Array<{ board: 'party' | 'enemy'; specs: CellTileSpec[] }> = [
+        { board: own, specs: [...inp.slots.map((slot) => ({ slot, state: 'selectable' as const, tone: ownTone })), ...reserved.map((slot) => ({ slot, state: 'invalid' as const }))] },
+      ];
+      if (chosen) groups.push({ board: foe, specs: [{ slot: chosen.slot, state: 'anchor', tone: 'enemy' }, ...inp.choices.filter((c) => c.uid !== chosen.uid).map((c) => ({ slot: c.slot, state: 'selectable' as const, tone: 'enemy' as const }))] });
+      this.showBasePlates(groups);
+      this.bindCellZones(chosen ? [foe, own] : [own], {
+        twoTap: false,
+        canPick: (b, slot) => (b === own ? inp.slots.includes(slot) : inp.choices.some((c) => c.slot === slot)),
+        onHover: (b, slot) => {
+          if (slot === null) {
+            this.clearAreaMarker();
+            this.hideInfoTip();
+            return;
+          }
+          if (b === own) {
+            const free = inp.slots.includes(slot);
+            const isReserved = reserved.includes(slot);
+            if (!free && !isReserved) {
+              this.clearAreaMarker();
+              this.hideInfoTip();
+              return;
+            }
+            const sp = previewOf(flow.corpseUid, slot);
+            this.showPlates(b, [{ slot, state: free ? 'hover' : 'invalid', tone: ownTone }]);
+            const tip = slotHoverTip({ unitName: sp.unit?.name ?? unitName, hp: sp.unit?.stats.hp ?? 0, empowered: sp.empowered, corpseName: chosen?.name ?? null, row: this.battle.rowOf(slot), reserved: isReserved && !free });
+            info(tip.title, tip.rows, 'skill', badge);
+            return;
+          }
+          const c = inp.choices.find((x) => x.slot === slot);
+          this.clearAreaMarker();
+          if (c) info(c.uid === chosen?.uid ? `Chosen: ${c.name}'s corpse` : `Consume ${c.name}'s corpse instead (danger ${c.danger})`, [{ text: c.uid === chosen?.uid ? 'Click to take it back and choose again' : 'Click to switch to this corpse', tone: 'info' }], 'corpse', badge);
+          else this.hideInfoTip();
+        },
+        onPick: (b, slot) => {
+          if (b === own) {
+            const res = pickSlot(flow, inp, slot);
+            if (res.kind === 'cast') this.perform(ctx.actor, ctx.skill, '', res.slot, undefined, res.corpseUid);
+            return;
+          }
+          const c = inp.choices.find((x) => x.slot === slot);
+          if (!c) return;
+          const res = pickCorpse(flow, inp, c.uid, consumed);
+          if (res.kind === 'state') {
+            this.raiseFlow = res.flow;
+            this.renderRaiseFlow();
+          }
+        },
+      });
+    }
+    this.drawFlowStrip(flow, unitName);
+    this.refreshConsumeHint();
+  }
+
+  /** The hint strip under the turn bar: 'Step 1/2  Choose a corpse to consume' (step 2 also has a 'Back' chip for touch). */
+  private drawFlowStrip(flow: RaiseFlow, unitName: string): void {
+    this.flowStrip?.destroy(true);
+    const hint = raiseFlowHint(flow, unitName);
+    const items: Phaser.GameObjects.GameObject[] = [];
+    const style = { fontFamily: SERIF, fontSize: '26px', fontStyle: 'bold', stroke: '#0c0805', strokeThickness: 3 };
+    const stepTxt = hint.step ? this.add.text(0, 0, hint.step, { ...style, color: '#f2b84a' }).setOrigin(0, 0.5) : undefined;
+    const msg = this.add.text(0, 0, hint.text, { ...style, color: '#f1e6cf' }).setOrigin(0, 0.5);
+    const back = flow.twoStep && flow.step === 'slot' ? this.add.text(0, 0, 'Back (Esc)', { ...style, fontSize: '22px', color: '#c4fbe8' }).setOrigin(0, 0.5) : undefined;
+    const gap = 18;
+    const parts = [stepTxt, msg, back].filter((t): t is Phaser.GameObjects.Text => !!t);
+    const total = parts.reduce((w, t) => w + t.width, 0) + gap * (parts.length - 1) + 40;
+    const h = 48;
+    const bg = this.add.graphics();
+    bg.fillStyle(0x0c0805, 0.92).fillRoundedRect(-total / 2, -h / 2, total, h, 10);
+    bg.lineStyle(2, 0xf2b84a, 0.9).strokeRoundedRect(-total / 2, -h / 2, total, h, 10);
+    items.push(bg);
+    let x = -total / 2 + 20;
+    for (const t of parts) {
+      t.setX(x);
+      x += t.width + gap;
+      items.push(t);
+    }
+    if (back) {
+      back.setInteractive({ useHandCursor: true });
+      back.on('pointerdown', () => this.raiseBack());
+    }
+    this.flowStrip = this.add.container(W / 2, 205, items).setDepth(3700);
   }
 
   /**
@@ -900,12 +1102,16 @@ export class BattleScene extends Phaser.Scene {
       if (hadHover) this.hideUnitTip();
       this.hoverView = undefined;
     }
+    this.flowStrip?.destroy(true);
+    this.flowStrip = undefined;
     if (!this.slotMarkers) return;
     this.slotMarkers.destroy(true);
     this.slotMarkers = undefined;
   }
 
   private clearSelection(): void {
+    this.raiseFlow = null;
+    this.raiseCtx = undefined;
     this.clearSlotMarkers();
     this.clearAreaMarker();
     this.selected = null;
@@ -941,13 +1147,14 @@ export class BattleScene extends Phaser.Scene {
   /** Test modu: her karakterin son kullandığı/seçtiği skill (kullanınca seçim sıfırlanmasın). */
   private lastSkill = new Map<string, string>();
 
-  private perform(actor: string, skill: string, target: string, slot?: number, board?: 'party' | 'enemy'): void {
+  private perform(actor: string, skill: string, target: string, slot?: number, board?: 'party' | 'enemy', corpseUid?: string): void {
+    this.suppressAutoSelect = null;
     if (this.battle.mode === 'test') this.lastSkill.set(actor, skill);
     this.cancelMoveQuiet();
     this.clearSelection();
     this.hideInfoTip();
     this.hideUnitTip();
-    if (!this.battle.useSkill(actor, skill, target || undefined, slot, board).ok) return;
+    if (!this.battle.useSkill(actor, skill, target || undefined, slot, board, corpseUid).ok) return;
     this.busy = true;
     this.refreshCommands();
     this.settle();
@@ -1349,7 +1556,8 @@ export class BattleScene extends Phaser.Scene {
     // Raise Dead: which corpse it would eat right now, and what comes out (the summon appears on your own side: no target to pick)
     const sp = this.battle.summonPreview(actor.uid, skill.id);
     const summonLine = summonPreviewLine(sp, sp.corpse ? (this.battle.get(sp.corpse.uid)?.name ?? null) : null);
-    if (summonLine) rows.push([summonLine.text, summonLine.tone === 'empowered' ? '#c58bff' : colors.muted]);
+    if (this.battle.needsCorpseChoice(actor.uid, skill.id) && sp.unit) rows.push([`You choose the corpse to consume: empowered ${sp.unit.name} (HP ${sp.unit.stats.hp})`, '#c58bff'], ['Step 1: pick a corpse, step 2: pick the cell (Esc goes back)', colors.muted]);
+    else if (summonLine) rows.push([summonLine.text, summonLine.tone === 'empowered' ? '#c58bff' : colors.muted]);
     this.placeInfoTip(this.makeInfo(info.name, colors.text, ensureSkillIcon(this, skill), rows, info.targetBadge, meta, skillMiniGrid(skill, content.formulas.formation)));
   }
 
@@ -1412,30 +1620,30 @@ export class BattleScene extends Phaser.Scene {
    */
   private makeUnitInfo(c: Combatant): Tip {
     const p = layout.commandPanel;
-    const x0 = this.globalX(); // the unit info is wide: it covers the global column (the buttons hide while it shows)
+    const x0 = this.globalX() - 12; // the unit info is wide: it covers the global column (the buttons hide while it shows)
     this.statHitsOn = false;
     const items = this.drawStatsBlock(c, x0);
     this.statHitsOn = true;
 
     // Skills (2 x 2 icons) next to the block
-    const sx = x0 + 468;
+    const sx = statBlockMetrics(x0).right + 8;
     c.skills.slice(0, 4).forEach((id, i) => {
       const skill = content.skills[id];
       if (!skill) return;
       const cd = this.battle.mode === 'turns' ? (c.cooldowns[id] ?? 0) : 0;
-      const ix = sx + (i % 2) * 48;
-      const iy = p.y + 12 + Math.floor(i / 2) * 48;
-      items.push(this.add.image(ix + 20, iy + 20, ensureSkillIcon(this, skill)).setDisplaySize(40, 40).setAlpha(cd > 0 ? 0.4 : 1));
-      if (cd > 0) items.push(this.add.text(ix + 20, iy + 20, String(cd), textStyle(24, colors.targetHighlight)).setOrigin(0.5));
+      const ix = sx + (i % 2) * 40;
+      const iy = p.y + 10 + Math.floor(i / 2) * 40;
+      items.push(this.add.image(ix + 18, iy + 18, ensureSkillIcon(this, skill)).setDisplaySize(36, 36).setAlpha(cd > 0 ? 0.4 : 1));
+      if (cd > 0) items.push(this.add.text(ix + 18, iy + 18, String(cd), textStyle(22, colors.targetHighlight)).setOrigin(0.5));
     });
 
     // The passive next to the skills
     if (c.passive) {
-      const px = sx + 104;
+      const px = sx + 84;
       items.push(
-        this.add.circle(px + 22, p.y + 32, 24, color(colors.button)).setStrokeStyle(3, color(colors.tooltipBorder)),
-        this.add.image(px + 22, p.y + 32, ensureIcon(this, c.passive.icon, c.color, false)).setDisplaySize(30, 30),
-        this.add.text(px + 22, p.y + 60, c.passive.name, { ...textStyle(14, colors.muted), wordWrap: { width: 110 }, align: 'center' }).setOrigin(0.5, 0),
+        this.add.circle(px + 20, p.y + 30, 20, color(colors.button)).setStrokeStyle(3, color(colors.tooltipBorder)),
+        this.add.image(px + 20, p.y + 30, ensureIcon(this, c.passive.icon, c.color, false)).setDisplaySize(26, 26),
+        this.add.text(px + 20, p.y + 54, c.passive.name, { ...textStyle(13, colors.muted), strokeThickness: 3, wordWrap: { width: 64 }, align: 'center' }).setOrigin(0.5, 0),
       );
     }
 
@@ -1448,7 +1656,7 @@ export class BattleScene extends Phaser.Scene {
     for (const st of c.statuses) extra.push([`${content.statuses[st.kind]?.name ?? st.kind[0]!.toUpperCase() + st.kind.slice(1)} ${st.turns}`, content.statuses[st.kind]?.color ?? colors.targetHighlight]);
     for (const tag of c.tags) for (const [el, m] of Object.entries(content.formulas.weaknesses[tag] ?? {})) extra.push([`Weak to ${el} +${Math.round((m - 1) * 100)}%`, colors.element[el as keyof typeof colors.element] ?? colors.muted]);
     if (c.summoned && c.lifespan !== undefined) extra.push([`Leaves in ${c.lifespan}`, colors.muted]);
-    extra.slice(0, 3).forEach(([text, hex], i) => items.push(this.add.text(sx, p.y + 102 + i * 17, text, textStyle(16, hex)).setOrigin(0, 0)));
+    extra.slice(0, 3).forEach(([text, hex], i) => items.push(this.add.text(sx, p.y + 100 + i * 18, text, textStyle(15, hex)).setOrigin(0, 0)));
 
     return { container: this.add.container(0, 0, items).setDepth(4700), width: W - x0, height: H - p.y };
   }
@@ -1532,6 +1740,12 @@ export class BattleScene extends Phaser.Scene {
     this.eventQueue = this.eventQueue.then(() => (battle === this.battle ? this.playEvent(e) : undefined));
   }
 
+  /** Extra damage tags for the floating number (engine fields, all optional): element, origin (skill/ground/status/self), ground type. */
+  private damageTags(e: BattleEvent & { type: 'damage' }): DamageTags {
+    const x = e as { statusId?: string };
+    return { ...(e.element ? { element: e.element } : {}), ...(e.origin ? { origin: e.origin } : {}), ...(e.ground ? { ground: e.ground } : {}), ...(x.statusId ? { statusId: x.statusId } : {}) };
+  }
+
   private async playEvent(e: BattleEvent): Promise<void> {
     if (!this.scene.isActive()) return;
     // Aşamalı alan skill'i: aşama olayları vfx o aşamayı açana kadar bekler (vfx aşamadan habersizse beklemez)
@@ -1561,10 +1775,10 @@ export class BattleScene extends Phaser.Scene {
           const ratio = e.amount / target.combatant.maxHp;
           if (e.amount === 0 && e.absorbed > 0) {
             target.ring(e.magicShieldAfter > 0 || e.shieldAfter === 0 ? colors.magicShield : colors.shield);
-            target.floatText('Blocked', colors.shield, 46);
+            target.floatText('Blocked', colors.shield, 46, false, { kind: 'shield' });
           } else {
             target.hit(ratio);
-            target.damageText(e.amount, ratio, e.crit);
+            target.damageText(e.amount, ratio, e.crit, this.damageTags(e));
           }
           if (e.redirected) target.ring(colors.shield, 0.8); // guarded damage taken for an ally
           target.setHp(e.hpAfter, true, ratio);
@@ -1587,7 +1801,7 @@ export class BattleScene extends Phaser.Scene {
         return;
       case 'rage': {
         const view = this.views.get(e.actor);
-        if (e.delta !== 0) view?.floatText(`${e.delta > 0 ? '+' : ''}${e.delta} Rage`, colors.rage, e.delta > 0 ? 38 : 44);
+        if (e.delta !== 0) view?.floatText(`${e.delta > 0 ? '+' : ''}${e.delta} Rage`, colors.rage, e.delta > 0 ? 38 : 44, false, { kind: 'resource' });
         this.tweenRage(e.actor, e.after);
         await this.wait(slow(60));
         return;
@@ -1620,10 +1834,8 @@ export class BattleScene extends Phaser.Scene {
       }
       case 'heal': {
         const target = this.views.get(e.target);
-        if (e.crit) {
-          target?.floatText(`+${e.amount}`, colors.crit, 70, true);
-          target?.floatText('CRIT', colors.crit, 34);
-        } else target?.floatText(`+${e.amount}`, colors.heal);
+        if (e.crit) target?.floatText(`+${e.amount}`, colors.crit, 70, true, { kind: 'crit', leftIcon: 'burst' });
+        else target?.floatText(`+${e.amount}`, colors.heal, 64, false, { kind: 'heal' });
         target?.ring(colors.heal);
         target?.setHp(e.hpAfter);
         await this.wait(slow(90));
@@ -1633,16 +1845,16 @@ export class BattleScene extends Phaser.Scene {
         const target = this.views.get(e.target);
         const hex = e.magic ? colors.magicShield : colors.shield;
         if (e.amount >= 0) {
-          target?.floatText(`+${e.amount}`, hex);
+          target?.floatText(`+${e.amount}`, hex, 60, false, { kind: 'shield' });
           target?.ring(hex);
-        } else target?.floatText(`${e.amount} shield`, hex, 44);
+        } else target?.floatText(`${e.amount} shield`, hex, 44, false, { kind: 'shield' });
         target?.setShield(e.shieldAfter, e.magicShieldAfter);
         await this.wait(slow(90));
         return;
       }
       case 'manaBurn': {
         const target = this.views.get(e.target);
-        target?.floatText(`-${e.amount} MP`, colors.burn, 44);
+        target?.floatText(`-${e.amount} MP`, colors.burn, 44, false, { kind: 'resource' });
         target?.ring(colors.burn, 0.8);
         target?.setMp(e.mpAfter);
         await this.wait(slow(60));
@@ -1713,7 +1925,7 @@ export class BattleScene extends Phaser.Scene {
       case 'mpRegen': {
         const view = this.views.get(e.actor);
         view?.setMp(e.after);
-        view?.floatText(`+${e.amount} MP`, colors.mpFill, 40);
+        view?.floatText(`+${e.amount} MP`, colors.mpFill, 40, false, { kind: 'resource' });
         return;
       }
       case 'turnStart':
@@ -1870,6 +2082,7 @@ export class BattleScene extends Phaser.Scene {
         releaseStage: (i) => releaseStage?.(i),
         ...(result ? { result } : {}),
         ...(this.skillBehind ? { behind: this.skillBehind } : {}),
+        foes: [...this.views.values()].filter((v) => v.combatant.side !== actor.combatant.side && v.combatant.hp > 0),
         lunge: () => meleeApproach(this, actor, targets, area ? this.cellPos(board, center!) : undefined),
         windUp: (hex, anim = 'cast') => actor.windUp(hex, anim),
         sfx: (id) => {
@@ -2061,7 +2274,7 @@ export class BattleScene extends Phaser.Scene {
   private addGroundView(e: { id: string; ground: string; board: 'party' | 'enemy'; slots: number[]; turns: number }): void {
     const def = content.grounds[e.ground];
     const hex = color(def?.color ?? '#ffffff');
-    // Holy Fire / Poison / Burning: zeminin bırakıldığı hücrelere oturan alan (hücre başına yumuşak elips + birleşik hücre plakası), ground süresince canlı
+    // Holy Fire / Poison / Burning: zeminin bırakıldığı hücrelerin karesini kenarlarına kadar dolduran canlı piksel yüzey (vfx.groundArea), ground süresince canlı
     const area = groundArea(this, e.ground, e.board, e.slots, 120);
     if (area) {
       this.tweens.add({ targets: area, alpha: 0.65, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -2498,13 +2711,13 @@ export class BattleScene extends Phaser.Scene {
 
     }
 
-    // --- Columns 2 and 3: stat rows ---
+    // --- Columns 2-4: stat rows (2: main attributes, 3: ATTACK stats, 4: DEFENSE stats) ---
     const column = (kinds: StatKind[], x: number, y0: number, step: number, icon: number, font: number, w: number) =>
       kinds.forEach((k, i) => {
         const cy = y0 + i * step;
         if (i < kinds.length - 1) {
           const hl = this.add.graphics();
-          hl.fillStyle(GOLD.edge, 0.22).fillRect(x, cy + step / 2, w - 10, 1);
+          hl.fillStyle(GOLD.edge, 0.22).fillRect(x, cy + step / 2, w - 8, 1);
           items.push(hl);
         }
         // ACC / EVA with a status on them (Blinded, Shrouded): reddish when lowered, greenish when raised, with a small arrow
@@ -2520,24 +2733,21 @@ export class BattleScene extends Phaser.Scene {
         }
         items.push(this.statHit(x - 2, cy - step / 2, w, step, k, actor));
       });
-    const c2 = x0 + av + 16;
-    const c2w = 168;
-    column(['str', 'dex', 'int', 'luck'], c2, top + 36, 32, 24, 22, c2w);
-    column(['spd', 'critChance', 'accuracy', 'evasion', 'armor', 'magicArmor'], c2 + c2w + 4, top + 31, 21, 18, 16, 170);
+    const m = statBlockMetrics(x0);
+    column(MAIN_STATS, m.mainX, top + 36, 32, 24, 22, m.mainW);
+    // Attack and defense columns share the same top/bottom; rows are spread evenly (4 attack rows, 5 defense rows), at least 16px text
+    const sTop = top + 12;
+    const sH = H - top - 24;
+    const rowsOf = (kinds: StatKind[]) => rowCenters(kinds.length, sTop, sH);
+    const atkRows = rowsOf(ATTACK_STATS);
+    const defRows = rowsOf(DEFENSE_STATS);
+    column(ATTACK_STATS, m.attackX, atkRows[0]!, atkRows[1]! - atkRows[0]!, 20, 17, m.attackW);
+    column(DEFENSE_STATS, m.defenseX, defRows[0]!, defRows[1]! - defRows[0]!, 20, 17, m.defenseW);
     return items;
   }
 
   private statText(k: StatKind, s: Combatant['stats']): string {
-    switch (k) {
-      case 'str': case 'int': case 'dex': case 'luck': return `${STAT_LABEL[k]} ${s[k]}`;
-      case 'spd': return `SPD ${s.spd}`;
-      case 'critChance': return `CRIT ${(s.critChance * 100).toFixed(1).replace(/\.0$/, '')}%`;
-      case 'accuracy': return `ACC ${Math.round(s.accuracy * 100)}%`;
-      case 'evasion': return `EVA ${Math.round(s.evasion * 100)}%`;
-      case 'armor': return `ARM ${Math.round(s.armor)}`;
-      case 'magicArmor': return `M.ARM ${Math.round(s.magicArmor)}`;
-      default: return '';
-    }
+    return statRowText(k, s, STAT_LABEL);
   }
 
   /** An invisible hover area that explains a stat in the tooltip space. */

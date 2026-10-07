@@ -68,7 +68,8 @@ describe('skill değişiklikleri (veri)', () => {
     expect(dmg.power).toBeGreaterThanOrEqual(0.6);
     const slow = t.effects.find((e) => e.type === 'status') as { status: string; turns: number };
     expect(slow).toMatchObject({ status: 'slow', turns: 2 });
-    expect(t.cost).toEqual({ resource: 'mp', amount: 8 });
-    expect(t.cooldown).toBe(3);
+    // Ömer (madde 230): Tremor Slam bedelsiz ve cooldown'suz
+    expect(t.cost).toEqual({ resource: 'mp', amount: 0 });
+    expect(t.cooldown).toBeUndefined();
   });
 });

@@ -36,10 +36,16 @@ export const VFX_KINDS = [
   'rootfall',
   /** Treant - Vine Snare: yere vurulan kol, toprak altından ilerleyen kökler, 2x2 hücrede fırlayan kök-sarmaşık bacakları sarar. */
   'vinesnare',
+  /** Yedek: Defender'ın eski animasyonları (Taunt ünlem + yay dalga, Guard örgülü şerit, Tremor Slam zikzak çatlak, Fist Crush gökten yumruk). */
   'taunt',
   'guardlink',
   'tremor',
   'fistcrush',
+  /** Defender (rework): kalkan-vuruşu + kükreme + hedef işaretleri; dostun önünde kule kalkanı hayaleti; yere çakılan kalkan + sıra boyunca kabaran taş levhalar; 3 hedefe sıralı zırhlı sıçrayış + eldiven darbesi. */
+  'taunt2',
+  'guard2',
+  'tremor2',
+  'fistcrush2',
   'manasteal',
   'drainfield',
   'spellward',
@@ -66,6 +72,6 @@ export const VFX_KINDS = [
 ] as const;
 
 /** Kullanılmayan ama bilerek saklanan yedek efektler. */
-export const BACKUP_VFX: readonly string[] = ['voidstrikespikes', 'holysword', 'woodsmash'];
+export const BACKUP_VFX: readonly string[] = ['voidstrikespikes', 'holysword', 'woodsmash', 'taunt', 'guardlink', 'tremor', 'fistcrush'];
 
 export type VfxKind = (typeof VFX_KINDS)[number];

@@ -5,7 +5,7 @@ import { betMultipliers, betStake } from './gamble';
 import { Rng } from './rng';
 import { damageSpecFor, type DamageEffect } from './spec';
 import { applySummonVariant, armorReduction, attributePower, hitOutcome } from './stats';
-import type { Corpse, CorpseState } from './types';
+import type { Corpse, CorpseChoice, CorpseState, DamageOrigin, Element } from './types';
 import { advanceTurn, predictQueue, turnProgress, type TurnSlot } from './turn-order';
 import type { ActionInfo, AreaStage, BattleAction, BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GlobalSkillDef, GroundDef, GroundEffect, Side, SkillDef, SkillEffect, Status, StatusDef } from './types';
 
@@ -51,6 +51,17 @@ export interface ChoiceLike {
   slot?: number;
   /** area_any alan skill'i: anchor hücrenin tahtası (yoksa karşı taraf). */
   board?: Side;
+  /** Ceset tüketen çağrı (Raise Dead): tüketilecek düşman cesedinin uid'si. */
+  corpseUid?: string;
+}
+
+/** Hasar olayının kaynak bilgisi (BattleEvent 'damage' > origin/element/damageType/ground/groundId). */
+interface HitMeta {
+  origin: DamageOrigin;
+  element?: Element;
+  damageType?: 'physical' | 'magic';
+  ground?: string;
+  groundId?: string;
 }
 
 /** Global skill'in oyun içi sonucu için birim başına son eylem türü (yapay zeka salınımı önlemek için okur). */
@@ -128,7 +139,7 @@ export class Battle {
    * consumed = Raise Dead tüketti (diriltilemez, yuvası rezerve değil). Dirilince kayıt silinir. Çağrıların ölümü ceset bırakmaz.
    */
   private readonly corpseState = new Map<string, CorpseState>();
-  /** Ceset sırası (ölüm anı): uid -> artan sayı; Raise Dead EN SON öleni tüketir. */
+  /** Ceset sırası (ölüm anı): uid -> artan sayı (corpses() listesinin sırası). */
   private readonly corpseOrder = new Map<string, number>();
   private corpseCounter = 0;
 
@@ -553,33 +564,105 @@ export class Battle {
     return c && state && c.hp <= 0 ? { uid: c.uid, slot: c.slot, side: c.side, state } : null;
   }
 
-  /**
-   * Ceset tüketen çağrının (Raise Dead) şu an tüketeceği ceset: kullanıcının KARŞI tarafındaki diriltilebilir (revivable) cesetlerden EN SON öleni
-   * (aynı anda ölenlerde küçük yuva). Yoksa null (çağrı beslenmemiş gelir). Savaşı değiştirmez (UI önizleme/tooltip ve YZ için).
-   */
-  corpseToConsume(actorUid: string): Corpse | null {
-    const actor = this.get(actorUid);
-    if (!actor) return null;
-    const list = this.corpses(opposite(actor.side)).filter((c) => c.state === 'revivable');
-    if (list.length === 0) return null;
-    return list.reduce((best, c) => {
-      const ob = this.corpseOrder.get(best.uid) ?? 0;
-      const oc = this.corpseOrder.get(c.uid) ?? 0;
-      return oc > ob || (oc === ob && c.slot < best.slot) ? c : best;
-    });
+  /** Skill ceset tüketen bir çağrı mı (summon etkisi + consumeCorpse: Raise Dead)? */
+  consumesCorpse(skillId: string): boolean {
+    return !!this.skill(skillId)?.effects.some((e) => e.type === 'summon' && e.consumeCorpse);
   }
 
   /**
-   * Çağrı skill'inin şu an hangi varyantla çağıracağı (UI tooltip/önizleme ve YZ için; savaşı değiştirmez): ceset tüketen çağrıda
-   * { empowered: true/false, corpse } (beslenmiş / beslenmemiş), diğer çağrılarda { empowered: undefined, corpse: null }.
+   * Ceset tüketen çağrının (Raise Dead) seçebileceği cesetler (madde 230): kullanıcının KARŞI tarafındaki diriltilebilir (revivable, çağrı olmayan)
+   * cesetler, yuva sırasıyla; her biri `danger` (o birim diriltilirse karşı takıma vereceği değer) ve `why` (gerekçe) taşır. Boş = tüketilecek ceset yok
+   * (çağrı beslenmemiş gelir). Ceset tüketmeyen skill'de boş. Savaşı değiştirmez (UI seçim + YZ).
    */
-  summonPreview(actorUid: string, skillId: string): { unit: CombatantDef | null; empowered: boolean | undefined; corpse: Corpse | null } {
+  corpseChoices(actorUid: string, skillId: string): CorpseChoice[] {
+    const actor = this.get(actorUid);
+    if (!actor || !this.consumesCorpse(skillId)) return [];
+    return this.corpses(opposite(actor.side))
+      .filter((c) => c.state === 'revivable')
+      .sort((a, b) => a.slot - b.slot)
+      .map((c) => {
+        const unit = this.get(c.uid)!;
+        const d = this.corpseDanger(unit);
+        return { uid: c.uid, slot: c.slot, name: unit.name, danger: d.danger, why: d.why };
+      });
+  }
+
+  /** Oyuncu ceset seçmek zorunda mı (ceset tüketen çağrı + en az bir tüketilebilir ceset)? */
+  needsCorpseChoice(actorUid: string, skillId: string): boolean {
+    return this.corpseChoices(actorUid, skillId).length > 0;
+  }
+
+  /**
+   * Ceset tehlikesi (formulas.json > corpseDanger): (tehdit + en iyi skill değeri) x (maks can / hpRef) x [diriltici: reviverMult]
+   * x [kendi tarafında yaşayan bir diriltici onu diriltebiliyor (yuvası boş): revivableMult]. Tehdit = max(str, int, dex) + hız (YZ kill önceliğiyle aynı).
+   * Saf ve belirleyici.
+   */
+  corpseDanger(unit: Combatant): { danger: number; why: string } {
+    const cfg = this.setup.formulas.corpseDanger ?? { hpRef: 100, reviverMult: 1.5, revivableMult: 1.5 };
+    const f = this.setup.formulas;
+    const r1 = (n: number) => Math.round(n * 10) / 10;
+    const threat = Math.max(unit.stats.str, unit.stats.int, unit.stats.dex) + unit.stats.spd;
+    let best = 0;
+    let bestName = '';
+    for (const id of unit.skills) {
+      const sk = this.skill(id);
+      if (!sk) continue;
+      let v = 0;
+      for (const e of sk.effects) {
+        if (e.type === 'damage' || e.type === 'heal') v += attributePower(unit.stats, e.scale, f) * e.power;
+        else if (e.type === 'hot') v += attributePower(unit.stats, e.scale, f) * e.power * e.turns;
+        else if (e.type === 'shield') v += attributePower(unit.stats, e.scale, f) * e.power * 0.5;
+      }
+      if (v > best) {
+        best = v;
+        bestName = sk.name;
+      }
+    }
+    const hpFactor = unit.maxHp / Math.max(1, cfg.hpRef);
+    let danger = (threat + best) * hpFactor;
+    const parts = [`(threat ${r1(threat)} + best skill ${r1(best)}${bestName ? ` ${bestName}` : ''}) x HP ${Math.round(hpFactor * 100) / 100}`];
+    const canRevive = (c: Combatant) => c.skills.some((id) => this.skill(id)?.effects.some((e) => e.type === 'revive'));
+    if (canRevive(unit)) {
+      danger *= cfg.reviverMult;
+      parts.push(`x reviver ${cfg.reviverMult}`);
+    }
+    const cellFree = !this.combatants.some((o) => o.hp > 0 && o.board === unit.board && o.slot === unit.slot);
+    const reviver = cellFree ? this.livingByDepth(unit.side).find((c) => !c.summoned && c.uid !== unit.uid && canRevive(c)) : undefined;
+    if (reviver) {
+      danger *= cfg.revivableMult;
+      parts.push(`x revivable by ${reviver.name} ${cfg.revivableMult}`);
+    }
+    return { danger: r1(danger), why: parts.join(' ') };
+  }
+
+  /**
+   * Yapay zekanın (ve oyuncu seçmeden önceki önizlemenin) tüketeceği ceset: corpseChoices içinde EN TEHLİKELİ olan (eşitlikte küçük yuva).
+   * Yoksa null (çağrı beslenmemiş gelir). Savaşı değiştirmez. Eski "en son ölen" kuralı madde 230 ile kalktı.
+   */
+  corpseToConsume(actorUid: string, skillId?: string): Corpse | null {
+    const actor = this.get(actorUid);
+    if (!actor) return null;
+    const id = skillId ?? actor.skills.find((s) => this.consumesCorpse(s));
+    if (!id) return null;
+    const best = this.corpseChoices(actorUid, id).reduce<CorpseChoice | null>((top, c) => (!top || c.danger > top.danger ? c : top), null);
+    return best ? this.corpseOf(best.uid) : null;
+  }
+
+  /**
+   * Çağrı skill'inin hangi varyantla çağıracağı (UI tooltip/önizleme ve YZ için; savaşı değiştirmez): ceset tüketen çağrıda
+   * { empowered: true/false, corpse } (beslenmiş / beslenmemiş), diğer çağrılarda { empowered: undefined, corpse: null }.
+   * `corpseUid`: oyuncunun seçtiği ceset (geçerliyse o; verilmezse/geçersizse YZ önerisi = en tehlikeli). `slot`: seçilen yuva (geçerliyse o; yoksa varsayılan).
+   */
+  summonPreview(actorUid: string, skillId: string, corpseUid?: string, slot?: number): { unit: CombatantDef | null; empowered: boolean | undefined; corpse: Corpse | null; slot: number | null } {
     const effect = this.skill(skillId)?.effects.find((e) => e.type === 'summon');
-    if (!effect || effect.type !== 'summon') return { unit: null, empowered: undefined, corpse: null };
+    if (!effect || effect.type !== 'summon') return { unit: null, empowered: undefined, corpse: null, slot: null };
     const def = this.setup.units[effect.unit];
-    if (!effect.consumeCorpse) return { unit: def ?? null, empowered: undefined, corpse: null };
-    const corpse = this.corpseToConsume(actorUid);
-    return { unit: def ? applySummonVariant(def, corpse ? 'fed' : 'unfed') : null, empowered: !!corpse, corpse };
+    const free = this.summonSlots(actorUid, skillId);
+    const spot = slot !== undefined && free.includes(slot) ? slot : this.summonSlotFor(actorUid, skillId);
+    if (!effect.consumeCorpse) return { unit: def ?? null, empowered: undefined, corpse: null, slot: spot };
+    const chosen = corpseUid && this.corpseChoices(actorUid, skillId).some((c) => c.uid === corpseUid) ? this.corpseOf(corpseUid) : null;
+    const corpse = chosen ?? this.corpseToConsume(actorUid, skillId);
+    return { unit: def ? applySummonVariant(def, corpse ? 'fed' : 'unfed') : null, empowered: !!corpse, corpse, slot: spot };
   }
 
   /**
@@ -609,7 +692,28 @@ export class Battle {
     this.corpseOrder.delete(uid);
   }
 
-  /** Bir tahtadaki çağrı için seçilebilecek boş yuvalar (küçükten büyüğe). */
+  /**
+   * Çağrı skill'i için seçilebilecek yuvalar (madde 230): kullanıcının KENDİ tahtasındaki boş yuvalar, ölü dostun diriltme için ayrılmış yuvaları
+   * (fallenSlots) HARİÇ; küçükten büyüğe. Çağrı skill'i değilse boş.
+   */
+  summonSlots(actorUid: string, skillId: string): number[] {
+    if (!this.get(actorUid) || !this.needsSlotChoice(skillId)) return [];
+    const board = this.summonBoard(actorUid, skillId);
+    const reserved = new Set(this.fallenSlots(board));
+    return this.freeSlots(board).filter((s) => !reserved.has(s));
+  }
+
+  /** Çağrının varsayılan (yapay zeka) yuvası: summonSlots içinden; yakın dövüşçü çağrı en öndeki, diğerleri en arkadaki yuvaya. Yer yoksa null. */
+  summonSlotFor(actorUid: string, skillId: string): number | null {
+    const effect = this.skill(skillId)?.effects.find((e) => e.type === 'summon');
+    const def = effect && effect.type === 'summon' ? this.setup.units[effect.unit] : undefined;
+    const free = this.summonSlots(actorUid, skillId);
+    if (!def || free.length === 0) return null;
+    const melee = this.setup.skills[def.skills[0] ?? '']?.motion === 'melee';
+    return melee ? free[0]! : free[free.length - 1]!;
+  }
+
+  /** Bir tahtadaki boş (canlı birim olmayan) yuvalar (küçükten büyüğe). Çağrılar için summonSlots kullanılır (ölü dost yuvaları hariç). */
   freeSlots(side: Side): number[] {
     const out: number[] = [];
     for (let slot = 0; slot < this.setup.maxSlots[side]; slot++) {
@@ -654,6 +758,8 @@ export class Battle {
         return list;
       }
       case 'single_ally':
+        // excludeSelf (Guard): kullanıcı kendini hedefleyemez
+        return this.livingByDepth(actor.side).filter((c) => !skill.excludeSelf || c.uid !== actor.uid);
       case 'all_allies':
         return this.livingByDepth(actor.side);
       case 'dead_ally':
@@ -701,6 +807,7 @@ export class Battle {
     if (!actor || !skill || !target) return 'Invalid target';
     if (target.hp <= 0 && skill.target !== 'dead_ally') return 'Target is dead';
     if (this.validTargets(actorUid, skillId).some((c) => c.uid === targetUid)) return null;
+    if (skill.excludeSelf && targetUid === actorUid) return this.selfTargetReason(skill);
     if (skill.target === 'single_enemy' && target.side !== actor.side) {
       if (skill.requiresOpenBehind) {
         const p = this.openBehindProblem(target);
@@ -710,6 +817,11 @@ export class Battle {
       return tauntingFoe ? 'Must target the taunting enemy' : 'Out of reach';
     }
     return 'Invalid target';
+  }
+
+  /** excludeSelf skill'inde kullanıcı kendini seçtiyse neden: Guard 'Cannot guard yourself', diğerleri 'Cannot target yourself'. */
+  private selfTargetReason(skill: SkillDef): string {
+    return skill.effects.some((e) => e.type === 'guard') ? 'Cannot guard yourself' : 'Cannot target yourself';
   }
 
   /** Aktör şu an bu skill'i kullanabilir mi (sıra, bedel, yer, savaş durumu)? */
@@ -731,10 +843,13 @@ export class Battle {
     if (resource === 'mp' && !this.freeMp && actor.mp < amount) return { ok: false, reason: 'Not enough MP' };
     if (resource === 'rage' && (actor.rage ?? 0) < amount) return { ok: false, reason: 'Not enough rage' };
     if (resource === 'hp' && actor.hp <= amount) return { ok: false, reason: 'Not enough HP' };
-    if (skill.effects.some((e) => e.type === 'summon') && this.freeSlots(this.summonBoard(actorUid, skillId)).length === 0) {
+    if (skill.effects.some((e) => e.type === 'summon') && this.summonSlots(actorUid, skillId).length === 0) {
       return { ok: false, reason: 'No free slot' };
     }
-    if (this.validTargets(actorUid, skillId).length === 0) return { ok: false, reason: skill.target === 'dead_ally' ? this.noReviveReason(actor) : skill.requiresOpenBehind ? 'No target with room behind it' : 'No target in reach' };
+    if (this.validTargets(actorUid, skillId).length === 0) {
+      const reason = skill.target === 'dead_ally' ? this.noReviveReason(actor) : skill.requiresOpenBehind ? 'No target with room behind it' : skill.excludeSelf ? (skill.effects.some((e) => e.type === 'guard') ? 'No ally to guard' : 'No other ally') : 'No target in reach';
+      return { ok: false, reason };
+    }
     return { ok: true };
   }
 
@@ -752,21 +867,23 @@ export class Battle {
   /**
    * Class skill'i ya da (skillId global bir id ise) global skill kullanır; global skill'de `slot` Move Tile'ın hedef boş yuvasıdır.
    * `board`: yalnızca area_any (Smoke Bomb) alan skill'inde anchor hücrenin tahtası (yoksa karşı taraf; `targetUid = 'tile:<yuva>'` kendi tahtası).
+   * `corpseUid`: ceset tüketen çağrıda (Raise Dead) tüketilecek düşman cesedi (corpseChoices'tan); ceset varken ZORUNLU ('Choose a corpse to consume'),
+   * hiç ceset yokken verilirse yok sayılır. Çağrıda `slot` summonSlots'tan biri olmalı (verilmezse varsayılan yuva).
    */
-  useSkill(actorUid: string, skillId: string, targetUid?: string, slot?: number, board?: Side): ActionResult {
+  useSkill(actorUid: string, skillId: string, targetUid?: string, slot?: number, board?: Side, corpseUid?: string): ActionResult {
     if (this.globalDef(skillId)) return this.useGlobal(actorUid, skillId, slot ?? slotOfTileUid(targetUid));
-    return this.cast(actorUid, skillId, targetUid, slot, false, board);
+    return this.cast(actorUid, skillId, targetUid, slot, false, board, corpseUid);
   }
 
   /** Tek giriş noktası: class skill'i ya da global skill ({kind:'global', id, slot?}). */
   act(actorUid: string, action: BattleAction): ActionResult {
-    return action.kind === 'global' ? this.useGlobal(actorUid, action.id, action.slot ?? slotOfTileUid(action.targetUid)) : this.cast(actorUid, action.skillId, action.targetUid, action.slot, false, action.board);
+    return action.kind === 'global' ? this.useGlobal(actorUid, action.id, action.slot ?? slotOfTileUid(action.targetUid)) : this.cast(actorUid, action.skillId, action.targetUid, action.slot, false, action.board, action.corpseUid);
   }
 
   /** Yapay zeka seçimini uygular; seçim yoksa (null) turu pas geçer (skipTurn). */
   applyChoice(actorUid: string, choice: ChoiceLike | null): ActionResult {
     if (!choice) return this.skipTurn();
-    return this.useSkill(actorUid, choice.skillId, choice.targetUid, choice.slot, choice.board);
+    return this.useSkill(actorUid, choice.skillId, choice.targetUid, choice.slot, choice.board, choice.corpseUid);
   }
 
   /** Global skill tanımı (data/global-skills.json). */
@@ -911,22 +1028,43 @@ export class Battle {
    * Debug: skill'i bedel, bekleme, menzil, sıra ve kullanıcının skill listesi kurallarını yok sayarak oynatır (animasyon/ses galerisi).
    * Hedef geçersizse ilk uygun hedefe/hücreye gider. Sıra ilerlemez, MP/bekleme harcanmaz, savaş bitmez.
    */
-  debugCast(actorUid: string, skillId: string, targetUid?: string, slot?: number): ActionResult {
+  debugCast(actorUid: string, skillId: string, targetUid?: string, slot?: number, corpseUid?: string): ActionResult {
     if (!this.get(actorUid)) return { ok: false, reason: 'No such unit' };
     if (!this.skill(skillId)) return { ok: false, reason: 'Unknown skill' };
     this.debugCasting = true;
     try {
-      return this.cast(actorUid, skillId, targetUid, slot, true);
+      return this.cast(actorUid, skillId, targetUid, slot, true, undefined, corpseUid);
     } finally {
       this.debugCasting = false;
     }
   }
 
-  private cast(actorUid: string, skillId: string, targetUid: string | undefined, slot: number | undefined, debug: boolean, boardArg?: Side): ActionResult {
+  private cast(actorUid: string, skillId: string, targetUid: string | undefined, slot: number | undefined, debug: boolean, boardArg?: Side, corpseArg?: string): ActionResult {
     if (!debug) {
       const can = this.canUse(actorUid, skillId);
       if (!can.ok) return can;
-      if (slot !== undefined && this.needsSlotChoice(skillId) && !this.freeSlots(this.summonBoard(actorUid, skillId)).includes(slot)) return { ok: false, reason: 'Invalid slot' };
+      if (slot !== undefined && this.needsSlotChoice(skillId) && !this.summonSlots(actorUid, skillId).includes(slot)) {
+        return { ok: false, reason: this.fallenSlots(this.summonBoard(actorUid, skillId)).includes(slot) ? 'That cell is reserved for a fallen ally' : 'Invalid slot' };
+      }
+    }
+    // Ceset tüketen çağrı (Raise Dead, madde 230): oyuncu cesedi seçer (ceset varken zorunlu); debug oynatmada seçilmezse YZ önerisi (en tehlikeli)
+    let corpseUid: string | undefined;
+    if (this.consumesCorpse(skillId)) {
+      const choices = this.corpseChoices(actorUid, skillId);
+      if (choices.length > 0) {
+        if (corpseArg && choices.some((c) => c.uid === corpseArg)) corpseUid = corpseArg;
+        else if (debug) corpseUid = this.corpseToConsume(actorUid, skillId)?.uid;
+        else if (!corpseArg) return { ok: false, reason: 'Choose a corpse to consume' };
+        else return { ok: false, reason: this.corpseState.get(corpseArg) === 'consumed' ? 'Corpse was consumed' : 'Invalid corpse' };
+      }
+    }
+    // Çağrının yuvası (skillUsed olayına da yazılır): seçilen ya da varsayılan; debug oynatmada yer yoksa herhangi bir boş yuva
+    let summonSpot: number | null = null;
+    if (this.needsSlotChoice(skillId)) {
+      const okSlots = this.summonSlots(actorUid, skillId);
+      const anyFree = this.freeSlots(this.summonBoard(actorUid, skillId));
+      summonSpot = slot !== undefined && (okSlots.includes(slot) || (debug && anyFree.includes(slot))) ? slot : this.summonSlotFor(actorUid, skillId);
+      if (summonSpot === null && debug) summonSpot = anyFree[0] ?? null;
     }
     const actor = this.get(actorUid)!;
     const skill = this.skill(skillId)!;
@@ -974,7 +1112,10 @@ export class Battle {
       targets = pool.slice(0, skill.count ?? 3).sort((x, y) => x.slot - y.slot);
     } else if (this.needsTargetChoice(skillId)) {
       const chosen = targets.find((c) => c.uid === targetUid) ?? (debug ? targets[0] : undefined);
-      if (!chosen) return { ok: false, reason: skill.target === 'dead_ally' && targetUid && this.corpseState.get(targetUid) === 'consumed' ? 'Corpse was consumed' : (targetUid && skill.requiresOpenBehind && this.targetProblem(actorUid, skillId, targetUid)) || 'Invalid target' };
+      if (!chosen) {
+        if (skill.excludeSelf && targetUid === actorUid) return { ok: false, reason: this.selfTargetReason(skill) };
+        return { ok: false, reason: skill.target === 'dead_ally' && targetUid && this.corpseState.get(targetUid) === 'consumed' ? 'Corpse was consumed' : (targetUid && skill.requiresOpenBehind && this.targetProblem(actorUid, skillId, targetUid)) || 'Invalid target' };
+      }
       targets = [chosen];
       // Yan vuruşlu (splash) skill: seçilen hedefin yanındaki hücreler de vurulur (ilk hedef = seçilen)
       for (const s of this.splashTargets(skillId, chosen)) {
@@ -1005,6 +1146,8 @@ export class Battle {
       ...(stageGroups ? { stages: stageGroups } : {}),
       ...(areaBoard && skill.target === 'area_any' ? { board: areaBoard } : {}),
       ...(backTarget && behind !== null ? { behindSlot: behind, behindBoard: backTarget.board, from: actor.slot } : {}),
+      ...(summonSpot !== null ? { slot: summonSpot } : {}),
+      ...(corpseUid ? { corpseUid } : {}),
     });
 
     if (!debug && this.mode === 'turns' && (skill.cooldown ?? 0) > 0) actor.cooldowns[skill.id] = skill.cooldown!;
@@ -1093,6 +1236,11 @@ export class Battle {
             this.announcedDead.delete(target.uid);
             this.clearCorpse(target.uid);
             emit({ type: 'revive', source: actor.uid, target: target.uid, hpAfter: target.hp, mpAfter: target.mp });
+            // Diriltme sonrası yenilenme (veri: revive.regen): sonraki `turns` turunun başında maks canın `ratio`'su (sabit, kritiksiz; durum olayı cause 'revival')
+            if (effect.regen && effect.regen.turns > 0 && effect.regen.ratio > 0) {
+              const amount = Math.max(1, Math.round(target.maxHp * effect.regen.ratio));
+              this.addStatus(target, { kind: 'regen', turns: effect.regen.turns, source: actor.uid, amount, critChance: 0, critMult: 1, cause: 'revival' }, emit, 'revival');
+            }
           }
           break;
         case 'hot':
@@ -1196,19 +1344,19 @@ export class Battle {
           const amount = Math.min(actor.hp - 1, Math.round(actor.maxHp * effect.ratio));
           if (amount > 0) {
             actor.hp -= amount;
-            emit({ type: 'damage', source: actor.uid, target: actor.uid, amount, absorbed: 0, hpAfter: actor.hp, shieldAfter: actor.shield, magicShieldAfter: actor.magicShield, crit: false });
+            emit({ type: 'damage', source: actor.uid, target: actor.uid, amount, absorbed: 0, hpAfter: actor.hp, shieldAfter: actor.shield, magicShieldAfter: actor.magicShield, crit: false, origin: 'self' });
           }
           break;
         }
         case 'summon': {
           const baseDef = this.setup.units[effect.unit];
           const board = actor.side; // çağrılar daima kendi tahtasına
-          const spot = baseDef ? (slot ?? this.defaultSummonSlot(board, baseDef)) : null;
+          const spot = baseDef ? summonSpot : null;
           if (!baseDef || spot === null) break;
-          // Ceset tüketen çağrı (Raise Dead): karşı taraftaki en son ölen diriltilebilir cesedi tüketir -> beslenmiş (fed); ceset yoksa beslenmemiş (unfed)
+          // Ceset tüketen çağrı (Raise Dead): seçilen (oyuncu) / en tehlikeli (YZ) düşman cesedini tüketir -> beslenmiş (fed); ceset yoksa beslenmemiş (unfed)
           let empowered: boolean | undefined;
           if (effect.consumeCorpse) {
-            const corpse = this.corpseToConsume(actor.uid);
+            const corpse = corpseUid && this.corpseState.get(corpseUid) === 'revivable' ? this.corpseOf(corpseUid) : null;
             empowered = !!corpse;
             if (corpse) {
               this.corpseState.set(corpse.uid, 'consumed');
@@ -1289,7 +1437,7 @@ export class Battle {
     if (stake > 0) {
       if (bet.resource === 'hp') {
         actor.hp -= stake;
-        emit({ type: 'damage', source: actor.uid, target: actor.uid, amount: stake, absorbed: 0, hpAfter: actor.hp, shieldAfter: actor.shield, magicShieldAfter: actor.magicShield, crit: false });
+        emit({ type: 'damage', source: actor.uid, target: actor.uid, amount: stake, absorbed: 0, hpAfter: actor.hp, shieldAfter: actor.shield, magicShieldAfter: actor.magicShield, crit: false, origin: 'self' });
       } else {
         actor.mp -= stake;
         emit({ type: 'resource', actor: actor.uid, resource: 'mp', amount: stake, after: actor.mp });
@@ -1364,7 +1512,7 @@ export class Battle {
     for (const g of [...this.ground]) {
       if (g.board !== actor.board || !g.slots.includes(actor.slot) || g.sourceSide === actor.side || actor.hp <= 0) continue;
       const src = this.get(g.source) ?? actor;
-      this.applyHit(src, actor, this.groundTickDamage(g.ground, g.amount, actor), 'magic', false, emit, false);
+      this.applyHit(src, actor, this.groundTickDamage(g.ground, g.amount, actor), 'magic', false, emit, false, { origin: 'ground', element: this.setup.grounds?.[g.ground]?.element ?? 'physical', damageType: 'magic', ground: g.ground, groundId: g.id });
       this.announceIfDead(actor, emit);
     }
     // Bu birimin bıraktığı yer etkilerinin süresi azalır (bırakan ölmüşse etki biter)
@@ -1475,12 +1623,13 @@ export class Battle {
     const guard = target.statuses.find((s) => s.kind === 'guard');
     const guardian = guard ? this.get(guard.source) : undefined;
     let hpLoss: number;
+    const meta: HitMeta = { origin: 'skill', element: effect.element ?? 'physical', damageType: effect.damageType };
     if (guard && guardian && guardian !== target && guardian.hp > 0) {
       const redirected = Math.round(total * (guard.share ?? 0.5));
-      hpLoss = this.applyHit(actor, target, total - redirected, effect.damageType, crit, emit, false);
-      if (redirected > 0) this.applyHit(actor, guardian, redirected, effect.damageType, crit, emit, true);
+      hpLoss = this.applyHit(actor, target, total - redirected, effect.damageType, crit, emit, false, meta);
+      if (redirected > 0) this.applyHit(actor, guardian, redirected, effect.damageType, crit, emit, true, meta);
     } else {
-      hpLoss = this.applyHit(actor, target, total, effect.damageType, crit, emit, false);
+      hpLoss = this.applyHit(actor, target, total, effect.damageType, crit, emit, false, meta);
     }
 
     // Rage: isabet eden hasar vuruşu, vurulan hasarın hedefin maks canına yüzdesine göre kazanç (hedef başına toplanır; formulas.json > rage)
@@ -1523,7 +1672,7 @@ export class Battle {
   }
 
   /** Hasarı kalkana (büyüyse önce büyü kalkanına) ve cana uygular; canı düşüren miktarı döndürür. */
-  private applyHit(actor: Combatant, target: Combatant, amount: number, type: 'physical' | 'magic', crit: boolean, emit: Emit, redirected: boolean): number {
+  private applyHit(actor: Combatant, target: Combatant, amount: number, type: 'physical' | 'magic', crit: boolean, emit: Emit, redirected: boolean, meta: HitMeta): number {
     let rest = amount;
     let absorbed = 0;
     let pendingBreak = false;
@@ -1564,6 +1713,10 @@ export class Battle {
       magicShieldAfter: target.magicShield,
       crit,
       ...(redirected ? { redirected: true } : {}),
+      origin: meta.origin,
+      ...(meta.element ? { element: meta.element } : {}),
+      ...(meta.damageType ? { damageType: meta.damageType } : {}),
+      ...(meta.ground ? { ground: meta.ground, groundId: meta.groundId } : {}),
     });
     if (luckySaved) emit({ type: 'passive', actor: target.uid, passive: 'primary_luck', name: 'Lucky Escape' });
     if (pendingBreak) emit({ type: 'statusEnd', target: target.uid, status: 'taunt', broken: true });
@@ -1591,17 +1744,6 @@ export class Battle {
     if (amount === 0 && (source === target || wanted === 0)) return; // boş şifa olayı üretme
     target.hp += amount;
     emit({ type: 'heal', source: source.uid, target: target.uid, amount, hpAfter: target.hp, crit });
-  }
-
-  /**
-   * Çağrı için varsayılan boş hücre (yapay zeka): yakın dövüşçüler ön sırada işe yarar, o yüzden onlar en öndeki boş hücreye,
-   * diğerleri en arkadaki boş hücreye gider.
-   */
-  private defaultSummonSlot(side: Side, def: CombatantDef): number | null {
-    const free = this.freeSlots(side);
-    if (free.length === 0) return null;
-    const melee = this.setup.skills[def.skills[0] ?? '']?.motion === 'melee';
-    return melee ? free[0]! : free[free.length - 1]!;
   }
 
   /** Bir tarafın en önde duran canlı biriminin sırası (0 = en önde). */

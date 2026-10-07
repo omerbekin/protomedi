@@ -124,8 +124,8 @@ describe('YZ bağlam: Druid - Summon Treant, Undead - Raise Dead (çağrı)', ()
   it('Undead: iskelet yokken, tüketilecek düşman cesedi ve kendi tahtasında boş yer varsa Raise Dead; iskelet varken ya da boş yer yokken değil (madde 222)', () => {
     const b = mk({ 0: 'undead', 1: 'warrior' }, { 0: 'warrior', 1: 'mage', 2: 'archer' });
     b.debugKill('enemy-2', false); // tüketilebilir düşman cesedi -> beslenmiş çağrı
-    expect(choose(b)).toMatchObject({ skillId: 'raise_dead', reason: 'summon' });
-    expect(b.useSkill('party-0', 'raise_dead').ok).toBe(true);
+    expect(choose(b)).toMatchObject({ skillId: 'raise_dead', reason: 'summon', corpseUid: 'enemy-2' });
+    expect(b.applyChoice('party-0', choose(b)).ok).toBe(true); // YZ seçimi ceseti ve yuvayı taşır (madde 230)
     b.get('party-0')!.mp = b.get('party-0')!.maxMp;
     expect(choose(b)?.skillId).not.toBe('raise_dead');
     // Kendi tahtası dolu: iskelet açılamaz (artık kendi tarafına çağrılıyor)

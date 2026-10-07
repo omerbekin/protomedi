@@ -356,6 +356,12 @@
   "cooldown": {
     "maxInitial": 3
   },
+  "corpseDanger": {
+    "_not": "Raise Dead ceset tehlikesi (madde 230; battle.corpseChoices, yapay zeka en yükseğini tüketir): danger = (tehdit + en iyi skill değeri) x (maks can / hpRef) x [diriltici ise reviverMult] x [kendi tarafında yaşayan bir diriltici onu diriltebiliyorsa revivableMult]. tehdit = max(str, int, dex) + hız (kill önceliğiyle aynı); en iyi skill değeri = birimin tek kullanımlık en yüksek ham hasar/şifa/kalkan değeri (stat x güç; kalkan x0,5; tur bazlı şifa x tur).",
+    "hpRef": 100,
+    "reviverMult": 1.5,
+    "revivableMult": 1.5
+  },
   "turn": {
     "threshold": 100,
     "queueLength": 8

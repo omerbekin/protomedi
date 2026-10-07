@@ -11,7 +11,8 @@ describe('ses efektleri (data/audio.json)', () => {
       used.add(k);
     }
     // yedek: Holy Strike'ın eski (düşen kılıç) animasyonunun sesleri ve Charge'ın eski sesleri, silinmedi
-    const backup = ['swordWhoosh', 'swordStab', 'armorCharge', 'armorCrash', 'stunChime'];
+    // yedek: Defender'ın eski (rework öncesi) sesleri
+    const backup = ['swordWhoosh', 'swordStab', 'armorCharge', 'armorCrash', 'stunChime', 'warShout', 'testudo', 'effortHah', 'armorStomp', 'punchImpact'];
     for (const k of SFX_IDS) if (!backup.includes(k)) expect(used.has(k), `kullanılmayan ses: ${k}`).toBe(true);
   });
 

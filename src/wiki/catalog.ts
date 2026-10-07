@@ -393,10 +393,13 @@ export function buildMechanics(): WikiArticle[] {
   out.push(statArticle('mp', 'Derived stats', [0]));
   out.push(statArticle('spd', 'Derived stats'));
   out.push(statArticle('critChance', 'Derived stats'));
+  out.push(statArticle('critMult', 'Derived stats'));
   out.push(statArticle('accuracy', 'Derived stats'));
   out.push(statArticle('evasion', 'Derived stats'));
   out.push(statArticle('armor', 'Derived stats', [1]));
   out.push(statArticle('magicArmor', 'Derived stats', [1]));
+  out.push(statArticle('hpRegen', 'Derived stats', [0, 1]));
+  out.push(statArticle('mpRegen', 'Derived stats', [0, 1]));
   // Primary bonuslar
   for (const kind of ['str', 'dex', 'int', 'luck'] as const) out.push(bonusArticle(kind));
   // Hasar ve isabet
@@ -480,10 +483,10 @@ export function buildMechanics(): WikiArticle[] {
     article('corpses', 'Special rules', 'Corpses', 'skull', [
       p('When a unit of a team falls, it leaves a corpse on its cell. Summoned units leave no corpse, not even when they fall together with their summoner.'),
       list(
-        'Revivable: the corpse can be brought back with a revive skill. Its cell stays reserved for it (allies cannot move onto it).',
+        'Revivable: the corpse can be brought back with a revive skill. Its cell stays reserved for it (allies cannot move onto it and summons cannot appear on it).',
         'Consumed: the corpse was devoured and can never be revived. Its cell is free again for moving and summoning.',
       ),
-      p(`Skills that consume corpses: ${skillsWith((e) => e.type === 'summon' && !!e.consumeCorpse).join(', ') || 'none yet'}. They summon on your own side; if a fallen enemy lies on the field, the most recently fallen enemy corpse is consumed first and the summon comes empowered. Without a corpse the summon comes weaker (unfed).`),
+      p(`Skills that consume corpses: ${skillsWith((e) => e.type === 'summon' && !!e.consumeCorpse).join(', ') || 'none yet'}. Choose a fallen foe to consume, then choose where the summon rises on your own side: the consumed corpse can never be revived and the summon comes empowered. While a fallen foe lies on the field you must consume one (you decide which); with no fallen foe you only choose the cell and the summon comes weaker (unfed). The AI consumes the most dangerous foe: the one worth the most to its team if revived (its threat and best skill, its max HP, more if it can revive others itself or if a living reviver could bring it back).`),
       p(`A revive skill (${skillsWith((e) => e.type === 'revive').join(', ') || 'none yet'}) cannot target a consumed corpse.`),
       p('On the battlefield a revivable corpse shows as a small ankh and skull on its cell (hover it to read who fell). When the corpse is consumed the mark fades and the cell looks empty again.'),
     ], '#b36bff'),
@@ -493,6 +496,7 @@ export function buildMechanics(): WikiArticle[] {
     ]),
     article('revive', 'Special rules', 'Resurrection', 'ankh', [
       p('A revive skill brings a fallen ally back on the cell where it fell, with a share of its max HP and MP. It cannot target living units, and it cannot target an ally whose corpse was consumed (see Corpses).'),
+      list(...Object.values(content.skills).flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'revive' }> => e.type === 'revive').map((e) => `${s.name}: revives at ${pct(e.hpRatio)} HP and ${pct(e.mpRatio)} MP${e.regen ? `; then regenerates ${pct(e.regen.ratio)} of its max HP at the start of each of its next ${e.regen.turns} turns` : ''}.`))),
       p(`Skills that revive: ${skillsWith((e) => e.type === 'revive').join(', ') || 'none yet'}.`),
     ]),
     article('shields', 'Special rules', 'Shields', 'shield', [
@@ -500,7 +504,7 @@ export function buildMechanics(): WikiArticle[] {
       p(`Skills that shield: ${skillsWith((e) => e.type === 'shield').join(', ') || 'none yet'}.`),
     ]),
     article('control', 'Special rules', 'Taunt, guard and mana burn', 'guardian', [
-      p(`Taunt forces enemies to target the taunting unit for some turns (it can end early if the unit loses enough HP, or at once if the unit is hit by a control status: ${Object.values(content.statuses).filter((d) => d.breaksTaunt).map((d) => d.name).join(', ') || 'none'}). Guard makes a protector take a share of the damage dealt to an ally. Mana burn removes MP from a target (and may give some of it to the caster) without hurting its HP.`),
+      p(`Taunt forces enemies to target the taunting unit for some turns (it can end early if the unit loses enough HP, or at once if the unit is hit by a control status: ${Object.values(content.statuses).filter((d) => d.breaksTaunt).map((d) => d.name).join(', ') || 'none'}). Guard makes a protector take a share of the damage dealt to another ally (a unit cannot guard itself). Mana burn removes MP from a target (and may give some of it to the caster) without hurting its HP.`),
       p(`Taunt: ${skillsWith((e) => e.type === 'taunt').join(', ') || 'none'}. Guard: ${skillsWith((e) => e.type === 'guard').join(', ') || 'none'}. Mana burn: ${skillsWith((e) => e.type === 'manaBurn').join(', ') || 'none'}.`),
     ]),
   );

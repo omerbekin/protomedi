@@ -11,10 +11,13 @@ export const STAT_ICON: Record<StatKind, IconKind> = {
   luck: 'clover',
   spd: 'boot',
   critChance: 'burst',
+  critMult: 'critdmg',
   accuracy: 'blast',
   evasion: 'whirlwind',
   armor: 'shield',
   magicArmor: 'rune',
+  hpRegen: 'hpregen',
+  mpRegen: 'mpregen',
 };
 
 /** Primary statın ismi bu altın renkte yazılır. */
@@ -29,10 +32,13 @@ export const STAT_COLOR: Record<StatKind, string> = {
   luck: '#ffd166',
   spd: '#b5e6ff',
   critChance: '#ffe066',
+  critMult: '#ff9f43',
   accuracy: '#ff9a7a',
   evasion: '#9be8c8',
   armor: '#c9d1dc',
   magicArmor: '#c58bff',
+  hpRegen: '#7dff9b',
+  mpRegen: '#7dc4ff',
 };
 
 /** Kısa etiketler (alt barda ikonun yanında). */
@@ -45,10 +51,13 @@ export const STAT_LABEL: Record<StatKind, string> = {
   luck: 'LCK',
   spd: 'SPD',
   critChance: 'CRIT',
+  critMult: 'CDMG',
   accuracy: 'ACC',
   evasion: 'EVA',
   armor: 'ARM',
   magicArmor: 'M.ARM',
+  hpRegen: 'HP+',
+  mpRegen: 'MP+',
 };
 
 /** Stat olmayan arayüz ikonları (skill düğmesindeki bekleme süresi). */

@@ -491,6 +491,8 @@ function candidateLine(c: AiExplanation['candidates'][number], withPer: boolean)
   if (c.mitigation) parts.push(`mitigation ${c.mitigation}`);
   if (c.revive) parts.push(`revive ${c.revive}`);
   if (c.summonValue !== undefined) parts.push(`summonValue ${c.summonValue}`);
+  if (c.summonSlot !== undefined) parts.push(`-> own cell ${c.summonSlot}`);
+  if (c.corpse) parts.push(`consumes ${c.corpse.unit} (danger ${c.corpse.danger}: ${c.corpse.why})${c.otherCorpses ? `; other corpses ${c.otherCorpses.map((x) => `${x.unit} danger ${x.danger}`).join(', ')}` : ''}`);
   parts.push(`cost ${c.cost} net ${c.net}`);
   if (c.score !== undefined) parts.push(`score ${c.score}`);
   if (c.tags.length > 0) parts.push(`{${c.tags.join(',')}}`);

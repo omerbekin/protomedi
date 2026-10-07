@@ -3,7 +3,7 @@ import { shapeLabel } from './area-shape';
 import { betStake } from './gamble';
 import { previewForTargets } from './preview';
 import { armorReduction, attributePower, hitChance } from './stats';
-import type { Combatant, Side, SkillAiCond, SkillDef } from './types';
+import type { Combatant, CorpseChoice, Side, SkillAiCond, SkillDef } from './types';
 
 /**
  * Yapay zeka: sırası gelen aktör için bir skill ve hedef seçer. Saf ve belirleyici:
@@ -92,6 +92,8 @@ export interface AiChoice {
   slot?: number;
   /** area_any alan skill'inde anchor hücrenin tahtası (kendi ya da karşı taraf). */
   board?: Side;
+  /** Ceset tüketen çağrı (Raise Dead): tüketilecek düşman cesedi (en tehlikeli; battle.corpseChoices). Çağrıda `slot` çağrı yuvasıdır. */
+  corpseUid?: string;
   /** Hangi öncelik bu kararı verdirdi ('fallback': hiçbiri uymadı, en değerlisi seçildi; rest/skip/move: global skill kuralı). */
   reason: AiPriority | 'fallback' | 'rest' | 'skip' | 'move';
 }
@@ -171,6 +173,10 @@ export interface Option {
   empowered?: boolean;
   /** Çağrının tahmini değeri (can-eşdeğer): çağrılacak birimin (varyantı uygulanmış) en iyi ham skill hasarı x ömür x summonValueShare; çağrı değilse 0. */
   summonValue: number;
+  /** Çağrı seçeneğinde: çağrının yuvası (battle.summonSlotFor) ve (ceset tüketen çağrıda) tüketilecek ceset + tüm ceset adayları (tehlike puanlarıyla). */
+  summonSlot?: number;
+  corpseUid?: string;
+  corpseOptions?: CorpseChoice[];
   taunt: boolean;
   guard: boolean;
   cost: number;
@@ -246,8 +252,9 @@ function toChoice(option: Option, reason: AiChoice['reason']): AiChoice {
   return {
     skillId: option.skill.id,
     ...(option.targetUid ? { targetUid: option.targetUid } : {}),
-    ...(option.anchorSlot !== undefined ? { slot: option.anchorSlot } : {}),
+    ...(option.anchorSlot !== undefined ? { slot: option.anchorSlot } : option.summonSlot !== undefined ? { slot: option.summonSlot } : {}),
     ...(option.board ? { board: option.board } : {}),
+    ...(option.corpseUid ? { corpseUid: option.corpseUid } : {}),
     reason,
   };
 }
@@ -483,8 +490,12 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
   // Çağrı: beslenmiş/beslenmemiş hâli ve tahmini değeri (varyantı uygulanmış birimin en iyi ham hasarı x ömür x summonValueShare)
   const summonEffect = skill.effects.find((e) => e.type === 'summon');
   if (summonEffect && summonEffect.type === 'summon') {
+    // Yuva: mevcut çağrı yuvası kuralı (summonSlotFor); ceset: karşı takımda diriltilmesi EN TEHLİKELİ olan (battle.corpseToConsume)
     const sp = battle.summonPreview(actor.uid, skill.id);
     if (sp.empowered !== undefined) o.empowered = sp.empowered;
+    if (sp.slot !== null) o.summonSlot = sp.slot;
+    if (sp.corpse) o.corpseUid = sp.corpse.uid;
+    if (summonEffect.consumeCorpse) o.corpseOptions = battle.corpseChoices(actor.uid, skill.id);
     if (sp.unit) o.summonValue = summonRawDamage(battle, sp.unit.stats, sp.unit.skills) * (summonEffect.lifespan ?? 3) * (profile.summonValueShare ?? 0.5);
   }
   const manaEffect = skill.effects.find((e) => e.type === 'damage' && e.bonusPerMissingMana);
@@ -640,7 +651,7 @@ const optionNet = (o: Option | undefined): number => (o ? Math.max(0, (o.pureBuf
  */
 function usableIgnoringCost(battle: Battle, actor: Combatant, skill: SkillDef): boolean {
   if (skill.motion === 'melee' && skill.target !== 'self' && !skill.ignoreFrontRow && !skill.ignoreReach && actor.board === actor.side && !battle.canMeleeFrom(actor.uid, actor.slot, skill.reach ?? 0)) return false;
-  if (skill.effects.some((e) => e.type === 'summon') && battle.freeSlots(battle.summonBoard(actor.uid, skill.id)).length === 0) return false;
+  if (skill.effects.some((e) => e.type === 'summon') && battle.summonSlots(actor.uid, skill.id).length === 0) return false;
   return battle.validTargets(actor.uid, skill.id).length > 0;
 }
 
@@ -1023,6 +1034,11 @@ export interface AiCandidate {
   perTarget?: Array<{ unit: string; avg: number; hit: number; lethal: boolean }>;
   /** Çağrı adayında tahmini çağrı değeri (birimin en iyi ham hasarı x ömür x summonValueShare). */
   summonValue?: number;
+  /** Çağrı adayında çağrı yuvası (kendi tahtası). */
+  summonSlot?: number;
+  /** Ceset tüketen çağrı adayında: tüketilecek ceset (tehlike puanı + gerekçe) ve seçilmeyen diğer cesetler. */
+  corpse?: { unit: string; danger: number; why: string };
+  otherCorpses?: Array<{ unit: string; danger: number }>;
   /** Etiketler: summon, empowered (ceset tüketilecek), unfed (ceset yok), taunt, guard, selfBuff, hpCost, hint (skill'in ai bağlam ipucu var). */
   tags: string[];
   /** Kazanan önceliğin seçicisinde bu adayın puanı (yalnızca seçicinin havuzundaki adaylarda). */
@@ -1040,7 +1056,7 @@ export interface AiExplanation {
   priorities: string[];
   focusRule: string;
   /** Verilen karar (chooseAction ile birebir aynı); null = hiçbir şey yapılamadı (tur pas). */
-  final: { skill: string; name: string; target?: string; slot?: number; board?: 'own' | 'foe'; reason: string } | null;
+  final: { skill: string; name: string; target?: string; slot?: number; board?: 'own' | 'foe'; corpse?: string; reason: string } | null;
   /** Tek cümlelik özet: hangi kural/öncelik neden bu kararı verdirdi. */
   why: string;
   /** Öncelik sırası boyunca her seçici: picked (seçti) / none (uymadı) ve gerekçe. */
@@ -1236,6 +1252,8 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
       ...(firstHit ? { hit: r2(firstHit.hitChance) } : {}),
       ...(perTarget.length > 0 ? { perTarget } : {}),
       ...(o.summon ? { summonValue: r1(o.summonValue) } : {}),
+      ...(o.summonSlot !== undefined ? { summonSlot: o.summonSlot } : {}),
+      ...corpseInfo(battle, o),
       tags: [o.summon && 'summon', o.empowered === true && 'empowered', o.empowered === false && 'unfed', o.taunt && 'taunt', o.guard && 'guard', o.pureBuff && 'selfBuff', o.hpCost && 'hpCost', o.skill.ai && 'hint'].filter((t): t is string => !!t),
       verdict: 'skipped',
     };
@@ -1260,7 +1278,7 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
     else if (!trace.options.some((o) => o.skill.id === id)) rejected.push({ skill: id, name: skillName(id), reason: 'no valid target' });
   }
 
-  const final = choice ? { skill: choice.skillId, name: skillName(choice.skillId), ...(choice.targetUid ? { target: labelOf(battle, choice.targetUid) } : {}), ...(choice.slot !== undefined ? { slot: choice.slot } : {}), ...(choice.board ? { board: choice.board === actor.side ? ('own' as const) : ('foe' as const) } : {}), reason: choice.reason } : null;
+  const final = choice ? { skill: choice.skillId, name: skillName(choice.skillId), ...(choice.targetUid ? { target: labelOf(battle, choice.targetUid) } : {}), ...(choice.slot !== undefined ? { slot: choice.slot } : {}), ...(choice.board ? { board: choice.board === actor.side ? ('own' as const) : ('foe' as const) } : {}), ...(choice.corpseUid ? { corpse: labelOf(battle, choice.corpseUid) } : {}), reason: choice.reason } : null;
   const chosen = candidates.find((c) => c.verdict === 'chosen');
   const runnerUp = candidates.find((c) => c.verdict === 'lost');
   const tag = (c: AiCandidate) => `${c.name}${c.target ? ` -> ${c.target}` : ''}`;
@@ -1288,6 +1306,18 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
     rejected,
     reserves: trace.reserves.map((r) => ({ skill: r.skill, needMp: r.need, inTurns: r.turns })),
     global: { ...g, ...(g.move ? { move: { slot: g.move.slot, net: r1(g.move.net) } } : {}) },
+  };
+}
+
+/** Çağrı adayının ceset bilgisi (açıklama): tüketilecek ceset (tehlike + gerekçe) ve seçilmeyen diğer cesetler. */
+function corpseInfo(battle: Battle, o: Option): Pick<AiCandidate, 'corpse' | 'otherCorpses'> {
+  const list = o.corpseOptions ?? [];
+  const chosen = list.find((c) => c.uid === o.corpseUid);
+  if (!chosen) return {};
+  const others = list.filter((c) => c !== chosen).sort((a, b) => b.danger - a.danger || a.slot - b.slot);
+  return {
+    corpse: { unit: labelOf(battle, chosen.uid), danger: chosen.danger, why: chosen.why },
+    ...(others.length > 0 ? { otherCorpses: others.map((c) => ({ unit: labelOf(battle, c.uid), danger: c.danger })) } : {}),
   };
 }
 

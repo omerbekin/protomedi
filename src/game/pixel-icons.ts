@@ -221,6 +221,59 @@ export function thorn(g: PxGrid, bx: number, by: number, tx: number, ty: number,
   g.poly([bx + nx, by + ny, tx, ty, bx, by], hi);
 }
 
+/**
+ * DEFENDER ortak parçası: kule kalkanı (Defender görselindeki gibi: hafif kemerli üst, uzun düz yanlar, sivri alt uç). Çelik kenar, lacivert
+ * alan, kemik rengi kule arması (mazgallı burç + kemerli kapı), kenar boyunca pirinç perçinler. (cx, top) üst orta; w genişlik, h boy.
+ */
+export function towerShield(g: PxGrid, cx: number, top: number, w: number, h: number, o: { rim?: string; field?: string; emblem?: string | null; rivet?: string | null; door?: string } = {}): void {
+  const hw = w / 2;
+  const shape = (i: number) => [cx - hw + i, top + 1.4 + i * 0.5, cx, top + i * 0.8, cx + hw - i, top + 1.4 + i * 0.5, cx + hw - i, top + h * 0.7, cx, top + h - i * 1.2, cx - hw + i, top + h * 0.7];
+  g.poly(shape(0), o.rim ?? 'm');
+  g.poly(shape(Math.max(1.2, w * 0.09)), o.field ?? 'U');
+  if (o.emblem !== null) {
+    const e = o.emblem ?? 'e';
+    const tw = w * 0.34;
+    const ty = top + h * 0.3;
+    const tb = top + h * 0.68;
+    g.rect(cx - tw / 2, ty, tw, tb - ty, e);
+    const mw = tw / 5;
+    for (const k of [0, 2, 4]) g.rect(cx - tw / 2 + k * mw - mw * 0.15, ty - h * 0.07, mw * 1.3, h * 0.07 + 0.2, e);
+    g.rect(cx - tw / 2 - tw * 0.12, tb - h * 0.04, tw * 1.24, h * 0.05, e);
+    g.rect(cx - tw * 0.14, tb - h * 0.15, tw * 0.28, h * 0.11, o.door ?? 'U').disc(cx, tb - h * 0.15, tw * 0.14, o.door ?? 'U');
+    g.rect(cx - tw * 0.1, ty + h * 0.07, tw * 0.2, h * 0.06, o.door ?? 'U');
+  }
+  if (o.rivet !== null) {
+    const r = o.rivet ?? 'y';
+    const inset = Math.max(0.9, w * 0.05);
+    for (const k of [0.12, 0.36, 0.6]) {
+      g.set(cx - hw + inset, top + 1.6 + h * k, r).set(cx + hw - inset - 0.5, top + 1.6 + h * k, r);
+    }
+    g.set(cx - 0.25, top + 0.6, r);
+  }
+}
+
+/** DEFENDER ortak parçası: çelik zırh eldiveni (gauntlet), yumruk aşağı bakar; (cx, top) bileklik üstü, `s` ölçek. Pirinç boğum plakası. */
+export function gauntletFist(g: PxGrid, cx: number, top: number, s = 1): void {
+  const X = (v: number) => cx + v * s;
+  const Y = (v: number) => top + v * s;
+  // bileklik (lacivert astar kenarı + çelik manşet)
+  g.poly([X(-5), Y(0), X(5), Y(0), X(6), Y(6), X(-6), Y(6)], 'd');
+  g.rect(X(-5), Y(0.4), 10 * s, 1.2 * s, 'U');
+  g.line(X(-5.4), Y(4.2), X(5.4), Y(4.2), 'm', 0.6 * s);
+  // el sırtı plakaları
+  g.poly([X(-7), Y(6), X(7), Y(6), X(8), Y(13), X(-8), Y(13)], 'm');
+  g.poly([X(-7), Y(6), X(-1), Y(6), X(-2), Y(13), X(-8), Y(13)], 'l');
+  g.line(X(-7.6), Y(9.4), X(7.6), Y(9.4), 'd', 0.6 * s);
+  // kıvrık parmak plakaları arası ayrım
+  for (const k of [-4, 0, 4]) g.line(X(k), Y(10), X(k), Y(13), 'd', 0.5 * s);
+  // başparmak plakası (yan, öne kıvrık)
+  g.poly([X(7), Y(6.6), X(10.6), Y(8.4), X(10.2), Y(14.4), X(7.2), Y(14.4)], 'l');
+  g.line(X(7.4), Y(11), X(10.2), Y(11), 'd', 0.5 * s);
+  // parmak boğumları (aşağıda): pirinç boğum plakası + dört parmak ucu
+  g.rect(X(-8), Y(13), 16 * s, 2.2 * s, 'Y').rect(X(-8), Y(13), 16 * s, 0.8 * s, 'y');
+  for (const k of [-6, -2, 2, 6]) g.disc(X(k), Y(16.6), 2.1 * s, 'm').disc(X(k - 0.6), Y(16), 0.8 * s, 'l');
+}
+
 export const PIXEL_ICONS: Record<string, Draw> = {
   // ---------- WARRIOR ----------
   sword: (g) => {
@@ -630,6 +683,72 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     shieldShape(g, 16, 1, 27, 30, 'a', 'A');
     g.rect(14, 4, 4, 22, 'z').rect(6, 12, 20, 4, 'z');
     g.disc(9.5, 7, 1.6, 'w').disc(22.5, 7, 1.6, 'w').disc(9.5, 20, 1.4, 'w').disc(22.5, 20, 1.4, 'w');
+  },
+  // --- Defender rework (aile dili: Defender görselindeki lacivert kule kalkanı + çelik plaka + pirinç perçin; parıltı yok, ağırlık var).
+  // Eski ikonlar (guard, tremor, fistcrush, finger) yedekte kalır (Wiki > Legacy > Spare icons).
+  // Tremor Slam: kule kalkanı sivri ucuyla toprağa çakılmış; iki yanda kalkan taş levhalar, kalkanın dibinden yayılan çatlaklar, uçuşan taşlar
+  tremor2: (g) => {
+    // toprak (arka) + yükselen taş levhalar
+    g.poly([0, 23, 32, 23, 32, 32, 0, 32], 'k').rect(0, 23, 32, 1.2, 'b');
+    g.poly([0.5, 22.5, 9, 19, 11.5, 23.5, 2, 26.5], 'm').poly([0.5, 22.5, 9, 19, 9.6, 20.4, 1.2, 23.6], 'l');
+    g.poly([31.5, 22.5, 23, 19, 20.5, 23.5, 30, 26.5], 'm').poly([31.5, 22.5, 23, 19, 22.4, 20.4, 30.8, 23.6], 'l');
+    // kalkan (sivri ucu toprağa gömülü)
+    towerShield(g, 16, 1.5, 13, 25);
+    // ön toprak dudağı: ucu örter
+    g.poly([6, 25, 26, 25, 27.5, 32, 4.5, 32], 'b').poly([6, 25, 26, 25, 26.4, 26.4, 5.6, 26.4], 'n');
+    // çatlaklar
+    g.line(16, 25.5, 12, 28, 'o', 1).line(12, 28, 13.5, 31, 'o', 1).line(12, 28, 6, 29.5, 'o', 0.8).line(6, 29.5, 2, 28, 'o', 0.8);
+    g.line(16, 25.5, 20.5, 28.4, 'o', 1).line(20.5, 28.4, 26, 29.4, 'o', 0.8).line(26, 29.4, 30, 27.8, 'o', 0.8).line(20.5, 28.4, 19.4, 31.5, 'o', 0.8);
+    // uçuşan taşlar ve sarsıntı çizgileri
+    g.poly([3, 13, 5.2, 12, 6, 14.4, 3.6, 15], 'd').poly([27, 11.5, 29.4, 12.4, 28.4, 14.6, 26.4, 13.6], 'd').poly([5.6, 7.6, 7, 7, 7.4, 8.6, 6, 9], 'm').poly([25, 6.6, 26.6, 7, 26, 8.6, 24.6, 8], 'm');
+    g.line(1, 18.4, 5, 18.4, 'w', 0.6).line(27, 18.4, 31, 18.4, 'w', 0.6).line(2, 20.4, 4.4, 20.4, 'l', 0.6).line(27.6, 20.4, 30, 20.4, 'l', 0.6);
+  },
+  // Fist Crush: zırh eldiveni yukarıdan iner (sıçrayışın kavisli izi arkada); altta üç ayrı darbe (3 rastgele hedef), ortadaki eldivenin altında
+  fistcrush2: (g) => {
+    // sıçrayış kavsi (çelik-mavi iz)
+    g.ring(16, 15, 14, 'c', 1, Math.PI * 1.05, Math.PI * 1.55).ring(16, 15, 12.4, 'u', 0.6, Math.PI * 1.08, Math.PI * 1.5);
+    // yan darbeler
+    for (const [x, y] of [[4.5, 27], [27.5, 27]] as const) {
+      g.ellipse(x, y + 1.6, 4, 1.2, 'k');
+      g.line(x - 3.4, y - 2.4, x - 1.2, y - 0.6, 'w', 0.7).line(x + 3.4, y - 2.4, x + 1.2, y - 0.6, 'w', 0.7).line(x, y - 3.6, x, y - 1.2, 'w', 0.7);
+      g.poly([x - 2, y + 0.4, x - 1, y - 0.8, x + 1.2, y - 0.6, x + 2, y + 0.6], 'm');
+    }
+    // orta darbe: yer çatlağı + toz
+    g.ellipse(16, 29.4, 9, 2.2, 'k').ellipse(16, 29, 6.2, 1.3, 'b');
+    g.line(16, 29, 10.5, 31.4, 'o', 0.8).line(16, 29, 21.8, 31.4, 'o', 0.8).line(16, 29, 9, 28.4, 'o', 0.7).line(16, 29, 23, 28.2, 'o', 0.7);
+    g.poly([8, 27, 10, 25.2, 11.6, 26.6], 'm').poly([24, 27, 22, 25.2, 20.4, 26.6], 'm');
+    // eldiven
+    gauntletFist(g, 16, 4.6, 1.15);
+    // hız çizgileri
+    g.line(4.5, 3, 4.5, 9, 'w', 0.6).line(27.5, 3, 27.5, 9, 'w', 0.6).line(7, 1, 7, 5, 'l', 0.6).line(25, 1, 25, 5, 'l', 0.6);
+  },
+  // Taunt: kule kalkanına kılıç kabzasıyla vurulur (kenarda çelik kıvılcımı); kalkandan karşıya turuncu-kızıl savaş çığlığı dalgaları
+  taunt2: (g) => {
+    // çığlık dalgaları (sağa)
+    g.ring(17, 16, 9.5, 'f', 1.1, -0.85, 0.85).ring(17, 16, 12.5, 'r', 1, -0.75, 0.75).ring(17, 16, 15.2, 'R', 0.9, -0.62, 0.62);
+    towerShield(g, 12, 3, 16, 26);
+    // kılıç kabzası: sağ üstten kalkan kenarına vurur (topuz + kabza + siper)
+    g.line(29.5, 1.5, 23, 7, 'k', 2).line(23.5, 4, 27, 8.6, 'Y', 1.4).disc(30, 1.2, 1.6, 'y');
+    g.line(29, 2, 24, 6.4, 'b', 0.8);
+    // kıvılcım
+    sparkle(g, 20.6, 8.6, 3.2, 'w');
+    g.set(18, 6.4, 'y').set(22.6, 11.2, 'y').set(19.4, 11.6, 'f');
+    // düşmanın hedef işareti (sağ altta küçük kızıl nişangâh)
+    g.ring(27, 26, 3.4, 'r', 0.9).line(27, 21.4, 27, 23.6, 'r', 0.8).line(27, 28.4, 27, 30.6, 'r', 0.8).line(22.4, 26, 24.6, 26, 'r', 0.8).line(29.4, 26, 31.6, 26, 'r', 0.8);
+    g.set(26.75, 25.75, 'w');
+  },
+  // Guard: Defender'ın kalkanından (solda) dostun önünde beliren soluk kule kalkanı hayaletine çelik-mavi bağ; hayaletin ardında dostun miğferi
+  guard2: (g) => {
+    // dostun miğferi ve omuzları (hayaletin ardında)
+    g.poly([17, 8.5, 18.5, 4.4, 22.5, 2.6, 26.5, 4.4, 28, 8.5, 28, 12, 17, 12], 'd').rect(18.6, 6.6, 7.8, 1, 'o');
+    // hayalet kule kalkanı (soluk mavi, damalı yarı saydam alan)
+    towerShield(g, 22.5, 5.5, 14, 24, { rim: 'c', field: 'u', emblem: 'w', rivet: 'w', door: 'u' });
+    g.dither(17.5, 12, 3, 8, 'c', 'u').dither(24.6, 8, 2.4, 9, 'u', 'c');
+    // bağ: kalkandan hayalete kavisli ışık şeridi
+    g.line(9.5, 15, 13, 12.4, 'c', 1.2).line(13, 12.4, 16.4, 12.6, 'c', 1.2).line(9.8, 15.4, 13.2, 13, 'w', 0.5).line(13.2, 13, 16.2, 13.2, 'w', 0.5);
+    // Defender'ın kalkanı (solda, katı)
+    towerShield(g, 6.5, 9, 11, 20);
+    sparkle(g, 15.4, 12.6, 2, 'w');
   },
   aura: (g) => {
     g.ring(16, 16, 15, 'a', 2).ring(16, 16, 10.5, 'z', 2);
@@ -1122,6 +1241,30 @@ export const PIXEL_ICONS: Record<string, Draw> = {
   droplet: (g) => {
     g.poly([16, 1, 26, 19, 26, 23, 16, 30, 6, 23, 6, 19], 'u').poly([16, 10, 22, 20, 20, 25, 13, 25, 12, 20], 'U');
     g.rect(11, 18, 2, 5, 'w').rect(13, 24, 2, 2, 'c');
+  },
+  // Kritik hasar çarpanı: kırmızı-turuncu çok sivri patlama, ortasında beyaz "x"
+  critdmg: (g) => {
+    for (let i = 0; i < 12; i++) {
+      const a = (i * TAU) / 12;
+      const [tx, ty] = polar(16, 16, i % 2 ? 11 : 15.5, a);
+      const [b1x, b1y] = polar(16, 16, 7, a + 0.3);
+      const [b2x, b2y] = polar(16, 16, 7, a - 0.3);
+      g.poly([tx, ty, b1x, b1y, b2x, b2y], 'f');
+    }
+    orb(g, 16, 16, 7.5, 'r');
+    g.line(12, 12, 20, 20, 'w', 2.4).line(20, 12, 12, 20, 'w', 2.4);
+  },
+  // Can yenilenmesi: kalp + yeşil artı
+  hpregen: (g) => {
+    g.disc(9, 10, 6.6, 'r').disc(20, 10, 6.6, 'r').poly([2.5, 13, 26.5, 13, 14.5, 26], 'r');
+    g.disc(7, 7.5, 2.2, 'w');
+    g.rect(19, 19, 11, 4.4, 'g').rect(22.3, 15.7, 4.4, 11, 'g').rect(19, 19, 11, 1.2, 'w');
+  },
+  // Mana yenilenmesi: damla + yeşil artı
+  mpregen: (g) => {
+    g.poly([13, 1, 22, 17, 22, 21, 13, 28, 4, 21, 4, 17], 'u').poly([13, 9, 18, 18, 16.5, 23, 10.5, 23, 9.5, 18], 'U');
+    g.rect(9, 16, 2, 4, 'w');
+    g.rect(19, 19, 11, 4.4, 'g').rect(22.3, 15.7, 4.4, 11, 'g').rect(19, 19, 11, 1.2, 'w');
   },
   muscle: (g) => {
     g.rect(6, 10, 20, 17, 'n').rect(6, 10, 20, 4, 'y').rect(6, 25, 20, 2, 'Y');

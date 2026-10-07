@@ -4,8 +4,16 @@ import type { Combatant, TargetPreview } from '../engine';
 import { animKey, characterTexture, type AnimName } from './assets';
 import { debugState } from './debug-state';
 import { formatHit, hitColor } from './hit-format';
+import { type DamageTags, FLOAT_ICON_TINT, damageIconKind, floatStyle, floatTimes, placeFloat, rowLayout, type FloatKind } from './float-text';
 import { ensureIcon } from './icons';
 import { SERIF } from './ui-frame';
+
+/** floatText seçenekleri: tür (tipografi) ve rakamın solundaki/sağındaki küçük ikon (piksel ikon adı). */
+export interface FloatOpts {
+  kind?: FloatKind;
+  leftIcon?: string;
+  rightIcon?: string;
+}
 
 export const color = (hex: string) => Phaser.Display.Color.HexStringToColor(hex).color;
 const { spriteBox: box, hpBar, animation: timing, colors } = layout;
@@ -65,7 +73,8 @@ export class CombatantView {
   private readonly hpY: number;
   private readonly shieldY: number;
   private previewItems: Phaser.GameObjects.GameObject[] = [];
-  private floating = 0;
+  /** Yüzen yazı şeritleri: her şeridi tutan yazının punto değeri (float-text.ts > placeFloat). */
+  private lanes: Array<number | undefined> = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -602,12 +611,12 @@ export class CombatantView {
   dodge(): void {
     const dir = this.combatant.side === 'enemy' ? 1 : -1;
     this.scene.tweens.add({ targets: this.sprite, x: dir * 46, duration: slow(120), yoyo: true, ease: 'Quad.easeOut' });
-    this.floatText('Dodge', colors.dodge, 46);
+    this.floatText('Dodge', colors.dodge, 48, false, { kind: 'dodge' });
   }
 
   /** Saldıranın isabeti yetmedi (accuracy yüzünden iska): saldıranın üstünde soluk "MISS" yazısı; kendisi kıpırdamaz. */
   missText(): void {
-    this.floatText('MISS', colors.miss, 46);
+    this.floatText('MISS', colors.miss, 46, false, { kind: 'miss' });
   }
 
   /**
@@ -650,36 +659,71 @@ export class CombatantView {
   }
 
   /**
-   * Hasar sayısı: vuruş şiddetiyle büyür ve sarıdan kırmızıya döner; kritikte altın renk, daha iri ve "CRIT" yazısı.
-   * Üst üste binmez.
+   * Hasar sayısı: vuruş şiddetiyle büyür ve sarıdan kırmızıya döner; kritikte altın renk, daha iri ve rakamın solunda patlama ikonu;
+   * hasarın elementi/kaynağı varsa rakamın sağında küçük element ikonu (ateş, buz, zehir...). Üst üste binmez.
    */
-  damageText(amount: number, ratio: number, crit = false): void {
+  damageText(amount: number, ratio: number, crit = false, tags: DamageTags = {}): void {
     const level = damageNumberLevel(ratio);
     const px = Math.round(52 + 64 * level) + (crit ? 14 : 0);
-    this.floatText(String(amount), crit ? colors.crit : damageColor(level), px, true);
-    if (crit) this.floatText('CRIT', colors.crit, 34);
+    const icon = damageIconKind({ ...tags, crit });
+    this.floatText(String(amount), crit ? colors.crit : damageColor(level), px, true, {
+      kind: crit ? 'crit' : 'damage',
+      ...(crit ? { leftIcon: 'burst' } : {}),
+      ...(icon ? { rightIcon: icon } : {}),
+    });
   }
 
-  /** Karakterin üstünde yukarı süzülüp kaybolan sayı/yazı. Aynı anda birden fazlası alt alta dizilir. */
-  floatText(text: string, hex: string, px = 64, pop = false): void {
+  /**
+   * Karakterin üstünde yukarı süzülüp kaybolan sayı/yazı (stil: float-text.ts). Aynı anda birden fazlası şeritlere dizilir (üst üste binmez);
+   * ömür data/battle-layout.json > animation.damageNumberMs, son floatFadeMs solar. `opts`: tür (tipografi) ve rakamın yanındaki ikonlar.
+   */
+  floatText(text: string, hex: string, px = 64, pop = false, opts: FloatOpts = {}): void {
     if (debugState.hideNumbers) return; // debug: numbers and texts above units hidden
-    const slot = this.floating++;
-    const startY = this.container.y - this.h - 60 - slot * (px * 0.95);
-    const t = this.scene.add.text(this.container.x, startY, text, textStyle(px, hex)).setOrigin(0.5).setDepth(5000 + slot);
-    const total = timing.damageNumberMs;
-    if (pop) {
-      t.setScale(0.4);
-      this.scene.tweens.add({ targets: t, scale: 1, duration: 220, ease: 'Back.easeOut' });
+    const { lane, offset } = placeFloat(this.lanes);
+    this.lanes[lane] = px;
+    const startY = this.container.y - this.h - 60 - offset;
+    const style = floatStyle(opts.kind ?? 'info', px, hex);
+    const t = this.scene.add.text(0, 0, text, style).setOrigin(0.5);
+    if (style.topLight) {
+      try {
+        const grad = t.context.createLinearGradient(0, 0, 0, t.height);
+        grad.addColorStop(0, style.topLight);
+        grad.addColorStop(0.55, hex);
+        t.setFill(grad);
+      } catch {
+        /* düz renk yeter */
+      }
     }
-    this.scene.tweens.add({ targets: t, y: startY - timing.damageNumberRise, duration: total, ease: 'Cubic.easeOut' });
+    const parts: Phaser.GameObjects.GameObject[] = [];
+    const sizeOf = (o: Phaser.GameObjects.GameObject) => (o as Phaser.GameObjects.Image).displayWidth;
+    const mk = (kind: string): Phaser.GameObjects.Image => {
+      const img = this.scene.add.image(0, 0, ensureIcon(this.scene, kind, FLOAT_ICON_TINT[kind] ?? hex, false));
+      const d = Math.round(px * (kind === 'burst' ? 0.66 : 0.58));
+      return img.setDisplaySize(d, d).setOrigin(0.5);
+    };
+    const left = opts.leftIcon ? mk(opts.leftIcon) : null;
+    const right = opts.rightIcon ? mk(opts.rightIcon) : null;
+    if (left) parts.push(left);
+    parts.push(t);
+    if (right) parts.push(right);
+    const { lefts } = rowLayout(parts.map((o) => (o === t ? t.width : sizeOf(o))), -Math.round(px * 0.07));
+    parts.forEach((o, i) => (o as Phaser.GameObjects.Image).setX(lefts[i]! + (o === t ? t.width : sizeOf(o)) / 2));
+    const box = this.scene.add.container(this.container.x, startY, parts).setDepth(5000 + lane);
+    const times = floatTimes(timing.damageNumberMs, timing.floatFadeMs);
+    if (pop) {
+      box.setScale(0.4);
+      this.scene.tweens.add({ targets: box, scale: 1, duration: 220, ease: 'Back.easeOut' });
+    }
+    this.scene.tweens.add({ targets: box, y: startY - timing.damageNumberRise, duration: times.total, ease: 'Cubic.easeOut' });
     this.scene.tweens.add({
-      targets: t,
+      targets: box,
       alpha: 0,
-      delay: total * 0.55,
-      duration: total * 0.45,
+      delay: times.fadeDelay,
+      duration: times.fade,
       onComplete: () => {
-        t.destroy();
-        this.floating = Math.max(0, this.floating - 1);
+        box.destroy();
+        this.lanes[lane] = undefined;
+        while (this.lanes.length > 0 && this.lanes[this.lanes.length - 1] === undefined) this.lanes.pop();
       },
     });
   }
@@ -817,7 +861,7 @@ export class CombatantView {
     this.setShield(0, 0, false);
     this.play('idle');
     this.ring(colors.heal, 1.2);
-    this.floatText('Revived', colors.heal, 48);
+    this.floatText('Revived', colors.heal, 48, false, { kind: 'heal' });
     this.scene.tweens.add({ targets: this.container, alpha: 1, duration: slow(450) });
   }
 }

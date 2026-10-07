@@ -233,6 +233,7 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       add(`Heal ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)})${who}`);
     } else if (e.type === 'revive') {
       add(`Revives the ally where it fell with ${pct(e.hpRatio)} HP and ${pct(e.mpRatio)} MP`);
+      if (e.regen && e.regen.turns > 0 && e.regen.ratio > 0) add(`Then regenerates ${pct(e.regen.ratio)} of its max HP at the start of each of its next ${e.regen.turns} turns`);
     } else if (e.type === 'hot') {
       add(`Heal ${raw(e.scale, e.power)} per turn for ${e.turns} turns`);
     } else if (e.type === 'shield') {
@@ -248,7 +249,7 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
         const unfed = applySummonVariant(unit, 'unfed');
         const statOf = (d: CombatantDef) => (d.stats.int > d.stats.str ? `INT ${d.stats.int}` : `STR ${d.stats.str}`);
         const boost = unfed.stats.hp > 0 ? Math.round(((fed.stats.hp / unfed.stats.hp - 1) * 100) / 5) * 5 : 0;
-        add(`Raises a ${unit.name} on your side${life}. If a fallen foe lies on the field, consumes the corpse: the ${unit.name} is empowered (+${boost}%) and the corpse can no longer be revived.`);
+        add(`Choose a fallen foe to consume, then choose where the ${unit.name} rises (on your side${life}). The consumed corpse can no longer be revived and the ${unit.name} is empowered (+${boost}%). With no fallen foe, you only choose the cell.`);
         add(`Empowered: HP ${fed.stats.hp}, ${statOf(fed)} · Without a corpse: HP ${unfed.stats.hp}, ${statOf(unfed)}`);
       } else {
         add(unit ? `Summons ${unit.name} (HP ${unit.stats.hp})${life}` : `Summons ${e.unit}${life}`);
@@ -276,6 +277,7 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       add(`Costs you ${pct(e.ratio)} of your max HP`);
     } else if (e.type === 'guard') {
       add(`Guard ${e.turns} turns: take ${pct(e.share)} of the damage ally takes`);
+      if (skill.excludeSelf) add('Cannot target yourself');
     }
   }
   const waves = skill.target === 'area_enemies' || skill.target === 'area_any' ? stageText(skill.area) : '';

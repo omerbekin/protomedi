@@ -169,6 +169,18 @@ export interface Corpse {
   state: CorpseState;
 }
 
+/**
+ * Ceset tüketen çağrının (Raise Dead) seçebileceği bir düşman cesedi (`battle.corpseChoices`): `danger` = o birim diriltilirse karşı takıma vereceği
+ * değer (yüksek = tüketmek daha değerli; yapay zeka en yükseğini seçer), `why` = hesabın okunur gerekçesi (maç kaydı/tooltip).
+ */
+export interface CorpseChoice {
+  uid: string;
+  slot: number;
+  name: string;
+  danger: number;
+  why: string;
+}
+
 export type Element = 'physical' | 'fire' | 'ice' | 'holy' | 'dark' | 'nature' | 'arcane';
 
 /**
@@ -227,15 +239,20 @@ export type SkillEffectKind =
       guaranteedCrit?: boolean;
     }
   | { type: 'heal'; scale: Attribute; power: number }
-  /** Düşmüş bir dostu bulunduğu yerde diriltir: maks canının/manasının bu oranlarıyla (hedef 'dead_ally'). */
-  | { type: 'revive'; hpRatio: number; mpRatio: number }
+  /**
+   * Düşmüş bir dostu bulunduğu yerde diriltir: maks canının/manasının bu oranlarıyla (hedef 'dead_ally').
+   * `regen` (isteğe bağlı): dirilen birim sonraki `turns` turunun başında maks canının `ratio` kadarını yeniler (durum 'regen', `cause: 'revival'`;
+   * miktar diriltme anında sabitlenir, kritik yok, can maks'ı aşmaz; buff olduğu için Resilience etkilemez).
+   */
+  | { type: 'revive'; hpRatio: number; mpRatio: number; regen?: { turns: number; ratio: number } }
   /** Tur bazlı şifa: hedefin sonraki `turns` turunun başında `power` kadar iyileştirir. */
   | { type: 'hot'; scale: Attribute; power: number; turns: number }
   | { type: 'shield'; scale: Attribute; power: number; shieldType?: 'magic'; /** Kullanıcının kalan MP'si başına eklenen kalkan. */ bonusPerMana?: number; /** true: kalkan hedefe değil kullanıcının kendisine gider (ör. Shield Bash). */ self?: boolean }
   /**
-   * Birim kullanıcının KENDİ tahtasında boş bir yuvaya çağrılır. `consumeCorpse`: çağırmadan önce karşı taraftaki tüketilebilir (revivable, çağrı olmayan)
-   * düşman cesetlerinden EN SON öleni (eşitlikte küçük yuva) tüketir (ceset `consumed` olur, artık diriltilemez); ceset tüketildiyse birim `fed` varyantıyla
-   * (beslenmiş, `empowered`), yoksa `unfed` varyantıyla gelir (birim tanımındaki `variants`; bkz. CombatantData.variants).
+   * Birim kullanıcının KENDİ tahtasında boş bir yuvaya çağrılır (`battle.summonSlots`: ölü dostun ayrılmış yuvası hariç). `consumeCorpse`: çağırmadan önce
+   * karşı taraftaki tüketilebilir (revivable, çağrı olmayan) düşman cesetlerinden SEÇİLENİ tüketir (madde 230: oyuncu `corpseUid` ile seçer, ceset varken
+   * zorunlu; yapay zeka en tehlikelisini seçer, `battle.corpseChoices`); ceset `consumed` olur, artık diriltilemez. Ceset tüketildiyse birim `fed`
+   * varyantıyla (beslenmiş, `empowered`), hiç ceset yoksa `unfed` varyantıyla gelir (birim tanımındaki `variants`; bkz. CombatantData.variants).
    */
   | { type: 'summon'; unit: string; lifespan?: number; consumeCorpse?: boolean }
   | { type: 'manaBurn'; amount: number; /** Yakılan mananın bu oranı kullanıcıya geri verilir. */ gainRatio?: number }
@@ -346,6 +363,8 @@ export interface SkillDef {
   initialCooldown?: number;
   /** Yapay zeka bağlam ipucu: skill ne zaman EFEKTİF kullanılır (bkz. SkillAiHint). Yoksa yalnızca beklenen değere göre seçilir. */
   ai?: SkillAiHint;
+  /** true (target 'single_ally'): kullanıcı KENDİNİ hedefleyemez (Guard: 'Cannot guard yourself'). */
+  excludeSelf?: boolean;
   /** true: yakın dövüş skill'i olsa da kullanıcının ön sırada olma şartı aranmaz (ileride dash/charge gibi skill'ler için). */
   ignoreFrontRow?: boolean;
   /**
@@ -483,7 +502,12 @@ export interface Formulas {
   turn: { threshold: number; queueLength: number };
   /** Cooldown kuralları: `maxInitial` = bir skill'in savaş başı başlangıç cooldown'unun (initialCooldown) üst sınırı. */
   cooldown: { maxInitial: number };
+  /** Raise Dead ceset tehlikesi katsayıları (madde 230; battle.corpseChoices). Yoksa varsayılan hpRef 100, çarpanlar 1,5. */
+  corpseDanger?: { hpRef: number; reviverMult: number; revivableMult: number };
 }
+
+/** Hasar olayının kaynağı (BattleEvent 'damage' > origin). */
+export type DamageOrigin = 'skill' | 'ground' | 'status' | 'self';
 
 /** turns = hıza göre sıralı gerçek oyun; test = sırasız, her karakter istediği an oynar (debug). */
 export type BattleMode = 'turns' | 'test';
@@ -561,6 +585,8 @@ export interface Status {
   /** regen: iyileştirenin kritik değerleri (her tikte kritik zarı atılır). */
   critChance?: number;
   critMult?: number;
+  /** Görsel/kaynak nedeni (status olayındaki `cause` ile aynı): ör. 'revival' = Resurrection sonrası yenilenme. */
+  cause?: string;
 }
 
 export interface Combatant {
@@ -645,6 +671,10 @@ type BattleEventBody =
       behindSlot?: number;
       behindBoard?: Side;
       from?: number;
+      /** Çağrı skill'inde: çağrının geleceği (kullanıcının kendi tahtasındaki) yuva. */
+      slot?: number;
+      /** Ceset tüketen çağrıda (Raise Dead): tüketilen cesedin uid'si (ceset yoksa tanımsız). */
+      corpseUid?: string;
     }
   | { type: 'resource'; actor: string; resource: 'mp' | 'hp'; amount: number; after: number }
   | {
@@ -660,6 +690,18 @@ type BattleEventBody =
       crit: boolean;
       /** Guard ile korumacıya aktarılan hasar. */
       redirected?: boolean;
+      /**
+       * Hasarın kaynağı (UI yazı/ikon için): 'skill' = skill vuruşu (guard aktarımı dahil), 'ground' = yer etkisi tiki (zehir/yanma/holy fire;
+       * `ground` türü + `groundId` örneği), 'status' = durum kaynaklı tik (şu an yok; ileride DoT), 'self' = kendine hasar (selfDamage, kaybedilen can bahsi).
+       */
+      origin?: DamageOrigin;
+      /** Hasarın elementi (skill etkisinin `element`'i ya da yer etkisinin elementi; yoksa 'physical'). */
+      element?: Element;
+      /** Fiziksel / büyü (zırh türü). */
+      damageType?: 'physical' | 'magic';
+      /** origin 'ground': yer etkisi türü (data/grounds.json anahtarı: poison | burning | holy_fire) ve örnek kimliği (ground olayındaki id). */
+      ground?: string;
+      groundId?: string;
     }
   /**
    * İska (tek zardan ayrıştırılır): 'dodge' = hedefin KAÇINMASI yüzünden vurulamadı (UI: hedefin üstünde "Dodge");
@@ -726,7 +768,7 @@ export interface GlobalSkillDef {
 
 /** Bir birimin yapabileceği tek bir eylem (battle.act girdisi; yapay zeka seçimi de bu şekle çevrilir). */
 export type BattleAction =
-  | { kind: 'skill'; skillId: string; targetUid?: string; slot?: number; /** area_any: anchor hücrenin tahtası (yoksa karşı taraf; `targetUid` canlı birimse onun tahtası, `tile:<yuva>` ise kendi tahtası). */ board?: Side }
+  | { kind: 'skill'; skillId: string; targetUid?: string; slot?: number; /** area_any: anchor hücrenin tahtası (yoksa karşı taraf; `targetUid` canlı birimse onun tahtası, `tile:<yuva>` ise kendi tahtası). */ board?: Side; /** Ceset tüketen çağrı (Raise Dead): tüketilecek düşman cesedi (ceset varken zorunlu). */ corpseUid?: string }
   | { kind: 'global'; id: string; slot?: number; /** Move Tile: slot yerine `tile:<yuva>` kimliği de kabul edilir. */ targetUid?: string };
 
 /** battle.listActions satırı: bir eylem ve şu an kullanılabilir olup olmadığı. */

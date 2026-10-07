@@ -12,6 +12,8 @@ export interface CorpseMarker {
   remove(fast?: boolean): void;
   /** Raise Dead'in tüketeceği ceset: yumuşak nabız (ipucu); false = normal. */
   setConsumeHint(on: boolean): void;
+  /** Raise Dead'in 2. adımında oyuncunun SEÇTİĞİ ceset: işaret büyür ve belirgin nabız atar; false = normal. */
+  setSelected(on: boolean): void;
 }
 
 export interface CorpseMarkerOptions {
@@ -59,6 +61,17 @@ export function createCorpseMarker(scene: Phaser.Scene, pos: Pt, opts: CorpseMar
       scene.tweens.killTweensOf(container);
       container.setAlpha(1).setScale(1);
       if (on) pulse = scene.tweens.add({ targets: container, alpha: 0.55, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    },
+    setSelected: (on) => {
+      if (gone || !container.active) return;
+      pulse?.stop();
+      pulse = undefined;
+      scene.tweens.killTweensOf(container);
+      container.setAlpha(1).setScale(1);
+      if (on) {
+        container.setScale(1.3);
+        pulse = scene.tweens.add({ targets: container, scale: 1.45, duration: 480, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      }
     },
   };
 }

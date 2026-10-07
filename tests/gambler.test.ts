@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, chooseAction, content, describeSkill, previewSkill } from '../src/engine';
+import { Battle, betMultipliers, chooseAction, content, describeSkill, previewSkill } from '../src/engine';
 import type { AiConfig, BattleEvent, BattleMode, SkillDef, SkillEffect } from '../src/engine';
 
 // Gambler class'ı ve onun yeni motor kuralları: çifte vuruş (repeatChance), bahis (bet), rastgele durum (randomStatus).
@@ -174,16 +174,34 @@ describe('bahis (damage.bet): can', () => {
 describe('bahis (damage.bet): MP', () => {
   const ai_ = (winChance: number) => ({ all_in: withEffect('all_in', (e) => (e.type === 'damage' && e.bet ? { ...e, bet: { ...e.bet, winChance } } : e)) });
   const skill = content.skills.all_in!;
-  const bet = (skill.effects[0] as { bet: { winMult: number; perStake: number } }).bet;
+  const bet = (skill.effects[0] as { bet: { winChance: number; winMult: number; loseMult?: number; perStake: number } }).bet;
 
-  it('kayıp: iska (hasar yok), bedelden SONRA kalan tüm MP gider', () => {
+  it('kayıp: hasar loseMult katı (0 ise iska; madde 230: 0,6 = yarım-zayıf vuruş), bedelden SONRA kalan tüm MP gider', () => {
     const b = duel({ overrides: ai_(0) });
     const me = b.get(G)!;
     me.mp = me.maxMp;
     const ev = run(b, 'all_in');
     expect(passives(ev, 'gamble_lose')).toHaveLength(1);
-    expect(dmgTo(ev, E)).toHaveLength(0);
+    const lose = bet.loseMult ?? 1;
+    if (lose <= 0) expect(dmgTo(ev, E)).toHaveLength(0);
+    else {
+      const luck = content.classes.gambler!.stats.luck;
+      const power = (skill.effects[0] as { power: number }).power;
+      const d = sumDmg(ev, E);
+      expect(d).toBeGreaterThan(0);
+      expect(d).toBeLessThan(luck * power * lose * 1.15 * 1.5); // zırh/kritik payı
+    }
     expect(me.mp).toBe(0);
+  });
+
+  it('All In daha az şansa dayalı (madde 230): beklenen çarpan eskisiyle aynı (0,5 x (3 + 0,1 x bahis)), yayılım (kazanç - kayıp) daha dar', () => {
+    for (const stake of [0, 10, 22, 40]) {
+      const m = betMultipliers(bet as never, stake);
+      expect(m.expected).toBeCloseTo(0.5 * (3 + 0.1 * stake), 1);
+      expect(m.win - m.lose).toBeLessThan(3 + 0.1 * stake); // eski yayılım: kazanç 3+0,1s, kayıp 0
+    }
+    expect(bet.winChance).toBeGreaterThan(0.5);
+    expect(bet.loseMult ?? 1).toBeGreaterThan(0);
   });
 
   it('kazanç: hasar winMult + perStake x bahis katı, MP bedelden sonra kalan miktarda kalır; bahis büyüdükçe hasar artar', () => {
@@ -256,6 +274,9 @@ describe('rastgele durum (randomStatus): Card Trick', () => {
   });
 });
 
+/** All In bahsi (veriden). */
+const allInBet = (content.skills.all_in!.effects[0] as { bet: { loseMult?: number } }).bet;
+
 describe('önizleme ve açıklama', () => {
   it('önizleme: bahis/çifte vuruş en az-en çok-ortalama aralığını verir; ölümcül hesap en çok değere bakar', () => {
     const b = duel();
@@ -268,7 +289,8 @@ describe('önizleme ve açıklama', () => {
     expect(stakes.max).toBeGreaterThan(stakes.avg);
     expect(stakes.min).toBeGreaterThan(0);
     const allIn = previewSkill(b, G, 'all_in', E)[0]!.damage!;
-    expect(allIn.min).toBe(0); // iska ihtimali
+    if ((allInBet.loseMult ?? 1) <= 0) expect(allIn.min).toBe(0); // iska ihtimali
+    else expect(allIn.min).toBeGreaterThan(0); // kayıpta da zayıf vuruş (loseMult)
     expect(allIn.max).toBeGreaterThan(allIn.avg);
     expect(previewSkill(b, G, 'card_trick')).toEqual([]); // hedefler rastgele: önizleme yok
   });
@@ -292,7 +314,7 @@ describe('önizleme ve açıklama', () => {
     expect(info('loaded_dice').lines.join('\n')).toMatch(/chance to hit twice/);
     expect(info('high_stakes').lines.join('\n')).toMatch(/Bet .*max HP/);
     expect(info('all_in').lines.join('\n')).toMatch(/Bet all your remaining MP/);
-    expect(info('all_in').lines.join('\n')).toMatch(/you miss/);
+    expect(info('all_in').lines.join('\n')).toMatch((allInBet.loseMult ?? 1) <= 0 ? /you miss/ : new RegExp(`otherwise x${allInBet.loseMult} damage`));
     expect(info('card_trick').lines.join('\n')).toMatch(/Random effect/);
     expect(info('card_trick').targetBadge).toMatch(/Random/);
     for (const id of content.classes.gambler!.skills) {

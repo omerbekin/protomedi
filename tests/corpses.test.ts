@@ -3,9 +3,9 @@ import { Battle, MatchLog, applySummonVariant, chooseAction, content, describeSk
 import type { BattleEvent, BattleMode } from '../src/engine';
 
 /**
- * Ceset sistemi + yeni Raise Dead (madde 222): ölen (çağrı olmayan) birim ceset bırakır (revivable); Undead'in Raise Dead'i Skeleton'ı KENDİ tarafına
- * çağırır ve karşı taraftaki en son ölen diriltilebilir cesedi tüketir (consumed: artık diriltilemez, yuvası rezerve değil) -> beslenmiş (fed) Skeleton;
- * ceset yoksa beslenmemiş (unfed). Sayılar veriden okunur (skeleton.json variants).
+ * Ceset sistemi + Raise Dead (madde 222, 230): ölen (çağrı olmayan) birim ceset bırakır (revivable); Undead'in Raise Dead'i Skeleton'ı KENDİ tarafına
+ * çağırır ve karşı taraftaki SEÇİLEN diriltilebilir cesedi tüketir (oyuncu corpseUid ile seçer; YZ en tehlikelisini; consumed: artık diriltilemez,
+ * yuvası rezerve değil) -> beslenmiş (fed) Skeleton; ceset yoksa beslenmemiş (unfed). Sayılar veriden okunur (skeleton.json variants).
  */
 const ai = content.aiConfig;
 const cells = (map: Record<number, string>) => Array.from({ length: 12 }, (_, i) => map[i] ?? '');
@@ -17,8 +17,8 @@ function mk(mode: BattleMode = 'test', seed = 1): Battle {
   b.freeMp = true;
   return b;
 }
-const act = (b: Battle, actor: string, skill: string, target?: string, slot?: number): BattleEvent[] => {
-  const r = b.useSkill(actor, skill, target, slot);
+const act = (b: Battle, actor: string, skill: string, target?: string, slot?: number, corpse?: string): BattleEvent[] => {
+  const r = b.useSkill(actor, skill, target, slot, undefined, corpse);
   if (!r.ok) throw new Error(`${actor} ${skill}: ${r.reason}`);
   return r.events;
 };
@@ -99,7 +99,7 @@ describe('Raise Dead: kendi tarafına çağrı + ceset tüketimi', () => {
   it('düşman cesedi varsa tüketir: corpseConsumed olayı, ceset consumed, Skeleton beslenmiş (fed) = veri dosyasındaki mevcut değerler', () => {
     const b = mk();
     b.debugKill('enemy-1', false);
-    const ev = act(b, 'party-1', 'raise_dead');
+    const ev = act(b, 'party-1', 'raise_dead', undefined, undefined, 'enemy-1');
     expect(ofType(ev, 'corpseConsumed')).toEqual([{ type: 'corpseConsumed', uid: 'enemy-1', by: 'party-1', slot: 1, side: 'enemy' }]);
     // olay sırası: önce tüketim, sonra çağrı
     expect(ev.findIndex((e) => e.type === 'corpseConsumed')).toBeLessThan(ev.findIndex((e) => e.type === 'summon'));
@@ -116,23 +116,54 @@ describe('Raise Dead: kendi tarafına çağrı + ceset tüketimi', () => {
     expect(s.combatant.maxHp / unfed.hp).toBeLessThan(1.55);
   });
 
-  it('en son ölen düşman cesedi tüketilir; kendi tarafındaki ceset ve tüketilmiş ceset tüketilmez', () => {
+  it('oyuncu cesedi seçer: iki cesetten seçilen tüketilir, diğeri revivable kalır; kendi tarafındaki ceset aday değil', () => {
     const b = mk();
-    b.debugKill('party-0', false); // kendi ölüsü: tüketilmez
+    b.debugKill('party-0', false); // kendi ölüsü: aday değil
     b.debugKill('enemy-2', false);
-    b.debugKill('enemy-0', false); // en son ölen
-    expect(b.corpseToConsume('party-1')?.uid).toBe('enemy-0');
-    act(b, 'party-1', 'raise_dead');
-    expect(b.corpseOf('enemy-0')?.state).toBe('consumed');
-    expect(b.corpseOf('enemy-2')?.state).toBe('revivable');
+    b.debugKill('enemy-0', false);
+    expect(b.corpseChoices('party-1', 'raise_dead').map((c) => [c.uid, c.slot, c.name])).toEqual([['enemy-0', 0, 'Warrior'], ['enemy-2', 3, 'Paladin']]);
+    expect(b.needsCorpseChoice('party-1', 'raise_dead')).toBe(true);
+    // en son ölen enemy-0 değil, oyuncunun seçtiği enemy-2 tüketilir (eski otomatik kural kalktı)
+    const ev = act(b, 'party-1', 'raise_dead', undefined, 1, 'enemy-2');
+    expect(b.corpseOf('enemy-2')?.state).toBe('consumed');
+    expect(b.corpseOf('enemy-0')?.state).toBe('revivable');
     expect(b.corpseOf('party-0')?.state).toBe('revivable');
-    expect(b.corpseToConsume('party-1')?.uid).toBe('enemy-2');
+    expect(ofType(ev, 'skillUsed')[0]).toMatchObject({ skill: 'raise_dead', slot: 1, corpseUid: 'enemy-2' });
+    expect(b.corpseChoices('party-1', 'raise_dead').map((c) => c.uid)).toEqual(['enemy-0']);
+  });
+
+  it('ceset varken corpseUid zorunlu ("Choose a corpse to consume"); geçersiz/kendi ceset reddedilir; ceset yokken verilen corpseUid yok sayılır', () => {
+    const b = mk();
+    b.debugKill('enemy-1', false);
+    b.debugKill('party-0', false);
+    expect(b.useSkill('party-1', 'raise_dead', undefined, 1)).toEqual({ ok: false, reason: 'Choose a corpse to consume' });
+    expect(b.useSkill('party-1', 'raise_dead', undefined, 1, undefined, 'party-0')).toEqual({ ok: false, reason: 'Invalid corpse' });
+    expect(b.useSkill('party-1', 'raise_dead', undefined, 1, undefined, 'enemy-2')).toEqual({ ok: false, reason: 'Invalid corpse' }); // canlı
+    expect(b.corpseOf('enemy-1')?.state).toBe('revivable'); // reddedilen deneme hiçbir şeyi değiştirmez
+    expect(b.log.some((e) => e.type === 'skillUsed')).toBe(false);
+    // ceset yok: yalnızca yuva; verilen corpseUid yok sayılır (beslenmemiş)
+    const c = mk();
+    const ev = act(c, 'party-1', 'raise_dead', undefined, 2, 'enemy-0');
+    expect(ofType(ev, 'corpseConsumed')).toHaveLength(0);
+    expect(ofType(ev, 'summon')[0]).toMatchObject({ empowered: false });
+    expect(ofType(ev, 'skillUsed')[0]!.corpseUid).toBeUndefined();
+    expect(c.needsCorpseChoice('party-1', 'raise_dead')).toBe(false);
+  });
+
+  it('summonSlots: kendi tahtasındaki boş yuvalar, ölü dostun ayrılmış yuvası HARİÇ; o yuvaya çağrı reddedilir', () => {
+    const b = mk();
+    b.debugKill('party-0', false); // party-0 yuvası 0: diriltme için ayrılmış
+    expect(b.fallenSlots('party')).toEqual([0]);
+    expect(b.summonSlots('party-1', 'raise_dead')).toEqual(b.freeSlots('party').filter((s) => s !== 0));
+    expect(b.summonSlots('party-1', 'raise_dead')).not.toContain(0);
+    expect(b.useSkill('party-1', 'raise_dead', undefined, 0)).toEqual({ ok: false, reason: 'That cell is reserved for a fallen ally' });
+    expect(b.summonSlots('party-1', 'bone_throw')).toEqual([]); // çağrı değil
   });
 
   it('düşman Undead de aynı kuralla oyuncunun cesedini tüketir (iki taraf)', () => {
     const b = mk();
     b.debugKill('party-0', false);
-    const ev = act(b, 'enemy-3', 'raise_dead');
+    const ev = act(b, 'enemy-3', 'raise_dead', undefined, undefined, 'party-0');
     expect(ofType(ev, 'corpseConsumed')[0]).toMatchObject({ uid: 'party-0', by: 'enemy-3', side: 'party' });
     expect(ofType(ev, 'summon')[0]!.combatant.board).toBe('enemy');
   });
@@ -141,10 +172,15 @@ describe('Raise Dead: kendi tarafına çağrı + ceset tüketimi', () => {
     const b = mk();
     expect(previewSkill(b, 'party-1', 'raise_dead')[0]!.summon).toMatchObject({ unit: 'skeleton', empowered: false, corpse: null });
     b.debugKill('enemy-0', false);
-    expect(previewSkill(b, 'party-1', 'raise_dead')[0]!.summon).toMatchObject({ empowered: true, corpse: 'enemy-0', hp: skeletonDef.stats.hp });
+    b.debugKill('enemy-2', false);
+    // seçilmeden: YZ önerisi (en tehlikeli); seçilince: seçilen ceset + seçilen yuva
+    const top = b.corpseChoices('party-1', 'raise_dead').reduce((x, y) => (y.danger > x.danger ? y : x));
+    expect(previewSkill(b, 'party-1', 'raise_dead')[0]!.summon).toMatchObject({ empowered: true, corpse: top.uid, hp: skeletonDef.stats.hp });
+    expect(previewSkill(b, 'party-1', 'raise_dead', undefined, 2, undefined, 'enemy-0')[0]!.summon).toMatchObject({ empowered: true, corpse: 'enemy-0', slot: 2 });
+    expect(b.summonPreview('party-1', 'raise_dead', 'enemy-2', 5)).toMatchObject({ empowered: true, corpse: { uid: 'enemy-2' }, slot: 5 });
     const info = describeSkill(content.skills.raise_dead!, content.classes.undead!.stats, content.formulas, content.summons, { statuses: content.statuses, grounds: content.grounds });
-    expect(info.lines.join(' ')).toContain('Raises a Skeleton on your side');
-    expect(info.lines.join(' ')).toContain('consumes the corpse');
+    expect(info.lines.join(' ')).toContain('Choose a fallen foe to consume, then choose where the Skeleton rises');
+    expect(info.lines.join(' ')).toContain('can no longer be revived');
     expect(info.lines.join(' ')).toContain(`HP ${skeletonDef.stats.hp}`);
     expect(info.lines.join(' ')).toContain(`HP ${applySummonVariant(skeletonDef, 'unfed').stats.hp}`);
   });
@@ -155,7 +191,7 @@ describe('Resurrection ve tüketilmiş ceset', () => {
     const b = mk();
     b.debugKill('enemy-0', false);
     b.debugKill('enemy-1', false);
-    act(b, 'party-1', 'raise_dead'); // en son ölen enemy-1 tüketilir
+    act(b, 'party-1', 'raise_dead', undefined, undefined, 'enemy-1');
     expect(b.validTargets('enemy-2', 'resurrection').map((c) => c.uid)).toEqual(['enemy-0']);
     expect(b.useSkill('enemy-2', 'resurrection', 'enemy-1')).toEqual({ ok: false, reason: 'Corpse was consumed' });
     expect(b.reviveBlockReason('enemy-2', 'enemy-1')).toBe('Corpse was consumed');
@@ -165,7 +201,7 @@ describe('Resurrection ve tüketilmiş ceset', () => {
   it('tüm düşmüşler tüketildiyse canUse nedeni "Corpse was consumed"', () => {
     const b = mk();
     b.debugKill('enemy-0', false);
-    act(b, 'party-1', 'raise_dead');
+    act(b, 'party-1', 'raise_dead', undefined, undefined, 'enemy-0');
     expect(b.canUse('enemy-2', 'resurrection')).toEqual({ ok: false, reason: 'Corpse was consumed' });
     expect(previewSkill(b, 'enemy-2', 'resurrection', 'enemy-0')).toEqual([]);
   });
@@ -175,7 +211,7 @@ describe('Resurrection ve tüketilmiş ceset', () => {
     b.debugKill('enemy-1', false);
     expect(b.fallenSlots('enemy')).toEqual([1]);
     expect(b.freeTiles('enemy-0')).not.toContain(1);
-    act(b, 'party-1', 'raise_dead');
+    act(b, 'party-1', 'raise_dead', undefined, undefined, 'enemy-1');
     expect(b.fallenSlots('enemy')).toEqual([]);
     expect(b.freeTiles('enemy-0')).toContain(1);
     expect(b.useGlobal('enemy-0', 'move_tile', 1).ok).toBe(true);
@@ -192,10 +228,11 @@ describe('YZ: Undead ve Paladin', () => {
   it('Undead: düşman cesedi varsa ve Skeleton yoksa Raise Dead (summon, empowered)', () => {
     const b = tough(mk());
     b.debugKill('enemy-1', false);
-    expect(chooseAction(b, 'party-1', ai)).toMatchObject({ skillId: 'raise_dead', reason: 'summon' });
+    expect(chooseAction(b, 'party-1', ai)).toMatchObject({ skillId: 'raise_dead', reason: 'summon', corpseUid: 'enemy-1' });
     const ex = explainChoice(b, 'party-1', ai)!;
     expect(ex.candidates.find((c) => c.skill === 'raise_dead')!.tags).toContain('empowered');
-    act(b, 'party-1', 'raise_dead');
+    expect(b.applyChoice('party-1', chooseAction(b, 'party-1', ai)).ok).toBe(true);
+    expect(b.corpseOf('enemy-1')?.state).toBe('consumed');
     b.debugKill('enemy-0', false);
     expect(chooseAction(b, 'party-1', ai)?.skillId).not.toBe('raise_dead'); // aynı anda çağrı sınırı (maxSummons)
   });
@@ -219,7 +256,7 @@ describe('YZ: Undead ve Paladin', () => {
     const b = tough(mk());
     b.debugKill('enemy-0', false);
     b.debugKill('enemy-1', false);
-    act(b, 'party-1', 'raise_dead'); // enemy-1 tüketildi
+    act(b, 'party-1', 'raise_dead', undefined, undefined, 'enemy-1'); // enemy-1 tüketildi
     const c = chooseAction(b, 'enemy-2', ai)!;
     if (c.skillId === 'resurrection') expect(c.targetUid).toBe('enemy-0');
     expect(c).toMatchObject({ skillId: 'resurrection', targetUid: 'enemy-0' });
@@ -235,7 +272,7 @@ describe('iki mod, determinizm, maç kaydı', () => {
         const b = mk(mode, 5);
         b.debugKill('enemy-0', false);
         for (let i = 0; i < 400 && mode === 'turns' && b.currentUid !== 'party-1'; i++) b.skipTurn();
-        act(b, 'party-1', 'raise_dead');
+        act(b, 'party-1', 'raise_dead', undefined, undefined, 'enemy-0');
         return JSON.stringify(b.log.filter((e) => e.type !== 'battleStart'));
       };
       const a = run();
@@ -248,7 +285,7 @@ describe('iki mod, determinizm, maç kaydı', () => {
     const b = mk();
     const log = new MatchLog(b, { version: 'test' });
     b.debugKill('enemy-1', false);
-    act(b, 'party-1', 'raise_dead', undefined, 1);
+    act(b, 'party-1', 'raise_dead', undefined, 1, 'enemy-1');
     const text = log.serialize();
     expect(text).toContain('consumes the corpse of E1:Defender');
     expect(text).toContain('EMPOWERED');

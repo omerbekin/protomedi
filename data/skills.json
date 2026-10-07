@@ -1,5 +1,5 @@
 {
-  "_not": "Etkiler: damage (damageType physical|magic, element physical|fire|ice|holy|dark|nature|arcane (yalnızca renk/yazı), scale str|int|dex|luck, power; opsiyonel ignoreDefense, lifesteal, bonusVsTag, bonusPerMissingMana, bonusFromShield {ratio, consume}), heal, hot (tur bazlı şifa: turns), shield (shieldType 'magic' ise yalnızca büyü hasarını emer), summon (lifespan: kendi tur sayısı), manaBurn, taunt (turns, breakRatio: taunt'lı bu oranda can kaybedince biter), guard (turns, share). scale: etkinin hangi temel özelliğe (str/int/dex/luck) bağlı olduğu. motion melee olan skill'ler yalnızca düşmanın en öndeki 2 canlı birimine vurabilir. cooldown: kullanıcının kendi tur sayısıyla bekleme. motion/fx/icon yalnızca görsel. Sayılar GEÇİCİDİR. Çağrı skill'inde oyuncu boş yuvayı seçer. HEDEF BİÇİMLERİ: alan skill'i = area_enemies + area {shape: row | column | plus | rect (rows 1-4 sıra x cols 1-3 şerit, anchor bottom_left), stages?: row | column | distance, reverse?}: oyuncu bir anchor HÜCRE seçer (boş olabilir), şeklin hücrelerindeki canlı düşmanlar vurulur (docs/design/combat.md > AOE şekilleri). stages: vuruş aşama aşama gelir (row = sıra sıra, ön sıra önce; column = şerit şerit; distance = anchor'dan dışarı halkalar; reverse ters), olaylarda stage numarası; hasar aynıdır. Eski area.radius ve column_enemies KALDIRILDI. Dizilim: sıra (derinlik) x şerit; motion melee olanlar yalnızca en öndeki dolu sıraya vurur. Çağrı skill'inde oyuncu boş yuvayı seçer. shield efektinde self: true ise kalkan hedefe değil kullanıcıya gider (Shield Bash). Alan skill'leri boş hücreye de atılabilir (useSkill'in slot parametresi). summon efekti birimi daima kullanıcının KENDİ tahtasına çağırır; consumeCorpse: true ise önce karşı taraftaki en son ölen diriltilebilir düşman cesedini tüketir (ceset consumed olur) ve birim fed (beslenmiş) varyantıyla, ceset yoksa unfed varyantıyla gelir (data/summons > variants). status efektinde chance (0-1) her alıcı için bağımsız zar, cause görsel neden (status olayına yazılır, ör. vines). Skill'de ignoreFrontRow: true ise yakın dövüş 'yalnızca ön sıradan' kuralından muaf (dash/charge). BUFF/DEBUFF: {type:'status', status, turns, self?} (data/statuses.json: slow, haste, wound, stun, fortify, blessed...). YER ETKİSİ: {type:'ground', ground, turns, scale, power} (data/grounds.json: poison, burning); skill'in kapsadığı hücrelere bırakılır. {type:'selfDamage', ratio}: kullanıcıya maks canının ratio'su kadar hasar. target 'everyone': herkese gider, her etki 'side' (allies|enemies) ile ya da varsayılanla (hasar/durum düşmana, şifa/kalkan dosta) taraf seçer. Hasar etkisinde falloff: çok hedefli vuruşta her yeni hedef bir öncekinin falloff katı hasar alır (sıra: aşamalıda aşama sırası, değilse öndeki önce). Skill'de ignoreReach: melee olsa da menzil/ön sıra sınırı yok (charge). target 'random_enemies' + count: rastgele (seed'li) farklı count düşmana gider. skyCenter: yukarıdan düşen etki seçilen alanın merkezine tek büyük olarak düşer. skyStagger: hedeflere sırayla (rastgele sıra, ms arayla) başlar. motion 'ground' (yerden çıkan etki: Blood Rite ağzı), 'whip' (kırbaç). taunt etkisinde allyDamageMult: taunt sürerken taunt'lı olmayan dostlar bu çarpanla hasar alır. reach: yakın dövüş menzili bonusu (satır); kullanıcı ön sıranın reach kadar gerisinden vurabilir ve düşmanın meleeRows+reach ön sırasına ulaşır. revive/dead_ally: düşmüş dostu olduğu yerde maks can/mana oranıyla diriltir. sfx: skill'in animasyonunun çaldığı ses adları (data/audio.json). vfx bunlardan yalnızca listede olanları çalar. KUMAR (Gambler): hasar etkisinde repeatChance (0-1): her hedefe vuruştan sonra bu ihtimalle aynı vuruş bir kez daha (çifte vuruş). Hasar etkisinde bet {resource hp|mp, ratio, winChance, winMult, loseMult (varsayılan 1, 0 = iska), perStake}: skill başına bir zar; bahis hp ise maks canın ratio'su (canı en fazla 1'e indirir), mp ise bedel düşüldükten sonra KALAN MP'nin ratio'su; kazanırsa hasar winMult + perStake x bahis katı ve bahis geri kalır, kaybederse loseMult katı ve bahis kaybedilir. {type:'randomStatus', options:[{status, turns, weight}]}: vurulan her hedefe ağırlıklı zarla tek bir durum. cooldown: kullanıldıktan sonra kaç tur beklenir. initialCooldown: savaş başında (yalnızca turns modu, çağrılan birimler hariç) bu skill zaten bu kadar tur bekleme sayacıyla başlar; sayaç mevcut cooldown sayacıyla aynıdır (kullanıcının kendi turlarında azalır), üst sınır data/formulas.json > cooldown.maxInitial (3). ai: yapay zeka bağlam ipucu (src/engine/ai.ts): requires = hepsi sağlanmalı, anyOf = en az biri sağlanmalı; sağlanmayınca skill yalnızca öldürücü vuruş önceliğinde seçilebilir. Koşullar: kill, minTargets (vurulan düşman sayısı), minLivingEnemies, minLivingAllies, minSelfHpRatio, minSelfHpRatioAfter (can bedeli sonrası), minSelfMpRatio, minBattleTurns, minWoundedAllies+woundedBelowRatio, minTargetArmorReduction, minTargetHpToDamage, minMissingManaShare. Saf self-buff skill'lerinde incomingShare (düşman takımının bana vuracak payı, savunma değeri) ve opportunityShare (buff turunda yapılabilecek en iyi saldırının bedele eklenen payı). reserveMp: N; skill en geç N tur sonra hazır olacaksa ona yetecek MP'yi tüketecek saldırılar ertelenir. CUTTHROAT EKLERİ: area.shape x (anchor + 4 çapraz komşu) ve area.hitsAtCenter (anchor hücredeki birim N kez vurulur, ayrı zarlar); target area_any (alan İKİ tahtaya da atılabilir; etkiler side: allies|enemies ile ayrılır; şimdilik yalnızca status); damage.guaranteedCrit (kritik zarı atılmaz, her vuruş kritik; isabet zarı normal); requiresOpenBehind (yalnızca arkasındaki hücrede canlı birim olmayan, en arka sırada olmayan hedef; skillUsed olayında behindSlot/behindBoard/from). RECT ANCHOR: boyutu 3+ olan eksende fare hücresi ortada (ortalanamazsa soldan referans, taşarsa kaydır), 1-2 boyutlu eksende sol-alt köşe.",
+  "_not": "Etkiler: damage (damageType physical|magic, element physical|fire|ice|holy|dark|nature|arcane (yalnızca renk/yazı), scale str|int|dex|luck, power; opsiyonel ignoreDefense, lifesteal, bonusVsTag, bonusPerMissingMana, bonusFromShield {ratio, consume}), heal, hot (tur bazlı şifa: turns), shield (shieldType 'magic' ise yalnızca büyü hasarını emer), summon (lifespan: kendi tur sayısı), manaBurn, taunt (turns, breakRatio: taunt'lı bu oranda can kaybedince biter), guard (turns, share). scale: etkinin hangi temel özelliğe (str/int/dex/luck) bağlı olduğu. motion melee olan skill'ler yalnızca düşmanın en öndeki 2 canlı birimine vurabilir. cooldown: kullanıcının kendi tur sayısıyla bekleme. motion/fx/icon yalnızca görsel. Sayılar GEÇİCİDİR. Çağrı skill'inde oyuncu boş yuvayı seçer. HEDEF BİÇİMLERİ: alan skill'i = area_enemies + area {shape: row | column | plus | rect (rows 1-4 sıra x cols 1-3 şerit, anchor bottom_left), stages?: row | column | distance, reverse?}: oyuncu bir anchor HÜCRE seçer (boş olabilir), şeklin hücrelerindeki canlı düşmanlar vurulur (docs/design/combat.md > AOE şekilleri). stages: vuruş aşama aşama gelir (row = sıra sıra, ön sıra önce; column = şerit şerit; distance = anchor'dan dışarı halkalar; reverse ters), olaylarda stage numarası; hasar aynıdır. Eski area.radius ve column_enemies KALDIRILDI. Dizilim: sıra (derinlik) x şerit; motion melee olanlar yalnızca en öndeki dolu sıraya vurur. Çağrı skill'inde oyuncu boş yuvayı seçer. shield efektinde self: true ise kalkan hedefe değil kullanıcıya gider (Shield Bash). Alan skill'leri boş hücreye de atılabilir (useSkill'in slot parametresi). summon efekti birimi daima kullanıcının KENDİ tahtasına çağırır; consumeCorpse: true ise önce karşı taraftaki diriltilebilir düşman cesetlerinden SEÇİLENİ tüketir (madde 230: oyuncu seçer, ceset varken zorunlu; YZ en tehlikelisini; ceset consumed olur) ve birim fed (beslenmiş) varyantıyla, ceset yoksa unfed varyantıyla gelir (data/summons > variants). status efektinde chance (0-1) her alıcı için bağımsız zar, cause görsel neden (status olayına yazılır, ör. vines). Skill'de ignoreFrontRow: true ise yakın dövüş 'yalnızca ön sıradan' kuralından muaf (dash/charge). BUFF/DEBUFF: {type:'status', status, turns, self?} (data/statuses.json: slow, haste, wound, stun, fortify, blessed...). YER ETKİSİ: {type:'ground', ground, turns, scale, power} (data/grounds.json: poison, burning); skill'in kapsadığı hücrelere bırakılır. {type:'selfDamage', ratio}: kullanıcıya maks canının ratio'su kadar hasar. target 'everyone': herkese gider, her etki 'side' (allies|enemies) ile ya da varsayılanla (hasar/durum düşmana, şifa/kalkan dosta) taraf seçer. Hasar etkisinde falloff: çok hedefli vuruşta her yeni hedef bir öncekinin falloff katı hasar alır (sıra: aşamalıda aşama sırası, değilse öndeki önce). Skill'de ignoreReach: melee olsa da menzil/ön sıra sınırı yok (charge). target 'random_enemies' + count: rastgele (seed'li) farklı count düşmana gider. skyCenter: yukarıdan düşen etki seçilen alanın merkezine tek büyük olarak düşer. skyStagger: hedeflere sırayla (rastgele sıra, ms arayla) başlar. motion 'ground' (yerden çıkan etki: Blood Rite ağzı), 'whip' (kırbaç). taunt etkisinde allyDamageMult: taunt sürerken taunt'lı olmayan dostlar bu çarpanla hasar alır. reach: yakın dövüş menzili bonusu (satır); kullanıcı ön sıranın reach kadar gerisinden vurabilir ve düşmanın meleeRows+reach ön sırasına ulaşır. revive/dead_ally: düşmüş dostu olduğu yerde maks can/mana oranıyla diriltir; regen {turns, ratio}: dirilen sonraki turns turunun başında maks canın ratio'sunu yeniler. excludeSelf (single_ally): kullanıcı kendini hedefleyemez (Guard). sfx: skill'in animasyonunun çaldığı ses adları (data/audio.json). vfx bunlardan yalnızca listede olanları çalar. KUMAR (Gambler): hasar etkisinde repeatChance (0-1): her hedefe vuruştan sonra bu ihtimalle aynı vuruş bir kez daha (çifte vuruş). Hasar etkisinde bet {resource hp|mp, ratio, winChance, winMult, loseMult (varsayılan 1, 0 = iska), perStake}: skill başına bir zar; bahis hp ise maks canın ratio'su (canı en fazla 1'e indirir), mp ise bedel düşüldükten sonra KALAN MP'nin ratio'su; kazanırsa hasar winMult + perStake x bahis katı ve bahis geri kalır, kaybederse loseMult katı ve bahis kaybedilir. {type:'randomStatus', options:[{status, turns, weight}]}: vurulan her hedefe ağırlıklı zarla tek bir durum. cooldown: kullanıldıktan sonra kaç tur beklenir. initialCooldown: savaş başında (yalnızca turns modu, çağrılan birimler hariç) bu skill zaten bu kadar tur bekleme sayacıyla başlar; sayaç mevcut cooldown sayacıyla aynıdır (kullanıcının kendi turlarında azalır), üst sınır data/formulas.json > cooldown.maxInitial (3). ai: yapay zeka bağlam ipucu (src/engine/ai.ts): requires = hepsi sağlanmalı, anyOf = en az biri sağlanmalı; sağlanmayınca skill yalnızca öldürücü vuruş önceliğinde seçilebilir. Koşullar: kill, minTargets (vurulan düşman sayısı), minLivingEnemies, minLivingAllies, minSelfHpRatio, minSelfHpRatioAfter (can bedeli sonrası), minSelfMpRatio, minBattleTurns, minWoundedAllies+woundedBelowRatio, minTargetArmorReduction, minTargetHpToDamage, minMissingManaShare. Saf self-buff skill'lerinde incomingShare (düşman takımının bana vuracak payı, savunma değeri) ve opportunityShare (buff turunda yapılabilecek en iyi saldırının bedele eklenen payı). reserveMp: N; skill en geç N tur sonra hazır olacaksa ona yetecek MP'yi tüketecek saldırılar ertelenir. CUTTHROAT EKLERİ: area.shape x (anchor + 4 çapraz komşu) ve area.hitsAtCenter (anchor hücredeki birim N kez vurulur, ayrı zarlar); target area_any (alan İKİ tahtaya da atılabilir; etkiler side: allies|enemies ile ayrılır; şimdilik yalnızca status); damage.guaranteedCrit (kritik zarı atılmaz, her vuruş kritik; isabet zarı normal); requiresOpenBehind (yalnızca arkasındaki hücrede canlı birim olmayan, en arka sırada olmayan hedef; skillUsed olayında behindSlot/behindBoard/from). RECT ANCHOR: boyutu 3+ olan eksende fare hücresi ortada (ortalanamazsa soldan referans, taşarsa kaydır), 1-2 boyutlu eksende sol-alt köşe.",
   "melee_attack": {
     "id": "melee_attack",
     "name": "Double Strike",
@@ -644,7 +644,7 @@
   "taunt": {
     "id": "taunt",
     "name": "Taunt",
-    "icon": "finger",
+    "icon": "taunt2",
     "target": "self",
     "cost": {
       "resource": "mp",
@@ -652,7 +652,7 @@
     },
     "cooldown": 4,
     "motion": "cast",
-    "fx": "#ff9f43",
+    "fx": "#b9c8dc",
     "effects": [
       {
         "type": "taunt",
@@ -666,23 +666,25 @@
         "power": 0.15
       }
     ],
-    "vfx": "taunt",
+    "vfx": "taunt2",
     "sfx": [
-      "warShout"
+      "shieldBang",
+      "battleRoar"
     ]
   },
   "guard": {
     "id": "guard",
     "name": "Guard",
-    "icon": "guard",
+    "icon": "guard2",
     "target": "single_ally",
+    "excludeSelf": true,
     "cost": {
       "resource": "mp",
       "amount": 10
     },
     "cooldown": 4,
     "motion": "cast",
-    "fx": "#6ec1ff",
+    "fx": "#7fb8e8",
     "effects": [
       {
         "type": "guard",
@@ -690,9 +692,10 @@
         "share": 0.5
       }
     ],
-    "vfx": "guardlink",
+    "vfx": "guard2",
     "sfx": [
-      "testudo"
+      "shieldBrace",
+      "chainTether"
     ]
   },
   "mana_burn": {
@@ -1086,18 +1089,17 @@
   "tremor_slam": {
     "id": "tremor_slam",
     "name": "Tremor Slam",
-    "icon": "tremor",
+    "icon": "tremor2",
     "target": "area_enemies",
     "area": {
       "shape": "row"
     },
     "cost": {
       "resource": "mp",
-      "amount": 8
+      "amount": 0
     },
-    "cooldown": 3,
     "motion": "melee",
-    "fx": "#ffe9b0",
+    "fx": "#9db0c8",
     "effects": [
       {
         "type": "damage",
@@ -1111,17 +1113,18 @@
         "turns": 2
       }
     ],
-    "vfx": "tremor",
+    "vfx": "tremor2",
     "sfx": [
-      "effortHah",
-      "armorStomp",
-      "earthCrack"
+      "plateCreak",
+      "heaveGrunt",
+      "shieldPlant",
+      "groundHeave"
     ]
   },
   "fist_crush": {
     "id": "fist_crush",
     "name": "Fist Crush",
-    "icon": "fistcrush",
+    "icon": "fistcrush2",
     "target": "random_enemies",
     "count": 3,
     "cost": {
@@ -1132,7 +1135,7 @@
     "initialCooldown": 2,
     "motion": "sky",
     "skyFx": "fist",
-    "fx": "#ffd166",
+    "fx": "#86a8d4",
     "effects": [
       {
         "type": "damage",
@@ -1141,10 +1144,10 @@
         "power": 1.3
       }
     ],
-    "vfx": "fistcrush",
+    "vfx": "fistcrush2",
     "sfx": [
-      "fistWhoosh",
-      "punchImpact"
+      "armorLeap",
+      "gauntletCrush"
     ],
     "ai": {
       "requires": {
@@ -1168,8 +1171,12 @@
     "effects": [
       {
         "type": "revive",
-        "hpRatio": 0.25,
-        "mpRatio": 0.25
+        "hpRatio": 0.3,
+        "mpRatio": 0.3,
+        "regen": {
+          "turns": 2,
+          "ratio": 0.1
+        }
       }
     ],
     "vfx": "resurrect",
@@ -1307,10 +1314,10 @@
         "bet": {
           "resource": "mp",
           "ratio": 1,
-          "winChance": 0.5,
-          "winMult": 3,
-          "loseMult": 0,
-          "perStake": 0.1
+          "winChance": 0.75,
+          "winMult": 1.8,
+          "loseMult": 0.6,
+          "perStake": 0.0667
         }
       }
     ],

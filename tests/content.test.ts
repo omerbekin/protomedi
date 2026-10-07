@@ -434,6 +434,9 @@ describe('görsel veri: skill ikonları, class logoları, stat ikonları, hareke
       'roar', // varsayılan durum ikonu
       'finger', // yedek
       'holystrike', // yedek: Holy Strike'ın eski ikonu
+      'guard', // yedek: Defender'ın eski ikonları (rework: guard2, tremor2, fistcrush2, taunt2)
+      'tremor',
+      'fistcrush',
       ...UI_ICONS, // debug dock ve ayarlar (DOM)
     ]);
     for (const kind of ICON_KINDS) expect(used.has(kind), kind).toBe(true);

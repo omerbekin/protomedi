@@ -94,8 +94,9 @@ describe('animasyon ve arayüz ayarları', () => {
     expect(layout.animation.skillSlowdown).toBeCloseTo(1.2, 5);
   });
 
-  it('hasar/şifa/MP sayıları ekranda en az 1,2 saniye kalır', () => {
-    expect(layout.animation.damageNumberMs).toBeGreaterThanOrEqual(1200);
+  it('hasar/şifa/MP sayıları ekranda en az 2 saniye kalır (eskisinden +0,5 sn), son 200 ms solar', () => {
+    expect(layout.animation.damageNumberMs).toBeGreaterThanOrEqual(2000);
+    expect(layout.animation.floatFadeMs).toBeLessThanOrEqual(layout.animation.damageNumberMs);
   });
 
   it('skill düğmeleri küçük (kompakt) ve ikon + isim + bedel sığıyor', () => {

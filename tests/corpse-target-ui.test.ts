@@ -29,10 +29,10 @@ describe('ceset işaretleri: hangi ceset işaret taşır', () => {
     b.debugKill('enemy-0', false);
     b.debugKill('enemy-1', false);
     expect(visibleCorpseMarks(b.corpses('enemy')).map((c) => c.uid)).toEqual(['enemy-0', 'enemy-1']);
-    const r = b.useSkill('party-1', 'raise_dead');
+    const r = b.useSkill('party-1', 'raise_dead', undefined, undefined, undefined, 'enemy-1');
     expect(r.ok).toBe(true);
     const eaten = ofType(eventsOf(r), 'corpseConsumed')[0]!;
-    expect(eaten.uid).toBe('enemy-1'); // en son ölen
+    expect(eaten.uid).toBe('enemy-1'); // oyuncunun seçtiği ceset (madde 230)
     expect(visibleCorpseMarks(b.corpses('enemy')).map((c) => c.uid)).toEqual(['enemy-0']);
   });
 
@@ -66,7 +66,7 @@ describe('ceset işaretleri: hangi ceset işaret taşır', () => {
     b.freeMp = true;
     b.debugKill('enemy-0', false);
     expect(b.validTargets('enemy-1', 'resurrection').map((c) => c.uid)).toEqual(['enemy-0']);
-    expect(b.useSkill('party-1', 'raise_dead').ok).toBe(true);
+    expect(b.useSkill('party-1', 'raise_dead', undefined, undefined, undefined, 'enemy-0').ok).toBe(true);
     expect(b.validTargets('enemy-1', 'resurrection')).toEqual([]);
     expect(b.reviveBlockReason('enemy-1', 'enemy-0')).toBe('Corpse was consumed');
     expect(visibleCorpseMarks(b.corpses('enemy'))).toEqual([]);
@@ -110,7 +110,7 @@ describe('ceset ve çağrı tooltip metinleri', () => {
     expect(empoweredLine(undefined)).toBeNull();
     const b = mk();
     b.debugKill('enemy-1', false);
-    const sk = ofType(eventsOf(b.useSkill('party-1', 'raise_dead')), 'summon')[0]!.combatant;
+    const sk = ofType(eventsOf(b.useSkill('party-1', 'raise_dead', undefined, undefined, undefined, 'enemy-1')), 'summon')[0]!.combatant;
     expect(sk.empowered).toBe(true);
     const c = mk();
     const sk2 = ofType(eventsOf(c.useSkill('party-1', 'raise_dead')), 'summon')[0]!.combatant;

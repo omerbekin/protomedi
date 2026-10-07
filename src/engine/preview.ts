@@ -42,7 +42,7 @@ export interface TargetPreview {
    * Çağrı (kullanıcının girdisinde): çağrılacak birim, maks canı ve (ceset tüketen çağrıda) beslenmiş mi + tüketilecek ceset (yoksa null).
    * `empowered` yalnızca Raise Dead gibi ceset tüketen çağrılarda tanımlı (UI mor parıltı / "Empowered" yazısı).
    */
-  summon?: { unit: string; name: string; hp: number; empowered?: boolean; corpse?: string | null };
+  summon?: { unit: string; name: string; hp: number; empowered?: boolean; corpse?: string | null; /** Çağrının geleceği yuva (seçilen ya da varsayılan). */ slot?: number | null };
   /** Yer etkisi: tik başına büyü hasarı (hedefin büyü zırhı ve element zayıflığı dahil), tur sayısı, toplam. */
   ground?: { perTick: number; turns: number; total: number };
   /** Yakılacak mana. */
@@ -51,8 +51,11 @@ export interface TargetPreview {
   statuses?: string[];
 }
 
-/** Hedef(ler) için etki önizlemesi. Tek hedefli skill'de `targetUid` verilmelidir. */
-export function previewSkill(battle: Battle, actorUid: string, skillId: string, targetUid?: string, slot?: number, board?: Side): TargetPreview[] {
+/**
+ * Hedef(ler) için etki önizlemesi. Tek hedefli skill'de `targetUid` verilmelidir.
+ * Ceset tüketen çağrıda (Raise Dead) `corpseUid` seçilen ceset (yoksa YZ önerisi = en tehlikeli), `slot` seçilen çağrı yuvası.
+ */
+export function previewSkill(battle: Battle, actorUid: string, skillId: string, targetUid?: string, slot?: number, board?: Side, corpseUid?: string): TargetPreview[] {
   const actor = battle.get(actorUid);
   if (!actor || !battle.skill(skillId)) return [];
   let targets = battle.validTargets(actorUid, skillId);
@@ -74,7 +77,7 @@ export function previewSkill(battle: Battle, actorUid: string, skillId: string, 
     // Yan vuruşlu skill: seçilen hedefin yanındaki hücreler de vurulur (ilk giriş seçilen hedef)
     if (targets[0]) targets = [targets[0], ...battle.splashTargets(skillId, targets[0])];
   }
-  return previewForTargets(battle, actor, skillId, targets, centerUid);
+  return previewForTargets(battle, actor, skillId, targets, centerUid, battle.needsSlotChoice(skillId) ? { corpseUid, slot } : undefined);
 }
 
 const foe = (side: Side): Side => (side === 'party' ? 'enemy' : 'party');
@@ -83,7 +86,7 @@ const foe = (side: Side): Side => (side === 'party' ? 'enemy' : 'party');
  * Verilen hedef listesi için etkiyi hesaplar; arkaya sıçrayan hasar ayrı bir giriş olarak döner.
  * `centerUid`: alan skill'inde anchor hücredeki birim (area.hitsAtCenter > 1 ise hasar etkileri ona o kadar kez uygulanır: X şekli).
  */
-export function previewForTargets(battle: Battle, actor: Combatant, skillId: string, targets: Combatant[], centerUid?: string): TargetPreview[] {
+export function previewForTargets(battle: Battle, actor: Combatant, skillId: string, targets: Combatant[], centerUid?: string, summonPick?: { corpseUid?: string; slot?: number }): TargetPreview[] {
   const skill = battle.skill(skillId);
   if (!skill) return [];
   const f = battle.formulas;
@@ -207,8 +210,8 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         const amount = Math.round(attributePower(actor.stats, effect.scale, f) * effect.power) + Math.round((effect.bonusPerMana ?? 0) * mpLeft);
         entry(recipient.uid).shield = { amount, magic: effect.shieldType === 'magic' };
       } else if (effect.type === 'summon') {
-        const sp = battle.summonPreview(actor.uid, skill.id);
-        if (sp.unit) entry(actor.uid).summon = { unit: sp.unit.id, name: sp.unit.name, hp: sp.unit.stats.hp, ...(sp.empowered !== undefined ? { empowered: sp.empowered, corpse: sp.corpse?.uid ?? null } : {}) };
+        const sp = battle.summonPreview(actor.uid, skill.id, summonPick?.corpseUid, summonPick?.slot);
+        if (sp.unit) entry(actor.uid).summon = { unit: sp.unit.id, name: sp.unit.name, hp: sp.unit.stats.hp, slot: sp.slot, ...(sp.empowered !== undefined ? { empowered: sp.empowered, corpse: sp.corpse?.uid ?? null } : {}) };
       } else if (effect.type === 'ground') {
         const perTick = battle.groundTickDamage(effect.ground, Math.round(attributePower(actor.stats, effect.scale, f) * effect.power), target);
         const e = entry(target.uid);

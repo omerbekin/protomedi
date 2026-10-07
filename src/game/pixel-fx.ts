@@ -1,8 +1,16 @@
 import { blade, crystal, leafShape, sparkle, type Draw, type PxGrid } from './pixel-art';
-import { goldCoin, holyHammer, isoDie, playingCard, thorn } from './pixel-icons';
+import { gauntletFist, goldCoin, holyHammer, isoDie, playingCard, thorn, towerShield } from './pixel-icons';
 
 /** Efekt (VFX) sprite'ları (32x32): ikon olmayan, animasyonlarda kullanılan çizimler. Aynı jetonlar, aynı araçlar. */
 export const PIXEL_FX: Record<string, Draw> = {
+  /** Defender: dik duran lacivert kule kalkanı (Tremor Slam'de yere çakılan, Taunt'ta vurulan, Guard'da hayalet olarak beliren). */
+  towershield: (g) => {
+    towerShield(g, 16, 0.5, 20, 31);
+  },
+  /** Defender: aşağı inen çelik zırh eldiveni (Fist Crush). */
+  gauntlet: (g) => {
+    gauntletFist(g, 16, 2, 1.45);
+  },
   shard: (g) => {
     crystal(g, 16, 16, 14, 31, 'c', 'u');
     g.line(13, 8, 14, 22, 'w');

@@ -336,8 +336,8 @@ describe('sınıf verisi (bu turun düzenlemeleri)', () => {
     expect(content.summons.treant!.tags).toContain('nature');
   });
 
-  it('Taunt ikonu çelik eldivenle orta parmak; Void Strike menzilli', () => {
-    expect(content.skills.taunt!.icon).toBe('finger');
+  it('Taunt ikonu Defender rework ikonu (kule kalkanına vuruş; eski orta parmak ikonu yedekte); Void Strike menzilli', () => {
+    expect(content.skills.taunt!.icon).toBe('taunt2');
     expect(content.skills.void_strike!.motion).not.toBe('melee');
   });
 
