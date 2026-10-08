@@ -13,6 +13,8 @@ export const balance = balanceJson as {
     normal: { low: number; high: number };
     situational: { low: number; high: number };
     ultimateUsedMin: number;
+    /** Tek class'ın ultimate oranı bunun altındaysa yalnızca uyarı (çok düşük kullanılan ult). */
+    ultimateLowWarn: number;
     battleTurns: { low: number; high: number };
     matchup: { crushingLow: number; crushingHigh: number; minGames: number };
   };

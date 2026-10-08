@@ -36,7 +36,7 @@ describe('buff / debuff tanımları (data/statuses.json)', () => {
         expect(def.dispellable, id).toBe(false);
         continue;
       }
-      expect(def.speedMult !== undefined || def.damageTakenMult !== undefined || def.healTakenMult !== undefined || def.skipTurn === true || def.accuracyDelta !== undefined || def.evasionDelta !== undefined || def.critDelta !== undefined || def.critDeltaPerStack !== undefined || def.maxStacks !== undefined || def.dot !== undefined || def.blocksMpSkills === true, id).toBe(true);
+      expect(def.speedMult !== undefined || def.damageTakenMult !== undefined || def.healTakenMult !== undefined || def.skipTurn === true || def.accuracyDelta !== undefined || def.evasionDelta !== undefined || def.critDelta !== undefined || def.critDeltaPerStack !== undefined || def.maxStacks !== undefined || def.dot !== undefined || def.blocksMpSkills === true || def.attackCharges !== undefined, id).toBe(true);
     }
   });
 
@@ -99,17 +99,16 @@ describe('durumlar: hız, alınan hasar, alınan şifa, sersemleme', () => {
     expect(reduced).toBe(Math.round(normal * 0.75));
   });
 
-  it('Abyssal Cry: kendine maks canının %15\'i kadar hasar verir (en az 1 can kalır) ve alınan hasarı azaltır', () => {
+  it('Abyssal Cry (madde 262): can bedeli yok, kendine Abyssal Fury (yüklü buff); Fortified durumu generic olarak hâlâ alınan hasarı ~yarıya indirir', () => {
     const b = calm(grid(cells({ 0: 'warrior' }), cells({ 0: 'archer' })));
     const w = b.get('party-0')!;
-    const cryRatio = (content.skills.abyssal_cry!.effects[0] as { ratio: number }).ratio;
-    expect(cryRatio).toBeGreaterThan(0); // değer veriden okunur (Ömer kararı: maks canın %30'u)
     w.rage = w.maxRage; // Abyssal Cry'ın bedeli Rage
     const events = act(b, 'party-0', 'abyssal_cry');
-    expect(ofType(events, 'damage')[0]).toMatchObject({ target: 'party-0', source: 'party-0', amount: Math.round(w.maxHp * cryRatio) });
-    expect(w.hp).toBe(w.maxHp - Math.round(w.maxHp * cryRatio));
-    expect(hasStatus(b, 'party-0', 'fortify')).toBe(true);
-    // fortify'lı birim aynı saldırıdan ~yarı hasar alır
+    expect(ofType(events, 'damage')).toHaveLength(0);
+    expect(w.hp).toBe(w.maxHp);
+    expect(hasStatus(b, 'party-0', 'abyssal_fury')).toBe(true);
+    expect(hasStatus(b, 'party-0', 'fortify')).toBe(false);
+    // fortify durumu (artık hiçbir skill vermiyor; debug ile eklenebilir) aynı saldırıdan ~yarı hasar aldırır
     const hit = (fort: boolean) => {
       const c = calm(grid(cells({ 0: 'warrior' }), cells({ 0: 'archer' })));
       c.get('enemy-0')!.stats.dex = 200; // büyük sayılar: yuvarlama payı oranı bozmasın (skill gücü veriden değişebilir)
@@ -119,14 +118,6 @@ describe('durumlar: hız, alınan hasar, alınan şifa, sersemleme', () => {
     const ratio = hit(true) / hit(false);
     expect(ratio).toBeGreaterThan(0.38); // küçük hasarlarda yuvarlama payı
     expect(ratio).toBeLessThan(0.6);
-  });
-
-  it('Abyssal Cry canı düşük birimi öldürmez', () => {
-    const b = calm(grid(cells({ 0: 'warrior' }), cells({ 0: 'archer' })));
-    b.get('party-0')!.hp = 3;
-    b.get('party-0')!.rage = b.get('party-0')!.maxRage;
-    act(b, 'party-0', 'abyssal_cry');
-    expect(b.get('party-0')!.hp).toBe(1);
   });
 
   it('Blessing (Paladin): dosta 3 tur %30 daha az hasar', () => {

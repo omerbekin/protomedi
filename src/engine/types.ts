@@ -677,7 +677,7 @@ export type Side = 'party' | 'enemy';
  * Durum türleri. 'thorns' (eski Thorn Shield) motorda ve veride KALDIRILDI (madde 222); ad yalnızca src/game/scenes/BattleScene.ts eski bir
  * `e.status === 'thorns'` karşılaştırması yaptığı için tür listesinde duruyor (ui-dev silince buradan da silinecek). Hiçbir skill/durum tanımı onu üretmez.
  */
-export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns' | 'blinded' | 'shrouded' | 'dark_bond' | 'omen' | 'wither' | 'jinxed' | 'silence';
+export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns' | 'blinded' | 'shrouded' | 'dark_bond' | 'omen' | 'wither' | 'jinxed' | 'silence' | 'abyssal_fury';
 
 /** Yığılan durumun patlaması (Hexer Doom): hasar = scale statı x powerPerStack x yığın x çarpan; büyü zırhı/kalkan uygulanır, isabet zarı YOK, kritik zarı VAR. */
 export interface DoomDef {
@@ -731,6 +731,19 @@ export interface StatusDef {
   doom?: DoomDef;
   /** Zamanla hasar (DoT) durumu: tikin hasar türü ve elementi (miktar skill'in `dot` etkisinden, uygulama anında sabitlenir). */
   dot?: { damageType: 'physical' | 'magic'; element: Element };
+  /**
+   * Yüklü durum (Abyssal Fury, madde 262): tur sayısıyla DEĞİL, taşıyanın SALDIRILARIYLA biter. Uygulanınca kalan yük = bu sayı (durumun `turns`
+   * alanında tutulur; tur başında azalmaz). Taşıyanın her HASAR VEREN skill kullanımı (çok vuruşlu / alan skill'i dahil, tek saldırı) TÜM vuruşlarından
+   * sonra 1 yük düşürür; yük 0 olunca durum biter (statusEnd consumed). Yeniden uygulanırsa yük tazelenir (yığılmaz).
+   */
+  attackCharges?: number;
+  /** Yakın dövüş menziline ek sıra (generic; skill'in `reach`'ine eklenir: battle.reachOf). Hem hedef sırası hem saldıranın kendi sırası için geçerli. */
+  reachBonus?: number;
+  /**
+   * Saldırı statı eki, oran (ör. { str: 0.5 } = STR'nin %50'si kadar bonus STR). YALNIZCA skill hasarının hesabına girer (battle.attackStats:
+   * vuruş, önizleme, YZ); türetilmiş değerler (can, kritik, zırh...), şifa ve kalkan değişmez.
+   */
+  attackAttrPct?: Partial<Record<Attribute, number>>;
 }
 
 /** data/grounds.json girişi: yerde kalan etki türü. */

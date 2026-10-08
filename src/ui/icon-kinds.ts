@@ -9,6 +9,8 @@ export const ICON_KINDS = [
   'warcry',
   'helm',
   'rage',
+  /** Warrior - Abyssal Fury durum rozeti (Abyssal Cry, madde 262): 3 kor + kızıl iz uzanan kılıç. */
+  'abyssalfury',
   'holystrike',
   'ankh',
   'judgehammer',

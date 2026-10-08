@@ -203,10 +203,13 @@ describe('MatchLog: kayıt', () => {
     // gerçek kaydı sınırla serileştir
     const limited = (full.log as unknown as { opts: { maxChars?: number } }).opts;
     const prev = limited.maxChars;
-    limited.maxChars = 60_000;
+    // sınır tam kaydın altında olmalı (savaş uzunluğu denge verisiyle değişir): en çok 60.000, en çok tam kaydın %60'ı
+    const cap = Math.min(60_000, Math.floor(text.length * 0.6));
+    limited.maxChars = cap;
     const t = log.serialize();
     limited.maxChars = prev;
-    expect(t.length).toBeLessThanOrEqual(60_500);
+    expect(text.length).toBeGreaterThan(cap);
+    expect(t.length).toBeLessThanOrEqual(cap + 500);
     expect(t).toMatch(/TRUNCATED|compact detail/);
     if (t.includes('TRUNCATED')) expect(t).toMatch(/\[truncated: \d+ later move/);
     expect(t.trimEnd().split('\n').some((l) => l.startsWith('## RESULT'))).toBe(true);

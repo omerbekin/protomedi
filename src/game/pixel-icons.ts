@@ -325,6 +325,21 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     g.poly([9, 22, 6, 14, 11, 18], 'R').poly([23, 22, 26, 14, 21, 18], 'R');
     g.disc(14, 22, 1.6, 'w');
   },
+  /** Abyssal Fury (Abyssal Cry durumu, madde 262): kızıl öfke alevi, ucundan ileri kızıl iz uzanan kılıç, 3 kor = 3 saldırı yükü. */
+  abyssalfury: (g) => {
+    flame(g, 17, 31.5, 16, 8, 'R', 'r', 'f');
+    // kılıç ucundan ileri uzanan kızıl iz (menzil +1)
+    g.poly([20.5, 9.5, 31, 0.5, 23, 12], 'r');
+    g.line(22.5, 9.5, 29.5, 2, 'f', 1);
+    // öfke dolu kılıç: kızıl parıltı + çelik ağız
+    g.line(10, 22, 23, 9, 'R', 5);
+    blade(g, 9, 23, 23.5, 8.5, 4.4, 'l', 'm', 'r');
+    g.line(6.5, 20.5, 11.5, 25.5, 'Y', 2.5).line(6.5, 20, 11.5, 25, 'y', 1);
+    g.line(8.5, 23.5, 4.5, 27.5, 'b', 2.5);
+    g.disc(3.5, 28.5, 2, 'y');
+    // 3 kor (yük)
+    for (const [x, y] of [[4.5, 13], [7, 6], [13.5, 3.5]] as const) g.disc(x, y, 2.6, 'R').disc(x, y, 1.8, 'r').disc(x - 0.4, y - 0.4, 0.9, 'y');
+  },
 
   // ---------- PALADIN ----------
   holystrike: (g) => {

@@ -127,16 +127,15 @@ describe('en kötü 5 karar (ai-priorities.md 3. bölüm) düzeldi', () => {
     expect(chooseAction(three, 'party-0', ai)!.skillId).toBe('whirlwind');
   });
 
-  it('#3 Abyssal Cry: tehdit düşükken değeri saldırıdan küçük (seçilmez); bedeli ödeyince ölecekse negatif', () => {
-    const FOES = { 0: 'mage', 1: 'archer', 2: 'undead', 3: 'gambler' };
-    const b = mk({ 0: 'warrior', 1: 'paladin', 2: 'druid' }, FOES);
-    b.get('party-0')!.rage = b.get('party-0')!.maxRage;
-    for (const e of b.combatants.filter((c) => c.side === 'enemy')) Object.assign(e.stats, { str: 1, int: 1, dex: 1, luck: 1 });
-    expect(chooseAction(b, 'party-0', ai)!.skillId).not.toBe('abyssal_cry');
-    const low = mk({ 0: 'warrior', 1: 'paladin', 2: 'druid' }, FOES);
+  it('#3 Abyssal Cry (madde 262: saldırı buffı): tek düşman bu vuruşla ölecekse seçilmez; bir sonraki turundan önce ölecekse değeri 0 ya da altı', () => {
+    const one = mk({ 0: 'warrior', 1: 'paladin', 2: 'druid' }, { 0: 'mage' });
+    one.get('party-0')!.rage = one.get('party-0')!.maxRage;
+    one.get('enemy-0')!.hp = 3;
+    expect(chooseAction(one, 'party-0', ai)!.skillId).not.toBe('abyssal_cry');
+    const low = mk({ 0: 'warrior', 1: 'paladin', 2: 'druid' }, { 0: 'mage', 1: 'archer', 2: 'undead', 3: 'gambler' });
     low.get('party-0')!.rage = low.get('party-0')!.maxRage;
-    low.get('party-0')!.hp = Math.round(low.get('party-0')!.maxHp * 0.15);
-    expect(top(cand(low, 'party-0', 'abyssal_cry'))).toBeLessThan(0);
+    low.get('party-0')!.hp = Math.max(1, Math.round(low.get('party-0')!.maxHp * 0.05));
+    expect(top(cand(low, 'party-0', 'abyssal_cry'))).toBeLessThanOrEqual(0);
   });
 
   it('#4 Dark Bond değeri gerçek çalınabilir canla sınırlı: Undead tam canlıyken küçük; 3 kümeli düşmanda Wail kazanır', () => {

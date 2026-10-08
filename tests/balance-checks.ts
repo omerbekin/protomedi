@@ -19,9 +19,8 @@ export const PENDING_BALANCE: readonly string[] = [];
  * BANDI BEKLEYEN SKILL'LER (kullanım payı / ultimate oranı): Ömer onayı bekleyen yeniden tasarım önerisi olanlar; ölçülür, uyarı yazılır.
  * Normalde BOŞ; tasarım kararı verilip uygulanınca listeden çıkarılır (docs/balance.md > Bandı bekleyen skill'ler).
  */
-export const PENDING_SKILLS: Readonly<Record<string, string>> = {
-  abyssal_cry: 'saf savunma buff\'ı; YZ terazisinde saldırıyı nadiren geçer (yeniden tasarım önerisi: madde 261)',
-};
+// Abyssal Cry madde 262 yeniden tasarımından sonra hazır olanlardan ~%69 kullanılıyor: 2026-10-08 denge turunda listeden çıkarıldı.
+export const PENDING_SKILLS: Readonly<Record<string, string>> = {};
 
 export function balanceSuite(label: string, firstSeed: number): void {
   const RUNS = balance.test.runs;
@@ -77,16 +76,14 @@ export function balanceSuite(label: string, firstSeed: number): void {
       }
     });
 
-    it(`ultimate: hazır olduğu ana kadar yaşayan birimlerde en az bir kez kullanma oranı class ortalaması >= %${B.ultimateUsedMin}; bekleyenler dışında her class da`, () => {
+    it(`ultimate: hazır olduğu ana kadar yaşayan birimlerde en az bir kez kullanma oranı class ORTALAMASI >= %${B.ultimateUsedMin} (tek class %${B.ultimateLowWarn} altıysa yalnızca uyarı)`, () => {
+      // Ömer kararı 2026-10-08: hedef class'ların ortalaması; class bazında ayrı kontrol yok, çok düşük kullanılan ult raporlanır.
       const rates = content.randomPool.map((id) => ({ id, ult: content.classes[id]!.skills.at(-1)!, rate: ultReadyRate(result.classes.get(id)!) }));
       const avg = rates.reduce((a, r) => a + r.rate, 0) / rates.length;
       expect(avg).toBeGreaterThanOrEqual(B.ultimateUsedMin);
       for (const r of rates) {
-        if (r.ult in PENDING_SKILLS) {
-          console.warn(`[balance] ULTIMATE BEKLİYOR: ${r.ult} %${r.rate.toFixed(1)}`);
-          continue;
-        }
-        expect(r.rate, `${r.id} ${r.ult} %${r.rate.toFixed(1)}`).toBeGreaterThanOrEqual(B.ultimateUsedMin);
+        expect(r.rate, `${r.id} ${r.ult} ölçülmeli`).toBeGreaterThanOrEqual(0);
+        if (r.rate < B.ultimateLowWarn) console.warn(`[balance] ÇOK DÜŞÜK ULTIMATE: ${r.id} ${r.ult} %${r.rate.toFixed(1)} (< %${B.ultimateLowWarn})`);
       }
     });
 

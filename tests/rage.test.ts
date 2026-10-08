@@ -57,11 +57,11 @@ describe('Rage: veri ve başlangıç', () => {
     expect(start.combatants.find((c) => c.uid === 'party-1')!.maxRage).toBeUndefined();
   });
 
-  it('Abyssal Cry maliyeti Rage (MP değil); can bedeli (selfDamage) ve cooldown/initialCooldown aynı', () => {
+  it('Abyssal Cry maliyeti yalnızca Rage (MP değil; madde 262: can bedeli kaldırıldı); cooldown/initialCooldown aynı', () => {
     expect(cry.cost.resource).toBe('rage');
     expect(cry.cost.amount).toBeGreaterThan(0);
     expect(cry.cost.amount).toBeLessThanOrEqual(R.max);
-    expect(cry.effects.some((e) => e.type === 'selfDamage')).toBe(true);
+    expect(cry.effects.some((e) => e.type === 'selfDamage')).toBe(false);
     expect(cry.cooldown).toBe(5);
     expect(cry.initialCooldown).toBeUndefined();
     // Warrior'ın diğer skill'leri MP kullanır
@@ -192,7 +192,7 @@ describe('Rage: harcama (Abyssal Cry)', () => {
     expect(b.canUse('party-0', 'abyssal_cry').ok).toBe(true);
   });
 
-  it('kullanılınca Rage düşer (rage olayı delta -bedel), MP harcanmaz, can bedeli ve Fortify uygulanır', () => {
+  it('kullanılınca Rage düşer (rage olayı delta -bedel), MP ve can harcanmaz, Abyssal Fury uygulanır (madde 262)', () => {
     const b = mk({ 0: 'warrior', 1: 'paladin' }, { 0: 'archer' });
     const w = b.get('party-0')!;
     w.rage = R.max;
@@ -200,12 +200,12 @@ describe('Rage: harcama (Abyssal Cry)', () => {
     const hp0 = w.hp;
     const events = act(b, 'party-0', 'abyssal_cry');
     expect(ofType(events, 'rage')).toEqual([{ type: 'rage', actor: 'party-0', delta: -cry.cost.amount, after: R.max - cry.cost.amount, max: R.max }]);
-    expect(ofType(events, 'resource')).toHaveLength(0); // MP/can 'resource' olayı yok (can bedeli damage olayıyla gelir)
+    expect(ofType(events, 'resource')).toHaveLength(0); // MP/can 'resource' olayı yok
+    expect(ofType(events, 'damage')).toHaveLength(0); // can bedeli yok (madde 262)
     expect(w.rage).toBe(R.max - cry.cost.amount);
     expect(w.mp).toBe(mp0);
-    const ratio = (cry.effects.find((e) => e.type === 'selfDamage') as { ratio: number }).ratio;
-    expect(w.hp).toBe(hp0 - Math.round(hp0 * ratio));
-    expect(w.statuses.some((s) => s.kind === 'fortify')).toBe(true);
+    expect(w.hp).toBe(hp0);
+    expect(w.statuses.some((s) => s.kind === 'abyssal_fury')).toBe(true);
   });
 
   it('Rage bedeli freeMp (debug) ile bedavalaşmaz; test modunda da çalışır', () => {

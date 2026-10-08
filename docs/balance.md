@@ -10,7 +10,7 @@ Sayılar `data/balance.json` dosyasındadır; `npm run sim` raporu ve `tests/bal
 | Bedelsiz temel saldırı (class'ın 1. skill'i) kullanım payı | **%20-45** |
 | Normal skill (2.-3. yuva, durumsal olmayan) | **%15-35** |
 | Durumsal destek skill'leri (`balance.json > situational`: Guard, Mana Barrier, Spell Ward, Jinx, Dark Bond, Resurrection) | **%8-25** |
-| Ultimate (class'ın 4. skill'i) | birim hayattayken ultimate'ı ilk kez kullanılabilir olduğu (kendi turunda kullanılabilir) savaşlarda en az bir kez kullanma oranı, **class ortalaması >= %50**; ham oran (tüm birimler) da raporlanır |
+| Ultimate (class'ın 4. skill'i) | birim hayattayken ultimate'ı ilk kez kullanılabilir olduğu (kendi turunda kullanılabilir) savaşlarda en az bir kez kullanma oranı, **class ORTALAMASI >= %50** (Ömer kararı 2026-10-08: class bazında ayrı kontrol yok); tek bir class **%35 altındaysa** (`ultimateLowWarn`) test ve rapor UYARI yazar; ham oran (tüm birimler) da raporlanır |
 | Savaş süresi (tüm birimlerin turları toplamı, 4'e 4) | ortalama **35-50 tur** |
 | Karşılaşma tablosu (A class'ının B class'ına karşı kazanma oranı; karşı taraflarda, aynı takımda değilken) | eşitlik HEDEFLENMEZ; yalnızca ezici eşleşmeler (> %75 / < %25, en az 200 savaş) işaretlenir |
 | Taraf (oyuncu/düşman) | %45-55 |
@@ -21,7 +21,54 @@ Sayılar `data/balance.json` dosyasındadır; `npm run sim` raporu ve `tests/bal
 
 ## Dengesi / bandı bekleyenler (geçici muafiyet; normalde BOŞ)
 - `tests/balance-checks.ts > PENDING_BALANCE` (class bandı): **boş**. Hexer bu turda bantta (%48) olduğu için listeden çıkarıldı.
-- `tests/balance-checks.ts > PENDING_SKILLS` (skill/ultimate bandı): **Abyssal Cry** (Warrior ultimate'ı, hazır olanlardan en az bir kez kullanma %20-21). Sayılarla çözülmedi; yeniden tasarım önerisi aşağıda, Ömer onayı bekliyor. Ölçülür ve test çıktısına uyarı olarak yazılır.
+- `tests/balance-checks.ts > PENDING_SKILLS` (skill bandı): **boş**. Abyssal Cry (madde 262 yeni tasarımı) hazır olanlardan ~%69 kullanılıyor; 2026-10-08 ikinci turda listeden çıkarıldı.
+
+## Denge turu 2 — 2026-10-08 (balance-tester, Opus; madde 263; Abyssal Cry yeniden tasarımı + Guard yarım tur sonrası)
+
+### Ölçüm
+4'e 4 ana ölçüm: grup başına 10.000 savaş, seed 1.. ve 500001..; test grupları (900001.., 300001.., 5.000) ayrıca. 3'e 3 ve 5'e 5: 10.000 savaş, seed 1.. (önce 3'e 3 iki grup). Hızlı tarama 7 paralel işle.
+
+### Class kazanma oranı (önce -> sonra)
+
+| Class | 4'e 4 önce (grup 1 / 2) | 4'e 4 sonra (grup 1 / 2) | 3'e 3 önce | 3'e 3 sonra | 5'e 5 sonra |
+|---|---|---|---|---|---|
+| Warrior | %54,5 / %58,1 | %51,3 / %51,6 | %59,0 | %54,3 | %50,7 |
+| Paladin | %47,2 / %46,7 | %48,2 / %47,8 | %44,8 | %46,4 | %49,7 |
+| Mage | %52,8 / %52,3 | %52,8 / %53,8 | %50,9 | %50,2 | %53,5 |
+| Undead | %50,2 / %51,3 | %49,8 / %49,7 | %48,4 | %47,6 | %48,7 |
+| Archer | %46,7 / %44,2 | %50,2 / %50,3 | %51,2 | %53,1 | %49,3 |
+| Druid | %44,9 / %45,7 | %47,5 / %45,8 | %42,7 | %45,5 | %49,6 |
+| Defender | %47,2 / %47,1 | %49,0 / %48,0 | %44,8 | %46,3 | %50,3 |
+| Anti-Mage | %52,9 / %53,5 | %49,1 / %50,7 | %47,4 | %46,0 | %52,3 |
+| Gambler | %53,6 / %52,4 | %52,4 / %51,5 | %57,9 | %54,2 | %47,5 |
+| Cutthroat | %52,0 / %50,8 | %51,2 / %50,1 | %54,5 | %55,9 | %50,7 |
+| Hexer | %47,5 / %47,9 | %48,2 / %50,1 | %47,9 | %49,8 | %47,4 |
+
+- Test grupları (900001 / 300001, 5.000): önce Warrior %57,6 / %55,6 (kırmızı), sonra tüm class'lar %47,2-53,0.
+- Savaş süresi (4'e 4): **35,3 / 35,4 -> 36,2 / 36,7 tur** (test grupları 34,8 / 35,4 -> 36,1 / 36,7). Bant 35-50 tutuyor; can tabanı 30 korunur (35'e çıkarmak gerekmedi). 3'e 3: 29,7; 5'e 5: 43,0.
+- Ultimate class ortalaması %80,6 (hedef >= %50); %35 altında class yok. En düşükler: Summon Treant %52, Raise Dead %57-59, Abyssal Cry %70 (önce %67). Payı en düşük ultimate: Raise Dead %13, Abyssal Cry %13.
+- Skill payları (4'e 4): bant dışı yok. Kenara yakın: Wail of the Dead %33,3-34,6, Withering Curse %34,0-34,4, Card Trick %33,5-33,9 (üst 35); Tremor Slam %39-42 (üst 45; önce test grubunda %44,8 göründü); Guard %9,8-10,1 (alt 8).
+- Ezici eşleşme (> %75 / < %25) yok.
+- 3'e 3 skill payı (yalnızca kontrol): Quick Shot %47, Tremor Slam %50, Mana Steal %46 (temel üst 45), Piercing Arrow %13,5, Arrow Rain %11, Drain Field %14 (normal alt 15), Guard %7,6: az düşmanda alan skill'leri değer kaybediyor (önceki turla aynı yapı). 5'e 5: Holy Strike %19,8, Fire Bolt %19,2, Venom Edge %16,9 (temel alt 20), Wail %36,2, Card Trick %36,6 (normal üst 35).
+
+### Değişiklikler (eski -> yeni; hepsi veri; süreler değişmedi)
+- **Warrior:** Double Strike vuruş başına 0,9 -> 0,8; Whirlwind 1,5 -> 1,38; Charge 1,5 -> 1,35. Abyssal Fury bonus STR %50 korundu (%35 denemesi Warrior'ı belirgin düşürmedi ama ult kullanımını %68 -> %42 indirdi; geri alındı).
+- **Paladin:** Holy Strike 0,85 -> 0,9.
+- **Mage:** Fire Bolt 2,1 -> 2,0; Blizzard 1,5 -> 1,42; Meteor 1,28 -> 1,22.
+- **Undead:** Wail of the Dead 1,27 -> 1,22 (bedel %20 aynı; %25 denemesi geri alındı).
+- **Archer:** Piercing Arrow MP 4 -> 3; Aimed Shot 2,75 -> 2,85.
+- **Druid:** Thorn Whip 1,5 -> 1,72; Rejuvenate ilk şifa 1,2 -> 1,35 ve tur başı 0,4 -> 0,45 (ilk şifa = tur şifası x 3 kuralı korunur).
+- **Defender:** Tremor Slam 0,38 -> 0,36; Taunt kalkanı 0,15 -> 0,3; Fist Crush 1,5 -> 1,42. (Zırh 19 -> 20 denemesi Defender'a karşı Defender kalan savaşı bitmez yaptı: geri alındı.)
+- **Anti-Mage:** Mana Steal 1,7 -> 1,55; Void Strike 3,3 -> 3,15; Drain Field yakım maks MP'nin %58'i -> %55'i, manası biten hedefe hasar 1,6 -> 1,45 (%50 denemesi Anti-Mage'i %46'ya düşürdü).
+- **Gambler:** Loaded Dice 1,6 -> 1,55; High Stakes 2,3 -> 2,2; Card Trick 1,4 -> 1,3 ve MP 8 -> 9; All In 2,2 -> 1,98.
+- **Cutthroat:** Backstab 3,2 -> 3,05 (Venom Edge 2,0 -> 1,92 denemesi payını %20 altına indirdi; geri alındı).
+- **Hexer:** Withering Curse 0,47 -> 0,45.
+
+### Test değişiklikleri (gevşetilmedi)
+- `balance-checks.ts`: ultimate yalnızca class ortalaması (Ömer kararı); %35 altı tek class uyarı; Abyssal Cry `PENDING_SKILLS`'ten çıktı. `balance.json > bands.ultimateLowWarn: 35`; `npm run sim` raporu aynı uyarıyı yazar.
+- `abyssal-fury.test.ts`: bonus STR oranı ölçümünde Warrior STR'si iki savaşta da x4 (Double Strike 0,8'de vuruş ~6 hasar; tam sayı yuvarlaması oranı %50 -> %67 gösteriyordu).
+- `match-log.test.ts`: kırpma sınırı tam kaydın %60'ı ile 60.000'in küçüğü (savaş kısalınca kayıt 60.000'in altına düşüyordu; kırpmanın gerçekten olduğu da ayrıca doğrulanır).
+- YZ bağlam testleri (Aimed Shot / Fist Crush / All In seçimleri) değiştirilmedi; sayılar bunlara uyacak şekilde seçildi (Quick Shot 0,62 aynı kaldı, Fist Crush 1,42, All In 1,98).
 
 ## Denge turu 2026-10-08 (balance-tester, Opus; madde 261)
 

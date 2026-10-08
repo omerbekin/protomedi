@@ -516,6 +516,36 @@ export class Battle {
   }
 
   /**
+   * Yakın dövüş skill'inin bu birim için geçerli menzil eki: skill'in `reach`'i + taşıdığı durumların `reachBonus`'u (Abyssal Fury, madde 262).
+   * Hem hedeflenebilecek düşman sıraları (meleeRows + reach) hem de saldıranın kendi sırası ('Melee: front row only') için kullanılır.
+   */
+  reachOf(actor: Combatant | string, skill: SkillDef): number {
+    const c = typeof actor === 'string' ? this.get(actor) : actor;
+    let bonus = 0;
+    for (const s of c?.statuses ?? []) bonus += this.statusDef(s.kind)?.reachBonus ?? 0;
+    return (skill.reach ?? 0) + bonus;
+  }
+
+  /**
+   * Skill HASARI hesabında kullanılan stat'lar (madde 262): durumların `attackAttrPct` eki (Abyssal Fury: STR'nin %X'i kadar bonus STR) uygulanmış.
+   * Yalnızca hasar (vuruş zarı, önizleme, YZ tahmini) bunu kullanır; can/kritik/zırh gibi türetilmiş değerler, şifa ve kalkan gerçek stat'tan.
+   * Ek yoksa gerçek stat nesnesi döner.
+   */
+  attackStats(c: Combatant): Combatant['stats'] {
+    let out: Combatant['stats'] | null = null;
+    for (const s of c.statuses) {
+      const pct = this.statusDef(s.kind)?.attackAttrPct;
+      if (!pct) continue;
+      for (const [k, v] of Object.entries(pct) as Array<[Attribute, number]>) {
+        if (!v) continue;
+        out ??= { ...c.stats };
+        out[k] += c.stats[k] * v;
+      }
+    }
+    return out ?? c.stats;
+  }
+
+  /**
    * Zırh aurası (Defender gibi) ve durumların isabet/kaçınma ekleri (Blinded/Shrouded: statuses.json > accuracyDelta/evasionDelta) dahil,
    * savaştaki geçerli stat'lar. Hiçbiri yoksa gerçek stat nesnesi döner. İsabet/kaçınma 0'ın altına inmez; hit şansı ayrıca [0, hit.max] arasına sıkışır.
    * Aura: kaynağın KENDİ zırhının pct'si, kendine ve artı şeklindeki komşu dostlara; bir birim en fazla maxStacks kaynaktan (en büyükler) alır.
@@ -1003,7 +1033,7 @@ export class Battle {
         if (skill.motion === 'melee' && !skill.ignoreReach && !this.debugCasting) {
           // Ön sıra, düşmanın kendi tahtasındaki birimlere göre belirlenir (çağrılar da kendi tahtalarında durur; eski "düşman tahtasına sızan çağrı" kuralı madde 222 ile kalktı)
           const home = list.filter((c) => c.board === c.side);
-          const rows = [...new Set(home.map((c) => this.rowOf(c.slot)))].slice(0, this.setup.formulas.formation.meleeRows + (skill.reach ?? 0));
+          const rows = [...new Set(home.map((c) => this.rowOf(c.slot)))].slice(0, this.setup.formulas.formation.meleeRows + this.reachOf(actor, skill));
           list = list.filter((c) => c.board !== c.side || rows.includes(this.rowOf(c.slot)));
         }
         // Backstab: yalnızca arkası boş hedefler (menzil gibi bir erişim kuralı; taunt bundan SONRA uygulanır: arkası dolu taunter seçilemez)
@@ -1094,7 +1124,7 @@ export class Battle {
     if (!skill) return { ok: false, reason: 'Unknown skill' };
     if (this.mode === 'turns' && !this.noCooldowns && (actor.cooldowns[skillId] ?? 0) > 0) return { ok: false, reason: 'On cooldown' };
     // Yakın dövüş yalnızca kendi takımının ön sırasındaki birimlerden yapılabilir (dash/charge gibi skill'ler ignoreFrontRow ile istisna olur)
-    if (skill.motion === 'melee' && skill.target !== 'self' && !skill.ignoreFrontRow && !skill.ignoreReach && actor.board === actor.side && this.rowOf(actor.slot) > this.frontRowOf(actor.side) + (skill.reach ?? 0)) {
+    if (skill.motion === 'melee' && skill.target !== 'self' && !skill.ignoreFrontRow && !skill.ignoreReach && actor.board === actor.side && this.rowOf(actor.slot) > this.frontRowOf(actor.side) + this.reachOf(actor, skill)) {
       return { ok: false, reason: 'Melee: front row only' };
     }
     const resource = skill.cost.resource;
@@ -1453,6 +1483,8 @@ export class Battle {
     let repeatAnnounced = false;
     // endsOnOwnAttack (Jinxed): bu hasar skill'inin TÜM vuruşları durumdan etkilenir, skill bitince durum düşer
     const ownAttackEnds = skill.effects.some((e) => e.type === 'damage') ? actor.statuses.filter((s) => this.statusDef(s.kind)?.endsOnOwnAttack) : [];
+    // attackCharges (Abyssal Fury, madde 262): hasar veren skill = TEK saldırı (çok vuruşlu/alan dahil); skill bitince 1 yük düşer
+    const chargedBefore = skill.effects.some((e) => e.type === 'damage') ? actor.statuses.filter((s) => this.statusDef(s.kind)?.attackCharges) : [];
     const hitIndex = new Map<SkillEffect, number>(); // etki başına toplam vuruş sırası (falloff ve ilk-hedef ekleri aşamalar boyunca sürer)
     for (const [gi, group] of groups.entries()) {
     stage = stageGroups ? gi : undefined;
@@ -1748,6 +1780,15 @@ export class Battle {
       actor.statuses = actor.statuses.filter((x) => x !== s);
       emit({ type: 'statusEnd', target: actor.uid, status: s.kind, consumed: true });
     }
+    for (const s of chargedBefore) {
+      if (!actor.statuses.includes(s)) continue; // skill sırasında silindiyse (dispel) ya da yenilendiyse dokunma
+      s.turns--;
+      if (s.turns > 0) emit({ type: 'status', target: actor.uid, status: s.kind, turns: s.turns, source: s.source, cause: 'charge' });
+      else {
+        actor.statuses = actor.statuses.filter((x) => x !== s);
+        emit({ type: 'statusEnd', target: actor.uid, status: s.kind, consumed: true });
+      }
+    }
 
     // Rage kazancı: skill başına tek (en yüksek tek hedefin toplamı; perCastCap ile sınırlı), yalnızca isabet eden hasar vuruşlarından
     if (this.rageTally && this.rageTally.size > 0 && actor.maxRage !== undefined) {
@@ -1941,6 +1982,7 @@ export class Battle {
     for (const status of [...actor.statuses]) {
       if (!actor.statuses.includes(status)) continue;
       if (this.statusDef(status.kind)?.maxStacks) continue; // yığılan durumun süresi yukarıda işlendi
+      if (this.statusDef(status.kind)?.attackCharges) continue; // yüklü durum (Abyssal Fury): turla değil saldırıyla azalır
       if (this.statusDef(status.kind)?.tickAtTurnEnd) continue; // Silence: süre turun SONUNDA azalır (finishAction > tickTurnEnd)
       // Dark Bond: süre yalnızca bağı KURANIN turlarında azalır; bağlı dosttaki kopya kendi turunda azalmaz (sahibininkiyle eşitlenir)
       if (status.kind === 'dark_bond' && status.source !== actor.uid) continue;
@@ -2008,6 +2050,9 @@ export class Battle {
       status = { ...status, turns: status.turns - 1 };
       emit({ type: 'passive', actor: target.uid, passive: 'primary_str', name: 'Resilience' });
     }
+    // Yüklü durum (attackCharges): kalan yük `turns` alanında, her uygulamada tam yükle başlar (yığılmaz, tazelenir)
+    const charges = this.statusDef(status.kind)?.attackCharges;
+    if (charges) status = { ...status, turns: charges };
     // Aynı türden durum yenisiyle değişir; tur bazlı şifa (regen) ve Dark Bond kopyası kaynağa göre ayrı tutulur (iki farklı Undead aynı dostu bağlayabilir)
     const perSource = status.kind === 'regen' || status.kind === 'dark_bond';
     target.statuses = target.statuses.filter((s) => !(s.kind === status.kind && (!perSource || s.source === status.source)));
@@ -2191,7 +2236,7 @@ export class Battle {
     }
     const spec = damageSpecFor(actor, target, effect, f, powerMult, extras, this.damageTakenMult(target), this.hunterMarkMult(actor, target));
     const targetStats = this.effectiveStats(target);
-    const base = rollDamage(actor.stats, targetStats, spec, f, this.rng);
+    const base = rollDamage(this.attackStats(actor), targetStats, spec, f, this.rng); // Abyssal Fury: bonus STR yalnızca hasarda (madde 262)
     // Garantili kritik (Backstab): kritik zarı ATILMAZ, kritik çarpanı uygulanır (debug 'never' yine kapatır; Jinxed bunu bozmaz: madde Ö5).
     // Kritik şansı durum ekleriyle (Jinxed, Omen Misfortune) geçerli değerdir (effectiveStats).
     // critBonus (Jinx): bu skill'in vuruşunda kritik şansına ek (generic)

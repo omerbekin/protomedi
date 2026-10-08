@@ -16,13 +16,13 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.9
+        "power": 0.8
       },
       {
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.9
+        "power": 0.8
       }
     ],
     "vfx": "doublestrike",
@@ -49,7 +49,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.5
+        "power": 1.38
       }
     ],
     "vfx": "whirlwind",
@@ -75,7 +75,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.85,
+        "power": 0.9,
         "element": "holy"
       }
     ],
@@ -169,7 +169,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 2.1,
+        "power": 2.0,
         "element": "fire"
       }
     ],
@@ -204,7 +204,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.5,
+        "power": 1.42,
         "element": "ice"
       }
     ],
@@ -237,7 +237,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.28,
+        "power": 1.22,
         "element": "fire"
       },
       {
@@ -342,7 +342,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.27,
+        "power": 1.22,
         "element": "dark"
       },
       {
@@ -402,7 +402,7 @@
     },
     "cost": {
       "resource": "mp",
-      "amount": 4
+      "amount": 3
     },
     "cooldown": 2,
     "motion": "ranged",
@@ -474,7 +474,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 2.75,
+        "power": 2.85,
         "ignoreDefense": 0.5
       }
     ],
@@ -506,7 +506,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.5,
+        "power": 1.72,
         "element": "nature"
       },
       {
@@ -538,12 +538,12 @@
       {
         "type": "heal",
         "scale": "int",
-        "power": 1.2
+        "power": 1.35
       },
       {
         "type": "hot",
         "scale": "int",
-        "power": 0.4,
+        "power": 0.45,
         "turns": 3
       }
     ],
@@ -636,7 +636,7 @@
       {
         "type": "shield",
         "scale": "str",
-        "power": 0.15
+        "power": 0.3
       }
     ],
     "vfx": "taunt2",
@@ -656,6 +656,7 @@
       "amount": 2
     },
     "cooldown": 4,
+    "turnCost": 0.5,
     "motion": "cast",
     "fx": "#7fb8e8",
     "effects": [
@@ -687,7 +688,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.7,
+        "power": 1.55,
         "element": "arcane"
       },
       {
@@ -724,7 +725,7 @@
     "effects": [
       {
         "type": "manaBurn",
-        "pctMax": 0.58,
+        "pctMax": 0.55,
         "onEmpty": {
           "chance": 0.5,
           "status": "silence",
@@ -733,7 +734,7 @@
             "damageType": "magic",
             "element": "arcane",
             "scale": "int",
-            "power": 1.6
+            "power": 1.45
           }
         }
       }
@@ -764,7 +765,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 3.3,
+        "power": 3.15,
         "bonusPerMissingMana": 1,
         "element": "arcane"
       }
@@ -981,7 +982,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.5
+        "power": 1.35
       },
       {
         "type": "status",
@@ -1009,12 +1010,8 @@
     "fx": "#c0203a",
     "effects": [
       {
-        "type": "selfDamage",
-        "ratio": 0.15
-      },
-      {
         "type": "status",
-        "status": "fortify",
+        "status": "abyssal_fury",
         "turns": 3,
         "self": true
       }
@@ -1073,7 +1070,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.38
+        "power": 0.36
       },
       {
         "type": "status",
@@ -1109,7 +1106,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.5
+        "power": 1.42
       }
     ],
     "vfx": "fistcrush2",
@@ -1169,7 +1166,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.6,
+        "power": 1.55,
         "repeatChance": 0.25
       }
     ],
@@ -1196,7 +1193,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 2.3,
+        "power": 2.2,
         "bet": {
           "resource": "hp",
           "ratio": 0.15,
@@ -1220,7 +1217,7 @@
     "count": 2,
     "cost": {
       "resource": "mp",
-      "amount": 8
+      "amount": 9
     },
     "cooldown": 2,
     "motion": "ranged",
@@ -1230,7 +1227,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.4
+        "power": 1.3
       },
       {
         "type": "randomStatus",
@@ -1277,7 +1274,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 2.2,
+        "power": 1.98,
         "bet": {
           "resource": "mp",
           "ratio": 1,
@@ -1555,7 +1552,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 3.2,
+        "power": 3.05,
         "guaranteedCrit": true
       }
     ],
@@ -1624,7 +1621,7 @@
         "damageType": "magic",
         "element": "dark",
         "scale": "luck",
-        "power": 0.47
+        "power": 0.45
       },
       {
         "type": "dot",

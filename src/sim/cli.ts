@@ -72,12 +72,12 @@ for (const { name, id, s } of rows) {
 console.log(skillWarnings.length ? `  UYARI: ${skillWarnings.join(', ')}` : '  Tüm skill\'ler bandında.');
 
 console.log('');
-console.log(`ULTIMATE (4. skill) KULLANIMI (hazır = birim hayattayken en az bir turunda kullanılabilirdi; hedef: class ortalaması >= %${B.ultimateUsedMin})`);
+console.log(`ULTIMATE (4. skill) KULLANIMI (hazır = birim hayattayken en az bir turunda kullanılabilirdi; hedef: class ortalaması >= %${B.ultimateUsedMin}; tek class %${B.ultimateLowWarn} altıysa uyarı)`);
 let ultSum = 0;
 for (const { name, id, s } of rows) {
   const ready = ultReadyRate(s);
   ultSum += ready;
-  console.log(`  ${name.padEnd(9)} ${content.skills[content.classes[id]!.skills.at(-1)!]!.name.padEnd(15)} hazır olanlardan en az 1 kez: %${fmt(ready, 0).padStart(3)}   ham (tüm birimler): %${fmt(ultRawRate(s), 0).padStart(3)}${ready < B.ultimateUsedMin ? '  <-- %' + B.ultimateUsedMin + ' altında' : ''}`);
+  console.log(`  ${name.padEnd(9)} ${content.skills[content.classes[id]!.skills.at(-1)!]!.name.padEnd(15)} hazır olanlardan en az 1 kez: %${fmt(ready, 0).padStart(3)}   ham (tüm birimler): %${fmt(ultRawRate(s), 0).padStart(3)}${ready < B.ultimateLowWarn ? '  <-- ÇOK DÜŞÜK (%' + B.ultimateLowWarn + ' altı)' : ''}`);
 }
 const ultAvg = ultSum / rows.length;
 console.log(`  Class ortalaması: %${fmt(ultAvg)}${ultAvg < B.ultimateUsedMin ? '  <-- BANT DIŞI' : ''}`);

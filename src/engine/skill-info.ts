@@ -285,6 +285,15 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
     } else if (e.type === 'status') {
       const def = defs.statuses?.[e.status];
       const how = e.cause === 'vines' ? ' (rooted by vines)' : '';
+      if (def?.attackCharges) {
+        // Yüklü durum (Abyssal Fury, madde 262): tur değil saldırı sayar; menzil ve bonus stat veriden
+        const parts: string[] = [];
+        if (def.reachBonus) parts.push(`melee reach +${def.reachBonus} row${def.reachBonus > 1 ? 's' : ''} (can hit one row deeper and strike from one row further back)`);
+        for (const [k, v] of Object.entries(def.attackAttrPct ?? {}) as Array<[Attribute, number]>) if (v) parts.push(`+${pct(v)} ${ATTRIBUTE_NAME[k]} (+${Math.round(stats[k] * v)}) for damage only`);
+        add(`${e.self ? 'You gain' : 'Applies'} ${def.name} for your next ${def.attackCharges} attacks: ${parts.join(', ')}`, undefined);
+        add('Each damaging skill you use spends 1 charge (a multi-hit or area skill counts as one attack)');
+        continue;
+      }
       if (e.chance !== undefined && e.chance < 1) add(`${pct(e.chance)} chance per target hit (rolled separately) to apply ${def?.name ?? e.status} for ${e.turns} turn${e.turns > 1 ? 's' : ''}${how}${def ? `: ${def.text}` : ''}`, undefined);
       else add(`${e.self ? 'You gain' : 'Applies'} ${def?.name ?? e.status}${skill.target === 'area_any' ? who : ''} for ${e.turns} turn${e.turns > 1 ? 's' : ''}${how}${def ? `: ${def.text}` : ''}`, undefined);
     } else if (e.type === 'randomStatus') {

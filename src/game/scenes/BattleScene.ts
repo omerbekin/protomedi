@@ -295,7 +295,9 @@ export class BattleScene extends Phaser.Scene {
         const max = (def as { maxStacks?: number } | undefined)?.maxStacks ?? 0;
         // Yığılan durum (Omen): rozet "x2"; kalan tur ve yığın can çubuğunun solundaki mühür yuvalarında (hexer.md bölüm 8)
         if (max > 1 && st.stacks) seals = { stacks: st.stacks, max, turns: st.turns, color: def?.color ?? '#b04fa8' };
-        list.push({ icon: art.name, owner: art.owner, color: def?.color ?? fallback[1]!, text: max > 1 && st.stacks ? `x${st.stacks}` : String(st.turns), debuff: def?.type === 'debuff', turns: !(max > 1 && st.stacks) });
+        // Yüklü durum (Abyssal Fury, madde 262): rozet kalan saldırı yükünü gösterir ("x3"; `turns` alanında tutulur, tur saymaz)
+        const charged = !!def?.attackCharges;
+        list.push({ icon: art.name, owner: art.owner, color: def?.color ?? fallback[1]!, text: max > 1 && st.stacks ? `x${st.stacks}` : charged ? `x${st.turns}` : String(st.turns), debuff: def?.type === 'debuff', turns: !(max > 1 && st.stacks) && !charged });
       }
       for (const g of this.battle.ground) {
         if (g.board !== c.board || !g.slots.includes(c.slot) || g.sourceSide === c.side) continue;

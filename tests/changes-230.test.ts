@@ -260,8 +260,11 @@ describe('hasar olayı kaynak alanları (UI yazı/ikon)', () => {
     expect(tick).toMatchObject({ origin: 'ground', ground: 'poison', groundId: 'gx', element: content.grounds.poison!.element, damageType: 'magic', crit: false });
   });
 
-  it('kendine hasar: origin self', () => {
-    const b = mk({ 0: 'warrior' }, { 0: 'archer' });
+  it('kendine hasar: origin self (generic selfDamage etkisi; madde 262 sonrası hiçbir oyun skilli kullanmıyor: test kopyası)', () => {
+    const setup = content.battleSetup('random-battle', 1, 'test', { party: cells({ 0: 'warrior' }), enemies: cells({ 0: 'archer' }) }, false);
+    const cry = setup.skills.abyssal_cry!;
+    setup.skills = { ...setup.skills, abyssal_cry: { ...cry, effects: [{ type: 'selfDamage', ratio: 0.15 }, ...cry.effects] } };
+    const b = new Battle(setup);
     b.get('party-0')!.rage = 100;
     const r = b.useSkill('party-0', 'abyssal_cry');
     expect(r.ok).toBe(true);

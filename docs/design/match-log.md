@@ -86,3 +86,4 @@ Lucky Escape (madde 258): `result` satırında `E0:Gambler -> P1:Warrior: killin
 Diriltme satırı: `* Resurrection -> P0:Warrior -> rises on own cell 3 cost 6 SCORE 69.9 = revive 75.9 + cost -6`; sonuç satırı `P1:Paladin revives P0:Warrior (hp 33, mp 9, cell 3; corpse was on cell 0)`.
 
 Drain Field ve Silence (madde 260): aday terimlerinde `silence` (manası bitecek düşmanı susturmanın "engellenen hamle" değeri x zar ihtimali; zarın hasarı `damage`'da), notta `E1:Mage: mana empty -> 50% Silenced 1t + 14 dmg`. `result` satırı: `E1:Mage is out of mana: 50% roll for silence + damage (Drain Field) -> HIT` (ya da `-> no effect`); tutarsa ardından `+silence 1t` ve hasar satırı gelir.
+- **Madde 262 (Abyssal Fury):** yüklü durumda yük harcaması `<birim> abyssal_fury: attack spent a charge, N left`, uygulanınca `+abyssal_fury 3 attack charge(s)`; YZ adayında Abyssal Cry notu `Abyssal Fury: next 3 attacks X -> Y (+Z)` (buff'sız / buff'lı 3 saldırılık planın net değeri).

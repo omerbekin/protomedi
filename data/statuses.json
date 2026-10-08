@@ -103,6 +103,17 @@
     "endsOnOwnAttack": true,
     "text": "Accuracy -20% and no critical hits on its next attack"
   },
+  "abyssal_fury": {
+    "_not": "Warrior Abyssal Cry (madde 262, Ömer isteği 2026-10-08): 'sonraki 3 saldırısı için 1 menzil + bonus STR'. attackCharges: tur saymaz; taşıyanın her HASAR VEREN skill kullanımı (çok vuruşlu Double Strike, alan Whirlwind dahil TEK saldırı) bittikten sonra 1 yük düşer, 0'da biter; rozet kalan yükü gösterir (x3). reachBonus: yakın dövüş menzili +1 sıra (battle.reachOf; skill reach'iyle aynı kural: düşmanın en öndeki dolu sırasının bir arkası da hedeflenir, kendisi de bir sıra geriden vurabilir). attackAttrPct: STR'nin bu oranı kadar bonus STR, YALNIZCA skill hasarında (battle.attackStats; can/kritik/zırh/şifa/kalkan değişmez). Buff: dispel silebilir. İkon: abyssalfury (content-designer, gerçek rozet). STR oranı %50: balance-tester 2026-10-08 ölçtü ve korudu (%35 denemesi Warrior'ı belirgin düşürmeden ult kullanımını %68'den %42'ye indirdi).",
+    "name": "Abyssal Fury",
+    "type": "buff",
+    "icon": "abyssalfury",
+    "color": "#c0203a",
+    "attackCharges": 3,
+    "reachBonus": 1,
+    "attackAttrPct": { "str": 0.5 },
+    "text": "Next 3 attacks: melee reach +1 row and +50% STR (damage only)"
+  },
   "silence": {
     "_not": "Anti-Mage Drain Field (madde 260): manası biten düşmana %50 şansla. blocksMpSkills: MP bedelli skill'ler kullanılamaz (bedelsiz temel saldırı, Rage/can bedelliler, Rest/Skip/Move serbest). tickAtTurnEnd: süre taşıyanın turu BİTİNCE azalır (1 tur = bir sonraki turunun tamamı). Debuff: Resilience (1 turlukta zar yok) ve Mana Barrier dispel ile uyumlu. İkon YER TUTUCU: manaburn (content-designer gerçeğini yapacak). Süre PROVİZYON.",
     "name": "Silenced",

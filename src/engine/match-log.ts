@@ -142,6 +142,9 @@ function describeEventBody(battle: Battle, e: BattleEvent): string | null {
     case 'emptyProc':
       return `${L(e.target)} is out of mana: ${Math.round(e.chance * 100)}% roll for ${e.status} + damage (${battle.skill(e.skill)?.name ?? e.skill}) -> ${e.success ? 'HIT' : 'no effect'}`;
     case 'status':
+      // Yüklü durum (Abyssal Fury, madde 262): saldırı bir yük harcadı
+      if (e.cause === 'charge') return `${L(e.target)} ${e.status}: attack spent a charge, ${e.turns} left`;
+      if (battle.statusDef(e.status)?.attackCharges) return `${L(e.target)} +${e.status} ${e.turns} attack charge(s) (from ${L(e.source)}): ${battle.statusDef(e.status)?.text ?? ''}`;
       return `${L(e.target)} +${e.status}${e.stacks !== undefined ? ` x${e.stacks}` : ''} ${e.turns}t (from ${L(e.source)})${e.stacks !== undefined ? ` [omen timer ${e.turns}]` : ''}${e.partner ? ` bond with ${L(e.partner)}` : ''}${e.cause ? ` [${e.cause}]` : ''}`;
     case 'statusEnd':
       return `${L(e.target)} -${e.status}${e.broken ? ' (ended early: broken / control)' : e.dispelled ? ` (DISPELLED by ${e.source ? L(e.source) : '?'}${e.cause ? ` [${e.cause}]` : ''})` : e.cause === 'bond_broken' ? ' (bond broken)' : e.cause === 'doom' ? ' (burst into Doom)' : e.cause === 'ill_omen' ? ' (passed on by Ill Omen)' : e.consumed ? ' (used up by its own attack)' : ' (expired)'}`;

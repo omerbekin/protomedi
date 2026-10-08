@@ -1,11 +1,12 @@
 {
-  "_not": "DENGE HEDEF BANTLARI (Ömer kararı 2026-10-08; docs/balance.md). npm run sim raporu ve tests/balance.test.ts bu dosyadan okur. Ana ölçüm 4'e 4 (random-battle.json > random.size). Skill kategorileri: class'ın 1. skill'i 'basic' (bedelsiz temel saldırı), 4. skill'i 'ultimate', aşağıdaki 'situational' listesindekiler durumsal destek, geri kalanlar 'normal'. Kullanım payı = o skill'in, class'ın TÜM hamleleri (Rest/Skip/Move dahil) içindeki yüzdesi. Ultimate ölçümü: birimin hayattayken ultimate'ı ilk kez kullanılabilir olduğu (kendi turunda canUse ok) birimler içinde en az bir kez kullananların oranı; class ortalaması >= ultimateUsedMin. Karşılaşma tablosu (class A'nın class B'ye karşı kazanma oranı; aynı takımda olmadıkları savaşlar) eşitlik hedeflemez; yalnızca crushingHigh üstü / crushingLow altı işaretlenir.",
+  "_not": "DENGE HEDEF BANTLARI (Ömer kararı 2026-10-08; docs/balance.md). npm run sim raporu ve tests/balance.test.ts bu dosyadan okur. Ana ölçüm 4'e 4 (random-battle.json > random.size). Skill kategorileri: class'ın 1. skill'i 'basic' (bedelsiz temel saldırı), 4. skill'i 'ultimate', aşağıdaki 'situational' listesindekiler durumsal destek, geri kalanlar 'normal'. Kullanım payı = o skill'in, class'ın TÜM hamleleri (Rest/Skip/Move dahil) içindeki yüzdesi. Ultimate ölçümü: birimin hayattayken ultimate'ı ilk kez kullanılabilir olduğu (kendi turunda canUse ok) birimler içinde en az bir kez kullananların oranı; class ORTALAMASI >= ultimateUsedMin (Ömer kararı 2026-10-08: class bazında ayrı kontrol yok); tek bir class'ın oranı ultimateLowWarn altındaysa test ve rapor UYARI yazar (kırmızı değil). Karşılaşma tablosu (class A'nın class B'ye karşı kazanma oranı; aynı takımda olmadıkları savaşlar) eşitlik hedeflemez; yalnızca crushingHigh üstü / crushingLow altı işaretlenir.",
   "bands": {
     "classWin": { "low": 44, "high": 56 },
     "basic": { "low": 20, "high": 45 },
     "normal": { "low": 15, "high": 35 },
     "situational": { "low": 8, "high": 25 },
     "ultimateUsedMin": 50,
+    "ultimateLowWarn": 35,
     "battleTurns": { "low": 35, "high": 50 },
     "matchup": { "crushingLow": 25, "crushingHigh": 75, "minGames": 200 }
   },

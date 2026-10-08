@@ -180,73 +180,56 @@ describe('YZ bağlam: Anti-Mage - Void Strike', () => {
   });
 });
 
-describe('YZ bağlam: Warrior - Abyssal Cry (can bedeli + %50 hasar azaltma)', () => {
+describe('YZ bağlam: Warrior - Abyssal Cry (madde 262: sonraki 3 saldırı için menzil +1 ve bonus STR; bedel yalnızca Rage)', () => {
   const FOES = { 0: 'mage', 1: 'archer', 2: 'undead', 3: 'gambler', 4: 'antimage' };
-  const war = (tweak?: (b: Battle) => void) => {
-    const b = mk({ 0: 'warrior', 1: 'paladin', 2: 'druid' }, FOES);
+  const war = (foes: Record<number, string> = FOES, tweak?: (b: Battle) => void) => {
+    const b = mk({ 0: 'warrior', 1: 'paladin', 2: 'druid' }, foes);
     b.get('party-0')!.rage = b.get('party-0')!.maxRage; // Abyssal Cry Rage ister (bedel: rage)
     b.get('party-0')!.mp = 0; // Charge (Stun) / Whirlwind yok: Abyssal Cry yalnızca bedelsiz Double Strike ile yarışsın
     tweak?.(b);
     return b;
   };
-  const cry = content.skills.abyssal_cry!;
-  const cost = () => (cry.effects.find((e) => e.type === 'selfDamage') as { ratio: number }).ratio;
 
-  it('yeterli canda ve tehdit varken seçilir (önlenen hasar + hasar artışı, en iyi saldırıdan büyük)', () => {
+  it('kalabalık düşmanda (3 saldırının bonusu bu turun saldırısından büyük) seçilir', () => {
     expect(choose(war())).toMatchObject({ skillId: 'abyssal_cry', reason: 'tactic' });
   });
 
-  it('düşük canda ASLA seçilmez (can bedelinden sonra güvenli eşiğin altına düşecekse)', () => {
-    const min = 0.35; // (eski minSelfHpRatioAfter ipucu madde 258'de silindi; terazi ölüm riskiyle aynı sonucu vermeli)
-    for (const ratio of [0.2, 0.4, min + cost() - 0.05]) {
-      const b = war((x) => (x.get('party-0')!.hp = Math.round(x.get('party-0')!.maxHp * ratio)));
+  it('arka sıraya yalnızca buff ile ulaşılıyorsa seçilir (ön sırada tek Defender)', () => {
+    expect(choose(war({ 0: 'defender', 3: 'mage', 4: 'archer' }))?.skillId).toBe('abyssal_cry');
+  });
+
+  it('bir sonraki turundan önce ölecekse seçilmez (buff boşa gider)', () => {
+    for (const ratio of [0.05, 0.1]) {
+      const b = war(FOES, (x) => (x.get('party-0')!.hp = Math.max(1, Math.round(x.get('party-0')!.maxHp * ratio))));
       expect(choose(b)?.skillId, `can oranı ${ratio}`).not.toBe('abyssal_cry');
     }
   });
 
-  it('bedeli ödedikten sonra gelecek vuruşlara dayanacak kadar canlıyken seçilir; dayanamayacaksa seçilmez (terazi: ölüm riski)', () => {
-    expect(choose(war())?.skillId).toBe('abyssal_cry'); // tam can: 5 düşmanın odağında olsa da dayanır
-    expect(choose(war((x) => (x.get('party-0')!.hp = Math.ceil(x.get('party-0')!.maxHp * (cost() + 0.05)))))?.skillId).not.toBe('abyssal_cry');
-  });
-
-  it('karşıda tek düşman varsa (tehdit yok) seçilmez', () => {
-    const b = mk({ 0: 'warrior', 1: 'paladin', 2: 'druid' }, { 0: 'mage' });
+  it('tek düşman bu vuruşla ölecekse seçilmez', () => {
+    const b = war({ 0: 'mage' }, (x) => (x.get('enemy-0')!.hp = 3));
     expect(choose(b)?.skillId).not.toBe('abyssal_cry');
   });
 
-  it('zaten Fortified iken tekrar seçilmez (yığılmaz)', () => {
-    const b = war((x) => x.debugAddStatus('party-0', 'fortify', 3));
-    expect(choose(b)?.skillId).not.toBe('abyssal_cry');
-  });
-
-  it('düşmanlar zayıf ya da etkisizse (MP\'siz büyücüler, tehdit düşük) seçilmez', () => {
-    const b = war((x) => {
-      for (const c of x.combatants.filter((u) => u.side === 'enemy')) {
-        c.mp = 0; // yalnızca bedelsiz saldırılar kaldı
-        c.stats.str = 1;
-        c.stats.int = 1;
-        c.stats.dex = 1;
-        c.stats.luck = 1;
-      }
-    });
+  it('zaten Abyssal Fury varken tekrar seçilmez (yığılmaz)', () => {
+    const b = war(FOES, (x) => x.debugAddStatus('party-0', 'abyssal_fury', 3));
     expect(choose(b)?.skillId).not.toBe('abyssal_cry');
   });
 
   it('öldürme seçeneği öldürme terimini taşır; seçim en yüksek puandır (sabit "önce öldür" yok, K1)', () => {
-    const b = war((x) => (x.get('enemy-1')!.hp = 1));
+    const b = war(FOES, (x) => (x.get('enemy-1')!.hp = 1));
     const ex = explainChoice(b, 'party-0', ai)!;
     const killer = ex.candidates.find((c) => c.kills.includes('E1:Archer'))!;
     expect(killer.terms!.kill).toBeGreaterThan(0);
     expect(ex.candidates.find((c) => c.verdict === 'chosen')!.score).toBe(Math.max(...ex.candidates.map((c) => c.score ?? -Infinity)));
   });
 
-  it('seçilirse gerçekten oynanır: can bedeli ödenir ve Fortified verilir', () => {
+  it('seçilirse gerçekten oynanır: can harcanmaz, Abyssal Fury verilir', () => {
     const b = war();
     const w = b.get('party-0')!;
     const hp0 = w.hp;
     expect(b.useSkill('party-0', 'abyssal_cry').ok).toBe(true);
-    expect(w.hp).toBe(hp0 - Math.round(hp0 * 0 + w.maxHp * cost()));
-    expect(w.statuses.some((s) => s.kind === 'fortify')).toBe(true);
+    expect(w.hp).toBe(hp0);
+    expect(w.statuses.some((s) => s.kind === 'abyssal_fury')).toBe(true);
   });
 });
 
