@@ -78,7 +78,7 @@ export interface TargetPreview {
   };
   /** Karakter üstü DoT (Wither): tik başına hasar (zırh/zayıflık dahil), tur sayısı, toplam. */
   dot?: { status: string; perTick: number; turns: number; total: number };
-  /** Kontrol bağışıklığı (madde 271): hedefin YEMEYECEĞİ CC durumlarının adları (boss: Stun, Slow, Silence); `statuses` satırında 'Immune: Stun'. */
+  /** Kontrol bağışıklığı (madde 271/272): hedefin YEMEYECEĞİ durumların adları (boss: Stun, Slow, Silence, Blinded, Jinxed); `statuses` satırında 'Immune: Stun'. */
   immune?: string[];
   /** advanceToFront (Warrior Charge; kullanıcının girdisinde): skill sonrası geçeceği ön sıra hücresi (`from` -> `to`); ön sıradaysa ya da yer yoksa tanımsız. */
   advance?: { from: number; to: number };
@@ -203,7 +203,7 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         const def = battle.statusDef(effect.status);
         const e = entry(target.uid);
         if (battle.statusBlocked(target, effect.status)) {
-          // Boss: CC durumu işlemez (madde 271)
+          // Boss: CC durumu (madde 271) ve isabet/kritik cezası (Blinded, Jinxed; madde 272) işlemez
           e.immune = [...(e.immune ?? []), def?.name ?? effect.status];
           e.statuses = [...(e.statuses ?? []), `Immune: ${def?.name ?? effect.status}`];
           continue;

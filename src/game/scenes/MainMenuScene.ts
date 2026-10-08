@@ -1,19 +1,28 @@
 import Phaser from 'phaser';
 import { content } from '../../engine';
 import { CONFIG, deleteSave, deleteSlot, latestSave, listSaves, migrateSaves, readSaves, slotSummaries, type CampaignMode, type Difficulty, type SaveEntry, type SlotSummary } from '../../campaign';
-import { preloadAssets } from '../assets';
+import { backgroundKey, hasBackground, preloadAssets } from '../assets';
 import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
 import { H, W, crown, hpBar, openModal, type Modal } from '../campaign-ui';
 import { MAP_SCENE, loadEntry, startNewCampaign, storage } from '../campaign-session';
-import { buildBackdrop, classAvatar, classLogoBadge, fitText, goldText, makeMenuButton, serif } from '../menu-ui';
-import { makePanel } from '../ui-frame';
+import { classAvatar, classLogoBadge, ensureGlow, fitText, goldText, makeMenuButton, serif } from '../menu-ui';
+import { GOLD, makePanel } from '../ui-frame';
 import { mp, MP_SCENE } from '../mp-client';
 import { addLogo, hasLogo, preloadLogo } from '../branding';
-import { setSettingsOpen } from '../../ui/settings';
+import { loadVolume, setSettingsVolume } from '../../ui/settings';
+import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from '../../ui/fullscreen';
+import { isInputLocked, lockInput, unlockInput } from '../../ui/input-lock';
+import { promptCode, promptName } from '../../ui/mp-overlay';
+import { normalizeLobbyCode } from '../../net/lobby-code';
+import { sanitizeName } from '../../net/protocol';
+import { openWiki } from '../../wiki/view';
+import { MAIN_ITEMS, backTarget, backdropFor, campaignButtons, initialView, moveSelection, type MenuItemKey, type MenuView } from '../main-menu-flow';
 
 export interface MainMenuData {
-  /** 'load': Load Game penceresi açık başlar (yenilgi sonrası "Load Game"). */
+  /** 'load': Load Game penceresi açık başlar (yenilgi sonrası "Load Game"); 'new': New Campaign penceresi. İkisi de Play kartlarının üstünde açılır. */
   open?: 'load' | 'new';
+  /** Doğrudan bir görünümle aç (debug menüsü). */
+  view?: MenuView;
 }
 
 const DIFFS: Difficulty[] = ['easy', 'medium', 'hard'];
@@ -22,15 +31,79 @@ const dateText = (iso: string): string => {
   return Number.isNaN(d.getTime()) ? iso : `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 };
 
+// --- Yerleşim (1920x1080) ---
+const COL_X = 140; // sol sütunun yazı başlangıcı
+const COL_W = 560; // ana menü yazı satırlarının genişliği
+const PANEL_W = 760; // Settings / Multiplayer satırlarının genişliği (sağda değer/denetim)
+const SHADE_W = 980; // soldan sağa açılan gölge
+const ROW_H = 112; // satır aralığı = dokunma alanı yüksekliği (telefonda ~40-44 gerçek px)
+const ITEM_Y0 = 486;
+const CARD_W = 460;
+const CARD_H = 640;
+const CARD_GAP = 46;
+const CARD_CY = 572;
+const EMBER = 0xe0702a;
+const TXT = '#d9c8a2';
+const TXT_ON = '#f3d999';
+const PIVOT = { x: W * 0.62, y: H * 0.48 }; // haritanın yaklaştığı nokta (taslaktaki transform-origin)
+const EASE_SLIDE = 'Cubic.easeInOut';
+
+/** Canvas dokusu (bir kez üretilir). */
+function canvasTex(scene: Phaser.Scene, key: string, w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void): string {
+  if (scene.textures.exists(key)) return key;
+  const t = scene.textures.createCanvas(key, w, h);
+  if (!t) return key;
+  draw(t.getContext());
+  t.refresh();
+  return key;
+}
+
+/** Bir sütun satırı (menü maddesi ya da ayar satırı): önünde kor rengi elmas, seçilince/üstüne gelince parıltı. */
+interface Row {
+  root: Phaser.GameObjects.Container;
+  setOn(on: boolean): void;
+  run: () => void;
+  /** Sol/sağ tuşu (ses kaydırıcısı). */
+  adjust?: (d: number) => void;
+}
+
 /**
- * Ana menü (campaign.md 1.1 + madde 256): Continue (en son oynanan yuvanın en yeni kaydı) / New Campaign (yuva -> mod + genel zorluk) /
- * Load Game (önce yuva, sonra o yuvanın kayıtları) / Quick Battle (bugünkü takım seçimi akışı).
+ * Ana menü (Ömer 2026-10-08, taslak menu-flow.html (onaydan sonra silindi), animasyon 1 "March to the map"; saf kararlar `src/game/main-menu-flow.ts`):
+ *  - Menü: arkada sefer haritası + soldan sağa açılan gölge; sol sütunda logo ve kutusuz yazı listesi Play · Multiplayer · Settings · Codex
+ *    (seçili satırın önünde kor rengi elmas + hafif parıltı; fare, dokunma, klavye yukarı/aşağı/Enter). Açıklama yazısı yok.
+ *  - Play: harita yaklaşır, menü sola kayar, üç kart (Campaign · Quick Battle · Multiplayer) aşağıdan yükselir; sol üstte '◂ Back' / Esc.
+ *    Campaign kartı: Continue (kayıt varsa) · New (yuva -> mod + zorluk) · Load (yuva -> kayıtlar; kayıt yoksa pasif).
+ *  - Settings / Multiplayer: menü sola çekilir, harita kararıp bulanıklaşır, aynı sütunda satırlar belirir. Lobi kurulunca MultiplayerScene.
  */
 export class MainMenuScene extends Phaser.Scene {
   static readonly KEY = 'MainMenuScene';
-  private layer!: Phaser.GameObjects.Container;
+  private modalLayer!: Phaser.GameObjects.Container;
   private modal: Modal | null = null;
+  private modalBack: (() => void) | null = null;
   private openOnStart: MainMenuData['open'];
+  private startView: MenuView = 'menu';
+
+  private view: MenuView = 'menu';
+  private cameFrom: MenuView | null = null;
+  private busyUntil = 0;
+  private bg: Phaser.GameObjects.Image | null = null;
+  private bgBase = 1;
+  private look = { zoom: 1, dark: 0, blur: 0 };
+  private darkRect!: Phaser.GameObjects.Rectangle;
+  private blurFx: { strength: number } | null = null;
+  private lookTween: Phaser.Tweens.Tween | null = null;
+
+  private menuCol!: Phaser.GameObjects.Container;
+  private menuRows: Row[] = [];
+  private menuSel = 0;
+  private panel: Phaser.GameObjects.Container | null = null;
+  private panelRows: Row[] = [];
+  private panelSel = 0;
+  private back!: Phaser.GameObjects.Container;
+  private cards: Array<{ c: Phaser.GameObjects.Container; focus: (on: boolean) => void; run: () => void }> = [];
+  private cardSel = 0;
+  private cleanups: Array<() => void> = [];
+  private promptOpen = false;
 
   constructor() {
     super(MainMenuScene.KEY);
@@ -38,7 +111,22 @@ export class MainMenuScene extends Phaser.Scene {
 
   init(data: MainMenuData): void {
     this.openOnStart = data?.open;
+    this.startView = initialView(data?.open, data?.view);
     this.modal = null;
+    this.modalBack = null;
+    this.view = 'menu';
+    this.cameFrom = null;
+    this.menuRows = [];
+    this.panel = null;
+    this.panelRows = [];
+    this.cards = [];
+    this.menuSel = 0;
+    this.cardSel = 0;
+    this.busyUntil = 0;
+    this.blurFx = null;
+    this.lookTween = null;
+    this.cleanups = [];
+    this.promptOpen = false;
   }
 
   preload(): void {
@@ -50,44 +138,516 @@ export class MainMenuScene extends Phaser.Scene {
   create(): void {
     migrateSaves(storage()); // eski tek-liste kayıtlar Slot 1'e taşınır
     if (mp.active) mp.leave(); // ana menüye dönmek multiplayer lobisinden ayrılmaktır
-    buildBackdrop(this, W, H, hasCampaignArt(this, 'valdoria-bg') ? campaignArtKey('valdoria-bg') : null);
-    this.layer = this.add.container(0, 0).setDepth(100);
-    const L = this.layer;
-    if (hasLogo(this)) L.add(addLogo(this, W / 2, 175, 1100, 250)); // assets/branding/logo.png varsa onu göster (görselin tamamı ortalı)
-    else L.add(fitText(goldText(this, W / 2, 190, 'EMBERS OF VALDORIA', 104, 8).setOrigin(0.5), 1700));
+    this.buildBackground();
+    this.buildMenuColumn();
+    this.buildCards();
+    this.buildBack();
+    this.modalLayer = this.add.container(0, 0).setDepth(1000);
 
-    const { corrupt } = readSaves(storage());
-    const latest = latestSave(storage());
-    const anySaves = slotSummaries(storage()).some((x) => x && x.saveCount > 0);
-    const items: Array<{ label: string; run: () => void; primary?: boolean; enabled?: boolean; sub?: string }> = [];
-    if (latest)
-      items.push({
-        label: 'Continue Campaign',
-        primary: true,
-        run: () => this.loadSave(latest),
-        sub: `Slot ${latest.state.slot + 1} · ${latest.mode === 'ironman' ? 'Ironman' : 'Normal'} · ${CONFIG.difficulties[latest.state.difficulty]?.name} · Stop ${latest.summary.stop}/${latest.summary.stops} · ${latest.summary.node}`,
-      });
-    items.push({ label: 'New Campaign', primary: !latest, run: () => this.chooseSlot() });
-    items.push({ label: 'Load Game', run: () => this.loadSlots(), enabled: anySaves });
-    items.push({ label: 'Quick Battle', run: () => this.scene.start('TeamSelectScene'), sub: 'Pick two teams and fight one battle' });
-    items.push({ label: 'Multiplayer', run: () => this.scene.start(MP_SCENE), sub: 'Quick Battle against a friend online' });
-    items.push({ label: 'Settings', run: () => setSettingsOpen(true) }); // sağ üstteki dişliyle aynı ayarlar paneli
-    let y = 370;
-    for (const it of items) {
-      const b = makeMenuButton(this, W / 2, y, 560, 96, it.label, () => (it.enabled === false ? b.shake() : it.run()), { primary: !!it.primary, size: it.primary ? 42 : 36 });
-      if (it.enabled === false) b.setEnabled(false);
-      L.add(b.container);
-      if (it.sub) L.add(serif(this, W / 2, y + 62, it.sub, 19, '#a8977a', { bold: false, stroke: 2 }).setOrigin(0.5));
-      y += it.sub ? 128 : 108;
-    }
-    if (corrupt) L.add(serif(this, W / 2, H - 50, 'A damaged save file was ignored.', 20, '#d88a7e', { bold: false, stroke: 2 }).setOrigin(0.5));
-    if (this.openOnStart === 'load' && anySaves) this.loadSlots();
+    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onKey(e));
+    // Lobi kurulmaya başlayınca (Host / Join) mevcut multiplayer ekranı devralır
+    const offMp = mp.onChange(() => {
+      if (this.scene.isActive() && (mp.state !== 'idle' || mp.active)) this.scene.start(MP_SCENE);
+    });
+    this.cleanups.push(offMp);
+    this.events.once('shutdown', () => {
+      for (const fn of this.cleanups) fn();
+      this.cleanups = [];
+      if (this.promptOpen) unlockInput('main-menu-prompt');
+    });
+
+    // Doğrudan açılış (debug görünümü ya da yenilgi sonrası Load Game): animasyonsuz
+    if (this.startView !== 'menu') this.setView(this.startView, true);
+    if (this.openOnStart === 'load' && slotSummaries(storage()).some((x) => x && x.saveCount > 0)) this.loadSlots();
     if (this.openOnStart === 'new') this.chooseSlot();
   }
+
+  // ------------------------------------------------------------ arka plan
+
+  private buildBackground(): void {
+    this.cameras.main.setBackgroundColor('#0d0a07');
+    const key = hasCampaignArt(this, 'valdoria-bg') ? campaignArtKey('valdoria-bg') : null;
+    if (key) {
+      this.bg = this.add.image(W / 2, H / 2, key).setDepth(0);
+      this.bgBase = Math.max(W / this.bg.width, H / this.bg.height) * 1.04; // taslaktaki -%4 taşma
+      this.bg.setScale(this.bgBase);
+      const pre = (this.bg as unknown as { preFX?: { addBlur: (q?: number, x?: number, y?: number, s?: number) => { strength: number } } }).preFX;
+      if (pre) this.blurFx = pre.addBlur(0, 2, 2, 0); // WebGL yoksa bulanıklık yok (yalnızca kararma)
+    }
+    const vign = canvasTex(this, 'mm-vign', 480, 270, (ctx) => {
+      const g = ctx.createRadialGradient(288, 135, 0, 288, 135, 300);
+      g.addColorStop(0, 'rgba(20,14,8,0.25)');
+      g.addColorStop(1, 'rgba(8,6,4,0.85)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 480, 270);
+    });
+    this.add.image(W / 2, H / 2, vign).setDisplaySize(W, H).setDepth(1);
+    this.darkRect = this.add.rectangle(0, 0, W, H, 0x000000, 0).setOrigin(0, 0).setDepth(2);
+    this.applyLook();
+  }
+
+  private applyLook(): void {
+    const { zoom, dark, blur } = this.look;
+    if (this.bg) {
+      this.bg.setScale(this.bgBase * zoom);
+      this.bg.setPosition(PIVOT.x + (W / 2 - PIVOT.x) * zoom, PIVOT.y + (H / 2 - PIVOT.y) * zoom);
+    }
+    this.darkRect.setFillStyle(0x000000, dark);
+    if (this.blurFx) this.blurFx.strength = blur;
+  }
+
+  private tweenLook(view: MenuView, instant: boolean): void {
+    const to = backdropFor(view);
+    this.lookTween?.stop();
+    if (instant) {
+      this.look = { ...to };
+      this.applyLook();
+      return;
+    }
+    const from = { ...this.look };
+    this.lookTween = this.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: 1200,
+      ease: 'Cubic.easeOut',
+      onUpdate: (tw) => {
+        const k = tw.getValue() ?? 1;
+        this.look = { zoom: from.zoom + (to.zoom - from.zoom) * k, dark: from.dark + (to.dark - from.dark) * k, blur: from.blur + (to.blur - from.blur) * k };
+        this.applyLook();
+      },
+    });
+  }
+
+  // ------------------------------------------------------------ sol sütun: ana menü
+
+  /** Sütunun arkasındaki gölge: solda koyu, sağa doğru açılır (sütunla birlikte kayar). */
+  private columnShade(): Phaser.GameObjects.Image {
+    const key = canvasTex(this, 'mm-shade', 256, 4, (ctx) => {
+      const g = ctx.createLinearGradient(0, 0, 256, 0);
+      g.addColorStop(0, 'rgba(8,6,4,0.85)');
+      g.addColorStop(0.7, 'rgba(8,6,4,0.55)');
+      g.addColorStop(1, 'rgba(8,6,4,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 256, 4);
+    });
+    return this.add.image(0, 0, key).setOrigin(0, 0).setDisplaySize(SHADE_W, H);
+  }
+
+  /** Kutusuz yazı satırı: elmas + yazı (+ isteğe bağlı sağ taraf) + ince ayırıcı çizgi. Dokunma alanı satırın tamamı. */
+  private makeRow(y: number, label: string, size: number, run: () => void, o: { right?: Phaser.GameObjects.GameObject[]; enabled?: boolean; onHover?: () => void; width?: number } = {}): Row {
+    const rw = o.width ?? COL_W;
+    const enabled = o.enabled !== false;
+    const root = this.add.container(COL_X, y);
+    const glow = this.add.image(0, 0, ensureGlow(this)).setTint(0xf08c28).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
+    const text = serif(this, 34, 0, label, size, enabled ? TXT : '#7d705a', { spacing: 2, stroke: 3 }).setOrigin(0, 0.5);
+    glow.setDisplaySize(text.width * 1.5 + 80, size * 2.2).setPosition(34 + text.width / 2, 0);
+    const diamond = this.add.graphics();
+    const line = this.add.graphics();
+    line.lineStyle(1, 0xd9b26a, 0.16).lineBetween(0, ROW_H / 2 - 2, rw, ROW_H / 2 - 2);
+    const zone = this.add.zone(rw / 2 - 20, 0, rw + 40, ROW_H).setInteractive({ useHandCursor: enabled });
+    root.add([glow, line, diamond, text, ...(o.right ?? []), zone]);
+    // Sağ taraftaki etkileşimli parçalar (kaydırıcı, düğme) satırın dokunma alanının üstünde kalsın
+    if (o.right) for (const r of o.right) root.bringToTop(r);
+    const setOn = (v: boolean): void => {
+      diamond.clear();
+      if (v) {
+        diamond.fillStyle(EMBER, 1).fillPoints([{ x: 10, y: -8 }, { x: 18, y: 0 }, { x: 10, y: 8 }, { x: 2, y: 0 }], true);
+        diamond.lineStyle(2, 0xffb35a, 0.9).strokePoints([{ x: 10, y: -8 }, { x: 18, y: 0 }, { x: 10, y: 8 }, { x: 2, y: 0 }], true);
+      }
+      text.setColor(!enabled ? '#7d705a' : v ? TXT_ON : TXT);
+      text.x = v ? 44 : 34;
+      glow.x = text.x + text.width / 2;
+      this.tweens.killTweensOf(glow);
+      this.tweens.add({ targets: glow, alpha: v && enabled ? 0.22 : 0, duration: 150 });
+    };
+    setOn(false);
+    zone.on('pointerover', () => o.onHover?.());
+    zone.on('pointerup', () => {
+      if (!this.ready() || !enabled) return;
+      run();
+    });
+    return { root, setOn, run: () => enabled && run() };
+  }
+
+  private buildMenuColumn(): void {
+    const col = (this.menuCol = this.add.container(0, 0).setDepth(20));
+    col.add(this.columnShade());
+    if (hasLogo(this)) col.add(addLogo(this, COL_X + 300, 290, 600, 210)); // assets/branding/logo.png
+    else col.add(fitText(goldText(this, COL_X + 300, 290, 'EMBERS OF VALDORIA', 64, 4).setOrigin(0.5), 600));
+    MAIN_ITEMS.forEach((it, i) => {
+      const row = this.makeRow(ITEM_Y0 + i * ROW_H, it.label, 50, () => this.pickMain(it.key), { onHover: () => this.selectMain(i) });
+      col.add(row.root);
+      this.menuRows.push(row);
+    });
+    if (readSaves(storage()).corrupt) col.add(serif(this, COL_X, H - 60, 'A damaged save file was ignored.', 22, '#d88a7e', { bold: false, stroke: 2 }).setOrigin(0, 0.5));
+    this.selectMain(0);
+  }
+
+  private selectMain(i: number): void {
+    this.menuSel = i;
+    this.menuRows.forEach((r, k) => r.setOn(k === i));
+  }
+
+  private pickMain(key: MenuItemKey): void {
+    if (this.view !== 'menu') return;
+    if (key === 'play') this.setView('play');
+    else if (key === 'settings') this.setView('settings');
+    else if (key === 'mp') this.setView('mp');
+    else openWiki(); // Codex = wiki (sağ üstteki kitap simgesiyle aynı pencere)
+  }
+
+  // ------------------------------------------------------------ görünüm geçişleri
+
+  /** Kısa geçiş kilidi (çift dokunma / geçiş sırasında tıklama yeni geçiş başlatmasın). */
+  private ready(): boolean {
+    return this.time.now >= this.busyUntil && !this.modal && !isInputLocked();
+  }
+
+  private setView(next: MenuView, instant = false): void {
+    const prev = this.view;
+    if (prev === next && !instant) return;
+    if (next !== 'menu' && next !== 'play') this.cameFrom = prev;
+    this.view = next;
+    this.busyUntil = this.time.now + (instant ? 0 : 450);
+    this.tweenLook(next, instant);
+    this.slideMenu(next === 'menu', instant);
+    this.showCards(next === 'play', instant);
+    this.showPanel(next === 'settings' || next === 'mp' ? next : null, instant);
+    this.showBack(next !== 'menu', instant);
+    if (next === 'menu') this.selectMain(this.menuSel);
+  }
+
+  private goBack(): void {
+    const to = backTarget(this.view, this.cameFrom);
+    if (!to) return;
+    if (to === 'menu') this.cameFrom = null;
+    this.setView(to);
+  }
+
+  private slideMenu(shown: boolean, instant: boolean): void {
+    this.tweens.killTweensOf(this.menuCol);
+    const x = shown ? 0 : -(SHADE_W + 40);
+    if (shown) this.menuCol.setVisible(true);
+    if (instant) {
+      this.menuCol.setPosition(x, 0).setAlpha(shown ? 1 : 0).setVisible(shown);
+      return;
+    }
+    this.tweens.add({
+      targets: this.menuCol,
+      x,
+      alpha: shown ? 1 : 0.4,
+      duration: 700,
+      delay: shown ? 150 : 0,
+      ease: EASE_SLIDE,
+      onComplete: () => this.menuCol.setVisible(shown),
+    });
+  }
+
+  private showBack(shown: boolean, instant: boolean): void {
+    this.tweens.killTweensOf(this.back);
+    if (shown) this.back.setVisible(true);
+    if (instant) {
+      this.back.setAlpha(shown ? 1 : 0).setVisible(shown);
+      return;
+    }
+    this.tweens.add({ targets: this.back, alpha: shown ? 1 : 0, duration: shown ? 400 : 200, delay: shown ? 500 : 0, onComplete: () => this.back.setVisible(shown) });
+  }
+
+  private buildBack(): void {
+    const t = serif(this, 0, 0, '◂ Back', 36, TXT, { spacing: 2, stroke: 3 }).setOrigin(0, 0.5);
+    const zone = this.add.zone(t.width / 2, 0, t.width + 60, 100).setInteractive({ useHandCursor: true });
+    this.back = this.add.container(58, 64, [t, zone]).setDepth(40).setAlpha(0).setVisible(false);
+    zone.on('pointerover', () => t.setColor(TXT_ON));
+    zone.on('pointerout', () => t.setColor(TXT));
+    zone.on('pointerup', () => this.ready() && this.goBack());
+  }
+
+  // ------------------------------------------------------------ Play: üç kart
+
+  private buildCards(): void {
+    const latest = latestSave(storage());
+    const anySaves = slotSummaries(storage()).some((x) => x && x.saveCount > 0);
+    const campaignArt = hasCampaignArt(this, 'valdoria-bg') ? campaignArtKey('valdoria-bg') : null;
+    const art = (id: string) => (hasBackground(this, id) ? backgroundKey(id) : null);
+    const camp = campaignButtons(!!latest, anySaves);
+    const runCamp = (id: 'continue' | 'new' | 'load') => (id === 'continue' && latest ? this.loadSave(latest) : id === 'new' ? this.chooseSlot() : this.loadSlots());
+    const specs: Array<{ name: string; art: string | null; line?: string; buttons?: typeof camp; run: () => void }> = [
+      { name: 'Campaign', art: campaignArt, buttons: camp, run: () => runCamp(camp[0]!.id) },
+      { name: 'Quick Battle', art: art('castle-hall'), line: 'Pick two teams', run: () => this.scene.start('TeamSelectScene') },
+      { name: 'Multiplayer', art: art('kings-bridge'), line: 'Fight a friend online', run: () => this.setView('mp') },
+    ];
+    specs.forEach((s, i) => {
+      const cx = W / 2 + (i - 1) * (CARD_W + CARD_GAP);
+      const c = this.add.container(cx, CARD_CY).setDepth(30).setAlpha(0).setVisible(false);
+      const hw = CARD_W / 2;
+      const hh = CARD_H / 2;
+      const base = this.add.rectangle(0, 0, CARD_W, CARD_H, 0x241a11, 1);
+      c.add(base);
+      if (s.art) {
+        const img = this.add.image(0, 0, s.art).setAlpha(0.6);
+        const sc = Math.max(CARD_W / img.width, CARD_H / img.height);
+        const cw = CARD_W / sc;
+        const ch = CARD_H / sc;
+        img.setCrop((img.width - cw) / 2, (img.height - ch) / 2, cw, ch).setScale(sc);
+        c.add(img);
+      }
+      const shadeKey = canvasTex(this, 'mm-cardshade', 4, 256, (ctx) => {
+        const g = ctx.createLinearGradient(0, 0, 0, 256);
+        g.addColorStop(0.3, 'rgba(10,7,4,0)');
+        g.addColorStop(1, 'rgba(10,7,4,0.95)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 4, 256);
+      });
+      c.add(this.add.image(0, 0, shadeKey).setDisplaySize(CARD_W, CARD_H));
+      const glow = this.add.image(0, 0, ensureGlow(this)).setTint(0xf0a040).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setDisplaySize(CARD_W * 1.5, CARD_H * 1.3);
+      c.addAt(glow, 0);
+      const frame = this.add.graphics();
+      const drawFrame = (on: boolean) => {
+        frame.clear();
+        frame.lineStyle(4, 0x1b120a, 1).strokeRect(-hw + 4, -hh + 4, CARD_W - 8, CARD_H - 8);
+        frame.lineStyle(on ? 4 : 2, on ? GOLD.bright : 0xd9b26a, 1).strokeRect(-hw, -hh, CARD_W, CARD_H);
+      };
+      drawFrame(false);
+      c.add(frame);
+      c.add(goldText(this, 0, hh - (s.buttons ? 130 : 112), s.name, 50, 2).setOrigin(0.5));
+      const zone = this.add.zone(0, 0, CARD_W, CARD_H).setInteractive({ useHandCursor: !s.buttons });
+      c.add(zone);
+      if (s.line) c.add(serif(this, 0, hh - 50, s.line, 24, '#cdb88d', { bold: false, stroke: 3 }).setOrigin(0.5));
+      if (s.buttons) {
+        const gap = 10;
+        const widths = s.buttons.map((b) => (b.id === 'continue' ? 172 : s.buttons!.length > 2 ? 116 : 160));
+        let bx = -(widths.reduce((a, b) => a + b, 0) + gap * (widths.length - 1)) / 2;
+        s.buttons.forEach((b, k) => {
+          const bw = widths[k]!;
+          const btn = makeMenuButton(this, bx + bw / 2, hh - 56, bw, 76, b.label, () => {
+            if (!this.ready()) return;
+            if (!b.enabled) return btn.shake();
+            runCamp(b.id);
+          }, { primary: b.primary, size: 24 });
+          bx += bw + gap;
+          if (!b.enabled) btn.setEnabled(false);
+          c.add(btn.container);
+        });
+      }
+      const focus = (on: boolean) => {
+        drawFrame(on);
+        this.tweens.killTweensOf(glow);
+        this.tweens.add({ targets: glow, alpha: on ? 0.12 : 0, duration: 160 });
+      };
+      zone.on('pointerover', () => this.focusCard(i));
+      if (!s.buttons) zone.on('pointerup', () => this.ready() && s.run());
+      this.cards.push({ c, focus, run: s.run });
+    });
+  }
+
+  private focusCard(i: number): void {
+    this.cardSel = i;
+    this.cards.forEach((k, j) => k.focus(j === i));
+  }
+
+  private showCards(shown: boolean, instant: boolean): void {
+    this.cards.forEach(({ c }, i) => {
+      this.tweens.killTweensOf(c);
+      if (shown) c.setVisible(true);
+      if (instant) {
+        c.setPosition(c.x, CARD_CY).setScale(1).setAlpha(shown ? 1 : 0).setVisible(shown);
+        return;
+      }
+      if (shown) {
+        c.setPosition(c.x, CARD_CY + 60).setScale(0.96).setAlpha(0);
+        this.tweens.add({ targets: c, y: CARD_CY, scale: 1, alpha: 1, duration: 650, delay: 350 + i * 140, ease: 'Cubic.easeOut' });
+      } else if (c.visible) {
+        this.tweens.add({ targets: c, y: CARD_CY + 60, scale: 0.96, alpha: 0, duration: 320, delay: (this.cards.length - 1 - i) * 70, ease: 'Cubic.easeIn', onComplete: () => c.setVisible(false) });
+      }
+    });
+    if (shown) this.focusCard(this.cardSel);
+  }
+
+  // ------------------------------------------------------------ Settings / Multiplayer sütunu
+
+  private showPanel(kind: 'settings' | 'mp' | null, instant: boolean): void {
+    const old = this.panel;
+    this.panel = null;
+    this.panelRows = [];
+    if (old) {
+      this.tweens.killTweensOf(old);
+      if (instant) old.destroy(true);
+      else this.tweens.add({ targets: old, alpha: 0, x: -30, duration: 220, onComplete: () => old.destroy(true) });
+    }
+    if (!kind) return;
+    const p = (this.panel = this.add.container(0, 0).setDepth(25));
+    p.add(this.columnShade());
+    p.add(goldText(this, COL_X, 330, kind === 'settings' ? 'Settings' : 'Multiplayer', 66, 3).setOrigin(0, 0.5));
+    if (kind === 'settings') this.buildSettings(p);
+    else this.buildMultiplayer(p);
+    this.panelSel = 0;
+    this.selectPanel(0);
+    if (instant) return;
+    p.setAlpha(0).setX(-30);
+    this.tweens.add({ targets: p, alpha: 1, x: 0, duration: 450, delay: 250, ease: 'Cubic.easeOut' });
+  }
+
+  private selectPanel(i: number): void {
+    this.panelSel = i;
+    this.panelRows.forEach((r, k) => r.setOn(k === i));
+  }
+
+  private addPanelRow(p: Phaser.GameObjects.Container, label: string, run: () => void, o: { right?: Phaser.GameObjects.GameObject[]; enabled?: boolean; adjust?: (d: number) => void } = {}): Row {
+    const i = this.panelRows.length;
+    const row = this.makeRow(470 + i * ROW_H, label, 38, run, { ...o, width: PANEL_W, onHover: () => this.selectPanel(i) });
+    row.adjust = o.adjust;
+    p.add(row.root);
+    this.panelRows.push(row);
+    return row;
+  }
+
+  /** Ayarlar: mevcut ayar ekranındakilerin aynısı (ses seviyesi 0-10, tam ekran); değer aynı yerde saklanır. */
+  private buildSettings(p: Phaser.GameObjects.Container): void {
+    // --- Sound volume: − [kaydırıcı] + değer ---
+    let level = loadVolume();
+    const trackX = 440;
+    const trackW = 200;
+    const g = this.add.graphics();
+    const value = serif(this, PANEL_W - 6, 0, String(level), 32, TXT_ON, { stroke: 3 }).setOrigin(1, 0.5);
+    const draw = () => {
+      g.clear();
+      g.fillStyle(0x120c07, 0.9).fillRect(trackX, -5, trackW, 10);
+      g.fillStyle(0xd9b26a, 1).fillRect(trackX, -5, (trackW * level) / 10, 10);
+      g.lineStyle(1, GOLD.edge, 1).strokeRect(trackX - 0.5, -5.5, trackW + 1, 11);
+      g.fillStyle(0xf3d999, 1).fillCircle(trackX + (trackW * level) / 10, 0, 13);
+      g.lineStyle(2, 0x5a3a10, 1).strokeCircle(trackX + (trackW * level) / 10, 0, 13);
+      value.setText(String(level));
+    };
+    const set = (v: number, preview: boolean) => {
+      const n = Math.min(10, Math.max(0, Math.round(v)));
+      if (n === level && !preview) return;
+      level = n;
+      setSettingsVolume(n, preview);
+      draw();
+    };
+    const step = (label: string, x: number, d: number) => {
+      const t = serif(this, x, 0, label, 40, TXT_ON, { stroke: 3 }).setOrigin(0.5);
+      const z = this.add.zone(x, 0, 64, ROW_H - 8).setInteractive({ useHandCursor: true });
+      z.on('pointerup', () => set(level + d, true));
+      return [t, z];
+    };
+    const track = this.add.zone(trackX + trackW / 2, 0, trackW + 40, ROW_H - 8).setInteractive({ useHandCursor: true });
+    const fromPointer = (ptr: Phaser.Input.Pointer) => {
+      const root = track.parentContainer;
+      const lx = ptr.x - (root?.x ?? 0) - (root?.parentContainer?.x ?? 0) - trackX;
+      set((lx / trackW) * 10, false);
+    };
+    let dragging = false;
+    track.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+      dragging = true;
+      fromPointer(ptr);
+    });
+    track.on('pointermove', (ptr: Phaser.Input.Pointer) => dragging && ptr.isDown && fromPointer(ptr));
+    const stopDrag = () => {
+      if (dragging) setSettingsVolume(level, true); // bırakınca deneme sesi
+      dragging = false;
+    };
+    track.on('pointerup', stopDrag);
+    track.on('pointerout', stopDrag);
+    draw();
+    this.addPanelRow(p, 'Sound volume', () => undefined, { right: [g, ...step('−', trackX - 46, -1), track, ...step('+', trackX + trackW + 42, 1), value], adjust: (d) => set(level + d, true) });
+
+    // --- Fullscreen (API yoksa satır yok; iPhone'da ipucu) ---
+    const support = currentSupport();
+    if (support !== 'none' && !isStandalone()) {
+      const state = serif(this, PANEL_W - 6, 0, 'Enter', 32, TXT_ON, { stroke: 3 }).setOrigin(1, 0.5);
+      const note = serif(this, COL_X, 470 + 2 * ROW_H - 10, '', 22, '#cdb88d', { bold: false, stroke: 2 }).setOrigin(0, 0.5);
+      p.add(note);
+      this.cleanups.push(onFullscreenChange((on) => state.active && state.setText(on ? 'Exit' : 'Enter')));
+      this.addPanelRow(p, 'Fullscreen', () => {
+        if (support === 'ios') note.setText(IOS_HINT);
+        else void toggleFullscreen();
+      }, { right: [state] });
+    }
+  }
+
+  /** Multiplayer: mevcut lobi akışının ilk adımı (ad, Host, kodla Join). Lobi kurulmaya başlayınca MultiplayerScene devralır. */
+  private buildMultiplayer(p: Phaser.GameObjects.Container): void {
+    const ok = !!mp.serverUrl();
+    const name = serif(this, PANEL_W - 6, 0, mp.names().local, 32, TXT_ON, { stroke: 3 }).setOrigin(1, 0.5);
+    fitText(name, 260);
+    this.addPanelRow(p, 'Your name', () => void this.askName(name), { right: [name] });
+    this.addPanelRow(p, 'Host a lobby', () => mp.host(), { enabled: ok, right: [serif(this, PANEL_W - 6, 0, 'Host', 32, ok ? TXT_ON : '#7d705a', { stroke: 3 }).setOrigin(1, 0.5)] });
+    this.addPanelRow(p, 'Join with code', () => void this.askCode(), { enabled: ok, right: [serif(this, PANEL_W - 6, 0, 'Join', 32, ok ? TXT_ON : '#7d705a', { stroke: 3 }).setOrigin(1, 0.5)] });
+    if (!ok) {
+      p.add(serif(this, COL_X, 470 + 3 * ROW_H, 'Server not configured', 30, '#e08a7a', { stroke: 3 }).setOrigin(0, 0.5));
+      p.add(serif(this, COL_X, 470 + 3 * ROW_H + 44, 'The multiplayer server address has not been set up yet.', 20, '#a8977a', { bold: false, stroke: 2 }).setOrigin(0, 0.5));
+    }
+  }
+
+  /** DOM giriş kutusu açıkken sahne tıklama/tuş almaz. */
+  private async withPrompt<T>(ask: () => Promise<T>): Promise<T> {
+    this.promptOpen = true;
+    lockInput('main-menu-prompt');
+    try {
+      return await ask();
+    } finally {
+      this.promptOpen = false;
+      unlockInput('main-menu-prompt');
+    }
+  }
+
+  private async askName(label: Phaser.GameObjects.Text): Promise<void> {
+    const n = await this.withPrompt(() => promptName(mp.session?.localName ?? '', sanitizeName));
+    if (n !== null && this.scene.isActive()) {
+      mp.setName(n);
+      if (label.active) fitText(label.setScale(1).setText(mp.names().local), 260);
+    }
+  }
+
+  private async askCode(): Promise<void> {
+    if (!mp.serverUrl()) return;
+    const code = await this.withPrompt(() => promptCode(normalizeLobbyCode));
+    if (code && this.scene.isActive()) mp.join(code);
+  }
+
+  // ------------------------------------------------------------ klavye
+
+  private onKey(e: KeyboardEvent): void {
+    if (isInputLocked() || this.promptOpen) return; // ayarlar ekranı, wiki, giriş kutusu açık
+    const k = e.key;
+    if (k === 'Escape') {
+      if (this.modal) this.modalBack?.();
+      else if (this.time.now >= this.busyUntil) this.goBack();
+      return;
+    }
+    if (this.modal || this.time.now < this.busyUntil) return;
+    const enter = k === 'Enter' || k === ' ';
+    const up = k === 'ArrowUp' || k === 'w' || k === 'W';
+    const down = k === 'ArrowDown' || k === 's' || k === 'S';
+    const left = k === 'ArrowLeft' || k === 'a' || k === 'A';
+    const right = k === 'ArrowRight' || k === 'd' || k === 'D';
+    if (this.view === 'menu') {
+      if (up || down) this.selectMain(moveSelection(this.menuSel, up ? -1 : 1, this.menuRows.length));
+      else if (enter) this.pickMain(MAIN_ITEMS[this.menuSel]!.key);
+    } else if (this.view === 'play') {
+      if (left || right || up || down) this.focusCard(moveSelection(this.cardSel, left || up ? -1 : 1, this.cards.length));
+      else if (enter) this.cards[this.cardSel]?.run();
+    } else {
+      const row = this.panelRows[this.panelSel];
+      if (up || down) this.selectPanel(moveSelection(this.panelSel, up ? -1 : 1, this.panelRows.length));
+      else if ((left || right) && row?.adjust) row.adjust(left ? -1 : 1);
+      else if (enter) row?.run();
+    }
+  }
+
+  // ------------------------------------------------------------ kayıt pencereleri (eski akış aynen)
 
   private closeModal(): void {
     this.modal?.close();
     this.modal = null;
+    this.modalBack = null;
+  }
+
+  private openWindow(o: Parameters<typeof openModal>[2], back: () => void): Modal {
+    this.modal = openModal(this, this.modalLayer, o);
+    this.modalBack = back;
+    return this.modal;
   }
 
   private loadSave(entry: SaveEntry): void {
@@ -126,8 +686,8 @@ export class MainMenuScene extends Phaser.Scene {
     this.closeModal();
     const sums = slotSummaries(storage());
     const rowH = 150;
-    this.modal = openModal(this, this.layer, { title: 'New Campaign', subtitle: 'Choose a slot for your journey', width: 1400, height: 250 + sums.length * rowH, buttons: [{ label: 'Back', run: () => this.closeModal() }] });
-    const { root, area } = this.modal;
+    const back = () => this.closeModal();
+    const { root, area } = this.openWindow({ title: 'New Campaign', subtitle: 'Choose a slot for your journey', width: 1400, height: 250 + sums.length * rowH, buttons: [{ label: 'Back', run: back }] }, back);
     sums.forEach((sum, i) => {
       const pick = () => (sum ? this.confirmOverwrite(i, sum) : this.chooseOptions(i));
       this.slotCard(root, W / 2 - 660, area.y + i * rowH, 1320, rowH - 14, i, sum, [{ label: sum ? 'Overwrite' : 'Choose', primary: !sum, run: pick }]);
@@ -136,22 +696,24 @@ export class MainMenuScene extends Phaser.Scene {
 
   private confirmOverwrite(slot: number, sum: SlotSummary): void {
     this.closeModal();
-    this.modal = openModal(this, this.layer, {
+    const back = () => this.chooseSlot();
+    this.openWindow({
       title: `Overwrite slot ${slot + 1}?`,
       text: `The journey in this slot (${sum.mode === 'ironman' ? 'Ironman' : 'Normal'}, ${sum.latest ? `stop ${sum.latest.summary.stop}, ${sum.latest.summary.node}` : 'not saved yet'}) and all of its ${sum.saveCount} saves will be deleted. This cannot be undone.`,
       height: 440,
       buttons: [
         { label: 'Delete and start', primary: true, run: () => this.chooseOptions(slot) },
-        { label: 'Cancel', run: () => this.chooseSlot() },
+        { label: 'Cancel', run: back },
       ],
-    });
+    }, back);
   }
 
   private chooseOptions(slot: number): void {
     this.closeModal();
     let mode: CampaignMode = 'normal';
     let diff: Difficulty = CONFIG.defaultDifficulty;
-    this.modal = openModal(this, this.layer, {
+    const back = () => this.chooseSlot();
+    const { root, area } = this.openWindow({
       title: 'New Campaign',
       subtitle: `Slot ${slot + 1} · Mode and difficulty cannot be changed later`,
       width: 1300,
@@ -165,10 +727,9 @@ export class MainMenuScene extends Phaser.Scene {
             this.scene.start(MAP_SCENE);
           },
         },
-        { label: 'Back', run: () => this.chooseSlot() },
+        { label: 'Back', run: back },
       ],
-    });
-    const { root, area } = this.modal;
+    }, back);
     const layer = this.add.container(0, 0);
     root.add(layer);
     const draw = () => {
@@ -198,8 +759,8 @@ export class MainMenuScene extends Phaser.Scene {
     this.closeModal();
     const sums = slotSummaries(storage());
     const rowH = 150;
-    this.modal = openModal(this, this.layer, { title: 'Load Game', subtitle: 'Choose a slot', width: 1400, height: 250 + sums.length * rowH, buttons: [{ label: 'Back', run: () => this.closeModal() }] });
-    const { root, area } = this.modal;
+    const back = () => this.closeModal();
+    const { root, area } = this.openWindow({ title: 'Load Game', subtitle: 'Choose a slot', width: 1400, height: 250 + sums.length * rowH, buttons: [{ label: 'Back', run: back }] }, back);
     sums.forEach((sum, i) => {
       const buttons = sum
         ? [
@@ -213,7 +774,8 @@ export class MainMenuScene extends Phaser.Scene {
 
   private confirmDeleteSlot(slot: number, sum: SlotSummary): void {
     this.closeModal();
-    this.modal = openModal(this, this.layer, {
+    const back = () => this.loadSlots();
+    this.openWindow({
       title: `Delete slot ${slot + 1}?`,
       text: `The whole journey (${sum.mode === 'ironman' ? 'Ironman' : 'Normal'}) and all of its ${sum.saveCount} saves will be lost. This cannot be undone.`,
       height: 420,
@@ -223,12 +785,13 @@ export class MainMenuScene extends Phaser.Scene {
           primary: true,
           run: () => {
             deleteSlot(storage(), slot);
+            this.refreshCards();
             this.loadSlots();
           },
         },
-        { label: 'Cancel', run: () => this.loadSlots() },
+        { label: 'Cancel', run: back },
       ],
-    });
+    }, back);
   }
 
   private loadGame(slot: number): void {
@@ -236,13 +799,13 @@ export class MainMenuScene extends Phaser.Scene {
     const saves = listSaves(storage(), slot);
     const rows = Math.max(1, saves.length);
     const rowH = 118;
-    this.modal = openModal(this, this.layer, {
+    const back = () => this.loadSlots();
+    const { root, area } = this.openWindow({
       title: `Load Game · Slot ${slot + 1}`,
       width: 1400,
       height: Math.min(1000, 210 + rows * rowH + 40),
-      buttons: [{ label: 'Back to slots', run: () => this.loadSlots() }],
-    });
-    const { root, area } = this.modal;
+      buttons: [{ label: 'Back to slots', run: back }],
+    }, back);
     if (!saves.length) root.add(serif(this, W / 2, area.y + 40, 'No saved games in this slot.', 26, '#c9b48a', { bold: false }).setOrigin(0.5, 0));
     saves.forEach((e, i) => {
       const y = area.y + i * rowH;
@@ -262,7 +825,8 @@ export class MainMenuScene extends Phaser.Scene {
       root.add(makeMenuButton(this, x + 1110, y + 52, 150, 64, 'Load', () => this.loadSave(e), { primary: true, size: 26 }).container);
       const del = makeMenuButton(this, x + 1250, y + 52, 110, 64, 'Delete', () => {
         this.closeModal();
-        this.modal = openModal(this, this.layer, {
+        const backDel = () => this.loadGame(slot);
+        this.openWindow({
           title: 'Delete save?',
           text: `${e.summary.node}, stop ${e.summary.stop}. This cannot be undone.`,
           height: 400,
@@ -272,14 +836,24 @@ export class MainMenuScene extends Phaser.Scene {
               primary: true,
               run: () => {
                 deleteSave(storage(), slot, e.id);
+                this.refreshCards();
                 this.loadGame(slot);
               },
             },
-            { label: 'Cancel', run: () => this.loadGame(slot) },
+            { label: 'Cancel', run: backDel },
           ],
-        });
+        }, backDel);
       }, { size: 22 });
       root.add(del.container);
     });
+  }
+
+  /** Kayıt silinince Campaign kartındaki Continue / Load durumu yenilensin. */
+  private refreshCards(): void {
+    const shown = this.view === 'play';
+    for (const { c } of this.cards) c.destroy(true);
+    this.cards = [];
+    this.buildCards();
+    this.showCards(shown, true);
   }
 }

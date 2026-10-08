@@ -43,6 +43,8 @@ import type { CorpseMarker } from '../corpse-marker';
 import { isDeltaStat, previewStatusText, statDir, statSources } from '../stat-delta';
 import { areaBoards, areaHoverSpecs, areaTone, blockedTargets } from '../target-cells';
 import type { MpBattleHooks, MpResultInfo } from '../mp-hooks';
+import { isGameMenuOpen, toggleGameMenu } from '../../ui/game-menu';
+import { isSettingsOpen } from '../../ui/settings';
 
 export interface BattleSceneData {
   seed: number;
@@ -67,6 +69,8 @@ export interface BattleSceneData {
 /** Sefer bağlamı: savaş bitince sonuç ekranının düğmeleri (Continue / Load Last Save / Load Game / Main Menu). src/game/campaign-session.ts */
 export interface CampaignBattleHooks {
   resultActions(victory: boolean, battle: Battle): ResultAction[];
+  /** Savaş menüsü > Retreat to Map: savaş sayılmaz, haritaya aynı düğüme dönülür (campaign-session.retreatToMap). */
+  retreat?(): void;
 }
 
 /** Üç küçük global eylem düğmesinin (Rest / Skip Turn / Move) sütunu: 4 skill düğmesinin hemen sağında, tooltip plaketinin solunda. */
@@ -449,6 +453,7 @@ export class BattleScene extends Phaser.Scene {
   private bindSkillHotkeys(): void {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
+      if (isGameMenuOpen() || isSettingsOpen()) return; // menü / ayarlar açık: kısayollar savaşa gitmez
       if (e.key === 'Escape' && this.moveMode) {
         this.cancelMove();
         return;
@@ -458,6 +463,11 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       if (e.key === 'Escape' && this.clearUnitSelection()) return;
+      if (e.key === 'Escape') {
+        // Esc'in savaşta başka işi yoksa sağ üstteki Menu açılır (Resume / Settings / ... ; src/ui/game-menu.ts)
+        if (!debugState.uiPaused) toggleGameMenu();
+        return;
+      }
       const n = '1234'.indexOf(e.key) + 1;
       if (n === 0) return;
       const skillId = this.activeActor?.skills[n - 1];

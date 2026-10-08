@@ -7,6 +7,8 @@ import { W, H } from '../campaign-ui';
 import { buildBackdrop, goldText, makeMenuButton, serif } from '../menu-ui';
 import { mp, MP_SCENE } from '../mp-client';
 import { makePanel } from '../ui-frame';
+import { toggleGameMenu } from '../../ui/game-menu';
+import { debugState } from '../debug-state';
 
 /** Sayfa açılışında bir kez: davet linki (?lobby=KOD) ya da yenilenen sekmenin yarım kalan lobisi. main.ts ayarlar. */
 let bootIntent: { join: string } | { rejoin: true } | null = null;
@@ -34,6 +36,7 @@ export class MultiplayerScene extends Phaser.Scene {
   create(): void {
     buildBackdrop(this, W, H, hasCampaignArt(this, 'valdoria-bg') ? campaignArtKey('valdoria-bg') : null);
     this.layer = this.add.container(0, 0).setDepth(100);
+    this.input.keyboard?.on('keydown-ESC', () => !debugState.uiPaused && toggleGameMenu()); // Esc: sağ üstteki Menu
     this.off = mp.onChange(() => this.scene.isActive() && this.draw());
     this.events.once('shutdown', () => {
       this.off?.();

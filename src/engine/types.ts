@@ -797,8 +797,11 @@ export interface Formulas {
   /**
    * Kontrol bağışıklığı (madde 271, Ömer 2026-10-08: "Boss'lar CC yemesin"): `tiers` rütbesindeki birimler (Combatant.tier; boss tanımlı birimler de)
    * statuses.json > cc durumlarını yemez; `taunt`: taunt'a uymaz (tek hedefli skill'leri taunt'lı düşmana zorlanmaz); `displacement`: çekilemez/itilemez.
+   * `accuracyCrit` (madde 272, Ömer 2026-10-08: "isabeti-kritiği bozan etkiler de boss'a işlemesin"): isabet ya da kritik düşüren debuff'lar
+   * (statuses.json > accuracyDelta < 0 ya da critDelta < 0: Blinded, Jinxed) da yemez (CC ile aynı akış, olay `immune`).
+   * `omenCrit`: Omen uygulanır (yığın, Doom, patlama aynen) ama yığın başına kritik düşüşü (critDeltaPerStack, Misfortune) hesaba katılmaz.
    */
-  ccImmunity?: { tiers: string[]; taunt: boolean; displacement: boolean };
+  ccImmunity?: { tiers: string[]; taunt: boolean; displacement: boolean; accuracyCrit?: boolean; omenCrit?: boolean };
   /** Raise Dead ceset tehlikesi katsayıları (madde 230; battle.corpseChoices). Yoksa varsayılan hpRef 100, çarpanlar 1,5. */
   corpseDanger?: { hpRef: number; reviverMult: number; revivableMult: number };
 }
@@ -842,7 +845,8 @@ export interface StatusDef {
   breaksTaunt?: boolean;
   /**
    * true: kontrol etkisi (crowd control; madde 271): Stun, Slow, Silence. formulas.json > ccImmunity.tiers rütbesindeki birimler (boss) bu durumları
-   * YEMEZ (olay `immune`). Hasar/lanet/DoT/savunma debuff'ları (Wound, Omen, Wither, Blinded, Jinxed, Overextended) CC değildir.
+   * YEMEZ (olay `immune`). Hasar/lanet/DoT/savunma debuff'ları (Wound, Omen, Wither, Overextended) CC değildir. İsabet/kritik düşüren debuff'lar
+   * (Blinded, Jinxed) CC değildir ama ccImmunity.accuracyCrit açıkken boss onları da yemez (madde 272; kural accuracyDelta/critDelta < 0'dan okunur).
    */
   cc?: boolean;
   /** false: dispel/cleanse etkileri (Spell Ward, Mana Barrier) bu durumu silemez (ör. Dark Bond bağı). Yoksa silinebilir. */

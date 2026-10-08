@@ -1,3 +1,4 @@
+import { isAccuracyCritDebuff } from './cc-immunity';
 import { skillCostAmount } from './cost';
 import { damageRange, rollCrit, rollDamage, rollHeal, shieldAmount, type DamageSpec, type Range } from './formulas';
 import { isShapeArea, shapeCells, shapeStages } from './area-shape';
@@ -593,12 +594,13 @@ export class Battle {
     let eva = 0;
     // extraCrit: vuruşun kendi kritik eki (skill hasarının critBonus'u, Jinx); durum ekleriyle birlikte toplanıp [0, 1]'e kırpılır
     let crit = extraCrit;
+    const noMisfortune = this.ignoresMisfortune(c); // boss: Omen'in kritik düşüşü işlemez (madde 272)
     for (const s of c.statuses) {
       const d = this.statusDef(s.kind);
       acc += d?.accuracyDelta ?? 0;
       eva += d?.evasionDelta ?? 0;
       // Kritik eki (Jinxed: kritik yok) ve yığın başına kritik eki (Omen Misfortune); sonuç [0, 1]
-      crit += (d?.critDelta ?? 0) + (d?.critDeltaPerStack ?? 0) * (s.stacks ?? 0);
+      crit += (d?.critDelta ?? 0) + (noMisfortune ? 0 : (d?.critDeltaPerStack ?? 0) * (s.stacks ?? 0));
     }
     if (bonus <= 0 && magicBonus <= 0 && acc === 0 && eva === 0 && crit === 0) return c.stats;
     return {
@@ -1019,7 +1021,16 @@ export class Battle {
 
   /** Bu durum bu birime işlemez mi (CC durumu + bağışık birim)? Önizleme ve YZ de bunu okur. Saf. */
   statusBlocked(c: Pick<Combatant, 'tier' | 'boss'>, kind: string): boolean {
-    return !!this.statusDef(kind)?.cc && this.ccImmune(c);
+    const d = this.statusDef(kind);
+    if (!d) return false;
+    // Madde 272: isabet/kritik düşüren debuff'lar (Blinded, Jinxed) da (ccImmunity.accuracyCrit)
+    const blockable = !!d.cc || (!!this.setup.formulas.ccImmunity?.accuracyCrit && isAccuracyCritDebuff(d));
+    return blockable && this.ccImmune(c);
+  }
+
+  /** Madde 272: bu birimde Omen'in yığın başına kritik düşüşü (Misfortune, critDeltaPerStack) yok sayılır mı (boss, ccImmunity.omenCrit)? Saf. */
+  ignoresMisfortune(c: Pick<Combatant, 'tier' | 'boss'>): boolean {
+    return !!this.setup.formulas.ccImmunity?.omenCrit && this.ccImmune(c);
   }
 
   /** Birim taunt'a uymaz mı (boss: tek hedefli skill'leri taunt'lı düşmana zorlanmaz; madde 271)? Saf. */
@@ -2572,7 +2583,8 @@ export class Battle {
 
   /** `cause`: görsel neden (skill etkisinin `cause` alanı, ör. 'vines'); `status` olayına aynen yazılır. */
   private addStatus(target: Combatant, status: Status, emit: Emit, cause?: string): void {
-    // Kontrol bağışıklığı (madde 271): boss rütbesi CC durumlarını (statuses.json > cc: Stun, Slow, Silence) yemez; durum uygulanmaz, 'Immune' yazısı
+    // Kontrol bağışıklığı (madde 271): boss rütbesi CC durumlarını (statuses.json > cc: Stun, Slow, Silence) yemez; durum uygulanmaz, 'Immune' yazısı.
+    // Madde 272: isabet/kritik düşüren debuff'lar (Blinded, Jinxed; ccImmunity.accuracyCrit) aynı akış.
     if (this.statusBlocked(target, status.kind)) {
       emit({ type: 'immune', target: target.uid, status: status.kind, source: status.source, ...(cause ? { cause } : {}) });
       emit({ type: 'passive', actor: target.uid, passive: 'cc_immune', name: 'Immune' });

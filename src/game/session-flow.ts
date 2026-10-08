@@ -34,8 +34,60 @@ export function flowButtons(ctx: FlowContext): { newGame: boolean; teamSelect: b
   };
 }
 
-/** Pure decision: the settings "Main Menu" row is shown everywhere except on the main menu itself. */
+/** Pure decision: the "Back to Main Menu" entry is shown everywhere except on the main menu itself. */
 export const mainMenuButton = (ctx: FlowContext): boolean => ctx !== 'none' && ctx !== 'main-menu';
+
+export type MenuItemId = 'resume' | 'settings' | 'newGame' | 'teamSelect' | 'retreat' | 'mainMenu';
+
+export interface MenuSpec {
+  items: MenuItemId[];
+  /** Onay isteyen girişler: giriş -> soru metni (Yes / No). */
+  confirm: Partial<Record<MenuItemId, string>>;
+}
+
+export const RETREAT_CONFIRM = 'Retreat? This battle will not count.';
+
+/**
+ * Pure decision (Ömer 2026-10-08): the in-game Menu (top right "Menu" button / Esc) of the battle, team select and multiplayer screens.
+ * Quick battle: Resume / Settings / New Game / Team Select / Back to Main Menu; team select: Resume / Settings / New Game / Back to Main Menu;
+ * campaign battle (undecided): Resume / Settings / Retreat to Map / Back to Main Menu (retreat: the battle does not count, same node and
+ * seed next time; `retreatToMap` in campaign-session); multiplayer: Resume / Settings / Back to Main Menu (= leave the match).
+ * Leaving an undecided battle asks first. No menu (null) on the main menu and the campaign map (it has its own Menu).
+ */
+export function menuItems(ctx: FlowContext): MenuSpec | null {
+  const f = flowButtons(ctx);
+  const leave = ctx === 'campaign-battle-live' ? 'Leave the battle and return to the main menu? Progress since your last save will be lost.' : ctx === 'mp-live' ? 'Leave the match? Leaving counts as a loss.' : 'Leave the current battle?';
+  switch (ctx) {
+    case 'battle-live':
+    case 'battle-over':
+    case 'team-select':
+    case 'campaign-battle-live':
+    case 'campaign-battle-over':
+    case 'mp-live':
+    case 'mp': {
+      const items: MenuItemId[] = ['resume', 'settings'];
+      if (f.newGame) items.push('newGame');
+      if (f.teamSelect) items.push('teamSelect');
+      if (ctx === 'campaign-battle-live') items.push('retreat');
+      items.push('mainMenu');
+      const confirm: MenuSpec['confirm'] = {};
+      if (f.confirm) for (const id of ['newGame', 'teamSelect', 'mainMenu'] as const) if (items.includes(id)) confirm[id] = leave;
+      if (items.includes('retreat')) confirm.retreat = RETREAT_CONFIRM;
+      return { items, confirm };
+    }
+    default:
+      return null;
+  }
+}
+
+export const MENU_LABELS: Record<MenuItemId, string> = {
+  resume: 'Resume',
+  settings: 'Settings',
+  newGame: 'New Game',
+  teamSelect: 'Team Select',
+  retreat: 'Retreat to Map',
+  mainMenu: 'Back to Main Menu',
+};
 
 export function flowContext(game: Phaser.Game): FlowContext {
   const scene = active(game);

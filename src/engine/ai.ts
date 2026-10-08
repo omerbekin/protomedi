@@ -1055,6 +1055,7 @@ function statusMitigation(battle: Battle, actor: Combatant, skill: SkillDef, tar
     const chance = (e as { chance?: number }).chance ?? 1;
     for (const t of targets) {
       if (t.hp <= 0 || !battle.effectAppliesTo(skill, e, t, actor)) continue;
+      if (battle.statusBlocked(t, e.status)) continue; // boss Blinded/Jinxed yemez (madde 272): isabet/kritik bozma değeri 0
       const has = t.statuses.find((s) => s.kind === e.status);
       // endsOnOwnAttack (Jinxed): yalnızca hedefin SONRAKİ saldırısı etkilenir (1 tur değer; zaten taşıyorsa 0)
       const turns = def?.endsOnOwnAttack ? (has ? 0 : 1) : Math.max(0, e.turns - (has?.turns ?? 0));

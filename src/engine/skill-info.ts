@@ -1,4 +1,5 @@
 import { isShapeArea, RECT_CENTER_MIN, shapeBadge } from './area-shape';
+import { bossBlocksStatus } from './cc-immunity';
 import { isRatioCost, skillCostLabel } from './cost';
 import { betMultipliers, betStake } from './gamble';
 import { applySummonVariant, attributePower } from './stats';
@@ -98,6 +99,8 @@ export function stageText(area: AreaDef | undefined): string {
 export const ATTRIBUTE_NAME: Record<Attribute, string> = { str: 'STR', int: 'INT', dex: 'DEX', luck: 'LUCK' };
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
+/** Boss bağışıklık satırındaki tür adı (madde 271/272): CC ya da isabet/kritik cezası. */
+const immuneKind = (d: StatusDef): string => (d.cc ? 'crowd control' : 'accuracy/crit penalty');
 
 /** Buff/debuff ve yer etkisi adlarını metinlere çevirmek için tanımlar (data/statuses.json, data/grounds.json). */
 export interface EffectDefs {
@@ -275,7 +278,7 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       if (em) {
         const def = defs.statuses?.[em.status];
         const el = em.damage.element ?? 'physical';
-        if (def?.cc && formulas.ccImmunity?.tiers.includes('boss')) add(`Bosses are immune to ${def.name} (crowd control); they still take the damage`);
+        if (def && bossBlocksStatus(formulas, def)) add(`Bosses are immune to ${def.name} (${immuneKind(def)}); they still take the damage`);
         add(`Each target left with 0 MP (or already at 0) has a ${pct(em.chance)} chance (rolled separately) to be ${def?.name ?? em.status} for ${em.turns} turn${em.turns > 1 ? 's' : ''}${def ? ` (${def.text})` : ''} and take ${pct(em.damage.power)} ${ATTRIBUTE_NAME[em.damage.scale]} (${raw(em.damage.scale, em.damage.power)}) ${el} damage; it cannot miss but can crit`, el);
       }
     } else if (e.type === 'taunt') {
@@ -297,12 +300,12 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       }
       if (e.chance !== undefined && e.chance < 1) add(`${pct(e.chance)} chance per target hit (rolled separately) to apply ${def?.name ?? e.status} for ${e.turns} turn${e.turns > 1 ? 's' : ''}${how}${def ? `: ${def.text}` : ''}`, undefined);
       else add(`${e.self ? 'You gain' : 'Applies'} ${def?.name ?? e.status}${skill.target === 'area_any' ? who : ''} for ${e.turns} turn${e.turns > 1 ? 's' : ''}${how}${def ? `: ${def.text}` : ''}`, undefined);
-      if (def?.cc && !e.self && formulas.ccImmunity?.tiers.includes('boss')) add(`Bosses are immune to ${def.name} (crowd control)`);
+      if (def && !e.self && bossBlocksStatus(formulas, def)) add(`Bosses are immune to ${def.name} (${immuneKind(def)})`);
     } else if (e.type === 'randomStatus') {
       const total = e.options.reduce((a, o) => a + o.weight, 0);
       add(`Random effect on each target hit: ${e.options.map((o) => `${defs.statuses?.[o.status]?.name ?? o.status} ${o.turns} turn${o.turns > 1 ? 's' : ''} (${pct(o.weight / total)})`).join(', ')}`);
-      const ccNames = e.options.map((o) => defs.statuses?.[o.status]).filter((d) => d?.cc).map((d) => d!.name);
-      if (ccNames.length > 0 && formulas.ccImmunity?.tiers.includes('boss')) add(`Bosses are immune to ${ccNames.join(' and ')} (crowd control)`);
+      const blocked = e.options.map((o) => defs.statuses?.[o.status]).filter((d): d is StatusDef => !!d && bossBlocksStatus(formulas, d));
+      if (blocked.length > 0) add(`Bosses are immune to ${blocked.map((d) => d.name).join(' and ')} (${blocked.every((d) => d.cc) ? 'crowd control' : 'crowd control and accuracy/crit penalties'})`);
     } else if (e.type === 'ground') {
       const g = defs.grounds?.[e.ground];
       add(`Leaves ${g?.name ?? e.ground} on the area for ${e.turns} turns: ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)}) damage at the start of each enemy turn there`, g?.element);
@@ -325,6 +328,8 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       add(`Adds ${e.stacks} ${name}${crit} to every enemy hit`, 'dark');
       if (doom && def?.maxStacks && !detonates) add(`At ${def.maxStacks} Omens, Doom strikes at once: ${pct(doom.powerPerStack)} ${ATTRIBUTE_NAME[doom.scale]} (${raw(doom.scale, doom.powerPerStack)}) ${doom.element} damage per Omen; it cannot miss but can crit`, doom.element);
       if (doom && def?.maxStacks && !detonates && e.critDoomOnCrit) add(`A critical ${skill.name} that completes ${def.maxStacks} Omens makes the Doom a critical hit`, doom.element);
+      // Madde 272: boss'ta Misfortune (yığın başına kritik düşüşü) işlemez; Omen ve Doom işler
+      if (def?.critDeltaPerStack && formulas.ccImmunity?.omenCrit && formulas.ccImmunity.tiers.includes('boss')) add(`Bosses ignore Misfortune (each ${name}: crit chance -${pct(Math.abs(def.critDeltaPerStack))}); the ${name}s and Doom still work on them`);
       if (def?.burstOnExpire && def.duration && !detonates) add(def.refreshOnStack ? `Each new Omen resets the ${def.duration}-turn timer; when it runs out, the Omens burst into Doom` : `After ${def.duration} turns the Omens burst into Doom (new Omens do not extend the timer)`);
     } else if (e.type === 'detonate') {
       const def = defs.statuses?.[e.status];

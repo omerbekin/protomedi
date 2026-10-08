@@ -16,6 +16,8 @@ import { drawQuadTile } from '../shape-draw';
 import type { SideSizes } from '../team-select-model';
 import { cornerOrnaments, frameRect, glowRect, GOLD, makePanel } from '../ui-frame';
 import type { MpTeamHooks } from '../mp-hooks';
+import { toggleGameMenu } from '../../ui/game-menu';
+import { debugState } from '../debug-state';
 
 const { width: W, height: H, colors } = layout;
 const { rows: ROWS, lanes: LANES } = content.GRID;
@@ -221,6 +223,8 @@ export class TeamSelectScene extends Phaser.Scene {
       this.onCardDragEnd(p, true);
     });
     this.input.keyboard?.on('keydown-ENTER', () => this.start());
+    // Esc: sağ üstteki Menu (Resume / Settings / New Game / Back to Main Menu; src/ui/game-menu.ts)
+    this.input.keyboard?.on('keydown-ESC', () => !debugState.uiPaused && toggleGameMenu());
     if (this.mp) {
       this.mpOff = this.mp.onChange(() => !this.mpSyncing && this.scene.isActive() && this.refresh());
       this.events.once('shutdown', () => {
@@ -375,9 +379,11 @@ export class TeamSelectScene extends Phaser.Scene {
     const swordR = this.add.image(x + w - 56, y + h / 2, ensureIcon(this, 'sword', '#e8c47e', false)).setDisplaySize(50, 50).setDepth(22).setFlipX(true);
     swordL.setAngle(-8);
     swordR.setAngle(8);
-    const shadow = serif(this, cx + 2, y + h / 2 + 4, 'Embers of Valdoria', 66, '#000000', { stroke: 0 }).setOrigin(0.5).setDepth(22).setAlpha(0.55);
-    const title = goldText(this, cx, y + h / 2 + 1, 'ProtoMedi', 66, 3).setOrigin(0.5).setDepth(23);
-    void shadow;
+    const shadow = serif(this, cx + 2, y + h / 2 + 4, 'Embers of Valdoria', 56, '#000000', { stroke: 0 }).setOrigin(0.5).setDepth(22).setAlpha(0.55);
+    const title = goldText(this, cx, y + h / 2 + 1, 'Embers of Valdoria', 56, 3).setOrigin(0.5).setDepth(23);
+    // Uzun ad plakaya (kılıçların arasına) sığsın: oran korunarak küçült
+    const room = w - 150;
+    if (title.width > room) for (const t of [title, shadow]) t.setScale(room / title.width);
     // Light sweep across the plaque
     const shine = this.add.graphics().setDepth(24).setBlendMode(Phaser.BlendModes.ADD);
     shine.fillStyle(0xffe6a8, fx(0.3)).fillPoints([{ x: 0, y: y }, { x: 46, y: y }, { x: 18, y: y + h }, { x: -28, y: y + h }], true);

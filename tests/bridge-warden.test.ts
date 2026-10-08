@@ -280,8 +280,11 @@ describe('Unyielding (M9)', () => {
     expect(w.statuses.some((s) => s.kind === 'staggered')).toBe(false);
     b.debugAddStatus(w.uid, 'wound', 3);
     expect(w.statuses.find((s) => s.kind === 'wound')?.turns).toBe(3 + W.boss!.unyielding!.debuffDurationDelta);
+    // madde 272: Blinded (isabet cezası) artık hiç işlemez; en az 1 kuralı başka bir debuff'la (Overextended) denenir
     b.debugAddStatus(w.uid, 'blinded', 1);
-    expect(w.statuses.find((s) => s.kind === 'blinded')?.turns).toBe(1);
+    expect(w.statuses.some((s) => s.kind === 'blinded')).toBe(false);
+    b.debugAddStatus(w.uid, 'overextended', 1);
+    expect(w.statuses.find((s) => s.kind === 'overextended')?.turns).toBe(1);
   });
 
   it('madde 271: rütbesiz kurulan Warden da (boss tanımı) bağışık', () => {

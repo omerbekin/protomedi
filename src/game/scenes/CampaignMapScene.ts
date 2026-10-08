@@ -47,6 +47,7 @@ import { GOLD, SERIF, makePanel } from '../ui-frame';
 import { sortByPrimary } from '../class-order';
 import { debugState } from '../debug-state';
 import { isSettingsOpen, setSettingsOpen } from '../../ui/settings';
+import { mountMenuToggle } from '../../ui/game-menu';
 
 /**
  * Sefer haritası (campaign.md 6): arka plan görseli, yollar (düz = tek yol, kesik = seçimli) ve altlarında boyalı toprak izi, düğüm rozetleri,
@@ -84,6 +85,8 @@ export class CampaignMapScene extends Phaser.Scene {
   private dashT = 0;
   private drag = { down: false, moved: false, x: 0, y: 0 };
   private legendOpen = true;
+  /** Takım şeridi portre nabızları (HUD yenilenince durdurulur). */
+  private stripTweens: Phaser.Tweens.Tween[] = [];
 
   constructor() {
     super(CampaignMapScene.KEY);
@@ -102,6 +105,7 @@ export class CampaignMapScene extends Phaser.Scene {
     this.modal = null;
     this.pauseMenu = null;
     this.tip = null;
+    this.stripTweens = [];
   }
 
   preload(): void {
@@ -144,32 +148,12 @@ export class CampaignMapScene extends Phaser.Scene {
 
   // ------------------------------------------------------------ oyun menüsü (sağ üst Menu düğmesi / Esc)
 
-  /** Sağ üstteki DOM simge sırasına (tam ekran / wiki / ayarlar) hizalı "Menu" düğmesi; sahne kapanınca kaldırılır. */
+  /** Sağ üstteki DOM simge sırasına (Menu / tam ekran / wiki) hizalı "Menu" düğmesi (savaştaki ile aynı: mountMenuToggle); sahne kapanınca kaldırılır. */
   private mountMenuButton(): void {
     const root = document.getElementById('ui-root');
     if (!root) return;
     root.querySelector('.campaign-menu-toggle')?.remove();
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'settings-toggle campaign-menu-toggle';
-    b.textContent = 'Menu';
-    b.title = 'Menu (Esc)';
-    b.setAttribute('aria-label', 'Menu');
-    const fs = root.querySelector<HTMLElement>('.fullscreen-toggle');
-    const fsShown = !!fs && !fs.hidden && getComputedStyle(fs).display !== 'none';
-    Object.assign(b.style, {
-      right: `calc(${fsShown ? 176 : 120}px + var(--sar, 0px))`,
-      width: 'auto',
-      minWidth: '76px',
-      padding: '0 14px',
-      color: '#f3e4c4',
-      fontFamily: SERIF,
-      fontWeight: 'bold',
-      fontSize: '18px',
-      letterSpacing: '1px',
-    });
-    b.addEventListener('click', () => this.toggleMenu());
-    root.append(b);
+    const b = mountMenuToggle(root, () => this.toggleMenu(), 'campaign-menu-toggle');
     this.events.once('shutdown', () => {
       b.remove();
       setSettingsOpen(false);
@@ -200,7 +184,8 @@ export class CampaignMapScene extends Phaser.Scene {
           this.renderHud(); // "Game saved" bildirimi
         },
       });
-    items.push({ label: 'Settings', run: () => { this.closeMenu(); setSettingsOpen(true); } });
+    // Ayarlar ekranı menünün üstünde açılır; Back / Esc onu kapatınca bu menü yeniden görünür
+    items.push({ label: 'Settings', run: () => setSettingsOpen(true) });
     items.push({ label: 'Back to Main Menu', run: () => this.scene.start(MENU_SCENE) });
     const m = openModal(this, this.ui, { title: 'Menu', width: 640, height: 190 + items.length * 100 });
     items.forEach((it, i) => m.root.add(makeMenuButton(this, W / 2, m.area.y + 46 + i * 100, 460, 82, it.label, it.run, { primary: !!it.primary, size: it.primary ? 32 : 28 }).container));
@@ -695,31 +680,50 @@ export class CampaignMapScene extends Phaser.Scene {
   // ------------------------------------------------------------ arayüz (sabit katman)
 
   private renderHud(): void {
+    for (const t of this.stripTweens) t.remove();
+    this.stripTweens = [];
     this.hud.removeAll(true);
     const s = this.s;
     const L = this.hud;
     // Kartuş (sol üst): yalnızca harita adı (Ömer 2026-10-08). Durak/mod/zorluk/yuva Party penceresinde.
     // Çerçevesiz yazı; okunurluk için kontur + yumuşak gölge.
     L.add(goldText(this, 40, 26, this.map.title, 56, 8).setOrigin(0, 0).setShadow(3, 4, '#000000', 8, true, true));
-    // Takım şeridi (üst orta)
+    // Takım şeridi (üst orta). Ömer 2026-10-08: ayrı Party düğmesi yok; herhangi bir kahraman portresine dokunmak Party penceresini açar.
+    // Hücre 112 px (telefonda da >= 44 gerçek px); fareyle üstüne gelince büyür + altın halka, şerit yavaşça nabız atar (tıklanabilir).
     const team = activeHeroes(s);
     const lead = leaderOf(s);
-    const cw = 96;
+    const cw = 112;
     const x0 = W / 2 - ((team.length - 1) * cw) / 2;
-    if (team.length) L.add(makePanel(this, x0 - 64, 18, (team.length - 1) * cw + 128, 120, { top: 0x2a2017, bottom: 0x0f0a07, bevel: 3, ornaments: false, alpha: 0.9 }));
+    if (team.length) L.add(makePanel(this, x0 - 70, 16, (team.length - 1) * cw + 140, 128, { top: 0x2a2017, bottom: 0x0f0a07, bevel: 3, ornaments: false, alpha: 0.9 }));
     team.forEach((h, i) => {
       const def = content.classes[h.class]!;
       const x = x0 + i * cw;
-      L.add(classAvatar(this, def, x, 62, 62));
+      const ring = this.add.graphics();
+      ring.lineStyle(3, GOLD.bright, 1).strokeCircle(x, 62, 36);
+      ring.setAlpha(0.25);
+      L.add(ring);
+      const pulse = this.tweens.add({ targets: ring, alpha: { from: 0.18, to: 0.55 }, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: i * 180 });
+      this.stripTweens.push(pulse);
+      const face = this.add.container(x, 62, [classAvatar(this, def, 0, 0, 62)]);
+      L.add(face);
       L.add(classLogoBadge(this, def, x - 26, 84, 12)); // class logosu (seçili sanat sürümüyle)
-      L.add(hpBar(this, x - 34, 98, 68, 10, h.hpRatio));
-      L.add(serif(this, x, 122, session.showHp ? `${Math.round(h.hpRatio * 100)}%` : def.name, 13, '#d8c49a', { bold: false, stroke: 2 }).setOrigin(0.5));
+      L.add(hpBar(this, x - 34, 100, 68, 10, h.hpRatio));
+      L.add(serif(this, x, 126, session.showHp ? `${Math.round(h.hpRatio * 100)}%` : def.name, 13, '#d8c49a', { bold: false, stroke: 2 }).setOrigin(0.5));
       if (lead?.id === h.id) L.add(crown(this, x + 26, 34, 0.75));
+      const z = this.add.zone(x, 78, cw, 124).setInteractive({ useHandCursor: true });
+      z.on('pointerover', () => {
+        pulse.pause();
+        ring.setAlpha(1);
+        this.tweens.add({ targets: face, scale: 1.12, duration: 120, ease: 'Sine.easeOut' });
+      });
+      z.on('pointerout', () => {
+        pulse.resume();
+        this.tweens.add({ targets: face, scale: 1, duration: 160, ease: 'Sine.easeOut' });
+      });
+      z.on('pointerdown', () => this.tweens.add({ targets: face, scale: 0.94, duration: 70 }));
+      z.on('pointerup', () => this.openPartyFromStrip());
+      L.add(z);
     });
-    if (team.length) {
-      const pb = makeMenuButton(this, x0 + (team.length - 1) * cw + 140, 78, 130, 64, 'Party', () => !this.walking && this.openParty(), { size: 26 });
-      L.add(pb.container);
-    }
     // Lejant (sağ alt, katlanabilir)
     this.renderLegend();
     // Menu: sağ üstteki DOM simge sırasında (tam ekran / wiki / ayarlar ile hizalı; bkz. mountMenuButton). Save menünün içinde.
@@ -1008,7 +1012,6 @@ export class CampaignMapScene extends Phaser.Scene {
       height: 480,
       buttons: [
         { label: 'Fight', primary: true, run: () => startCampaignBattle(this) },
-        { label: 'Party', run: () => this.openParty() },
         { label: 'Back', run: () => this.closeModal() },
       ],
     });
@@ -1153,17 +1156,22 @@ export class CampaignMapScene extends Phaser.Scene {
     update();
   }
 
+  /** Üstteki takım şeridinden Party: yürürken, menü açıkken ya da zorunlu bir seçim penceresi varken açılmaz. */
+  private openPartyFromStrip(): void {
+    if (this.walking || this.pauseMenu) return;
+    if (this.modal && ['hero', 'recruit', 'volunteer', 'farewell', 'company'].includes(nextStep(this.s).kind)) return;
+    this.openParty();
+  }
+
   /** Party: kadro kartları + 4x3 dizilim ızgarası; bir karaktere sonra bir hücreye dokun = taşı / yer değiştir. */
   private openParty(): void {
-    const reopenBattle = nextStep(this.s).kind === 'battle';
-    const reopenTown = nextStep(this.s).kind === 'town';
     this.closeModal();
+    // Ömer 2026-10-08: Party kapanınca önceden açık düğüm kartı (savaş / kasaba) yeniden AÇILMAZ; yalnızca harita kalır
+    // (kart, nabız atan düğüme dokununca yine açılır).
     const back = () => {
       this.closeModal();
       this.renderHud();
       this.placeCaravan(this.s.at);
-      if (reopenTown) this.advance();
-      else if (reopenBattle) this.showBattleCard();
     };
     const m = openModal(this, this.ui, {
       title: 'Party',

@@ -290,6 +290,7 @@ export class WikiPanel {
     });
     this.show('start');
     this.refresh();
+    wikiInstance = this;
   }
 
   get isOpen(): boolean {
@@ -340,7 +341,7 @@ export class WikiPanel {
     if (!this.opened) return;
     if (e.key === 'Escape') {
       if (document.querySelector('.lightbox')) return; // önce büyütülmüş görsel kapanır
-      e.stopPropagation();
+      e.stopImmediatePropagation(); // savaşın / menülerin kendi Esc işleyicileri (aynı window üzerinde) bu tuşu görmesin
       this.setOpen(false);
       return;
     }
@@ -349,4 +350,12 @@ export class WikiPanel {
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
     e.stopPropagation();
   }
+}
+
+let wikiInstance: WikiPanel | null = null;
+/** Wiki'yi sahnelerden aç (ana menü > Codex); `section` verilirse o bölümde açılır. */
+export function openWiki(section?: string): void {
+  if (!wikiInstance) return;
+  if (section) wikiInstance.show(section);
+  wikiInstance.setOpen(true);
 }

@@ -363,10 +363,12 @@
     "revivableMult": 1.5
   },
   "ccImmunity": {
-    "_not": "Madde 271 (Ömer 2026-10-08: 'Boss'lar CC yemesin. Ama Omen, Wound, ignite gibi skill'leri yesin'): tiers rütbesindeki birimler (UnitSetup.tier; data/bosses boss tanımlı birimler de) statuses.json > cc: true durumlarını (Stun, Slow, Silence) yemez; taunt: true = taunt'a uymaz; displacement: true = çekilemez/itilemez. Elitler bağışık DEĞİL (yalnızca boss). Warden'ın kendi Staggered mekaniği (Mooring kırılınca) CC değildir, aynen işler.",
+    "_not": "Madde 271 (Ömer 2026-10-08: 'Boss'lar CC yemesin. Ama Omen, Wound, ignite gibi skill'leri yesin'): tiers rütbesindeki birimler (UnitSetup.tier; data/bosses boss tanımlı birimler de) statuses.json > cc: true durumlarını (Stun, Slow, Silence) yemez; taunt: true = taunt'a uymaz; displacement: true = çekilemez/itilemez. Elitler bağışık DEĞİL (yalnızca boss). Warden'ın kendi Staggered mekaniği (Mooring kırılınca) CC değildir, aynen işler. Madde 272 (Ömer 2026-10-08: 'İsabeti-kritiği bozan etkiler de boss'a işlemesin. Hexer'in Omen'indeki kritik düşürme (Misfortune) de boss'a işlemesin'): accuracyCrit: true = isabet ya da kritik düşüren debuff'lar (statuses.json > accuracyDelta < 0 ya da critDelta < 0: Blinded, Jinxed) da yemez (CC ile aynı 'Immune' akışı). omenCrit: true = Omen uygulanır (yığın, Doom, patlama aynen) ama yığın başına kritik düşüşü (critDeltaPerStack) yok sayılır.",
     "tiers": ["boss"],
     "taunt": true,
-    "displacement": true
+    "displacement": true,
+    "accuracyCrit": true,
+    "omenCrit": true
   },
   "turn": {
     "threshold": 100,

@@ -11,7 +11,9 @@ import { lobbyFromSearch } from './net/lobby-code';
 import { DebugMenu } from './ui/debug-menu';
 import { DEBUG_INFO_TAB, DEBUG_TABS, registerDebugTools } from './ui/debug-tools';
 import { flowContext, startMainMenu, startNewGame, startTeamSelect } from './game/session-flow';
-import { SettingsMenu } from './ui/settings';
+import { SettingsScreen } from './ui/settings';
+import { GameMenu, isGameMenuOpen } from './ui/game-menu';
+import { lockInput, onInputLockChange, unlockInput } from './ui/input-lock';
 import { createFullscreenButton } from './ui/fullscreen';
 import { installViewport, parseRotateMode } from './ui/viewport';
 import { WikiPanel } from './wiki/view';
@@ -62,22 +64,45 @@ installViewport(game, document.getElementById('stage')!, parseRotateMode(window.
 // --- Debug menu ---
 const debug = new DebugMenu(document.getElementById('ui-root')!, DEBUG_TABS, DEBUG_INFO_TAB);
 
-// --- Settings (top right): sound volume 0-10 ---
-new SettingsMenu(document.getElementById('ui-root')!, {
+// --- DOM katmanları (ayarlar, Menu, wiki) açıkken alttaki sahne tıklama almaz (src/ui/input-lock.ts) ---
+onInputLockChange((locked) => {
+  game.input.enabled = !locked;
+});
+
+// --- Settings screen (Ömer 2026-10-08: no gear; opened from a menu: main menu > Settings, campaign Menu > Settings, battle Menu > Settings) ---
+new SettingsScreen(document.getElementById('ui-root')!, {
   onVolume: (level) => {
     audioSettings.volume = level / 10;
   },
   preview: () => playSfxOn((game.sound as unknown as { context?: AudioContext }).context, 'stunChime'),
-  // New Game / Team Select (an unfinished battle asks for confirmation first)
-  flow: { context: () => flowContext(game), newGame: () => startNewGame(game), teamSelect: () => startTeamSelect(game), mainMenu: () => startMainMenu(game) },
 });
 
 // --- Fullscreen button (top right, next to the wiki); hidden where the browser has no Fullscreen API (iPhone: shows an Add to Home Screen hint) ---
 createFullscreenButton(document.getElementById('ui-root')!);
 
-// --- Wiki (top right, next to the settings gear): opens over the game; the battle is paused while it is open ---
+// --- Wiki (top right): opens over the game; the battle is paused while it is open ---
 const battleNow = (): BattleScene | null => (game.scene.isActive(BattleScene.KEY) ? (game.scene.getScene(BattleScene.KEY) as BattleScene) : null);
 const wiki = new WikiPanel(document.getElementById('ui-root')!, {
+  onOpen: () => {
+    lockInput('wiki');
+    debugState.uiPaused = true;
+    battleNow()?.applyDebugTiming();
+  },
+  onClose: () => {
+    unlockInput('wiki');
+    debugState.uiPaused = isGameMenuOpen(); // the battle Menu below keeps the battle paused
+    battleNow()?.applyDebugTiming();
+  },
+});
+
+// --- In-game Menu (top right "Menu" button + Esc) of battle / team select / multiplayer: Resume / Settings / New Game / Team Select /
+// Retreat to Map (campaign) / Back to Main Menu; the battle is paused while it is open (src/ui/game-menu.ts) ---
+new GameMenu(document.getElementById('ui-root')!, {
+  context: () => flowContext(game),
+  newGame: () => startNewGame(game),
+  teamSelect: () => startTeamSelect(game),
+  mainMenu: () => startMainMenu(game),
+  retreat: () => battleNow()?.campaign?.retreat?.(),
   onOpen: () => {
     debugState.uiPaused = true;
     battleNow()?.applyDebugTiming();

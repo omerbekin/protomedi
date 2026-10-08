@@ -71,6 +71,7 @@ export const SECTION_ICONS: Record<string, string> = {
   Progress: 'next',
   Saves: 'clipboard',
   Menu: 'frame',
+  'Main menu': 'frame',
   Display: 'eye',
   'Battle setup': 'restart',
   'Test battles': 'flask',

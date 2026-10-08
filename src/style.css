@@ -306,7 +306,7 @@ body {
   border-color: #ff6b6b;
 }
 
-/* --- Ayarlar (sağ üst) --- */
+/* --- Sağ üst simge sırası (sağdan sola): wiki, tam ekran, Menu. Dişli düğmesi yok (Ömer 2026-10-08): ayarlar menüden açılan ayrı ekran --- */
 .settings-toggle {
   position: fixed;
   top: calc(8px + var(--sat));
@@ -320,6 +320,10 @@ body {
   z-index: 30;
 }
 
+.settings-toggle[hidden] {
+  display: none;
+}
+
 .settings-toggle img {
   width: 34px;
   height: 34px;
@@ -327,111 +331,292 @@ body {
 }
 
 .settings-toggle.fullscreen-toggle {
+  right: calc(64px + var(--sar));
+}
+
+/* Menu düğmesi (savaş, takım seçimi, multiplayer, sefer haritası): aynı sıra, koyu deri / altın yazı */
+.settings-toggle.menu-toggle {
   right: calc(120px + var(--sar));
+  width: auto;
+  min-width: 84px;
+  padding: 0 16px;
+  font: bold 18px Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+  letter-spacing: 1px;
+  color: #f3e4c4;
+  background: linear-gradient(180deg, #5c4128, #24170d);
+  border: 2px solid #9a7438;
+  box-shadow: 0 0 0 1px #000, inset 0 1px 0 rgba(255, 226, 154, 0.25);
 }
 
-.settings-panel {
+.settings-toggle.menu-toggle.no-fs {
+  right: calc(64px + var(--sar));
+}
+
+.settings-toggle.menu-toggle:hover {
+  color: #ffe29a;
+  border-color: #e8c47e;
+}
+
+/* --- Menü ve ayarlar ekranı: ana menü / sefer menüsüyle aynı görsel dil (koyu deri panel, altın çerçeve, serif, bronz düğmeler).
+   z-index debug panelinin (20) ve sağ üst simgelerin (30) altında: debug menüsü her zaman erişilebilir. --- */
+.gm-overlay,
+.st-overlay {
+  --g-dark: #6b4f26;
+  --g-edge: #9a7438;
+  --g-gold: #e8c47e;
+  --g-bright: #ffe29a;
+  --g-text: #f4ede1;
+  --g-muted: #b9ab94;
+  --g-serif: Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
   position: fixed;
-  top: calc(64px + var(--sat));
-  right: calc(8px + var(--sar));
-  width: min(300px, calc(var(--stage-w, 100vw) - 16px));
-  max-height: calc(var(--stage-h, 100dvh) - 72px - var(--sat) - var(--sab));
-  overflow-y: auto;
-  padding: 12px;
-  background: rgba(15, 15, 25, 0.95);
-  border: 1px solid #8d99ae;
-  border-radius: 8px;
-  z-index: 30;
-}
-
-.settings-panel[hidden] {
-  display: none;
-}
-
-.settings-title {
-  margin-bottom: 10px;
-  font: bold 16px monospace;
-  color: #edf2f4;
-}
-
-.settings-row {
+  inset: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  font: 14px system-ui, sans-serif;
-  color: #edf2f4;
+  justify-content: center;
+  padding: calc(64px + var(--sat)) calc(16px + var(--sar)) calc(16px + var(--sab)) calc(16px + var(--sal));
+  background: rgba(5, 3, 2, 0.62);
+  color: var(--g-text);
+  z-index: 18;
 }
 
-.settings-row img {
-  width: 28px;
-  height: 28px;
+.st-overlay {
+  z-index: 19;
+  background: rgba(5, 3, 2, 0.86);
+}
+
+.gm-overlay[hidden],
+.st-overlay[hidden],
+.gm-overlay [hidden],
+.st-overlay [hidden] {
+  display: none !important;
+}
+
+.gm-box,
+.st-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  background: linear-gradient(180deg, #2e2218, #110b07);
+  border: 2px solid var(--g-edge);
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px #000, 0 12px 40px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 226, 154, 0.12);
+}
+
+.gm-box {
+  width: min(440px, 100%);
+  padding: 18px 26px 24px;
+  overflow-y: auto;
+}
+
+.gm-title,
+.st-title {
+  font: bold 34px var(--g-serif);
+  letter-spacing: 4px;
+  text-align: center;
+  color: var(--g-bright);
+  text-shadow: 0 2px 0 #000, 0 0 12px rgba(255, 190, 90, 0.35);
+}
+
+.gm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.gm-btn,
+.st-btn {
+  min-height: 56px;
+  padding: 0 18px;
+  font: bold 22px var(--g-serif);
+  letter-spacing: 1px;
+  color: #fff2c0;
+  text-shadow: 0 2px 0 #000;
+  background: linear-gradient(180deg, #5c4128, #24170d);
+  border: 2px solid var(--g-edge);
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px #000, inset 0 1px 0 rgba(255, 226, 154, 0.22);
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.1s, box-shadow 0.1s;
+}
+
+.gm-btn.primary,
+.st-btn.st-back {
+  background: linear-gradient(180deg, #9a6a28, #3f220c);
+  border-color: var(--g-gold);
+  font-size: 26px;
+}
+
+.gm-btn:hover,
+.st-btn:hover {
+  border-color: var(--g-bright);
+  box-shadow: 0 0 0 1px #000, 0 0 14px rgba(255, 200, 96, 0.35), inset 0 1px 0 rgba(255, 226, 154, 0.3);
+  transform: scale(1.02);
+}
+
+.gm-btn:active,
+.st-btn:active {
+  transform: scale(0.97);
+}
+
+.gm-confirm {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.gm-confirm-text {
+  font: bold 20px/1.35 var(--g-serif);
+  color: var(--g-gold);
+}
+
+.gm-confirm-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.gm-confirm-row .gm-btn {
+  flex: 1;
+}
+
+/* Ayarlar ekranı */
+.st-modal {
+  width: min(860px, 100%);
+}
+
+.st-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 16px 20px 12px;
+  border-bottom: 2px solid var(--g-dark);
+  background: linear-gradient(180deg, #3a2b1c, #1f1610);
+  border-radius: 8px 8px 0 0;
+}
+
+.st-headicon {
+  width: 40px;
+  height: 40px;
   image-rendering: pixelated;
 }
 
-.settings-row input[type='range'] {
+.st-body {
   flex: 1;
-  min-width: 0;
-  height: 32px;
-  accent-color: #ffd23f;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 28px 16px;
 }
 
-.settings-btn {
-  margin-left: auto;
-  min-width: 72px;
-  min-height: 44px;
-  padding: 0 14px;
-  font: bold 14px system-ui, sans-serif;
-  color: #edf2f4;
-  background: #2b2d42;
-  border: 1px solid #4a4e69;
-  border-radius: 6px;
+.st-section {
+  margin-top: 14px;
 }
 
-.settings-btn:active {
-  background: #4a4e69;
+.st-section-title {
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+  font: bold 16px var(--g-serif);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--g-muted);
+  border-bottom: 1px solid var(--g-dark);
 }
 
-.settings-row[hidden] {
-  display: none;
-}
-
-.settings-confirm {
-  margin-top: 6px;
-  padding: 8px 10px;
-  background: rgba(255, 210, 63, 0.08);
-  border: 1px solid #ffd23f;
-  border-radius: 6px;
-}
-
-.settings-confirm[hidden] {
-  display: none;
-}
-
-.settings-confirm-text {
-  font: bold 14px system-ui, sans-serif;
-  color: #ffd23f;
-}
-
-.settings-confirm-row {
+.st-row {
   display: flex;
-  gap: 10px;
-  margin-top: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  min-height: 64px;
 }
 
-.settings-confirm-row .settings-btn {
+.st-icon {
+  width: 36px;
+  height: 36px;
+  image-rendering: pixelated;
+}
+
+.st-label {
+  font: bold 22px var(--g-serif);
+  color: var(--g-text);
+}
+
+.st-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   flex: 1;
-  margin-left: 0;
+  min-width: 260px;
+  justify-content: flex-end;
 }
 
-.settings-note {
-  display: block;
-  font: 12px system-ui, sans-serif;
-  color: #ffd23f;
+.st-btn.st-step {
+  width: 56px;
+  padding: 0;
+  font-size: 30px;
 }
 
-.settings-note:empty {
+.st-btn.st-wide {
+  min-width: 220px;
+}
+
+.st-slider {
+  flex: 1;
+  min-width: 120px;
+  height: 44px;
+  accent-color: #e8c47e;
+}
+
+.st-value {
+  min-width: 34px;
+  text-align: right;
+  font: bold 26px var(--g-serif);
+  color: var(--g-bright);
+}
+
+.st-note {
+  margin: 4px 0 0 52px;
+  font: 15px var(--g-serif);
+  color: var(--g-gold);
+}
+
+.st-note:empty {
   display: none;
+}
+
+.st-foot {
+  display: flex;
+  justify-content: center;
+  padding: 12px 20px 20px;
+  border-top: 1px solid var(--g-dark);
+}
+
+.st-btn.st-back {
+  min-width: 260px;
+}
+
+/* Kısa sahne (yatay telefon): daha sıkı */
+html.short .gm-title,
+html.short .st-title {
+  font-size: 24px;
+}
+
+html.short .gm-btn,
+html.short .st-btn {
+  min-height: 46px;
+  font-size: 18px;
+}
+
+html.short .gm-list {
+  gap: 8px;
+}
+
+html.short .st-row {
+  min-height: 52px;
+}
+
+html.short .st-head {
+  padding: 8px 16px 6px;
 }
 
 /* Tam ekran ipucu (ilk açılışta tek seferlik, kapatılabilir) */
@@ -465,12 +650,6 @@ body {
   color: #edf2f4;
   background: transparent;
   border: 0;
-}
-
-.settings-value {
-  min-width: 22px;
-  text-align: right;
-  font: bold 16px monospace;
 }
 
 /* --- Debug menüsü: sekmeler, paneller, galeri (üstteki kurallara ek) --- */

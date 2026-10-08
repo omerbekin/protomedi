@@ -68,14 +68,14 @@ describe('CC bağışıklığı: motor', () => {
     });
   }
 
-  it('boss Slow ve Silence yemez; Wound, Omen, Wither, Blinded, Jinxed, Overextended uygulanır', () => {
+  it('boss Slow ve Silence (madde 272: Blinded, Jinxed da) yemez; Wound, Omen, Wither, Overextended uygulanır', () => {
     const b = grid({ 0: 'warrior' }, { 1: 'defender' }, { units: BOSS });
     const e = at(b, 'enemy', 1);
-    for (const k of ['slow', 'silence', 'stun']) {
+    for (const k of ['slow', 'silence', 'stun', 'blinded', 'jinxed']) {
       b.debugAddStatus(e.uid, k, 2);
       expect(has(b, e.uid, k)).toBe(false);
     }
-    for (const k of ['wound', 'wither', 'blinded', 'jinxed', 'overextended']) {
+    for (const k of ['wound', 'wither', 'overextended']) {
       b.debugAddStatus(e.uid, k, 2);
       expect(has(b, e.uid, k)).toBe(true);
     }

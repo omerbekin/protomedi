@@ -107,6 +107,19 @@ export function loadLastSave(): CampaignState | null {
   return back;
 }
 
+/**
+ * Savaştan haritaya geri çekilme (Ömer 2026-10-08; savaş menüsü > Retreat to Map, onaylı): savaş sonuçsuz biter. Sefer durumu savaş
+ * boyunca değişmediği için (sonuç yalnızca zaferde `applyBattle` ile yazılır) takım savaştan ÖNCEKİ haliyle aynı düğüme döner; düğüm
+ * tamamlanmamış kalır, deneme sayacı ARTMAZ (sonraki girişte aynı savaş seed'i: geri çekilip seed değiştirme hilesi yok), kayıt alınmaz
+ * (Normal ve Ironman aynı), boss savaşında da geçerli.
+ */
+export function retreatToMap(): CampaignState | null {
+  const s = session.state;
+  if (!s) return null;
+  session.notice = 'You retreated. The battle did not count.';
+  return s;
+}
+
 /** Sefer başı kaydı (Normal: listede görünür; Ironman: yalnızca bellekte, yenilgide dönüş noktası). */
 export function markJourneyStart(): void {
   const s = session.state;
@@ -132,7 +145,13 @@ export function startCampaignBattle(scene: Phaser.Scene): BattlePlan | null {
     difficulty: plan.difficulty,
     // Savaş arka planı (karşılaşma > düğüm > bölge; dosya yoksa savaşın varsayılanı): King's Bridge = kings-bridge
     ...(plan.background ? { background: plan.background } : {}),
-    campaign: { resultActions: (victory, battle) => resultActions(game, plan, victory, battle) },
+    campaign: {
+      resultActions: (victory, battle) => resultActions(game, plan, victory, battle),
+      retreat: () => {
+        retreatToMap();
+        goTo(game, MAP_SCENE);
+      },
+    },
   };
   scene.scene.start(BATTLE_SCENE, data);
   return plan;
