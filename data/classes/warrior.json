@@ -27,7 +27,7 @@
     "id": "berserker",
     "name": "Berserker",
     "icon": "rage",
-    "text": "The lower your HP, the harder you hit: up to +50% damage at the brink of death.",
+    "text": "The lower your HP, the harder you hit: up to +80% damage at the brink of death.",
     "effect": {
       "type": "rage",
       "maxBonus": 0.8

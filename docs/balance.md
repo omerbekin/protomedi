@@ -5,7 +5,7 @@ Sayılar `data/balance.json` dosyasındadır; `npm run sim` raporu ve `tests/bal
 
 | Ölçüm | Hedef |
 |---|---|
-| Ana ölçüm | **4'e 4** (varsayılan takım boyutu 4; `random-battle.json > random.size`), 10.000 savaş, iki farklı seed grubu (1.. ve 500001..). 5'e 5 ve 3'e 3 yalnızca kontrol |
+| Ana ölçüm | **4'e 4** (varsayılan takım boyutu 4; `random-battle.json > random.size`), 10.000 savaş, iki farklı seed grubu (1.. ve 500001..). 5'e 5 ve 3'e 3 yalnızca kontrol (Ömer kararı: skill kullanım bantları YALNIZCA 4'e 4 için geçerli; 3'e 3/5'e 5'te skill payı sapmaları kabul) |
 | Class kazanma oranı | **%44-56** (her iki seed grubunda) |
 | Bedelsiz temel saldırı (class'ın 1. skill'i) kullanım payı | **%20-45** |
 | Normal skill (2.-3. yuva, durumsal olmayan) | **%15-35** |
