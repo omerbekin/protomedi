@@ -25,7 +25,7 @@ type Side = 'party' | 'enemies';
 
 export interface TeamSelectData {
   teams: Teams;
-  /** Takım boyutları (her taraf 1-12); yoksa takımların doluluğu, o da yoksa adres/varsayılan 5-5. */
+  /** Takım boyutları (her taraf 1-12); yoksa takımların doluluğu, o da yoksa adres/varsayılan 4-4. */
   sizes: SideSizes;
 }
 
@@ -127,7 +127,7 @@ export class TeamSelectScene extends Phaser.Scene {
 
   init(data: Partial<TeamSelectData>): void {
     const pad = (cells: string[]) => Array.from({ length: CELLS }, (_, i) => cells[i] ?? '');
-    // Sizes: given by the caller, else the size of the given teams, else the page address (?party=3&enemies=8) / default 5-5
+    // Sizes: given by the caller, else the size of the given teams, else the page address (?party=3&enemies=8) / default 4-4
     if (data.sizes) this.sizes = { party: clampSize(data.sizes.party), enemies: clampSize(data.sizes.enemies) };
     else if (data.teams) this.sizes = { party: clampSize(teamCount(data.teams.party) || this.sizes.party), enemies: clampSize(teamCount(data.teams.enemies) || this.sizes.enemies) };
     else this.sizes = initialSizes();

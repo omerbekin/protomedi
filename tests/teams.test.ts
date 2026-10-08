@@ -9,13 +9,14 @@ describe('seed\'e göre takım seçimi', () => {
     for (const seed of [1, 7, 42, 99999]) expect(content.rollTeams(BATTLE, seed)).toEqual(content.rollTeams(BATTLE, seed));
   });
 
-  it('her takım 5 kişi ve kendi içinde farklı class\'lardan oluşur', () => {
+  it('her takım varsayılan boyutta (random.size) ve kendi içinde farklı class\'lardan oluşur', () => {
     for (const seed of SEEDS) {
       const { party, enemies } = content.rollTeams(BATTLE, seed);
-      expect(party, `seed ${seed}`).toHaveLength(5);
-      expect(enemies, `seed ${seed}`).toHaveLength(5);
-      expect(new Set(party).size, `seed ${seed}`).toBe(5);
-      expect(new Set(enemies).size, `seed ${seed}`).toBe(5);
+      const size = content.battles[BATTLE]!.random!.size; // varsayılan 4 (Ömer kararı 2026-10-08)
+      expect(party, `seed ${seed}`).toHaveLength(size);
+      expect(enemies, `seed ${seed}`).toHaveLength(size);
+      expect(new Set(party).size, `seed ${seed}`).toBe(size);
+      expect(new Set(enemies).size, `seed ${seed}`).toBe(size);
     }
   });
 

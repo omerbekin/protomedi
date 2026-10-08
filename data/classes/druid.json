@@ -13,7 +13,7 @@
     "luck": 1
   },
   "primary": "int",
-  "armor": 6,
+  "armor": 8,
   "magicArmor": 0,
   "ai": "support",
   "skills": [

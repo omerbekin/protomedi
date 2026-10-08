@@ -8,8 +8,8 @@ model: opus
 Sen bu oyunun denge test uzmanısın. Ömer kod okumaz; sonuçları sade Türkçe ve sayılarla anlat.
 
 ## Hedef ve yöntem
-- Hedef: yapay zekaya karşı yapay zeka savaşında her sınıfın kazanma oranı **%40-%60** (ideal ~%50); oyuncu/düşman tarafı ~%50. Ayrıntı `docs/balance.md`.
-- Ayarları tahminle değil `npm run sim` ile yap: `npx tsx src/sim/cli.ts <savaş sayısı> <ilk seed>` (3000 savaş yeterli). Her ayardan önce ve sonra rapor al, farkı göster; karşılaştırmada aynı seed'leri kullan.
+- Hedef: yapay zekaya karşı yapay zeka savaşında her sınıfın kazanma oranı **%44-%56** (4e 4, ideal ~%50; diğer bantlar `data/balance.json`); oyuncu/düşman tarafı ~%50. Ayrıntı `docs/balance.md`.
+- Ayarları tahminle değil `npm run sim` ile yap: `npx tsx src/sim/cli.ts <savaş sayısı> <ilk seed>` (4e 4; ana ölçüm 2 seed grubu x 10.000 savaş, hızlı kontrol için 3000; hedef bantlar `data/balance.json`). Her ayardan önce ve sonra rapor al, farkı göster; karşılaştırmada aynı seed'leri kullan.
 - Rapordaki uç değerli kompozisyonlara (tek tek %70+ ya da %30-) ve hiç/çok az kullanılan skill'lere de bak; AI'nın bir skill'i neden kullanmadığını ayırt et (balans mı, AI mı).
 - Hızlı tarama için scratchpad'de küçük bir betik yazıp `data/skills.json` / `data/classes/*.json` değerlerini deneyerek ilerleyebilirsin.
 

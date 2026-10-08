@@ -3,6 +3,7 @@ import { damageRange, rollCrit, rollDamage, rollHeal, shieldAmount, type DamageS
 import { isShapeArea, shapeCells, shapeStages } from './area-shape';
 import { pickSideNeighbors } from './formation';
 import { betMultipliers, betStake } from './gamble';
+import { burnAmountFor, emptyProcApplies } from './mana-burn';
 import { Rng } from './rng';
 import { damageSpecFor, type DamageEffect } from './spec';
 import { applySummonVariant, applyUnitModifiers, armorReduction, attributePower, hitOutcome } from './stats';
@@ -519,11 +520,12 @@ export class Battle {
    * savaştaki geçerli stat'lar. Hiçbiri yoksa gerçek stat nesnesi döner. İsabet/kaçınma 0'ın altına inmez; hit şansı ayrıca [0, hit.max] arasına sıkışır.
    * Aura: kaynağın KENDİ zırhının pct'si, kendine ve artı şeklindeki komşu dostlara; bir birim en fazla maxStacks kaynaktan (en büyükler) alır.
    */
-  effectiveStats(c: Combatant): Combatant['stats'] {
+  effectiveStats(c: Combatant, extraCrit = 0): Combatant['stats'] {
     const bonus = this.auraArmor(c);
     let acc = 0;
     let eva = 0;
-    let crit = 0;
+    // extraCrit: vuruşun kendi kritik eki (skill hasarının critBonus'u, Jinx); durum ekleriyle birlikte toplanıp [0, 1]'e kırpılır
+    let crit = extraCrit;
     for (const s of c.statuses) {
       const d = this.statusDef(s.kind);
       acc += d?.accuracyDelta ?? 0;
@@ -1097,6 +1099,8 @@ export class Battle {
     }
     const resource = skill.cost.resource;
     const amount = skillCostAmount(skill.cost, actor); // oranlı bedel (ofCurrent): mevcut kaynağın oranı, en az 1
+    // Silence (statuses.json > blocksMpSkills, madde 260): MP bedelli skill kullanılamaz (Unlimited MP debug'ı da bunu açmaz); bedelsizler ve global eylemler serbest
+    if (resource === 'mp' && amount > 0 && this.isSilenced(actorUid)) return { ok: false, reason: 'Silenced' };
     if (resource === 'mp' && !this.freeMp && actor.mp < amount) return { ok: false, reason: 'Not enough MP' };
     if (resource === 'rage' && !this.freeRage && (actor.rage ?? 0) < amount) return { ok: false, reason: 'Not enough rage' };
     if (resource === 'hp' && actor.hp <= amount) return { ok: false, reason: 'Not enough HP' };
@@ -1110,6 +1114,12 @@ export class Battle {
     // Diriltme (madde 257): dirilen kendi tarafında seçilen BOŞ hücreye gelir; hiç boş hücre yoksa kullanılamaz
     if (this.isReviveSkill(skillId) && this.reviveSlots(actorUid, skillId).length === 0) return { ok: false, reason: 'No free cell' };
     return { ok: true };
+  }
+
+  /** Birim susturulmuş mu (statuses.json > blocksMpSkills taşıyan bir durum: Silence)? MP bedelli skill'leri kullanamaz. Saf (UI, YZ, önizleme). */
+  isSilenced(uid: string): boolean {
+    const c = this.get(uid);
+    return !!c && c.statuses.some((s) => this.statusDef(s.kind)?.blocksMpSkills);
   }
 
   /** Diriltilecek hedef yoksa neden: tüm düşmüş dostların cesedi tüketildiyse 'Corpse was consumed', aksi halde 'No fallen ally'. */
@@ -1576,11 +1586,22 @@ export class Battle {
           let total = 0;
           for (const target of ts) {
             if (target.hp <= 0) continue;
-            const burned = Math.min(target.mp, effect.amount);
-            if (burned <= 0) continue;
-            target.mp -= burned;
-            total += burned;
-            emit({ type: 'manaBurn', source: actor.uid, target: target.uid, amount: burned, mpAfter: target.mp });
+            // Yakım: sabit `amount` ya da hedefin maks MP'sinin `pctMax` oranı (madde 260), mevcut MP'yle sınırlı
+            const empties = emptyProcApplies(effect, target);
+            const burned = burnAmountFor(effect, target);
+            if (burned > 0) {
+              target.mp -= burned;
+              total += burned;
+              emit({ type: 'manaBurn', source: actor.uid, target: target.uid, amount: burned, mpAfter: target.mp });
+            }
+            // Mana boşaldı (bu yakımla 0'a indi ya da zaten 0'dı): hedef başına bağımsız zar; tutarsa durum (Silence) + isabet zarsız hasar
+            const spec = effect.onEmpty;
+            if (!spec || !empties) continue;
+            const success = this.rng.next() < spec.chance;
+            emit({ type: 'emptyProc', source: actor.uid, target: target.uid, skill: skill.id, chance: spec.chance, success, status: spec.status });
+            if (!success) continue;
+            this.addStatus(target, { kind: spec.status, turns: spec.turns, source: actor.uid }, emit);
+            this.strike(actor, target, { type: 'damage', ...spec.damage }, emit, 1, false, true);
           }
           const gain = Math.min(Math.floor(total * (effect.gainRatio ?? 0)), actor.maxMp - actor.mp);
           if (gain > 0) {
@@ -1836,9 +1857,22 @@ export class Battle {
       emit({ type: 'turnStart', actor: actor.uid, queue: this.turnQueue(), extra: true });
       return;
     }
+    // Tur sonu süreleri (tickAtTurnEnd: Silence): taşıyanın turu bitince 1 azalır; biten durum kalkar
+    if (this.mode === 'turns' && this.currentUid === actor.uid) this.tickTurnEnd(actor, emit);
     if (this.mode === 'turns' && !this.winner) {
       actor.turnCounter -= this.setup.formulas.turn.threshold * turnCost;
       this.advance(emit);
+    }
+  }
+
+  /** tickAtTurnEnd durumlarının süresi (Silence): turu biten birimde 1 azalır, 0'da statusEnd. */
+  private tickTurnEnd(actor: Combatant, emit: Emit): void {
+    for (const status of [...actor.statuses]) {
+      if (!this.statusDef(status.kind)?.tickAtTurnEnd || !actor.statuses.includes(status)) continue;
+      status.turns--;
+      if (status.turns > 0) continue;
+      actor.statuses = actor.statuses.filter((s) => s !== status);
+      emit({ type: 'statusEnd', target: actor.uid, status: status.kind });
     }
   }
 
@@ -1907,6 +1941,7 @@ export class Battle {
     for (const status of [...actor.statuses]) {
       if (!actor.statuses.includes(status)) continue;
       if (this.statusDef(status.kind)?.maxStacks) continue; // yığılan durumun süresi yukarıda işlendi
+      if (this.statusDef(status.kind)?.tickAtTurnEnd) continue; // Silence: süre turun SONUNDA azalır (finishAction > tickTurnEnd)
       // Dark Bond: süre yalnızca bağı KURANIN turlarında azalır; bağlı dosttaki kopya kendi turunda azalmaz (sahibininkiyle eşitlenir)
       if (status.kind === 'dark_bond' && status.source !== actor.uid) continue;
       if (status.kind === 'regen' && actor.hp > 0) {
@@ -2140,12 +2175,14 @@ export class Battle {
    * -> zar -> kritik (SON çarpan) -> guard paylaşımı -> kalkan -> can.
    * `powerMult`: arkaya sıçrayan kısmî hasar için güç çarpanı.
    */
-  private strike(actor: Combatant, target: Combatant, effect: DamageEffect, emit: Emit, powerMult: number, extras: boolean): { landed: boolean; crit?: boolean } {
+  private strike(actor: Combatant, target: Combatant, effect: DamageEffect, emit: Emit, powerMult: number, extras: boolean, sure = false): { landed: boolean; crit?: boolean } {
     const f = this.setup.formulas;
     // Zarlar her zaman atılır (debug zorlaması rastgele sayı akışını değiştirmez); vuruş başına TEK zar üç sonuca ayrışır
     // İsabet/kaçınma: durum ekleri (Blinded/Shrouded) dahil geçerli stat'lar (effectiveStats); hit şansı [0, hit.max]
-    let outcome = hitOutcome(this.effectiveStats(actor), this.effectiveStats(target), f, this.rng.next());
-    if (this.debug.dodge === 'always') outcome = 'dodge';
+    // `sure`: isabet zarı YOK (Drain Field onEmpty hasarı; zar da tüketilmez, debug iska zorlaması uygulanmaz)
+    let outcome: ReturnType<typeof hitOutcome> = sure ? 'hit' : hitOutcome(this.effectiveStats(actor), this.effectiveStats(target), f, this.rng.next());
+    if (sure) outcome = 'hit';
+    else if (this.debug.dodge === 'always') outcome = 'dodge';
     else if (this.debug.miss === 'always') outcome = 'miss';
     else if (this.debug.dodge === 'never') outcome = 'hit';
     if (outcome !== 'hit') {
@@ -2157,7 +2194,8 @@ export class Battle {
     const base = rollDamage(actor.stats, targetStats, spec, f, this.rng);
     // Garantili kritik (Backstab): kritik zarı ATILMAZ, kritik çarpanı uygulanır (debug 'never' yine kapatır; Jinxed bunu bozmaz: madde Ö5).
     // Kritik şansı durum ekleriyle (Jinxed, Omen Misfortune) geçerli değerdir (effectiveStats).
-    const rolled = effect.guaranteedCrit ? { crit: true } : rollCrit(this.effectiveStats(actor), this.rng);
+    // critBonus (Jinx): bu skill'in vuruşunda kritik şansına ek (generic)
+    const rolled = effect.guaranteedCrit ? { crit: true } : rollCrit(this.effectiveStats(actor, effect.critBonus ?? 0), this.rng);
     const crit = this.debug.crit === 'auto' ? rolled.crit : this.debug.crit === 'always';
     const mult = crit ? actor.stats.critMult : 1;
     const total = Math.max(f.damage.minDamage, Math.round(base * mult * this.debug.damageMult));

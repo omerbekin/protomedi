@@ -57,7 +57,7 @@ describe('Hexer class verisi', () => {
     expect(hx.role).toBe('Curse Caster');
     expect(hx.color).toBe('#6a2f5f');
     const a = hx.attributes;
-    expect([a.str, a.int, a.dex, a.luck]).toEqual([6, 7, 3, 14]);
+    expect([a.str, a.int, a.dex, a.luck]).toEqual([8, 5, 3, 14]); // madde 261 denge turu: str 6 -> 8, int 7 -> 5
     expect(a.str + a.int + a.dex + a.luck).toBe(30);
     expect(hx.primary).toBe('luck');
     expect(a.luck).toBe(Math.max(a.str, a.int, a.dex, a.luck));
@@ -69,7 +69,7 @@ describe('Hexer class verisi', () => {
     expect(hx.stats.spd).toBe(Math.round(f.spdBase + f.spdPerDex * a.dex)); // 8
     expect(hx.stats.accuracy).toBeCloseTo(f.accuracyBase + f.accuracyPerLuck * a.luck); // %94
     expect(hx.stats.critChance).toBeCloseTo(f.critChanceBase + f.critChancePerLuck * a.luck); // %12
-    expect([hx.stats.hp, hx.stats.mp, hx.stats.spd]).toEqual([56, 44, 8]);
+    expect([hx.stats.hp, hx.stats.mp, hx.stats.spd]).toEqual([78, 40, 8]); // madde 261: can tabanı 30, str 8
     expect(hx.stats.armor).toBe(4);
     expect(hx.stats.magicArmor).toBe(0);
     expect(hx.spriteId).toBe('hexer');

@@ -84,3 +84,5 @@ Lucky Escape (madde 258): `result` satırında `E0:Gambler -> P1:Warrior: killin
 "Warrior (E1) neden Double Strike kullandı, Whirlwind değil?" -> kaydın `#32` bloğu, `WHY` satırı: iki adayın da SCORE dökümü yazar (ör. Double Strike `damage 24.9 + kill 31.0 + pressure 3.1` = 59, Whirlwind `damage 18.2 + kill 31.0 + pressure 2.0 + cost -7.5` = 43.7): ikisi de Anti-Mage'i öldürüyor, Whirlwind'in ikinci hedefi zayıf ve MP bedeli var; en yüksek puanlı seçilir.
 
 Diriltme satırı: `* Resurrection -> P0:Warrior -> rises on own cell 3 cost 6 SCORE 69.9 = revive 75.9 + cost -6`; sonuç satırı `P1:Paladin revives P0:Warrior (hp 33, mp 9, cell 3; corpse was on cell 0)`.
+
+Drain Field ve Silence (madde 260): aday terimlerinde `silence` (manası bitecek düşmanı susturmanın "engellenen hamle" değeri x zar ihtimali; zarın hasarı `damage`'da), notta `E1:Mage: mana empty -> 50% Silenced 1t + 14 dmg`. `result` satırı: `E1:Mage is out of mana: 50% roll for silence + damage (Drain Field) -> HIT` (ya da `-> no effect`); tutarsa ardından `+silence 1t` ve hasar satırı gelir.

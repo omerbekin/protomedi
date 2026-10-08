@@ -889,6 +889,14 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     }
     setMode('test');
   };
+  // Turning Test mode off also turns the unlimited switches off, so normal battles keep their cooldowns, MP and Rage costs
+  const disableTestMode = (): void => {
+    testMode.autoEnabled = false;
+    BattleScene.freeMp = false;
+    setTestSwitches(false);
+    applyTestSwitches();
+    setMode('turns');
+  };
   debug.register({
     id: 'test.enable',
     icon: 'flask',
@@ -896,8 +904,8 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     section: 'Test Mode',
     label: () => (battle()?.mode === 'test' ? 'Test mode: on' : 'Test mode: off'),
     on: () => battle()?.mode === 'test',
-    hint: 'On: no turn order, every unit can act at any time (the battle restarts with the same teams). Off: normal turn-based battle',
-    run: () => (battle()?.mode === 'test' ? setMode('turns') : enableTestMode()),
+    hint: 'On: no turn order, every unit can act at any time, unlimited MP/Rage and no cooldowns (the battle restarts with the same teams). Off: normal turn-based battle with normal costs and cooldowns',
+    run: () => (battle()?.mode === 'test' ? disableTestMode() : enableTestMode()),
   });
   debug.register({
     id: 'test.unlimited-mp',

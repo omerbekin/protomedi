@@ -16,13 +16,13 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.1
+        "power": 0.9
       },
       {
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.1
+        "power": 0.9
       }
     ],
     "vfx": "doublestrike",
@@ -39,7 +39,7 @@
     "target": "all_enemies",
     "cost": {
       "resource": "mp",
-      "amount": 15
+      "amount": 8
     },
     "cooldown": 3,
     "motion": "melee",
@@ -49,7 +49,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.3
+        "power": 1.5
       }
     ],
     "vfx": "whirlwind",
@@ -75,7 +75,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.58,
+        "power": 0.85,
         "element": "holy"
       }
     ],
@@ -160,7 +160,7 @@
     "target": "single_enemy",
     "cost": {
       "resource": "mp",
-      "amount": 5
+      "amount": 3
     },
     "motion": "cast",
     "fx": "#ff7a1a",
@@ -169,7 +169,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 2.25,
+        "power": 2.1,
         "element": "fire"
       }
     ],
@@ -204,7 +204,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.58,
+        "power": 1.5,
         "element": "ice"
       }
     ],
@@ -300,7 +300,7 @@
     "excludeSelf": true,
     "cost": {
       "resource": "mp",
-      "amount": 8
+      "amount": 0
     },
     "cooldown": 2,
     "turnCost": 0.5,
@@ -310,7 +310,7 @@
       {
         "type": "bond",
         "turns": 3,
-        "ratio": 1
+        "ratio": 1.5
       }
     ],
     "vfx": "guardlink",
@@ -342,7 +342,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.35,
+        "power": 1.27,
         "element": "dark"
       },
       {
@@ -375,7 +375,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 0.44
+        "power": 0.62
       },
       {
         "type": "status",
@@ -402,7 +402,7 @@
     },
     "cost": {
       "resource": "mp",
-      "amount": 8
+      "amount": 4
     },
     "cooldown": 2,
     "motion": "ranged",
@@ -412,7 +412,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 1.08,
+        "power": 1.35,
         "falloff": 0.7
       }
     ],
@@ -447,7 +447,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 0.74
+        "power": 0.88
       }
     ],
     "vfx": "arrowrain",
@@ -474,7 +474,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 2.65,
+        "power": 2.75,
         "ignoreDefense": 0.5
       }
     ],
@@ -506,7 +506,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.12,
+        "power": 1.5,
         "element": "nature"
       },
       {
@@ -560,7 +560,7 @@
     "target": "self",
     "cost": {
       "resource": "mp",
-      "amount": 25
+      "amount": 16
     },
     "cooldown": 6,
     "motion": "cast",
@@ -603,7 +603,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.92,
+        "power": 1.12,
         "element": "nature"
       }
     ],
@@ -653,7 +653,7 @@
     "excludeSelf": true,
     "cost": {
       "resource": "mp",
-      "amount": 10
+      "amount": 2
     },
     "cooldown": 4,
     "motion": "cast",
@@ -662,7 +662,7 @@
       {
         "type": "guard",
         "turns": 3,
-        "share": 0.5
+        "share": 0.6
       }
     ],
     "vfx": "guard2",
@@ -687,7 +687,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 3.0,
+        "power": 1.7,
         "element": "arcane"
       },
       {
@@ -703,6 +703,7 @@
     ]
   },
   "drain_field": {
+    "_not": "Madde 260 (Ömer): yakım hedefin MAKSİMUM MP'sinin yüzdesi (pctMax). Bu yakımla MP'si 0'a inen YA DA zaten 0 olan her düşmana bağımsız %50 zar: tutarsa Silenced 1 tur + INT ölçekli büyü hasarı (isabet zarı yok, kritik olabilir). Sayılar PROVİZYON (balance-tester): pctMax, onEmpty.chance/turns/damage.power.",
     "id": "drain_field",
     "name": "Drain Field",
     "icon": "drainfield",
@@ -715,7 +716,7 @@
     },
     "cost": {
       "resource": "mp",
-      "amount": 14
+      "amount": 6
     },
     "cooldown": 3,
     "motion": "sky",
@@ -723,7 +724,18 @@
     "effects": [
       {
         "type": "manaBurn",
-        "amount": 14
+        "pctMax": 0.58,
+        "onEmpty": {
+          "chance": 0.5,
+          "status": "silence",
+          "turns": 1,
+          "damage": {
+            "damageType": "magic",
+            "element": "arcane",
+            "scale": "int",
+            "power": 1.6
+          }
+        }
       }
     ],
     "skyFx": "void",
@@ -752,7 +764,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 3.6,
+        "power": 3.3,
         "bonusPerMissingMana": 1,
         "element": "arcane"
       }
@@ -873,7 +885,7 @@
     "target": "self",
     "cost": {
       "resource": "mp",
-      "amount": 14
+      "amount": 8
     },
     "cooldown": 5,
     "motion": "cast",
@@ -969,7 +981,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 2
+        "power": 1.5
       },
       {
         "type": "status",
@@ -990,7 +1002,7 @@
     "target": "self",
     "cost": {
       "resource": "rage",
-      "amount": 40
+      "amount": 30
     },
     "cooldown": 5,
     "motion": "cast",
@@ -998,7 +1010,7 @@
     "effects": [
       {
         "type": "selfDamage",
-        "ratio": 0.3
+        "ratio": 0.15
       },
       {
         "type": "status",
@@ -1028,7 +1040,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "int",
-        "power": 1.1
+        "power": 1.12
       },
       {
         "type": "status",
@@ -1061,7 +1073,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.8
+        "power": 0.38
       },
       {
         "type": "status",
@@ -1097,7 +1109,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.3
+        "power": 1.5
       }
     ],
     "vfx": "fistcrush2",
@@ -1157,7 +1169,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.7,
+        "power": 1.6,
         "repeatChance": 0.25
       }
     ],
@@ -1174,7 +1186,7 @@
     "target": "single_enemy",
     "cost": {
       "resource": "mp",
-      "amount": 6
+      "amount": 4
     },
     "cooldown": 2,
     "motion": "cast",
@@ -1184,7 +1196,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.9,
+        "power": 2.3,
         "bet": {
           "resource": "hp",
           "ratio": 0.15,
@@ -1218,7 +1230,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.7
+        "power": 1.4
       },
       {
         "type": "randomStatus",
@@ -1436,7 +1448,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 1.1
+        "power": 2.0
       },
       {
         "type": "status",
@@ -1462,7 +1474,7 @@
     },
     "cost": {
       "resource": "mp",
-      "amount": 9
+      "amount": 7
     },
     "cooldown": 2,
     "motion": "ranged",
@@ -1496,7 +1508,7 @@
     },
     "cost": {
       "resource": "mp",
-      "amount": 10
+      "amount": 8
     },
     "cooldown": 3,
     "motion": "ranged",
@@ -1572,7 +1584,7 @@
         "damageType": "magic",
         "element": "dark",
         "scale": "luck",
-        "power": 0.9
+        "power": 1.3
       },
       {
         "type": "omen",
@@ -1601,7 +1613,7 @@
     },
     "cost": {
       "resource": "mp",
-      "amount": 10
+      "amount": 14
     },
     "cooldown": 3,
     "motion": "cast",
@@ -1612,7 +1624,7 @@
         "damageType": "magic",
         "element": "dark",
         "scale": "luck",
-        "power": 0.5
+        "power": 0.47
       },
       {
         "type": "dot",
@@ -1634,14 +1646,14 @@
     ]
   },
   "jinx": {
-    "_not": "Hexer: uğursuzluk düğümü. Hasar + Jinxed 2 tur (isabet -%20, kritik yok; hedefin bir sonraki hasar skill'inden sonra düşer) + 1 Omen (kritikse 2). Backstab'ın garantili kritiğini bozmaz (Ö5). İkon/vfx/ses YER TUTUCU (ödünç: ikon clover, vfx bonethrow, ses chainTether + boneImpact); gerçekleri: jinx ikon/vfx, threadCinch + ceramicCrack. Sayılar PROVİZYON.",
+    "_not": "Hexer: uğursuzluk düğümü. Hasar + Jinxed 2 tur (isabet -%20, kritik yok; hedefin bir sonraki hasar skill'inden sonra düşer) + 1 Omen (kritikse 2). Backstab'ın garantili kritiğini bozmaz (Ö5). Madde 260 (Ömer): yerleşik +%25 kritik şansı (critBonus; kritik Jinx = 2 Omen, hasar x1,5; PROVİZYON). İkon/vfx/ses YER TUTUCU (ödünç: ikon clover, vfx bonethrow, ses chainTether + boneImpact); gerçekleri: jinx ikon/vfx, threadCinch + ceramicCrack. Sayılar PROVİZYON.",
     "id": "jinx",
     "name": "Jinx",
     "icon": "clover",
     "target": "single_enemy",
     "cost": {
       "resource": "mp",
-      "amount": 6
+      "amount": 2
     },
     "cooldown": 3,
     "motion": "cast",
@@ -1652,7 +1664,8 @@
         "damageType": "magic",
         "element": "dark",
         "scale": "luck",
-        "power": 0.5
+        "power": 1.1,
+        "critBonus": 0.25
       },
       {
         "type": "status",

@@ -137,7 +137,18 @@ describe('skill verisi', () => {
             }
             break;
           case 'manaBurn':
-            expect(e.amount).toBeGreaterThan(0);
+            // sabit miktar ya da maks MP yüzdesi (pctMax, madde 260); onEmpty: zar (0-1], tanımlı durum, ölçekli hasar
+            if (e.pctMax !== undefined) {
+              expect(e.pctMax).toBeGreaterThan(0);
+              expect(e.pctMax).toBeLessThanOrEqual(1);
+            } else expect(e.amount).toBeGreaterThan(0);
+            if (e.onEmpty) {
+              expect(e.onEmpty.chance).toBeGreaterThan(0);
+              expect(e.onEmpty.chance).toBeLessThanOrEqual(1);
+              expect(content.statuses[e.onEmpty.status], e.onEmpty.status).toBeDefined();
+              expect(e.onEmpty.turns).toBeGreaterThanOrEqual(1);
+              expect(e.onEmpty.damage.power).toBeGreaterThan(0);
+            }
             break;
           case 'taunt':
             expect(e.turns).toBeGreaterThan(0);

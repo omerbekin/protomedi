@@ -154,7 +154,7 @@ describe('MatchLog: kayıt', () => {
     expect(head).toContain('# MATCH LOG');
     expect(head).toContain('seed: 7');
     expect(head).toContain('mode: turns');
-    expect(head).toMatch(/teams: party 5 vs enemy 5/);
+    expect(head).toMatch(/teams: party 4 vs enemy 4/);
     expect(text).toContain('## ROSTER');
     expect(text).toMatch(/STR \d+ INT \d+ DEX \d+ LUCK \d+/);
     expect(text).toMatch(/maxHP \d+ maxMP \d+/);

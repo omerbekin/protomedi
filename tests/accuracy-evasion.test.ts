@@ -248,6 +248,7 @@ describe('önizleme (preview) ve yapay zeka isabeti bilir', () => {
     const victim = unit(b, 'party', 'mage');
     victim.hp = 1;
     const archer = unit(b, 'enemy', 'archer');
+    archer.mp = 0; // yalnızca bedelsiz Quick Shot (madde 261: güçlenen Arrow Rain alan değeriyle öldürmeyi geçebiliyor)
     victim.stats.evasion = 0; // isabet yüksek: öldürür
     expect(chooseAction(b, archer.uid, content.aiConfig)).toMatchObject({ reason: 'kill', targetUid: victim.uid });
     archer.stats.accuracy = 0; // isabet %0

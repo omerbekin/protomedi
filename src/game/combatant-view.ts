@@ -839,6 +839,8 @@ export class CombatantView {
       lines.push([`+${p.shield.amount} ${p.shield.magic ? 'magic shield' : 'shield'}`, p.shield.magic ? colors.magicShield : colors.shield, 34]);
     }
     if (p.burn) lines.push([`-${p.burn} MP`, colors.burn, 36]);
+    // Drain Field (madde 260): manası bitecek hedefte zar: "50%: Silenced 1t + 12-15 dmg"
+    if (p.emptyProc) lines.push([`${Math.round(p.emptyProc.chance * 100)}%: ${p.emptyProc.statusName} ${p.emptyProc.turns}t + ${p.emptyProc.damage.min}-${p.emptyProc.damage.max} dmg`, colors.burn, 30]);
     for (const s of p.statuses ?? []) lines.push([s, colors.targetHighlight, 30]);
 
     // Yazılar ismin üstünde, alttan yukarı dizilir (en önemli satır en altta durur)

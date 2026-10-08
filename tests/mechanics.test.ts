@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { Battle, armorReduction, attributePower, chooseAction, content, describePassive, describeSkill, previewSkill } from '../src/engine';
+import { Battle, armorReduction, attributePower, chooseAction, content, describePassive, describeSkill, nominalBurn, previewSkill } from '../src/engine';
 import type { BattleEvent, BattleMode, Combatant } from '../src/engine';
 import { installLegacySkills } from './legacy-skills';
 import { shapeCells } from '../src/engine/area-shape';
@@ -367,6 +367,7 @@ describe('Defender: Taunt, Guard, Fist Crush', () => {
   });
 
   it('Guard: korunan dostun aldığı hasarın bir kısmı korumacıya geçer; toplam hasar aynı kalır', () => {
+    const guardShare = (content.skills.guard!.effects.find((e) => e.type === 'guard') as { share: number }).share;
     for (const seed of [1, 2, 3, 4]) {
       const plain = make({ party: ['defender', 'warrior', 'archer', 'mage'], enemies: ['warrior', 'archer', 'mage', 'paladin'] }, { seed });
       const guarded = make({ party: ['defender', 'warrior', 'archer', 'mage'], enemies: ['warrior', 'archer', 'mage', 'paladin'] }, { seed });
@@ -374,7 +375,7 @@ describe('Defender: Taunt, Guard, Fist Crush', () => {
       const warriorG = unit(guarded, 'party', 'warrior');
       const defenderG = unit(guarded, 'party', 'defender');
       act(guarded, defenderG.uid, 'guard', warriorG.uid);
-      expect(warriorG.statuses.find((s) => s.kind === 'guard')).toMatchObject({ source: defenderG.uid, share: 0.5 });
+      expect(warriorG.statuses.find((s) => s.kind === 'guard')).toMatchObject({ source: defenderG.uid, share: guardShare }); // pay veriden (madde 261 denge turu: 0,5 -> 0,6)
       const hit = (b: Battle) => act(b, unit(b, 'enemy', 'warrior').uid, 'melee_attack', unit(b, 'party', 'warrior').uid);
       const base = total(hit(plain), warriorP.uid);
       const events = hit(guarded);
@@ -385,8 +386,8 @@ describe('Defender: Taunt, Guard, Fist Crush', () => {
       expect(onDefender.every((e) => e.redirected)).toBe(true);
       const sum = (list: typeof onWarrior) => list.reduce((s, e) => s + e.amount + e.absorbed, 0);
       expect(sum(onWarrior) + sum(onDefender)).toBe(base);
-      expect(sum(onDefender)).toBeGreaterThanOrEqual(Math.round(base * 0.5) - 1);
-      expect(sum(onDefender)).toBeLessThanOrEqual(Math.round(base * 0.5) + 1);
+      expect(sum(onDefender)).toBeGreaterThanOrEqual(Math.round(base * guardShare) - 1);
+      expect(sum(onDefender)).toBeLessThanOrEqual(Math.round(base * guardShare) + 1);
     }
   });
 
@@ -579,7 +580,9 @@ describe('Anti-Mage: mana yakma, eksik manaya göre hasar, büyü kalkanı', () 
     const events = act(b, am.uid, 'drain_field', center.uid);
     const burns = ofType(events, 'manaBurn');
     expect(burns.length).toBe(hit.filter((c) => (before.get(c.uid) ?? 0) > 0).length);
-    for (const e of burns) expect(e.mpAfter).toBe(Math.max(0, before.get(e.target)! - (content.skills.drain_field!.effects[0] as { amount: number }).amount));
+    // Madde 260: yakım hedefin maks MP'sinin yüzdesi (nominalBurn); dolu manalı hedefler 0'a inmez: susturma zarı/hasar yok
+    const eff = content.skills.drain_field!.effects[0] as Parameters<typeof nominalBurn>[0];
+    for (const e of burns) expect(e.mpAfter).toBe(Math.max(0, before.get(e.target)! - nominalBurn(eff, b.get(e.target)!)));
     expect(ofType(events, 'damage')).toHaveLength(0);
   });
 

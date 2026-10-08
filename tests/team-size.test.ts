@@ -4,7 +4,7 @@ import type { BattleMode } from '../src/engine';
 import { simulate } from '../src/sim/simulate';
 
 /**
- * Takım boyutu: her taraf 1..12 (formasyon yuva sayısı = rows x lanes) birim alabilir; 5-5 varsayılandır.
+ * Takım boyutu: her taraf 1..12 (formasyon yuva sayısı = rows x lanes) birim alabilir; 4-4 varsayılandır (Ömer kararı 2026-10-08).
  * content.battleSetup(id, seed, mode, { party, enemies }) farklı uzunluklu listeleri kabul eder; rastgele takımlarda partySize/enemySize seçilir.
  */
 const CELLS = content.formulas.formation.rows * content.formulas.formation.lanes;
@@ -13,7 +13,7 @@ const POOL = content.randomPool; // testOnly class'lar (aoe_tester) rastgele hav
 const sizes = [1, 2, 3, 5, 7, 9, 10, 12];
 
 describe('takım boyutu: rastgele takım çekme', () => {
-  it('varsayılan 5-5 (random-battle.random.size); açık 5-5 ile birebir aynı; boyut seed\'e göre deterministik', () => {
+  it('varsayılan 4-4 (random-battle.random.size, Ömer kararı 2026-10-08); açık 4-4 ile birebir aynı; boyut seed\'e göre deterministik', () => {
     const def = content.battles['random-battle']!.random!;
     for (const seed of [1, 2, 3, 99]) {
       const d = content.rollTeams('random-battle', seed);
@@ -22,7 +22,7 @@ describe('takım boyutu: rastgele takım çekme', () => {
       expect(content.rollTeams('random-battle', seed, { partySize: def.size, enemySize: def.size })).toEqual(d);
       expect(content.rollTeams('random-battle', seed)).toEqual(d);
     }
-    expect(def.size).toBe(5);
+    expect(def.size).toBe(4);
   });
 
   it('her boyut için taraf başına tam o kadar sınıf çekilir; havuz yettiği sürece hepsi farklı; havuzdan fazlasında tekrar eder', () => {
@@ -72,7 +72,7 @@ describe('takım boyutu: savaş kurulumu ve dizilim', () => {
     const rolled = content.battleSetup('random-battle', 1, 'turns', { partySize: 2, enemySize: 11 });
     expect([rolled.party.length, rolled.enemies.length]).toEqual([2, 11]);
     const def = content.battleSetup('random-battle', 1, 'turns');
-    expect([def.party.length, def.enemies.length]).toEqual([5, 5]);
+    expect([def.party.length, def.enemies.length]).toEqual([4, 4]);
     // yalnızca bir taraf verilirse diğeri seed'e göre çekilir
     const half = content.battleSetup('random-battle', 1, 'turns', { party: ['mage'], enemySize: 4 });
     expect([half.party.length, half.enemies.length]).toEqual([1, 4]);

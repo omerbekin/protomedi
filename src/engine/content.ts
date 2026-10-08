@@ -118,7 +118,7 @@ export interface TeamUnits {
 }
 
 /**
- * Takım boyutu seçenekleri: her taraf 1..CELL_COUNT (formasyon yuva sayısı = rows x lanes = 12) birim alabilir; 5-5 varsayılandır
+ * Takım boyutu seçenekleri: her taraf 1..CELL_COUNT (formasyon yuva sayısı = rows x lanes = 12) birim alabilir; 4-4 varsayılandır
  * (data/battles/random-battle.json > random.size). partySize/enemySize yalnızca takım RASTGELE çekilirken kullanılır
  * (sınıf listesi verilmişse listenin uzunluğu geçerlidir). Boyut havuzdaki sınıf sayısını aşarsa sınıflar tekrar eder (ilk tur hep farklı).
  */
@@ -279,7 +279,7 @@ export function randomCells(ids: string[], seed: number): string[] {
 
 /**
  * `teams` verilirse onlar kullanılır (taraf başına 1..12 birim, uzunluk serbest; yalnızca bir taraf verilirse diğeri seed'e göre çekilir);
- * verilmezse seed'e göre belirlenir (`partySize`/`enemySize` ile boyut seçilir, varsayılan 5-5). `arrange` true: liste sınıf id'leridir (otomatik dizilir);
+ * verilmezse seed'e göre belirlenir (`partySize`/`enemySize` ile boyut seçilir, varsayılan 4-4). `arrange` true: liste sınıf id'leridir (otomatik dizilir);
  * false: liste hücre listesidir (dizin = yuva, '' = boş).
  */
 export function battleSetup(battleId: string, seed: number, mode: BattleMode = 'turns', teams?: Partial<Teams> & TeamSizes, arrange = true): BattleSetup {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, attributePower, content, describeClass, describeSkill, describeStat, previewSkill } from '../src/engine';
+import { Battle, attributePower, content, describeClass, describeSkill, describeStat, nominalBurn, previewSkill } from '../src/engine';
 import type { BattleEvent, SkillDef, StatKind } from '../src/engine';
 import { installLegacySkills } from './legacy-skills';
 
@@ -240,7 +240,9 @@ describe('önizleme: şifa, kalkan, tur bazlı şifa, mana yakma, durumlar', () 
     const center = b.livingByDepth('enemy')[0]!;
     const field = previewSkill(b, am, 'drain_field', center.uid);
     expect(field).toHaveLength(b.areaWindow(am, 'drain_field', center.uid).length);
-    for (const x of field) expect(x.burn ?? 0).toBeLessThanOrEqual((content.skills.drain_field!.effects[0] as { amount: number }).amount);
+    // Madde 260: yakım hedefin maks MP'sinin yüzdesi (nominalBurn), mevcut manayla sınırlı
+    const eff = content.skills.drain_field!.effects[0] as Parameters<typeof nominalBurn>[0];
+    for (const x of field) expect(x.burn ?? 0).toBe(Math.min(b.get(x.uid)!.mp, nominalBurn(eff, b.get(x.uid)!)));
   });
 
   it('taunt ve guard durum metni verir', () => {
@@ -302,7 +304,7 @@ describe('skill açıklaması (tooltip)', () => {
     expect(text('summon_treant')).toContain('for 3 turns');
     expect(text('summon_treant')).toContain('Summons take x2 damage');
     expect(text('taunt')).toContain('must target you');
-    expect(text('guard')).toContain('take 50% of the damage');
+    expect(text('guard')).toContain(`take ${Math.round((content.skills.guard!.effects.find((e) => e.type === 'guard') as { share: number }).share * 100)}% of the damage`);
     expect(text('mana_burn')).toContain('Steals 10 MP'); // Mana Steal: kısmen kendine geçer
   });
 

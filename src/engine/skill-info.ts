@@ -224,6 +224,7 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       if (e.falloff) add(`Each target hit takes ${pct(1 - e.falloff)} less damage than the previous one`);
       if (e.bonusPerMissingMana) add(`+${e.bonusPerMissingMana} per missing mana of the target`, element);
       if (e.repeatChance) add(`${pct(e.repeatChance)} chance to hit twice`, element);
+      if (e.critBonus && !e.guaranteedCrit) add(`+${pct(e.critBonus)} crit chance`, element);
       if (e.bet) {
         const b = e.bet;
         const stake = betStake(b, stats.hp, stats.hp, Math.max(0, stats.mp - (skill.cost.resource === 'mp' ? skill.cost.amount : 0)));
@@ -267,7 +268,15 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       }
       add(`Summons take x${formulas.summon.damageTakenMultiplier} damage`);
     } else if (e.type === 'manaBurn') {
-      add(e.gainRatio ? `Steals ${e.amount} MP: you gain ${pct(e.gainRatio)} of it` : `Burns ${e.amount} MP`);
+      // Madde 260: sabit miktar ya da hedefin maks MP'sinin yüzdesi (pctMax)
+      const what = e.pctMax !== undefined ? `${pct(e.pctMax)} of each target's max MP` : `${e.amount ?? 0} MP`;
+      add(e.gainRatio ? `Steals ${what}: you gain ${pct(e.gainRatio)} of it` : `Burns ${what}`);
+      const em = e.onEmpty;
+      if (em) {
+        const def = defs.statuses?.[em.status];
+        const el = em.damage.element ?? 'physical';
+        add(`Each target left with 0 MP (or already at 0) has a ${pct(em.chance)} chance (rolled separately) to be ${def?.name ?? em.status} for ${em.turns} turn${em.turns > 1 ? 's' : ''}${def ? ` (${def.text})` : ''} and take ${pct(em.damage.power)} ${ATTRIBUTE_NAME[em.damage.scale]} (${raw(em.damage.scale, em.damage.power)}) ${el} damage; it cannot miss but can crit`, el);
+      }
     } else if (e.type === 'taunt') {
       add(`Taunt ${e.turns} turns: enemies must target you${e.breakRatio ? ` (ends after losing ${pct(e.breakRatio)} HP)` : ''}`);
       const cc = Object.values(defs.statuses ?? {}).filter((d) => d.breaksTaunt).map((d) => d.name);

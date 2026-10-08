@@ -17,6 +17,7 @@ export type { HitOutcome } from './stats';
 export { damageSpecFor } from './spec';
 export { betMultipliers, betStake } from './gamble';
 export { isRatioCost, skillCostAmount, skillCostLabel } from './cost';
+export { burnAmountFor, emptyProcApplies, nominalBurn } from './mana-burn';
 export { previewForTargets, previewSkill } from './preview';
 export type { DoomPreview, TargetPreview } from './preview';
 export { ATTRIBUTE_NAME, describeGlobalSkill, describePassive, describeRage, describeSkill, TARGET_TEXT } from './skill-info';

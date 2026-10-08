@@ -1,0 +1,15 @@
+{
+  "_not": "DENGE HEDEF BANTLARI (Ömer kararı 2026-10-08; docs/balance.md). npm run sim raporu ve tests/balance.test.ts bu dosyadan okur. Ana ölçüm 4'e 4 (random-battle.json > random.size). Skill kategorileri: class'ın 1. skill'i 'basic' (bedelsiz temel saldırı), 4. skill'i 'ultimate', aşağıdaki 'situational' listesindekiler durumsal destek, geri kalanlar 'normal'. Kullanım payı = o skill'in, class'ın TÜM hamleleri (Rest/Skip/Move dahil) içindeki yüzdesi. Ultimate ölçümü: birimin hayattayken ultimate'ı ilk kez kullanılabilir olduğu (kendi turunda canUse ok) birimler içinde en az bir kez kullananların oranı; class ortalaması >= ultimateUsedMin. Karşılaşma tablosu (class A'nın class B'ye karşı kazanma oranı; aynı takımda olmadıkları savaşlar) eşitlik hedeflemez; yalnızca crushingHigh üstü / crushingLow altı işaretlenir.",
+  "bands": {
+    "classWin": { "low": 44, "high": 56 },
+    "basic": { "low": 20, "high": 45 },
+    "normal": { "low": 15, "high": 35 },
+    "situational": { "low": 8, "high": 25 },
+    "ultimateUsedMin": 50,
+    "battleTurns": { "low": 35, "high": 50 },
+    "matchup": { "crushingLow": 25, "crushingHigh": 75, "minGames": 200 }
+  },
+  "situational": ["guard", "mana_barrier", "spell_ward", "jinx", "dark_bond", "resurrection"],
+  "measure": { "runs": 10000, "seedGroups": [1, 500001] },
+  "test": { "runs": 5000, "seedGroups": [900001, 300001] }
+}

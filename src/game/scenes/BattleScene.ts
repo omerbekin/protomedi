@@ -50,7 +50,7 @@ export interface BattleSceneData {
   mode: BattleMode;
   /** Takım seçim ekranından gelen takımlar; yoksa seed'e göre rastgele. */
   teams: Teams | undefined;
-  /** Rastgele takım boyutları (1-12); yoksa önceki savaşın / adresin boyutu (varsayılan 5-5). */
+  /** Rastgele takım boyutları (1-12); yoksa önceki savaşın / adresin boyutu (varsayılan 4-4). */
   partySize: number;
   enemySize: number;
   /** Sefer savaşı (campaign-dev): sonuç ekranı düğmeleri seferden gelir; yoksa hızlı savaş (Quick Battle). */
@@ -2218,6 +2218,12 @@ export class BattleScene extends Phaser.Scene {
           this.views.get(e.target)?.setVineWrap(true);
           this.views.get(e.target)?.floatText('Rooted', '#8bd06a', 36);
         } else if (e.type === 'statusEnd' && e.status === 'stun') this.views.get(e.target)?.setVineWrap(false);
+        // Silence (Drain Field, madde 260): MP bedelli skill'leri kilitleyen durum: "Silenced" yazısı (rozet genel durum gösteriminden gelir)
+        if (e.type === 'status' && content.statuses[e.status]?.blocksMpSkills) {
+          const def = content.statuses[e.status];
+          this.views.get(e.target)?.floatText(def?.name ?? 'Silenced', def?.color ?? '#9b59d0', 38, false, { kind: 'resource' });
+          await this.wait(slow(60));
+        }
         // Dispel (Mana Barrier dostun debuff'ını, Spell Ward saldıranın buff'ını sildi): kısa parlama + "Dispelled: Haste"
         if (e.type === 'statusEnd' && e.dispelled) {
           const v = this.views.get(e.target);

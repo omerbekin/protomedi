@@ -303,6 +303,32 @@ export class ValueContext {
     return Math.max(0, worth(pool) - worth(pool - amount));
   }
 
+  /**
+   * Susturmanın "engellenen hamle" değeri (madde 260, Silence: MP bedelli skill kullanılamaz): düşman `f` susturulduğu turlarda (`turns`, ufuktaki turuyla
+   * sınırlı) MP'li en iyi hamlesi yerine bedelsiz en iyisini yapar. Her tur için: o tur ödenebilecek (MP = `mpAfter` + tur başı yenilenmeler; bir
+   * sonraki turda hâlâ cooldown'da olmayan) MP'li skill'lerin en iyisinin bedelsiz en iyiye göre fazlası x contributionShare. MP'siz birimde 0.
+   */
+  silenceDenial(f: Combatant, mpAfter: number, turns: number): number {
+    if (f.hp <= 0 || f.maxMp <= 0 || turns <= 0) return 0;
+    const opp = Math.min(3, this.battle.living(f.side === 'party' ? 'enemy' : 'party').length);
+    const raw = (sk: SkillDef) => {
+      let v = skillRawValue(this.battle, f.stats, sk);
+      for (const e of sk.effects) if (e.type === 'ground') v += attributePower(f.stats, e.scale, this.battle.formulas) * e.power * e.turns * 0.7;
+      return v * (this.battle.isAreaSkill(sk.id) && ATTACK_TARGETS.includes(sk.target) ? Math.max(1, opp) : 1);
+    };
+    const skills = f.skills.map((id) => this.battle.skill(id)).filter((sk): sk is SkillDef => !!sk);
+    const free = Math.max(0, ...skills.filter((sk) => sk.cost.resource !== 'mp' || sk.cost.amount <= 0).map(raw));
+    const regen = this.battle.mode === 'turns' ? f.stats.mpRegen : 0;
+    const n = Math.min(turns, Math.max(1, Math.ceil(this.turnsWithin(f) - 1e-9)));
+    let v = 0;
+    for (let k = 1; k <= n; k++) {
+      const mp = this.battle.freeMp ? Infinity : Math.min(f.maxMp, Math.max(0, mpAfter) + regen * k);
+      const best = Math.max(0, ...skills.filter((sk) => sk.cost.resource === 'mp' && sk.cost.amount > 0 && sk.cost.amount <= mp && (this.battle.mode !== 'turns' || (f.cooldowns[sk.id] ?? 0) <= k)).map(raw));
+      v += Math.max(0, best - free) * this.vc.contributionShare;
+    }
+    return v;
+  }
+
   private readonly dying = new Map<string, boolean>();
   /**
    * Hard "fazla vurmama": düşman `f` bizim müdahalemiz olmadan bir sonraki turunun başında ya da önce ölecek mi? Tur başı DoT (Wither) ve üstünde durduğu

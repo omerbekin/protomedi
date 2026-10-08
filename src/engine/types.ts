@@ -307,6 +307,18 @@ export interface BetSpec {
   perStake?: number;
 }
 
+/**
+ * manaBurn `onEmpty` (Drain Field; Ömer 2026-10-08, madde 260): bu yakımla MP'si 0'a inen YA DA zaten 0 olan (maks MP'si > 0) her canlı hedef için
+ * BAĞIMSIZ `chance` zarı (seed'li RNG; hedef başına bir sayı). Tutarsa: `status` `turns` tur (ör. silence) + `damage` (skill hasarı gibi: zırh, zayıflık,
+ * kritik zarı, Guard, kalkan, Lucky Escape normal; İSABET ZARI YOK). Olay sırası: manaBurn, emptyProc, status, damage.
+ */
+export interface ManaEmptySpec {
+  chance: number;
+  status: StatusKind;
+  turns: number;
+  damage: { damageType: 'physical' | 'magic'; element?: Element; scale: Attribute; power: number };
+}
+
 /** randomStatus seçeneği: `weight` ağırlıklı zarla seçilen durum. */
 export interface RandomStatusOption {
   status: StatusKind;
@@ -340,6 +352,11 @@ export type SkillEffectKind =
       bet?: BetSpec;
       /** true: bu hasarın HER vuruşu kritiktir (kritik zarı atılmaz, kritik çarpanı uygulanır); isabet zarı normal atılır (iska olabilir). Backstab. */
       guaranteedCrit?: boolean;
+      /**
+       * Bu hasarın vuruşlarında kritik şansına eklenen miktar (Jinx +0,25; generic). Kullanıcının geçerli kritik şansına (durum ekleri dahil:
+       * Jinxed / Misfortune) eklenir, sonuç [0, 1]. guaranteedCrit varsa anlamsız (zaten her vuruş kritik).
+       */
+      critBonus?: number;
     }
   | { type: 'heal'; scale: Attribute; power: number }
   /**
@@ -382,7 +399,11 @@ export type SkillEffectKind =
    * varyantıyla (beslenmiş, `empowered`), hiç ceset yoksa `unfed` varyantıyla gelir (birim tanımındaki `variants`; bkz. CombatantData.variants).
    */
   | { type: 'summon'; unit: string; lifespan?: number; consumeCorpse?: boolean }
-  | { type: 'manaBurn'; amount: number; /** Yakılan mananın bu oranı kullanıcıya geri verilir. */ gainRatio?: number }
+  /**
+   * Mana yakma: hedef başına `amount` (sabit) ya da `pctMax` (hedefin MAKSİMUM MP'sinin oranı, yuvarlanır; ikisi birden varsa pctMax) kadar, mevcut MP'yle
+   * sınırlı (miktar: src/engine/mana-burn.ts > burnAmountFor). `onEmpty`: bkz. ManaEmptySpec (Drain Field).
+   */
+  | { type: 'manaBurn'; amount?: number; pctMax?: number; /** Yakılan mananın bu oranı kullanıcıya geri verilir. */ gainRatio?: number; onEmpty?: ManaEmptySpec }
   /** Kullanıcı `turns` tur boyunca düşmanların tek hedefli skill'lerinin hedefi olmak zorunda. */
   | { type: 'taunt'; turns: number; /** Taunt'lı karakter maks canının bu oranı kadar can kaybederse taunt biter. */ breakRatio?: number; /** Taunt sürerken taunt'lı olmayan dostların aldığı hasar bu çarpanla çarpılır (ör. 0.5 = yarı hasar). */ allyDamageMult?: number }
   /** Hedef dost `turns` tur boyunca aldığı hasarın `share` kadarını kullanıcıya aktarır. */
@@ -656,7 +677,7 @@ export type Side = 'party' | 'enemy';
  * Durum türleri. 'thorns' (eski Thorn Shield) motorda ve veride KALDIRILDI (madde 222); ad yalnızca src/game/scenes/BattleScene.ts eski bir
  * `e.status === 'thorns'` karşılaştırması yaptığı için tür listesinde duruyor (ui-dev silince buradan da silinecek). Hiçbir skill/durum tanımı onu üretmez.
  */
-export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns' | 'blinded' | 'shrouded' | 'dark_bond' | 'omen' | 'wither' | 'jinxed';
+export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns' | 'blinded' | 'shrouded' | 'dark_bond' | 'omen' | 'wither' | 'jinxed' | 'silence';
 
 /** Yığılan durumun patlaması (Hexer Doom): hasar = scale statı x powerPerStack x yığın x çarpan; büyü zırhı/kalkan uygulanır, isabet zarı YOK, kritik zarı VAR. */
 export interface DoomDef {
@@ -693,6 +714,13 @@ export interface StatusDef {
   critDeltaPerStack?: number;
   /** true: taşıyanın bir sonraki HASAR VEREN skill'inin tüm vuruşlarından sonra düşer (statusEnd consumed). Jinxed. */
   endsOnOwnAttack?: boolean;
+  /** true: taşıyan MP bedelli (bedeli > 0) skill kullanamaz (canUse 'Silenced'); bedelsiz skill'ler, Rage/can bedelliler ve global eylemler serbest. Silence. */
+  blocksMpSkills?: boolean;
+  /**
+   * true: süre taşıyanın tur BAŞINDA değil, turu BİTİNCE (son eylemi / pas / sersemlik) 1 azalır; böylece 1 turluk durum taşıyanın bir sonraki
+   * turunu tam kapsar (Silence). Yalnızca turns modunda azalır (test modunda diğer durumlar gibi sürer).
+   */
+  tickAtTurnEnd?: boolean;
   /** Yığılan durum: en çok bu kadar yığın (Omen 3). Yığın maxStacks'e ulaşınca `doom` anında patlar. */
   maxStacks?: number;
   /** Yığılan durumun süresi (ilk yığınla başlar; yeni yığın süreyi YENİLEMEZ, madde Ö2). */
@@ -913,6 +941,11 @@ type BattleEventBody =
   | { type: 'shield'; source: string; target: string; amount: number; shieldAfter: number; magicShieldAfter: number; magic: boolean }
   /** `cause`: kalkan kancasıyla yakıldıysa kalkanın skill id'si (ör. 'spell_ward'; kaynak = kalkanı taşıyan, hedef = saldıran). */
   | { type: 'manaBurn'; source: string; target: string; amount: number; mpAfter: number; cause?: string }
+  /**
+   * Mana boşalma zarı (manaBurn `onEmpty`, Drain Field): bu yakımla MP'si 0'a inen (ya da zaten 0 olan) hedef için `chance` zarı atıldı. `success` ise
+   * ARKASINDAN `status` (ör. silence) ve hasar olayı (origin 'skill') gelir; başarısızsa başka olay yok. `skill`: yakan skill.
+   */
+  | { type: 'emptyProc'; source: string; target: string; skill: string; chance: number; success: boolean; status: StatusKind }
   /** `cause`: skill etkisinin görsel nedeni (ör. 'vines' = sarmaşıkla yere bağlandı; UI 'rooted' görseli). Yoksa sıradan durum. */
   | { type: 'status'; target: string; status: StatusKind; turns: number; source: string; cause?: string; /** dark_bond: bağın öbür ucu. */ partner?: string; /** Yığılan durum (Omen): güncel yığın sayısı. */ stacks?: number }
   /** Yığın değişimi (Omen): `delta` eklenen, `stacks` yeni yığın, `max` üst sınır; `crit` kritik lanet (critStacks); `cause` skill ya da Ill Omen geçişi. Ardından 'status' olayı da gelir. */

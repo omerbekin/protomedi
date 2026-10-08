@@ -1,6 +1,7 @@
 import type { Battle } from './battle';
 import { damageRange, healRange } from './formulas';
 import { betMultipliers, betStake } from './gamble';
+import { burnAmountFor, emptyProcApplies } from './mana-burn';
 import { damageSpecFor, type DamageEffect } from './spec';
 import { slotOfTileUid } from './battle';
 import { attributePower, hitChance } from './stats';
@@ -52,6 +53,11 @@ export interface TargetPreview {
   ground?: { perTick: number; turns: number; total: number };
   /** Yakılacak mana. */
   burn?: number;
+  /**
+   * Mana boşalma zarı (manaBurn onEmpty, Drain Field; madde 260): bu yakımla MP'si 0'a inecek (ya da zaten 0 olan) hedefte `chance` ihtimalle
+   * `status` (`turns` tur) + hasar (kritik hariç aralık; isabet zarı yok, kalkan düşülmemiş). Zar tutmazsa hiçbiri olmaz.
+   */
+  emptyProc?: { chance: number; status: string; statusName: string; turns: number; damage: { min: number; max: number; avg: number; critChance: number; critMax: number } };
   /** Uygulanacak durumlar, okunur metin (ör. "Taunt 2 turns"). */
   statuses?: string[];
   /**
@@ -165,7 +171,7 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
       hpLossMin: (prev?.hpLossMin ?? 0) + loss(r.min),
       hpLossMax: (prev?.hpLossMax ?? 0) + loss(r.max),
       lethal: null,
-      critChance: effect.guaranteedCrit ? 1 : battle.effectiveStats(actor).critChance,
+      critChance: effect.guaranteedCrit ? 1 : battle.effectiveStats(actor, effect.critBonus ?? 0).critChance, // critBonus: Jinx
       critMax: (prev?.critMax ?? 0) + (effect.guaranteedCrit ? r.max : Math.round(r.max * actor.stats.critMult)),
       hitChance: hit,
       expected: (prev?.expected ?? 0) + r.avg * hit,
@@ -249,7 +255,20 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         e.ground = { perTick: (e.ground?.perTick ?? 0) + perTick, turns: effect.turns, total: (e.ground?.total ?? 0) + perTick * effect.turns };
       } else if (effect.type === 'manaBurn') {
         const e = entry(target.uid);
-        e.burn = (e.burn ?? 0) + Math.min(target.mp, effect.amount);
+        e.burn = (e.burn ?? 0) + burnAmountFor(effect, target);
+        // Madde 260 (Drain Field): MP'si bu yakımla 0'a inecek (ya da zaten 0) hedefte onEmpty zarı: ihtimal, durum ve hasar aralığı (isabet zarı yok)
+        const spec = effect.onEmpty;
+        if (spec && emptyProcApplies(effect, target)) {
+          const dmg: DamageEffect = { type: 'damage', ...spec.damage };
+          const r = damageRange(actor.stats, battle.effectiveStats(target), damageSpecFor(actor, target, dmg, f, 1, false, battle.damageTakenMult(target), battle.hunterMarkMult(actor, target)), f);
+          e.emptyProc = {
+            chance: spec.chance,
+            status: spec.status,
+            statusName: battle.statusDef(spec.status)?.name ?? spec.status,
+            turns: spec.turns,
+            damage: { min: r.min, max: r.max, avg: r.avg, critChance: battle.effectiveStats(actor).critChance, critMax: Math.round(r.max * actor.stats.critMult) },
+          };
+        }
       } else if (effect.type === 'taunt') {
         const e = entry(target.uid);
         e.statuses = [...(e.statuses ?? []), `Taunt ${effect.turns} turns`];

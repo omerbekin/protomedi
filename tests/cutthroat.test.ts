@@ -45,7 +45,7 @@ describe('Cutthroat class verisi', () => {
     expect(a.dex).toBe(Math.max(a.str, a.int, a.dex, a.luck));
     expect(ct.stats.primaryActive).toBe(true);
     expect(ct.stats.hunterMark).toBe(content.formulas.primaryBonus.dex.hunterMarkMult);
-    expect(ct.stats.hp).toBeLessThanOrEqual(56); // kırılgan (~50)
+    expect(ct.stats.hp).toBeLessThanOrEqual(content.formulas.attributes.hpBase + 30); // kırılgan (Str 5: taban + 30; madde 261'da taban 20 -> 30)
     expect(ct.ai).toBe('assassin');
     expect(content.aiConfig.profiles.assassin!.priorities).toEqual(['kill', 'tactic', 'damage']);
     expect(ct.skills).toEqual(['venom_edge', 'x_cut', 'smoke_bomb', 'backstab']);
@@ -479,7 +479,7 @@ describe('Cutthroat yapay zekası (assassin): bağlam ipuçları, determinizm', 
   });
 
   it('Smoke Bomb: 2x2 alanda >= 2 tehlikeli düşman -> düşman tarafına; seçim uygulanır ve Blinded verir', () => {
-    const b = turnArena([['cutthroat', 0], ['warrior', 1], ['paladin', 2]], [['warrior', 0], ['warrior', 1], ['archer', 9]], ['smoke_bomb'])!;
+    const b = turnArena([['cutthroat', 0], ['warrior', 1], ['paladin', 2]], [['warrior', 0], ['warrior', 1], ['paladin', 9]], ['smoke_bomb'])!; // madde 261: Archer güçlenince tek Archer'ı kör etmek iki Warrior'la başa baş; arka saf Paladin
     const ch = chooseAction(b, b.currentUid!, NO_GLOBAL);
     expect(ch?.skillId).toBe('smoke_bomb');
     expect(ch?.board ?? 'enemy').toBe('enemy');

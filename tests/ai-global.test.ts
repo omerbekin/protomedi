@@ -276,7 +276,9 @@ describe('YZ Move Tile: kırılgan birimi geri çek, yakın dövüşçüyü öne
     expect(b.canMeleeFrom('party-0', 1)).toBe(true); // yakın dövüş yeteneği korunur
     expect(pick(b, 'party-0', classOnly)?.skillId).not.toBe('move_tile'); // global olmadan hareket yok
     // kazanç yoksa (bitişik yuvadan bir dosta daha ulaşılamıyor) ya da dostu yoksa hareket yok
-    expect(pick(mkB({ 0: 'defender', 3: 'mage', 5: 'archer' }), 'party-0')?.skillId).not.toBe('move_tile');
+    // madde 261: tek dost (Mage, 3): hiçbir yuva daha çok dosta bitişik değil (eski 3: mage + 5: archer kurgusunda 0 -> 2 takası şeride göre
+    // değişen düşman alan hasarı yüzünden küçük ama gerçek bir aura kazancı verebiliyordu)
+    expect(pick(mkB({ 0: 'defender', 3: 'mage' }), 'party-0')?.skillId).not.toBe('move_tile');
     expect(pick(mkB({ 0: 'defender' }), 'party-0')?.skillId).not.toBe('move_tile');
   });
 

@@ -36,7 +36,7 @@ describe('buff / debuff tanımları (data/statuses.json)', () => {
         expect(def.dispellable, id).toBe(false);
         continue;
       }
-      expect(def.speedMult !== undefined || def.damageTakenMult !== undefined || def.healTakenMult !== undefined || def.skipTurn === true || def.accuracyDelta !== undefined || def.evasionDelta !== undefined || def.critDelta !== undefined || def.critDeltaPerStack !== undefined || def.maxStacks !== undefined || def.dot !== undefined, id).toBe(true);
+      expect(def.speedMult !== undefined || def.damageTakenMult !== undefined || def.healTakenMult !== undefined || def.skipTurn === true || def.accuracyDelta !== undefined || def.evasionDelta !== undefined || def.critDelta !== undefined || def.critDeltaPerStack !== undefined || def.maxStacks !== undefined || def.dot !== undefined || def.blocksMpSkills === true, id).toBe(true);
     }
   });
 

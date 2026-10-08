@@ -7,7 +7,7 @@ import { groupByPrimary, sortByPrimary } from './class-order';
  * Test edilebilsin diye sahneden ayrıdır; sınıf listesi her zaman veriden (data/classes) gelir.
  */
 /** Varsayılan takım boyutu (random-battle.json > random.size ile aynı); ekranda her taraf 1..CELL_COUNT arası ayarlanabilir. */
-export const TEAM_SIZE = 5;
+export const TEAM_SIZE = 4;
 
 /** Kısa arketip etiketi (kartta). Sınıfın `role` alanı varsa o; yoksa skill verisinden türetilir. */
 export function archetypeOf(def: CombatantDef): string {
@@ -120,7 +120,7 @@ export interface SideSizes {
 /** Geçerli takım boyutu (1..CELL_COUNT, tam sayı); motorun `clampTeamSize` kuralı. */
 export const clampSize = (n: number): number => content.clampTeamSize(n);
 
-/** Varsayılan boyut: savaş verisindeki random.size (yoksa 5). */
+/** Varsayılan boyut: savaş verisindeki random.size (yoksa 4). */
 export function defaultTeamSize(): number {
   const size = content.battles[content.DEFAULT_BATTLE]?.random?.size;
   return clampSize(typeof size === 'number' ? size : TEAM_SIZE);
@@ -133,7 +133,7 @@ export function parseSizeParam(raw: string | null | undefined, fallback: number)
   return Number.isFinite(n) ? clampSize(n) : fallback;
 }
 
-/** Adresteki `?party=3&enemies=8` boyutları (yoksa varsayılan 5-5). */
+/** Adresteki `?party=3&enemies=8` boyutları (yoksa varsayılan 4-4). */
 export function sizesFromSearch(search: string, fallback: number = defaultTeamSize()): SideSizes {
   const q = new URLSearchParams(search);
   return { party: parseSizeParam(q.get('party'), fallback), enemies: parseSizeParam(q.get('enemies'), fallback) };

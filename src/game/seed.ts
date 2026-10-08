@@ -10,7 +10,7 @@ export function initialSeed(): number {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : newSeed();
 }
 
-/** Sayfa açılışındaki takım boyutları: adreste `?party=3&enemies=8` varsa onlar (1-12), yoksa varsayılan 5-5. */
+/** Sayfa açılışındaki takım boyutları: adreste `?party=3&enemies=8` varsa onlar (1-12), yoksa varsayılan 4-4. */
 export function initialSizes(): SideSizes {
   return sizesFromSearch(window.location.search);
 }

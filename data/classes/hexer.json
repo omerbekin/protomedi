@@ -7,8 +7,8 @@
   "role": "Curse Caster",
   "frontPriority": 6.5,
   "attributes": {
-    "str": 6,
-    "int": 7,
+    "str": 8,
+    "int": 5,
     "dex": 3,
     "luck": 14
   },

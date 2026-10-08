@@ -329,9 +329,12 @@ describe('yapay zeka: yeni sınıflar ve menzil/taunt kuralları', () => {
 
   it('Anti-Mage canı azken kendine büyü kalkanı basar', () => {
     const b = make(['antimage', 'warrior', 'archer', 'mage'], ['warrior', 'mage', 'druid', 'archer']);
-    for (const c of b.living('enemy')) { c.maxMp = 0; c.mp = 0; } // burn ve eksik-mana (kill) önceliği devreye girmesin
+    // burn ve eksik-mana (kill) önceliği devreye girmesin; düşman Mage'in MP'si kalır (büyü kalkanının karşılayacağı büyü tehdidi; madde 261:
+    // Double Strike zayıflayınca yalnızca fiziksel tehdit Spell Ward'a değer kazandırmıyor, ki doğru: büyü kalkanı fiziksel hasarı emmez)
+    for (const c of b.living('enemy')) if (c.defId !== 'mage') { c.maxMp = 0; c.mp = 0; }
     const am = b.get(uid(b, 'party', 'antimage'))!;
     am.hp = Math.round(am.maxHp * 0.35); // madde 241: eşik veride 0,45 (ölçümle düşürüldü)
+    am.skills = am.skills.filter((s) => s !== 'drain_field'); // madde 261: güçlenen Drain Field (Silence) MP'li Mage'e karşı ayrı bir yarış; burada kalkan ile saldırı kıyaslanır
     expect(chooseAction(b, am.uid, ai)).toMatchObject({ skillId: 'spell_ward', targetUid: am.uid, reason: 'shield' });
   });
 

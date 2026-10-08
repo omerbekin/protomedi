@@ -139,6 +139,8 @@ function describeEventBody(battle: Battle, e: BattleEvent): string | null {
       return `${L(e.source)} -> ${L(e.target)}: ${e.amount >= 0 ? '+' : ''}${e.amount} ${e.magic ? 'magic ' : ''}shield (now ${e.magic ? e.magicShieldAfter : e.shieldAfter})`;
     case 'manaBurn':
       return `${L(e.source)} burns ${e.amount} MP of ${L(e.target)} (now ${e.mpAfter})${e.cause ? ` [${e.cause}]` : ''}`;
+    case 'emptyProc':
+      return `${L(e.target)} is out of mana: ${Math.round(e.chance * 100)}% roll for ${e.status} + damage (${battle.skill(e.skill)?.name ?? e.skill}) -> ${e.success ? 'HIT' : 'no effect'}`;
     case 'status':
       return `${L(e.target)} +${e.status}${e.stacks !== undefined ? ` x${e.stacks}` : ''} ${e.turns}t (from ${L(e.source)})${e.stacks !== undefined ? ` [omen timer ${e.turns}]` : ''}${e.partner ? ` bond with ${L(e.partner)}` : ''}${e.cause ? ` [${e.cause}]` : ''}`;
     case 'statusEnd':

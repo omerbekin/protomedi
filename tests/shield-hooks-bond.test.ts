@@ -267,8 +267,9 @@ describe('Undead: lifesteal %35 (veriden), Dark Bond', () => {
     expect(content.classes.undead!.skills).toEqual(['bone_throw', 'wail_of_the_dead', 'dark_bond', 'raise_dead']);
     expect(content.classes.undead!.skills[3]).toBe('raise_dead');
     expect(S.blood_rite).toBeUndefined();
-    expect(S.dark_bond).toMatchObject({ target: 'single_ally', excludeSelf: true, cost: { resource: 'mp', amount: 8 }, cooldown: 2, turnCost: 0.5 });
-    expect(bondEffect).toEqual({ type: 'bond', turns: 3, ratio: 1 });
+    expect(S.dark_bond).toMatchObject({ target: 'single_ally', excludeSelf: true, cost: { resource: 'mp', amount: 0 }, cooldown: 2, turnCost: 0.5 }); // madde 261: Ömer kararı, bedelsiz
+    expect(bondEffect).toMatchObject({ type: 'bond', turns: 3 }); // oran veriden (madde 261 denge turu: 1 -> 1,5)
+    expect(bondEffect.ratio).toBeGreaterThan(0);
     // hasar yok: hasar ölçek kuralı dışında değil (ölçekli etki yok)
     expect(S.dark_bond!.effects.some((e) => e.type === 'damage' || 'scale' in e)).toBe(false);
   });
@@ -298,7 +299,7 @@ describe('Undead: lifesteal %35 (veriden), Dark Bond', () => {
     const want = Math.max(1, Math.round(dmg.amount * 0.35));
     const heals = ofType(events, 'heal');
     expect(heals.find((h) => h.target === u.uid)!.amount).toBe(want);
-    expect(heals.find((h) => h.target === w.uid)).toMatchObject({ source: u.uid, amount: want, cause: 'dark_bond' });
+    expect(heals.find((h) => h.target === w.uid)).toMatchObject({ source: u.uid, amount: Math.round(want * bondEffect.ratio), cause: 'dark_bond' });
   });
 
   it('madde 241: Undead canı doluyken can çalınmaz ve kopya yok; kısmi dolulukta yalnızca gerçekten iyileşen kadar; dost tam canlıysa olay yok; Wound dostta uygulanır', () => {
@@ -310,15 +311,15 @@ describe('Undead: lifesteal %35 (veriden), Dark Bond', () => {
     w.hp -= 50;
     const e2 = act(b, u.uid, 'bone_throw', at(b, 'enemy', 0).uid); // Undead tam canlı: dost da almaz
     expect(ofType(e2, 'heal')).toHaveLength(0);
-    u.hp = u.maxHp - 2; // kısmi: Undead yalnızca 2 iyileşir, dost da 2
+    u.hp = u.maxHp - 2; // kısmi: Undead yalnızca 2 iyileşir, dost da 2 x bağ oranı
     const e2b = act(b, u.uid, 'bone_throw', at(b, 'enemy', 0).uid);
     expect(Math.max(1, Math.round(ofType(e2b, 'damage')[0]!.amount * 0.35))).toBeGreaterThan(2);
-    expect(ofType(e2b, 'heal').map((h) => [h.target, h.amount])).toEqual([[u.uid, 2], [w.uid, 2]]);
+    expect(ofType(e2b, 'heal').map((h) => [h.target, h.amount])).toEqual([[u.uid, 2], [w.uid, Math.round(2 * bondEffect.ratio)]]);
     u.hp -= 60;
     b.debugAddStatus(w.uid, 'wound', 3);
     const e3 = act(b, u.uid, 'bone_throw', at(b, 'enemy', 0).uid);
     const raw = Math.max(1, Math.round(ofType(e3, 'damage')[0]!.amount * 0.35));
-    expect(ofType(e3, 'heal').find((h) => h.target === w.uid)!.amount).toBe(Math.round(raw * content.statuses.wound!.healTakenMult!));
+    expect(ofType(e3, 'heal').find((h) => h.target === w.uid)!.amount).toBe(Math.round(Math.round(raw * bondEffect.ratio) * content.statuses.wound!.healTakenMult!));
   });
 
   it('çağrısının (Skeleton) hasarından gelen lifesteal de kopyalanır', () => {
@@ -333,7 +334,7 @@ describe('Undead: lifesteal %35 (veriden), Dark Bond', () => {
     const want = Math.max(1, Math.round(ofType(ev, 'damage')[0]!.amount * 0.35));
     expect(ofType(ev, 'heal').map((h) => [h.target, h.amount, h.cause])).toEqual([
       [u.uid, want, undefined],
-      [w.uid, want, 'dark_bond'],
+      [w.uid, Math.round(want * bondEffect.ratio), 'dark_bond'],
     ]);
   });
 
@@ -511,20 +512,21 @@ describe('yapay zeka (madde 240)', () => {
       at(b, 'enemy', 0).maxHp = at(b, 'enemy', 0).hp = 500;
       return { pick: chooseAction(b, at(b, 'party', 1).uid, ai), w };
     };
-    const low = run(limit - 0.1);
+    const low = run(limit - 0.2); // madde 261: can tabanı 30 ve Mage zırhı 6 ile tehlike eşiği aşağı kaydı
     expect(low.pick).toMatchObject({ skillId: 'spell_ward', targetUid: low.w.uid, reason: 'shield' });
     expect(run(limit + 0.15).pick?.skillId).not.toBe('spell_ward');
   });
 
   it('Mage: yaralı olmasa da sersemlemiş dostunu Mana Barrier ile temizler (cleanse değeri >= cleanseMinValue)', () => {
-    const b = mk({ 0: 'warrior', 1: 'mage' }, { 0: 'defender' });
+    // madde 261: sersemleyen dost Archer (Double Strike 0,9'a inince sersem Warrior'ın kaybedeceği tur Fire Bolt'la başa baş kalıyordu)
+    const b = mk({ 0: 'archer', 1: 'mage' }, { 0: 'defender' });
     const w = at(b, 'party', 0);
     at(b, 'enemy', 0).maxHp = at(b, 'enemy', 0).hp = 500;
     b.debugAddStatus(w.uid, 'stun', 1);
     b.debugAddStatus(w.uid, 'slow', 2);
     const pick = chooseAction(b, at(b, 'party', 1).uid, ai)!;
     expect(pick).toMatchObject({ skillId: 'mana_barrier', targetUid: w.uid, reason: 'shield' });
-    expect(explainChoice(b, at(b, 'party', 1).uid, ai)!.candidates.find((c) => c.skill === 'mana_barrier' && c.target?.endsWith('Warrior'))!.cleanse).toBeGreaterThanOrEqual(content.aiConfig.profiles.caster!.cleanseMinValue!);
+    expect(explainChoice(b, at(b, 'party', 1).uid, ai)!.candidates.find((c) => c.skill === 'mana_barrier' && c.target?.endsWith('Archer'))!.cleanse).toBeGreaterThanOrEqual(content.aiConfig.profiles.caster!.cleanseMinValue!);
   });
 
   it('karışık takımlar iki modda çökmeden biter ve determinist (Undead, Anti-Mage, Mage)', () => {
@@ -567,7 +569,7 @@ describe('açıklama ve önizleme', () => {
     expect(mb).toContain(`Every hit the shield absorbs gives the shielded unit ${barrier.onAbsorb!.giveMana} MP`);
     const db = info('dark_bond', 'undead');
     expect(db.lines.join(' | ')).toContain('Takes half a turn');
-    expect(db.lines.join(' | ')).toContain('the bonded ally heals the same amount');
+    expect(db.lines.join(' | ')).toContain(bondEffect.ratio === 1 ? 'the bonded ally heals the same amount' : `the bonded ally heals ${Math.round(bondEffect.ratio * 100)}% of it`);
     expect(db.turnCost).toBe('Half turn');
     expect(info('bone_throw', 'undead').turnCost).toBe('');
   });

@@ -387,6 +387,31 @@ function skillsWith(pred: (e: SkillDef['effects'][number]) => boolean): string[]
 }
 
 /**
+ * "Silence and Drain Field" makalesi (madde 260): yüzdeyle mana yakma, mana boşalma zarı (onEmpty) ve Silence durumu (blocksMpSkills). Sayılar veriden;
+ * susturan durum yoksa makale yine yazılır (genel kural), skill listesi boş kalır.
+ */
+function silenceArticle(): WikiArticle {
+  const sil = Object.values(content.statuses).find((d) => d.blocksMpSkills);
+  const name = sil?.name ?? 'Silenced';
+  const lines = allSkills().flatMap((s) =>
+    s.effects
+      .filter((e): e is Extract<typeof e, { type: 'manaBurn' }> => e.type === 'manaBurn' && !!e.onEmpty)
+      .map((e) => {
+        const em = e.onEmpty!;
+        const st = content.statuses[em.status]?.name ?? em.status;
+        const burn = e.pctMax !== undefined ? `${pct(e.pctMax)} of each enemy's max MP` : `${e.amount ?? 0} MP`;
+        return `${s.name}: burns ${burn}. Every enemy left with 0 MP (or already at 0) rolls on its own: ${pct(em.chance)} chance to be ${st} for ${em.turns} turn${em.turns > 1 ? 's' : ''} and take ${pct(em.damage.power)} ${em.damage.scale.toUpperCase()} ${em.damage.element ?? 'physical'} damage (it cannot miss, but it can crit).`;
+      }),
+  );
+  return article('silence', 'Special rules', 'Silence and Drain Field', sil?.icon ?? 'manaburn', [
+    p(`${name}: the unit cannot use any skill that costs MP. Skills that cost nothing (a basic attack), skills paid with Rage or HP, and the actions Rest, Skip Turn and Move still work. A silenced unit with nothing else to do simply attacks for free or uses an action.`),
+    p(`It lasts through the unit's next turn: the timer counts down when the silenced unit's turn ENDS (not when it starts), so a 1-turn ${name} covers the whole of its next turn. It is a debuff: a cleanse (such as Mana Barrier) removes it, and Resilience cannot shorten a 1-turn debuff. The badge next to the HP bar shows it.`),
+    list(...(lines.length ? lines : ['No skill silences yet.'])),
+    p(`The AI values a silence by the move it takes away: the best MP skill the enemy could have paid for on that turn, compared with its best free move, times the chance; the extra damage counts as damage.`),
+  ], sil?.color ?? '#9b59d0');
+}
+
+/**
  * "Curses" makalesi (Hexer; docs/design/classes/hexer.md 8.7): Omen yığını, Doom, süre bitimi, Misfortune, Withering, Jinxed ve Ill Omen. Sayılar
  * data/statuses.json ve skill/pasif verisinden. Yığılan durum (maxStacks + doom) yoksa makale yok.
  */
@@ -515,6 +540,7 @@ export function buildMechanics(): WikiArticle[] {
       p('Some assassin skills slip behind the target, stab it in the back and return. They ignore the melee row rules (any row can be targeted), but only a target with an empty cell right behind it can be chosen: the next row back, same lane, must hold no living unit. A corpse or a cell kept for a fallen ally does not block it; a target in the back row can never be chosen ("No room behind the target"), and one with a living unit behind it is "shielded from behind". Moving units (or a unit falling) can open the way. The caster is drawn there only for the strike: the formation does not change.'),
       p(`Some hits are always critical: no crit roll is made and the crit multiplier (x${num(a.critMult)}) always applies. The hit roll still happens, so they can still miss or be dodged.`),
       p(`Skills that strike from behind: ${allSkills().filter((s) => s.requiresOpenBehind).map((s) => s.name).join(', ') || 'none yet'}. Always critical: ${allSkills().filter((s) => s.effects.some((e) => e.type === 'damage' && e.guaranteedCrit)).map((s) => s.name).join(', ') || 'none yet'}.`),
+      p(`Some skills carry extra crit chance of their own: it is added to the caster's crit chance (statuses included) for that skill's hits only. ${allSkills().flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'damage' }> => e.type === 'damage' && !!e.critBonus && !e.guaranteedCrit).slice(0, 1).map((e) => `${s.name} +${pct(e.critBonus!)}`)).join(', ') || 'None yet'}.`),
     ], '#c0203a'),
     article('status-bonus', 'Special rules', 'Bonus damage against weakened targets', 'opportunist', [
       p('Some passives deal extra damage to a target that already suffers from certain statuses. The bonus multiplies every hit (a crit multiplies on top of it) and shows in the damage preview.'),
@@ -571,7 +597,7 @@ export function buildMechanics(): WikiArticle[] {
     ], '#6ec1ff'),
     article('dark-bond', 'Special rules', 'Dark Bond and life steal', 'darkbond', [
       p('Life steal heals the attacker for part of the damage it deals (a passive such as Vampiric Bite, or a skill that says so). Damage dealt by a summon counts for its owner.'),
-      p('A dark bond links the caster to one other ally for a number of the caster\'s own turns. While it lasts, every time the caster heals from life steal, the bonded ally is healed the same amount too; the caster\'s own healing is not reduced. Only what the caster really heals is shared: at full HP the caster steals no life, so the ally gets nothing; the ally is never healed above its maximum.'),
+      p('A dark bond links the caster to one other ally for a number of the caster\'s own turns. While it lasts, every time the caster heals from life steal, the bonded ally is healed too (a share of that heal, listed below; it can be more than 100%); the caster\'s own healing is not reduced. Only what the caster really heals is shared: at full HP the caster steals no life, so the ally gets nothing; the ally is never healed above its maximum.'),
       list(
         'Only one bond at a time: a new bond breaks the old one.',
         'The bond ends when its time runs out (counted on the caster\'s turns; both badges show the same number), or at once if either unit falls.',
@@ -588,7 +614,9 @@ export function buildMechanics(): WikiArticle[] {
     article('control', 'Special rules', 'Taunt, guard and mana burn', 'guardian', [
       p(`Taunt forces enemies to target the taunting unit for some turns (it can end early if the unit loses enough HP, or at once if the unit is hit by a control status: ${Object.values(content.statuses).filter((d) => d.breaksTaunt).map((d) => d.name).join(', ') || 'none'}). Guard makes a protector take a share of the damage dealt to another ally (a unit cannot guard itself). Mana burn removes MP from a target (and may give some of it to the caster) without hurting its HP.`),
       p(`Taunt: ${skillsWith((e) => e.type === 'taunt').join(', ') || 'none'}. Guard: ${skillsWith((e) => e.type === 'guard').join(', ') || 'none'}. Mana burn: ${skillsWith((e) => e.type === 'manaBurn').join(', ') || 'none'}.`),
+      p('Some mana burns take a share of the target\'s maximum MP instead of a fixed amount: a big mana pool loses more. See Silence for what happens when a target runs dry.'),
     ]),
+    silenceArticle(),
   );
   // Sefer (campaign-dev): sayılar data/campaign/campaign.json ve harita verisinden
   {

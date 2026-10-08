@@ -196,6 +196,8 @@ export interface Option {
   burnScore: number;
   /** Hedef başına doğrudan yakılacak MP (manaBurn) ve kalkan kancası (Spell Ward onAbsorb.burnMana): terazide "engellenen hamle" değeri (madde 258). */
   burnBy: Record<string, number>;
+  /** Mana boşalma zarı (Drain Field onEmpty, madde 260): hedef başına ihtimal, yakımdan sonra kalan MP ve durumun süresi ('silence' terimi). */
+  emptyBy?: Record<string, { chance: number; mpAfter: number; turns: number; status: string }>;
   wardBurn?: { amount: number; magic: boolean };
   /** Ana hedef (tek hedefli skill'lerde seçilen düşman, alan skill'lerinde merkez/ilk hedef) ve ona beklenen ortalama hasar. */
   primary?: Combatant;
@@ -386,7 +388,7 @@ function reasonOf(o: Option): AiChoice['reason'] {
   const attack = v('damage') + v('pressure') + v('curse');
   if (support > 0 && support >= prot && support >= attack) return 'heal';
   if (prot > 0 && prot >= attack) return 'shield';
-  if (o.burn > 0 && v('burn') >= attack) return 'burn';
+  if (o.burn > 0 && v('burn') + v('silence') >= attack) return 'burn';
   if (o.pureBuff || (attack <= 0 && (v('control') > 0 || v('mitigation') > 0 || v('bond') > 0))) return 'tactic';
   if (o.skill.target === 'area_enemies' || o.skill.target === 'all_enemies') return 'aoe';
   return 'damage';
@@ -754,6 +756,16 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
       o.burnTargets++;
       o.burnBy[target.uid] = (o.burnBy[target.uid] ?? 0) + p.burn;
     }
+    // Drain Field onEmpty (madde 260): ihtimal x hasarın beklenen can kaybı (isabet zarı yok; kritik beklentisi dahil, kalan canla sınırlı) `damage`'a;
+    // susturmanın engellediği hamle değeri burnValue'da ('silence' terimi)
+    if (p.emptyProc && target.side !== actor.side) {
+      const ep = p.emptyProc;
+      const left = Math.max(0, target.hp - (p.damage?.hpLoss ?? 0));
+      const exp = ep.chance * Math.min(left + target.shield + target.magicShield, ep.damage.avg * (1 + ep.damage.critChance * (actor.stats.critMult - 1)));
+      o.damage += exp; // (dmgBy'a yazılmaz: isabet zarı olmadığından burn/silence değeri isabet şansıyla çarpılmamalı)
+      (o.emptyBy ??= {})[target.uid] = { chance: ep.chance, mpAfter: target.mp - (p.burn ?? 0), turns: ep.turns, status: ep.status };
+      if (o.notes.length < 6) o.notes.push(`${unitLabel(target)}: mana empty -> ${Math.round(ep.chance * 100)}% ${ep.statusName} ${ep.turns}t + ${ep.damage.avg} dmg`);
+    }
   }
   // Yerde kalan etki (zehir, yanan zemin, holy fire): alandaki (şeklin TÜM hücreleri; boş anchor dahil) düşmanların turlar boyunca alacağı beklenen hasar
   if (areaCells) {
@@ -806,12 +818,14 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
  */
 function curseValue(battle: Battle, actor: Combatant, skill: SkillDef, previews: ReturnType<typeof previewForTargets>, o: Option, profile: AiProfile): void {
   const share = profile.omenValueShare ?? 0.85;
-  const crit = battle.effectiveStats(actor).critChance;
+  const baseCrit = battle.effectiveStats(actor).critChance;
   const cm = actor.stats.critMult;
   const killMin = battle.formulas.hit.aiKillMin;
   for (const p of previews) {
     const target = battle.get(p.uid);
     if (!target || target.side === actor.side) continue;
+    // Kritik lanet ihtimali = bu vuruşun kritik şansı (skill'in critBonus'u dahil: Jinx; madde 260)
+    const crit = p.damage ? p.damage.critChance : baseCrit;
     const h = p.damage ? p.damage.hitChance : 1;
     const left = Math.max(0, target.hp - (p.damage?.hpLoss ?? 0));
     const label = unitLabel(target);
@@ -1067,6 +1081,7 @@ function scoreOption(ctx: ValueContext, profile: AiProfile, o: Option): void {
     add('mitigation', o.mitigation);
     add('cleanse', cleanseValue(ctx, profile, o));
     add('burn', burnValue(ctx, o));
+    add('silence', silenceValue(ctx, o));
     add('tempo', o.tempo);
   }
   const gross = Object.values(t).reduce((a, b) => a + b, 0);
@@ -1239,6 +1254,21 @@ function burnValue(ctx: ValueContext, o: Option): number {
       if (!f || share <= 0) continue;
       v += ctx.manaDenial(f, Math.min(f.mp, o.wardBurn.amount)) * share;
     }
+  }
+  return v;
+}
+
+/**
+ * Susturmanın değeri (Drain Field onEmpty, madde 260; "engellenen hamle" modeli): her hedef için zar ihtimali x ValueContext.silenceDenial (susturulduğu
+ * turlarda MP'li en iyi hamlesi yerine bedelsiz en iyi hamlesini yapmasının değer kaybı; yakımdan sonraki MP + yenilenmeyle ödenebilenler). Hasar payı
+ * `damage` teriminde (evaluate).
+ */
+function silenceValue(ctx: ValueContext, o: Option): number {
+  let v = 0;
+  for (const [uid, x] of Object.entries(o.emptyBy ?? {})) {
+    const f = ctx.battle.get(uid);
+    if (!f || f.side === ctx.actor.side || !ctx.battle.statusDef(x.status)?.blocksMpSkills) continue;
+    v += x.chance * (1 - (o.killP[uid] ?? 0)) * ctx.silenceDenial(f, x.mpAfter, x.turns);
   }
   return v;
 }
@@ -1766,7 +1796,7 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
     final,
     why,
     steps,
-    winnerRule: `value scale (difficulty ${difficulty}, horizon ${vc.horizon} turns): score = damage + pressure + kill + save + heal + shield + revive + control + protect + summon + bond + curse + mitigation + cleanse + burn + tempo (+ buff for self-buffs) - overkill - patience - cost - cooldown; ${rules.pickTop && rules.pickTop > 1 ? `picks among the best ${rules.pickTop} (deterministic, seed + turn + unit)` : 'highest wins'}`,
+    winnerRule: `value scale (difficulty ${difficulty}, horizon ${vc.horizon} turns): score = damage + pressure + kill + save + heal + shield + revive + control + protect + summon + bond + curse + mitigation + cleanse + burn + silence + tempo (+ buff for self-buffs) - overkill - patience - cost - cooldown; ${rules.pickTop && rules.pickTop > 1 ? `picks among the best ${rules.pickTop} (deterministic, seed + turn + unit)` : 'highest wins'}`,
     candidates,
     rejected,
     reserves: trace.reserves.map((r) => ({ skill: r.skill, needMp: r.need, inTurns: r.turns })),

@@ -62,10 +62,10 @@ describe('skill değişiklikleri (veri)', () => {
     expect(content.skills.resurrection!.cooldown).toBe(6);
   });
 
-  it('Defender Tremor Slam hasar gücü en az 0,6 (madde 214 ayarı: 0,8; yalnızca hasar etkisi; Slow ve diğer sayılar aynı)', () => {
+  it('Defender Tremor Slam hasar gücü pozitif (madde 214: 0,8; madde 261 denge turu: düşürüldü, temel saldırı payı bandı için; güncel değer veride; Slow ve diğer sayılar aynı)', () => {
     const t = content.skills.tremor_slam!;
     const dmg = t.effects.find((e) => e.type === 'damage') as { power: number };
-    expect(dmg.power).toBeGreaterThanOrEqual(0.6);
+    expect(dmg.power).toBeGreaterThan(0);
     const slow = t.effects.find((e) => e.type === 'status') as { status: string; turns: number };
     expect(slow).toMatchObject({ status: 'slow', turns: 2 });
     // Ömer (madde 230): Tremor Slam bedelsiz ve cooldown'suz

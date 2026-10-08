@@ -56,11 +56,11 @@ describe('takım seçimi (veriden)', () => {
 describe('takım boyutu (saf mantık)', () => {
   const cells = (n: number) => Array.from({ length: content.CELL_COUNT }, (_, i) => (i < n ? ids[i % ids.length]! : ''));
 
-  it('boyut 1..12 aralığına kısılır; varsayılan 5', () => {
+  it('boyut 1..12 aralığına kısılır; varsayılan 4 (Ömer kararı 2026-10-08)', () => {
     expect(clampSize(0)).toBe(1);
     expect(clampSize(99)).toBe(content.CELL_COUNT);
     expect(clampSize(7.9)).toBe(7);
-    expect(defaultTeamSize()).toBe(5);
+    expect(defaultTeamSize()).toBe(4);
     expect(stepSize(12, 1)).toBe(12);
     expect(stepSize(1, -1)).toBe(1);
     expect(stepSize(5, 1)).toBe(6);
@@ -68,8 +68,8 @@ describe('takım boyutu (saf mantık)', () => {
 
   it('adres parametreleri: ?party=3&enemies=8; geçersiz ve eksik değer varsayılana düşer', () => {
     expect(sizesFromSearch('?seed=7&party=3&enemies=8')).toEqual({ party: 3, enemies: 8 });
-    expect(sizesFromSearch('?seed=7')).toEqual({ party: 5, enemies: 5 });
-    expect(sizesFromSearch('?party=abc&enemies=50')).toEqual({ party: 5, enemies: 12 });
+    expect(sizesFromSearch('?seed=7')).toEqual({ party: 4, enemies: 4 });
+    expect(sizesFromSearch('?party=abc&enemies=50')).toEqual({ party: 4, enemies: 12 });
     expect(parseSizeParam('', 5)).toBe(5);
   });
 

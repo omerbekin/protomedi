@@ -8,7 +8,7 @@ import type { Attribute } from '../src/engine';
 const SCALE_EXCEPTIONS: { skill: string; effect: string; reason: string }[] = [
   { skill: 'abyssal_cry', effect: 'selfDamage', reason: 'Kullanıcının maks canının yüzdesi (bedel); stat ile ölçeklenmez.' },
   { skill: 'mana_burn', effect: 'manaBurn', reason: 'Sabit MP yakma/çalma; can hasarı değil, kaynak etkisi.' },
-  { skill: 'drain_field', effect: 'manaBurn', reason: 'Sabit MP yakma; can hasarı değil, kaynak etkisi.' },
+  { skill: 'drain_field', effect: 'manaBurn', reason: 'Maks MP yüzdesi yakma; can hasarı değil, kaynak etkisi. İç onEmpty.damage ise INT ölçeklidir (tests/drain-silence.test.ts denetler).' },
 ];
 
 // Ölçek alanı taşıması gereken hasar türü etkiler; ölçeksiz hasar benzerleri istisna listesinde olmalı.
