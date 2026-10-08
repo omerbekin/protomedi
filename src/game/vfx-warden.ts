@@ -1,3 +1,4 @@
+import { FULL_W } from '../ui/viewport'; // geniş ekran: tam ekran karartma görünen alanın tamamını kaplar
 import Phaser from 'phaser';
 import { content } from '../engine';
 import { playSfx } from './audio';
@@ -395,7 +396,7 @@ export async function fallofthebridge(c: VfxCtx, k: Kit): Promise<void> {
   const a = c.actor;
   const slots = cellsOf(c);
   const keys = allSlots().filter((s) => !slots.includes(s));
-  const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x0a0606, 0).setDepth(k.DEPTH - 25);
+  const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x0a0606, 0).setDepth(k.DEPTH - 25);
   c.scene.tweens.add({ targets: dim, alpha: 0.15, duration: k.slow(400) });
   c.sfx('bridgeGroan');
   c.sfx('wardenGrowl');

@@ -16,6 +16,7 @@
  *                                               dönüşür, zar atılır, yuvarlanır: jackpot = 6 + ışık sütunu + altın yağmuru; kayıp = tek göz,
  *                                               zar çatlayıp parçalanır, Gambler kararıp sendeler, mana söner, paralar kül olur.
  */
+import { FULL_W } from '../../../ui/viewport'; // geniş ekran: tam ekran karartma görünen alanın tamamını kaplar
 import type Phaser from 'phaser';
 import type { V2Vfx } from '../types';
 import type { VfxCtx } from '../../vfx';
@@ -451,7 +452,7 @@ const allin: V2Vfx = async (c, k) => {
   const top = { x: a.x, y: a.y - c.actor.h - 70 };
   c.actor.play('cast');
   c.sfx('heartbeatRise');
-  const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x140c02, 0).setDepth(k.DEPTH - 25);
+  const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x140c02, 0).setDepth(k.DEPTH - 25);
   c.scene.tweens.add({ targets: dim, alpha: 0.36, duration: k.slow(520) });
   // 1) mana -> altın zar
   c.sfx('manaToGold');

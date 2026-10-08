@@ -13,6 +13,7 @@
  *   aimed_shot (Aimed Shot)        -> 'aimed'     : yavaş tam çekiş, ekran kararır, nişan çizgisi + kapanan köşebentler, zırh zayıf
  *                                                   noktası parlar; düz ve çok hızlı ok, zırh parçalanır (zırhın yarısını yok sayar).
  */
+import { FULL_W } from '../../../ui/viewport'; // geniş ekran: tam ekran karartma görünen alanın tamamını kaplar
 import type Phaser from 'phaser';
 import type { V2Vfx } from '../types';
 import type { VfxCtx } from '../../vfx';
@@ -419,7 +420,7 @@ const aimed: V2Vfx = async (c, k) => {
   if (!t) return;
   const d = facing(c);
   const aim = { x: t.container.x - d * t.w * 0.05, y: t.container.y - t.h * 0.55 };
-  const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x0a0812, 0).setDepth(k.DEPTH - 25);
+  const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x0a0812, 0).setDepth(k.DEPTH - 25);
   c.scene.tweens.add({ targets: dim, alpha: 0.22, duration: k.slow(380) });
   c.sfx('bowDraw');
   const ret = reticle(c, k, t, 480);

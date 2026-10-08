@@ -45,6 +45,9 @@ import { areaBoards, areaHoverSpecs, areaTone, blockedTargets } from '../target-
 import type { MpBattleHooks, MpResultInfo } from '../mp-hooks';
 import { isGameMenuOpen, toggleGameMenu } from '../../ui/game-menu';
 import { isSettingsOpen } from '../../ui/settings';
+import { stageView, worldXY } from '../stage';
+import { backgroundOffsetY, battleBackground } from '../battle-background';
+import { FULL_W, FULL_X0 } from '../../ui/viewport';
 
 export interface BattleSceneData {
   seed: number;
@@ -117,6 +120,8 @@ export class BattleScene extends Phaser.Scene {
   difficulty: 'easy' | 'medium' | 'hard' | undefined = undefined;
   /** Sefer savaş arka planı (BattleSceneData.background). */
   background: string | undefined = undefined;
+  /** Ekrandaki arka planın kimliği (debug / testler). */
+  backgroundId = '';
   /** Multiplayer kancaları (yoksa tek oyunculu). */
   mp: MpBattleHooks | undefined = undefined;
   /** Bu ekranda oynayan insanın tarafı: tek oyunculuda daima 'party'; multiplayer'da katılan 'enemy' (sağ). */
@@ -259,7 +264,16 @@ export class BattleScene extends Phaser.Scene {
   create(): void {
     const def = content.battles[this.battleId];
     // Sefer arka planı (varsa ve dosyası yüklüyse), yoksa savaşın varsayılanı (castle-hall)
-    this.drawBackground(this.background && hasBackground(this, this.background) ? this.background : (def?.background ?? ''));
+    // Sefer: kendi arka planı (yoksa savaşın varsayılanı); Quick Battle / multiplayer: havuzdan seed'e göre (iki oyuncu aynı arka planı görür)
+    this.drawBackground(
+      battleBackground({
+        explicit: this.background,
+        pool: this.campaign ? null : this.mp ? 'multiplayer' : 'quick',
+        seed: this.mp ? this.mp.battle.seed : this.seed,
+        fallback: def?.background ?? '',
+        exists: (id) => hasBackground(this, id),
+      }),
+    );
     this.drawSlots();
 
     // Multiplayer: savaş iki istemcide aynı kurulan lockstep savaşıdır (src/net/lockstep.ts)
@@ -492,21 +506,23 @@ export class BattleScene extends Phaser.Scene {
         x,
         y,
       );
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
       this.longPressFired = false;
       cancelPress();
+      const p = worldXY(this, ptr); // dünya koordinatı (geniş ekran / gerçek piksel kamerası)
       if (p.y >= panelTop) return;
-      if (isSelectModifier(p.event as MouseEvent | undefined)) {
+      if (isSelectModifier(ptr.event as MouseEvent | undefined)) {
         const uid = unitAt(p.x, p.y);
         if (uid) this.toggleUnitSelect(uid);
         return;
       }
-      if (p.wasTouch) {
+      if (ptr.wasTouch) {
         const sx = p.x;
         const sy = p.y;
         this.pressTimer = this.time.delayedCall(LONG_PRESS_MS, () => {
           this.pressTimer = undefined;
-          if (!p.isDown || Math.hypot(p.x - sx, p.y - sy) > LONG_PRESS_SLOP) return;
+          const now = worldXY(this, ptr);
+          if (!ptr.isDown || Math.hypot(now.x - sx, now.y - sy) > LONG_PRESS_SLOP) return;
           const uid = unitAt(sx, sy);
           if (!uid) return;
           this.longPressFired = true;
@@ -518,7 +534,7 @@ export class BattleScene extends Phaser.Scene {
       if (this.unitSel.size > 0 && !unitAt(p.x, p.y)) this.clearUnitSelection();
     });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (this.pressTimer && p.isDown && Math.hypot(p.x - p.downX, p.y - p.downY) > LONG_PRESS_SLOP) cancelPress();
+      if (this.pressTimer && p.isDown && Math.hypot(p.x - p.downX, p.y - p.downY) / stageView.zoom > LONG_PRESS_SLOP) cancelPress();
     });
     this.input.on('pointerup', cancelPress);
     this.events.once('shutdown', cancelPress);
@@ -893,7 +909,10 @@ export class BattleScene extends Phaser.Scene {
       const y1 = Math.min(b.y1, layout.commandPanel.y - 2);
       const zone = this.add.zone(b.x0, b.y0, b.x1 - b.x0, y1 - b.y0).setOrigin(0, 0).setDepth(3600).setInteractive();
       // The unit's DRAWING picks its cell first (head, body, weapon), then the floor plate; the sprite list is rebuilt per event (<= 24 units)
-      const at = (p: Phaser.Input.Pointer) => pickCellAt(slots, lanes, p.x, p.y, this.pickSprites(board), body);
+      const at = (ptr: Phaser.Input.Pointer) => {
+        const p = worldXY(this, ptr);
+        return pickCellAt(slots, lanes, p.x, p.y, this.pickSprites(board), body);
+      };
       zone.on('pointermove', (p: Phaser.Input.Pointer) => setHover(board, at(p)));
       zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
         if (isSelectModifier(p.event as MouseEvent | undefined)) return; // Ctrl/Cmd+click selects a unit (bindUnitSelect), it never picks
@@ -3062,11 +3081,22 @@ export class BattleScene extends Phaser.Scene {
 
   // --- Drawing ---
 
+  /** Debug: arka planı değiştir (savaş sürer). */
+  debugSetBackground(id: string): void {
+    this.bgImage?.destroy();
+    this.bgImage = undefined;
+    this.drawBackground(id);
+    (this.bgImage as Phaser.GameObjects.Image | undefined)?.setDepth(-1);
+  }
+
+  private bgImage: Phaser.GameObjects.Image | undefined;
+
   private drawBackground(id: string): void {
     if (hasBackground(this, id)) {
-      const img = this.add.image(W / 2, H / 2, backgroundKey(id));
-      // Cover the screen (overflowing edges are cropped)
+      const img = (this.bgImage = this.add.image(W / 2, H / 2 + backgroundOffsetY(id), backgroundKey(id)));
+      // Cover the 16:9 screen by height (all battle backgrounds are >= 2.7:1, so at 1080 high they also fill the widest stage, 2580)
       img.setScale(Math.max(W / img.width, H / img.height));
+      this.backgroundId = id;
     } else {
       this.cameras.main.setBackgroundColor(colors.fallbackBackground);
     }
@@ -3227,15 +3257,19 @@ export class BattleScene extends Phaser.Scene {
     const p = layout.commandPanel;
     // Dark leather/stone slab with a carved gold edge on top
     const bg = this.add.graphics().setDepth(4500);
-    gradientRect(bg, 0, p.y, W, H - p.y, 0x2a1f16, 0x0d0906, 0.96);
-    this.add.tileSprite(0, p.y, W, H - p.y, ensureGrain(this)).setOrigin(0, 0).setAlpha(0.8).setDepth(4500);
+    // Geniş ekran: şerit görünen alanın tamamına uzar (FULL_X0..), içerik 1920 merkez bölgede kalır; 16:9'da görüntü aynı (doku deseni dünya 0'a hizalı)
+    const X0 = FULL_X0;
+    const FW = FULL_W;
+    gradientRect(bg, X0, p.y, FW, H - p.y, 0x2a1f16, 0x0d0906, 0.96);
+    const grain = this.add.tileSprite(X0, p.y, FW, H - p.y, ensureGrain(this)).setOrigin(0, 0).setAlpha(0.8).setDepth(4500);
+    grain.tilePositionX = X0;
     const edge = this.add.graphics().setDepth(4500);
-    edge.fillStyle(0x050302, 1).fillRect(0, p.y - 2, W, 2);
-    edge.fillStyle(GOLD.edge, 1).fillRect(0, p.y, W, 3);
-    edge.fillStyle(GOLD.light, 0.85).fillRect(0, p.y + 3, W, 1);
-    edge.fillStyle(0x000000, 0.45).fillRect(0, p.y + 4, W, 5);
-    edge.fillStyle(0x000000, 0.2).fillRect(0, p.y + 9, W, 6);
-    edge.fillStyle(GOLD.dark, 0.9).fillRect(0, H - 3, W, 3);
+    edge.fillStyle(0x050302, 1).fillRect(X0, p.y - 2, FW, 2);
+    edge.fillStyle(GOLD.edge, 1).fillRect(X0, p.y, FW, 3);
+    edge.fillStyle(GOLD.light, 0.85).fillRect(X0, p.y + 3, FW, 1);
+    edge.fillStyle(0x000000, 0.45).fillRect(X0, p.y + 4, FW, 5);
+    edge.fillStyle(0x000000, 0.2).fillRect(X0, p.y + 9, FW, 6);
+    edge.fillStyle(GOLD.dark, 0.9).fillRect(X0, H - 3, FW, 3);
     // Vertical gold dividers between the stats block, the skills and the info plaque
     for (const dx of [this.skillsLeft() - 104, this.globalX() - 7, this.infoTipX() - 7]) {
       edge.fillGradientStyle(GOLD.edge, GOLD.edge, GOLD.dark, GOLD.dark, 0.9).fillRect(dx, p.y + 12, 2, H - p.y - 24);

@@ -1,6 +1,6 @@
 /* Wiki (sağ üst kitap simgesi; en sağda, solunda tam ekran ve Menu): koyu deri/altın tasarım dili, serif başlıklar (ayarlar, debug menüsü ve galeriyle tutarlı). */
 .settings-toggle.wiki-toggle {
-  right: calc(8px + var(--sar, 0px));
+  right: calc(8px + var(--er, 0px));
 }
 
 .wk-overlay {

@@ -6,6 +6,10 @@ import type { MiniShape } from '../ui/shape-diagram';
 import { drawMiniShape, miniShapeSize } from './shape-draw';
 import { ensureIcon } from './icons';
 import { ownerOfUnit } from './asset-versions';
+import { onStageResize, stageView } from './stage';
+import { coverShift, FULL_REGION, placeArt, type Region } from './wide-map';
+import { edgeFillers } from './map-art';
+import { FULL_W, FULL_X0 } from '../ui/viewport';
 
 /**
  * Menü ekranları (takım seçimi) için ortak çizim yardımcıları: atmosferik arka plan, altın yazı, düğme, tooltip, kafa portresi.
@@ -94,16 +98,33 @@ const ensureBeam = (scene: Phaser.Scene): string =>
  * Atmosferik arka plan: koyulaştırılmış salon, sıcak ışık havuzları, ışık huzmeleri, sis, toz zerreleri, vinyet.
  * Her şey derinlik 0-12 arasındadır; arayüz üstüne çizilir.
  */
-export function buildBackdrop(scene: Phaser.Scene, W: number, H: number, bgKey: string | null): void {
+/**
+ * Menü zemini (takım seçimi, multiplayer). `region` verilirse görsel geniş bir harita görselidir ve o bölge eskiden 16:9 görselin durduğu yere
+ * oturur (src/game/wide-map.ts). Geniş ekranda görsel boşluk bırakmayacak kadar kayar; yetmezse kenar uzantısı; vinyet görünen alanı kaplar.
+ */
+export function buildBackdrop(scene: Phaser.Scene, W: number, H: number, bgKey: string | null, region: Region = FULL_REGION): void {
   const glow = ensureGlow(scene);
   scene.cameras.main.setBackgroundColor('#0b0705');
+  let layoutBg: (() => void) | null = null;
   if (bgKey) {
     const img = scene.add.image(W / 2, H / 2, bgKey).setDepth(0).setTint(0x8a7a6e);
-    img.setScale(Math.max(W / img.width, H / img.height));
+    const rw = (region[2] - region[0]) * img.width;
+    const rh = (region[3] - region[1]) * img.height;
+    const k = Math.max(W / rw, H / rh);
+    const p = placeArt(img.width, img.height, region, { x: W / 2 - (rw * k) / 2, y: H / 2 - (rh * k) / 2, w: rw * k, h: rh * k });
+    const cx = (p.left + p.right) / 2;
+    const cy = (p.top + p.bottom) / 2;
+    img.setScale(p.scale).setPosition(cx, cy);
+    const fill = edgeFillers(scene, bgKey, 0);
+    for (const f of fill.items) f.setTint(0x3a3028);
+    layoutBg = () => {
+      img.setX(cx + coverShift(p, stageView.left, stageView.right));
+      fill.place(img);
+    };
   }
   const dark = scene.add.graphics().setDepth(1);
-  dark.fillGradientStyle(0x050302, 0x050302, 0x0a0604, 0x0a0604, 0.9, 0.9, 0.78, 0.78).fillRect(0, 0, W, H);
-  dark.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.7, 0.7).fillRect(0, H * 0.55, W, H * 0.45);
+  dark.fillGradientStyle(0x050302, 0x050302, 0x0a0604, 0x0a0604, 0.9, 0.9, 0.78, 0.78).fillRect(FULL_X0, 0, FULL_W, H);
+  dark.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.7, 0.7).fillRect(FULL_X0, H * 0.55, FULL_W, H * 0.45);
 
   // Sıcak ışık havuzları (orta sahne + meşale)
   scene.add.image(W / 2, 330, glow).setDepth(2).setTint(0xff9a4a).setScale(15, 7).setAlpha(fx(0.16)).setBlendMode(Phaser.BlendModes.ADD);
@@ -161,7 +182,11 @@ export function buildBackdrop(scene: Phaser.Scene, W: number, H: number, bgKey: 
     });
   }
 
-  scene.add.image(W / 2, H / 2, ensureVignette(scene)).setDepth(6).setDisplaySize(W, H);
+  const vignette = scene.add.image(W / 2, H / 2, ensureVignette(scene)).setDepth(6).setDisplaySize(W, H);
+  onStageResize(scene, () => {
+    layoutBg?.();
+    vignette.setDisplaySize(stageView.viewW, H);
+  });
 }
 
 // --- Metin ---

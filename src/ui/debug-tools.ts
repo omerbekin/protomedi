@@ -32,6 +32,8 @@ import { isFullscreen, toggleFullscreen } from './fullscreen';
 import { registerCampaignDebug } from './debug-campaign';
 import { registerMultiplayerDebug } from './debug-mp';
 import { getRotateMode, setRotateMode } from './viewport';
+import { stageView } from '../game/stage-view';
+import { backgroundPool } from '../game/battle-background';
 import { VERSIONS_TAB, registerVersionsPanel } from './debug-versions';
 
 /** Sekme sırası (menü bu sırayla gösterir). */
@@ -720,6 +722,22 @@ export function registerDebugTools({ game, debug }: Ctx): void {
     hint: 'Turn the game 90 degrees so it fills a phone held upright: auto (touch devices only), on, off. Pointer input and all panels follow the rotation',
     run: () => setRotateMode(getRotateMode() === 'auto' ? 'on' : getRotateMode() === 'on' ? 'off' : 'auto'),
   });
+  // Savaş arka planı: tüm arka planlar arasında dolaş (Quick Battle / multiplayer havuzları + sefer arka planları); savaş sürer
+  const bgIds = (): string[] => [...new Set([...backgroundPool('quick'), ...backgroundPool('multiplayer'), 'castle-hall', 'kings-bridge'])];
+  debug.register({
+    id: 'screen.background',
+    icon: 'frame',
+    tab: 'Speed & View',
+    section: 'Display',
+    label: () => `Background: ${battle()?.backgroundId || '-'}`,
+    hint: 'Cycle the battle background (Quick Battle pool, multiplayer pool, campaign ones). Quick Battle and multiplayer normally pick one from the battle seed',
+    run: () => {
+      const b = battle();
+      if (!b) return;
+      const ids = bgIds();
+      b.debugSetBackground(ids[(ids.indexOf(b.backgroundId) + 1) % ids.length]!);
+    },
+  });
   for (const m of DAMAGE_MULTS) {
     debug.register({
       id: `tweak.damage.${m}`,
@@ -1106,7 +1124,8 @@ export function registerDebugTools({ game, debug }: Ctx): void {
       'Debug tweaks': tweaksSummary(debugState, BattleScene.freeMp, testModeSummary(testMode)),
       Version: __APP_VERSION__,
       'Build time': new Date(__BUILD_TIME__).toLocaleString('en-GB'),
-      'Game resolution': `${layout.width} x ${layout.height}`,
+      'Game resolution': `${Math.round(stageView.viewW)} x ${layout.height} (logical; base ${layout.width})`,
+      'Canvas (real px)': `${stageView.canvasW} x ${stageView.canvasH} (render x${stageView.zoom.toFixed(2)})`,
       'On-screen size': `${Math.round(game.scale.displaySize.width)} x ${Math.round(game.scale.displaySize.height)}`,
       'Window (CSS px)': `${window.innerWidth} x ${window.innerHeight}`,
     };

@@ -5,6 +5,7 @@ import { copyMatchData } from '../ui/match-copy';
 import { fitText, goldText, makeMenuButton, serif } from './menu-ui';
 import { GOLD, makePanel } from './ui-frame';
 import { tierStyle, unitName } from './unit-label';
+import { FULL_W, FULL_X0 } from '../ui/viewport';
 
 /**
  * Savaş sonu ekranı (VICTORY / DEFEAT): koyu vinyet, ortada plaket, altında iki takımın özet paneli, altta düğmeler.
@@ -107,10 +108,11 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   const root = scene.add.container(0, 0).setDepth(DEPTH);
 
   // --- Vinyet: sahne hafifçe kararır; altındaki tıklamaları yutar ---
-  const dim = scene.add.rectangle(0, 0, W, H, 0x050302, 0).setOrigin(0, 0).setInteractive();
+  // geniş ekran: örtüler görünen alanın tamamını kaplar (FULL_X0..)
+  const dim = scene.add.rectangle(FULL_X0, 0, FULL_W, H, 0x050302, 0).setOrigin(0, 0).setInteractive();
   const edge = scene.add.graphics();
-  edge.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.5, 0.5, 0, 0).fillRect(0, 0, W, 200);
-  edge.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.55, 0.55).fillRect(0, H - 260, W, 260);
+  edge.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.5, 0.5, 0, 0).fillRect(FULL_X0, 0, FULL_W, 200);
+  edge.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.55, 0.55).fillRect(FULL_X0, H - 260, FULL_W, 260);
   edge.setAlpha(0);
   root.add([dim, edge]);
   scene.tweens.add({ targets: dim, fillAlpha: victory ? 0.5 : 0.62, duration: 360 });

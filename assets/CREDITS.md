@@ -4,6 +4,8 @@
 |---|---|---|
 | `backgrounds/castle-hall.webp` | Ömer tarafından sağlandı (2026-10-04) | Ömer'e sorulacak |
 | `backgrounds/kings-bridge.webp` | Ömer tarafından sağlandı (2026-10-08): King's Bridge savaş arka planı (2000x729; `encounters.json > bridge_warden.background`) | Ömer'e sorulacak |
+| `backgrounds/proving-grounds-sunny-afternoon.webp`, `proving-grounds-sunset.webp`, `proving-grounds-rain.webp` | Ömer tarafından sağlandı (2026-10-08, ChatGPT): Quick Battle arka planları (2000x667, 3:1); savaş seed'ine göre biri (`data/battle-layout.json > backgrounds.quick`); öğleden sonra sürümü Play > Quick Battle kartında | Ömer'e ait |
+| `backgrounds/duelling-ring-moon.webp`, `duelling-ring-storm.webp`, `duelling-ring-snow.webp` | Ömer tarafından sağlandı (2026-10-08, ChatGPT): çevrimiçi savaş arka planları (2000x667, 3:1; `backgrounds.multiplayer`, iki oyuncu aynı seed = aynı arka plan); ay ışığı sürümü Play > Multiplayer kartında | Ömer'e ait |
 | `source/character-sheet.webp` | Ömer tarafından sağlandı (2026-10-04): 12 karakterlik sayfa | Ömer'e sorulacak |
 | `characters-pool/*.png` | Yukarıdaki sayfadan `tools/slice-characters.mjs` ile kesildi (12 karakter) | Sayfayla aynı |
 | `sprites/<id>/idle.png` | `characters-pool/` içinden kopyalandı (aşağıdaki eşleştirme) | Sayfayla aynı |
@@ -57,3 +59,5 @@ Kaynak: Ömer'in ChatGPT ile ürettirdiği iki görsel (arka plan şeffaf; WebP'
 
 ## Sefer haritası arka planı (campaign)
 Kaynak: Ömer'in ChatGPT ile ürettirdiği yazısız Valdoria haritası (`campaign/valdoria-bg.webp`, 1672x941, 16:9; referans: `docs/design/campaign/valdoria-map-reference.webp`, prompt `docs/design/campaign/campaign.md` 6.1). Lisans: Ömer'e ait. Harita sahnesi (`src/game/scenes/CampaignMapScene.ts`) ve ana menü arka planı olarak kullanılır; düğüm, yol, etiket ve sis üstüne kodla çizilir.
+
+Geniş sürüm (Ömer 2026-10-08, ChatGPT outpaint): `campaign/valdoria-bg-wide.webp` (1916x821, ~21:9). Eski 16:9 harita bu görselde `data/campaign/valdoria.json > backgroundWide.region` bölgesindedir (SIFT eşleştirmesiyle ölçüldü: ölçek 0,8202, dönme yok, ortalama hata ~1 px; düğüm konumları değişmedi). Ana menü, sefer haritası ve multiplayer zemininde kullanılır; 16:9'da eski haritanın tamamı görünür, ultrawide'da yanları da. Lisans: Ömer'e ait.

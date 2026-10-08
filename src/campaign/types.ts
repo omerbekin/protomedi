@@ -82,6 +82,8 @@ export interface CampaignMap {
   subtitle: string;
   blurb: string;
   background: string;
+  /** Geniş (21:9) harita görseli; region = eski 16:9 haritanın bu görseldeki kesir dikdörtgeni [x0, y0, x1, y1] (src/game/wide-map.ts). */
+  backgroundWide?: { image: string; region: [number, number, number, number] };
   start: string;
   stopsPerRun: number;
   visibility: number;

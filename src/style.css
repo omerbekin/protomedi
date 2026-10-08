@@ -27,6 +27,15 @@ body {
   --sal: env(safe-area-inset-left, 0px);
 }
 
+/* Oyun alanının kenarları (çentik payı + oyun alanının dışında kalan bant; src/ui/viewport.ts --game-*): sağ üst düğmeler, debug ve kenara
+   yaslanan DOM öğeleri ekranın değil OYUN ALANININ köşesine oturur (ultrawide'da 21.5:9'dan geniş ekran, 16:10/4:3'te üst-alt bant). */
+:root {
+  --et: calc(var(--sat) + var(--game-t, 0px));
+  --er: calc(var(--sar) + var(--game-r, 0px));
+  --eb: calc(var(--sab) + var(--game-b, 0px));
+  --el: calc(var(--sal) + var(--game-l, 0px));
+}
+
 :root.rotated {
   --sat: 0px;
   --sar: 0px;
@@ -67,8 +76,8 @@ body {
 /* --- Debug menüsü (gerçek piksel; dokunma hedefi >= 44px) --- */
 .debug-toggle {
   position: fixed;
-  right: calc(8px + var(--sar));
-  bottom: calc(8px + var(--sab));
+  right: calc(8px + var(--er));
+  bottom: calc(8px + var(--eb));
   min-width: 64px;
   min-height: 44px;
   padding: 0 12px;
@@ -82,10 +91,10 @@ body {
 
 .debug-panel {
   position: fixed;
-  right: calc(8px + var(--sar));
-  bottom: calc(60px + var(--sab));
-  top: calc(64px + var(--sat));
-  width: min(520px, calc(var(--stage-w, 100vw) - 16px - var(--sar) - var(--sal)));
+  right: calc(8px + var(--er));
+  bottom: calc(60px + var(--eb));
+  top: calc(64px + var(--et));
+  width: min(520px, calc(var(--stage-w, 100vw) - 16px - var(--er) - var(--el)));
   overflow: hidden;
   padding: 12px;
   background: rgba(15, 15, 25, 0.95);
@@ -162,8 +171,8 @@ body {
 
 .fps-counter {
   position: fixed;
-  left: calc(8px + var(--sal));
-  top: calc(8px + var(--sat));
+  left: calc(8px + var(--el));
+  top: calc(8px + var(--et));
   padding: 4px 8px;
   font: bold 12px monospace;
   background: rgba(0, 0, 0, 0.6);
@@ -309,8 +318,8 @@ body {
 /* --- Sağ üst simge sırası (sağdan sola): wiki, tam ekran, Menu. Dişli düğmesi yok (Ömer 2026-10-08): ayarlar menüden açılan ayrı ekran --- */
 .settings-toggle {
   position: fixed;
-  top: calc(8px + var(--sat));
-  right: calc(8px + var(--sar));
+  top: calc(8px + var(--et));
+  right: calc(8px + var(--er));
   width: 48px;
   height: 48px;
   padding: 0;
@@ -331,12 +340,12 @@ body {
 }
 
 .settings-toggle.fullscreen-toggle {
-  right: calc(64px + var(--sar));
+  right: calc(64px + var(--er));
 }
 
 /* Menu düğmesi (savaş, takım seçimi, multiplayer, sefer haritası): aynı sıra, koyu deri / altın yazı */
 .settings-toggle.menu-toggle {
-  right: calc(120px + var(--sar));
+  right: calc(120px + var(--er));
   width: auto;
   min-width: 84px;
   padding: 0 16px;
@@ -349,7 +358,7 @@ body {
 }
 
 .settings-toggle.menu-toggle.no-fs {
-  right: calc(64px + var(--sar));
+  right: calc(64px + var(--er));
 }
 
 .settings-toggle.menu-toggle:hover {
@@ -359,8 +368,7 @@ body {
 
 /* --- Menü ve ayarlar ekranı: ana menü / sefer menüsüyle aynı görsel dil (koyu deri panel, altın çerçeve, serif, bronz düğmeler).
    z-index debug panelinin (20) ve sağ üst simgelerin (30) altında: debug menüsü her zaman erişilebilir. --- */
-.gm-overlay,
-.st-overlay {
+.gm-overlay {
   --g-dark: #6b4f26;
   --g-edge: #9a7438;
   --g-gold: #e8c47e;
@@ -373,15 +381,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: calc(64px + var(--sat)) calc(16px + var(--sar)) calc(16px + var(--sab)) calc(16px + var(--sal));
+  padding: calc(64px + var(--et)) calc(16px + var(--er)) calc(16px + var(--eb)) calc(16px + var(--el));
   background: rgba(5, 3, 2, 0.62);
   color: var(--g-text);
   z-index: 18;
-}
-
-.st-overlay {
-  z-index: 19;
-  background: rgba(5, 3, 2, 0.86);
 }
 
 .gm-overlay[hidden],
@@ -391,8 +394,7 @@ body {
   display: none !important;
 }
 
-.gm-box,
-.st-modal {
+.gm-box {
   display: flex;
   flex-direction: column;
   max-height: 100%;
@@ -408,8 +410,7 @@ body {
   overflow-y: auto;
 }
 
-.gm-title,
-.st-title {
+.gm-title {
   font: bold 34px var(--g-serif);
   letter-spacing: 4px;
   text-align: center;
@@ -424,8 +425,7 @@ body {
   margin-top: 14px;
 }
 
-.gm-btn,
-.st-btn {
+.gm-btn {
   min-height: 56px;
   padding: 0 18px;
   font: bold 22px var(--g-serif);
@@ -440,22 +440,19 @@ body {
   transition: transform 0.1s, border-color 0.1s, box-shadow 0.1s;
 }
 
-.gm-btn.primary,
-.st-btn.st-back {
+.gm-btn.primary {
   background: linear-gradient(180deg, #9a6a28, #3f220c);
   border-color: var(--g-gold);
   font-size: 26px;
 }
 
-.gm-btn:hover,
-.st-btn:hover {
+.gm-btn:hover {
   border-color: var(--g-bright);
   box-shadow: 0 0 0 1px #000, 0 0 14px rgba(255, 200, 96, 0.35), inset 0 1px 0 rgba(255, 226, 154, 0.3);
   transform: scale(1.02);
 }
 
-.gm-btn:active,
-.st-btn:active {
+.gm-btn:active {
   transform: scale(0.97);
 }
 
@@ -479,130 +476,214 @@ body {
   flex: 1;
 }
 
-/* Ayarlar ekranı */
-.st-modal {
-  width: min(860px, 100%);
+/* Ayarlar ekranı (oyun içi; Ömer 2026-10-08): ana menünün sol sütun görünümü (MainMenuScene > Settings). Ölçüler oyun birimiyle:
+   --gu = 1 mantıksal birimin CSS pikseli, --menu-x = sütunun oyun alanı solundan uzaklığı (src/ui/viewport.ts); dokunma alanı en az 44px. */
+.st-overlay {
+  --st-text: #d9c8a2;
+  --st-on: #f3d999;
+  --st-serif: Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+  --u: var(--gu, 1px);
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  color: var(--st-text);
+  /* sahne kararır + bulanıklaşır; soldan sağa açılan gölge sütunun arkasında */
+  background:
+    linear-gradient(90deg, rgba(8, 6, 4, 0.85) 0, rgba(8, 6, 4, 0.85) calc(var(--el) + var(--menu-x, 140px) - 140 * var(--u)),
+      rgba(8, 6, 4, 0.55) calc(var(--el) + var(--menu-x, 140px) + 546 * var(--u)), rgba(8, 6, 4, 0) calc(var(--el) + var(--menu-x, 140px) + 840 * var(--u))),
+    rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
-.st-head {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 16px 20px 12px;
-  border-bottom: 2px solid var(--g-dark);
-  background: linear-gradient(180deg, #3a2b1c, #1f1610);
-  border-radius: 8px 8px 0 0;
+.st-col {
+  position: absolute;
+  left: calc(var(--el) + var(--menu-x, 140px));
+  top: calc(var(--et) + 280 * var(--u));
+  width: max(calc(800 * var(--u)), 500px);
+  max-width: calc(100% - var(--el) - var(--menu-x, 140px) - 16px);
 }
 
-.st-headicon {
-  width: 40px;
-  height: 40px;
-  image-rendering: pixelated;
-}
-
-.st-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 10px 28px 16px;
-}
-
-.st-section {
-  margin-top: 14px;
-}
-
-.st-section-title {
-  padding-bottom: 6px;
-  margin-bottom: 8px;
-  font: bold 16px var(--g-serif);
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  color: var(--g-muted);
-  border-bottom: 1px solid var(--g-dark);
+.st-title {
+  margin-bottom: calc(26 * var(--u));
+  font: bold calc(66 * var(--u)) var(--st-serif);
+  letter-spacing: calc(3 * var(--u));
+  line-height: 1.1;
+  background: linear-gradient(180deg, #fff2c0 20%, #c89238 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 0 #0c0805) drop-shadow(0 0 2px #0c0805);
 }
 
 .st-row {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 10px 16px;
-  min-height: 64px;
+  gap: calc(20 * var(--u));
+  height: max(44px, calc(112 * var(--u)));
+  border-bottom: 1px solid rgba(217, 178, 106, 0.16);
 }
 
-.st-icon {
-  width: 36px;
-  height: 36px;
-  image-rendering: pixelated;
+.st-diamond {
+  width: calc(34 * var(--u));
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+.st-row.on .st-diamond::before {
+  content: '';
+  width: calc(12 * var(--u));
+  height: calc(12 * var(--u));
+  margin-left: calc(4 * var(--u));
+  background: #e0702a;
+  border: max(1px, calc(2 * var(--u))) solid #ffb35a;
+  transform: rotate(45deg);
 }
 
 .st-label {
-  font: bold 22px var(--g-serif);
-  color: var(--g-text);
+  flex: 1 0 auto;
+  height: 100%;
+  padding: 0;
+  text-align: left;
+  white-space: nowrap;
+  font: bold calc(38 * var(--u)) var(--st-serif);
+  letter-spacing: calc(2 * var(--u));
+  color: var(--st-text);
+  text-shadow: 0 0 3px #0c0805, 0 2px 0 #0c0805;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: transform 0.15s, color 0.15s;
+}
+
+.st-row.on .st-label {
+  color: var(--st-on);
+  transform: translateX(calc(10 * var(--u)));
+  text-shadow: 0 0 3px #0c0805, 0 2px 0 #0c0805, 0 0 calc(18 * var(--u)) rgba(240, 140, 40, 0.45);
 }
 
 .st-control {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex: 1;
-  min-width: 260px;
-  justify-content: flex-end;
+  gap: calc(14 * var(--u));
+  height: 100%;
 }
 
-.st-btn.st-step {
-  width: 56px;
+.st-step {
+  min-width: 44px;
+  width: calc(56 * var(--u));
+  height: 100%;
   padding: 0;
-  font-size: 30px;
+  font: bold calc(40 * var(--u)) var(--st-serif);
+  color: var(--st-on);
+  text-shadow: 0 2px 0 #0c0805;
+  background: none;
+  border: 0;
+  cursor: pointer;
 }
 
-.st-btn.st-wide {
-  min-width: 220px;
+.st-step:active {
+  transform: scale(0.9);
 }
 
 .st-slider {
-  flex: 1;
-  min-width: 120px;
-  height: 44px;
-  accent-color: #e8c47e;
+  --fill: 70%;
+  width: calc(170 * var(--u));
+  min-width: 80px;
+  height: 100%;
+  margin: 0;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.st-slider::-webkit-slider-runnable-track {
+  height: max(6px, calc(10 * var(--u)));
+  background: linear-gradient(90deg, #d9b26a var(--fill), rgba(18, 12, 7, 0.9) var(--fill));
+  border: 1px solid #9a7438;
+}
+
+.st-slider::-moz-range-track {
+  height: max(6px, calc(10 * var(--u)));
+  background: linear-gradient(90deg, #d9b26a var(--fill), rgba(18, 12, 7, 0.9) var(--fill));
+  border: 1px solid #9a7438;
+}
+
+.st-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: max(18px, calc(26 * var(--u)));
+  height: max(18px, calc(26 * var(--u)));
+  margin-top: calc((max(6px, calc(10 * var(--u))) - max(18px, calc(26 * var(--u)))) / 2 - 1px);
+  background: #f3d999;
+  border: 2px solid #5a3a10;
+  border-radius: 50%;
+}
+
+.st-slider::-moz-range-thumb {
+  width: max(18px, calc(26 * var(--u)));
+  height: max(18px, calc(26 * var(--u)));
+  background: #f3d999;
+  border: 2px solid #5a3a10;
+  border-radius: 50%;
 }
 
 .st-value {
-  min-width: 34px;
+  min-width: calc(60 * var(--u));
   text-align: right;
-  font: bold 26px var(--g-serif);
-  color: var(--g-bright);
+  font: bold calc(32 * var(--u)) var(--st-serif);
+  color: var(--st-on);
+  text-shadow: 0 0 3px #0c0805, 0 2px 0 #0c0805;
 }
 
 .st-note {
-  margin: 4px 0 0 52px;
-  font: 15px var(--g-serif);
-  color: var(--g-gold);
+  margin-top: calc(10 * var(--u));
+  font: calc(22 * var(--u)) var(--st-serif);
+  color: #cdb88d;
+  text-shadow: 0 1px 0 #0c0805;
 }
 
 .st-note:empty {
   display: none;
 }
 
-.st-foot {
-  display: flex;
-  justify-content: center;
-  padding: 12px 20px 20px;
-  border-top: 1px solid var(--g-dark);
+/* Ayarlar açıkken alttaki oyun menüsü gizlenir (sütun onun yerine geçer; Back ile menü geri gelir) */
+html.settings-open .gm-overlay {
+  visibility: hidden;
 }
 
-.st-btn.st-back {
-  min-width: 260px;
+/* Sol üst "◂ Back" (ana menüdeki gibi; oyun alanının köşesi) */
+.st-back {
+  position: absolute;
+  left: calc(var(--el) + 58 * var(--u) - 10px);
+  top: calc(var(--et) + 64 * var(--u) - max(22px, calc(50 * var(--u))));
+  min-height: 44px;
+  height: max(44px, calc(100 * var(--u)));
+  padding: 0 10px;
+  font: bold calc(36 * var(--u)) var(--st-serif);
+  letter-spacing: calc(2 * var(--u));
+  color: var(--st-text);
+  text-shadow: 0 0 3px #0c0805, 0 2px 0 #0c0805;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.st-back:hover,
+.st-label:hover,
+.st-step:hover {
+  color: var(--st-on);
 }
 
 /* Kısa sahne (yatay telefon): daha sıkı */
-html.short .gm-title,
-html.short .st-title {
+html.short .gm-title {
   font-size: 24px;
 }
 
-html.short .gm-btn,
-html.short .st-btn {
+html.short .gm-btn {
   min-height: 46px;
   font-size: 18px;
 }
@@ -611,19 +692,11 @@ html.short .gm-list {
   gap: 8px;
 }
 
-html.short .st-row {
-  min-height: 52px;
-}
-
-html.short .st-head {
-  padding: 8px 16px 6px;
-}
-
 /* Tam ekran ipucu (ilk açılışta tek seferlik, kapatılabilir) */
 .fs-hint {
   position: fixed;
   left: 50%;
-  bottom: calc(12px + var(--sab));
+  bottom: calc(12px + var(--eb));
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -888,18 +961,18 @@ html.short .st-head {
 /* Yatay telefon (kısa sahne <= 520px; JS: html.short): debug paneli üst düğmelerin altında değil solda, tüm yüksekliği kullanır */
 :root.short .debug-panel,
 :root.short .debug-panel.left {
-  left: calc(8px + var(--sal));
+  left: calc(8px + var(--el));
   right: auto;
-  top: calc(8px + var(--sat));
-  bottom: calc(8px + var(--sab));
-  width: min(520px, calc(var(--stage-w, 100vw) - 190px - var(--sar) - var(--sal)));
+  top: calc(8px + var(--et));
+  bottom: calc(8px + var(--eb));
+  width: min(520px, calc(var(--stage-w, 100vw) - 190px - var(--er) - var(--el)));
 }
 
 
 /* --- Multiplayer (src/ui/mp-overlay.ts): bağlantı şeridi, bildirim, kod giriş kutusu --- */
 .mp-banner {
   position: fixed;
-  top: calc(8px + var(--sat));
+  top: calc(8px + var(--et));
   left: 50%;
   transform: translateX(-50%);
   max-width: calc(var(--stage-w, 100vw) - 200px);
@@ -926,7 +999,7 @@ html.short .st-head {
 }
 .mp-toast {
   position: fixed;
-  bottom: calc(70px + var(--sab));
+  bottom: calc(70px + var(--eb));
   left: 50%;
   transform: translateX(-50%);
   padding: 10px 18px;

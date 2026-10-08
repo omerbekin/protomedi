@@ -1,3 +1,4 @@
+import { FULL_W } from '../ui/viewport'; // geniş ekran: tam ekran karartma görünen alanın tamamını kaplar
 import Phaser from 'phaser';
 import layout from '../../data/battle-layout.json';
 import { content, type BattleEvent, type SkillDef } from '../engine';
@@ -201,7 +202,7 @@ function ring(scene: Phaser.Scene, x: number, y: number, o: RingOpts): Promise<v
 
 /** Ekranı kısa süre boyayan parlama. */
 function flash(scene: Phaser.Scene, hex: string, alpha: number, dur: number): void {
-  const r = scene.add.rectangle(960, 540, 1920, 1080, color(hex), alpha).setDepth(DEPTH - 20);
+  const r = scene.add.rectangle(960, 540, FULL_W, 1080, color(hex), alpha).setDepth(DEPTH - 20);
   scene.tweens.add({ targets: r, alpha: 0, duration: slow(dur), onComplete: () => r.destroy() });
 }
 
@@ -1249,7 +1250,7 @@ const blizzard = async (c: VfxCtx) => {
   const cloudY = Math.min(...ys) - 300;
   const wind = c.board === 'enemy' ? 1 : -1; // rüzgâr büyücüden uzağa eser
   // 1) fırtına bulutu: blok genişliğinde koyu, kabaran duman kümeleri
-  const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x0a1830, 0).setDepth(DEPTH - 25);
+  const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x0a1830, 0).setDepth(DEPTH - 25);
   c.scene.tweens.add({ targets: dim, alpha: 0.26, duration: slow(380) });
   // iki katman yumuşak bulut dokusu (arkada koyu, önde biraz açık ve alçak): konturlu 'duman' baloncukları yerine yumuşak piksel bulut
   const puffs: Phaser.GameObjects.Image[] = [];
@@ -1351,7 +1352,7 @@ const meteor = async (c: VfxCtx) => {
   const cx = cell.x;
   const cy = cell.y - 30;
   // gökyüzü kızarır, zeminde gölge ve ısı halkası büyür
-  const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x20060a, 0).setDepth(DEPTH - 25);
+  const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x20060a, 0).setDepth(DEPTH - 25);
   c.scene.tweens.add({ targets: dim, alpha: 0.32, duration: slow(420) });
   const shadow = c.scene.add.ellipse(cx, cy + 40, 40, 14, 0x000000, 0.4).setDepth(DEPTH - 40);
   const heat = c.scene.add.ellipse(cx, cy + 40, 40, 14, 0xff4d1a, 0).setStrokeStyle(4, 0xff8a1f, 0.7).setDepth(DEPTH - 39);
@@ -1481,7 +1482,7 @@ const bloodhands = async (c: VfxCtx) => {
       const p = spot(t);
       const circle = sprite(c.scene, 'circle', '#e5463b', x, y - 6, 240, DEPTH - 30).setScale(1.3, 0.46).setAlpha(0);
       c.scene.tweens.add({ targets: circle, alpha: 0.95, angle: 60, duration: slow(600) });
-      const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x20060a, 0).setDepth(DEPTH - 25);
+      const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x20060a, 0).setDepth(DEPTH - 25);
       c.scene.tweens.add({ targets: dim, alpha: 0.28, duration: slow(300) });
       burst(c.scene, x, y - 10, { colors: ['#8e1f2c', '#e5463b'], n: 10, speed: [20, 90], angle: [-Math.PI, 0], gravity: -50, life: [600, 1000], size: [10, 18] });
       const spots = [-92, -58, -22, 22, 58, 92, 0].map((dx, i) => ({ dx, dy: [-10, 8, -4, -2, 10, -8, 14][i]!, lean: dx === 0 ? 0 : Math.sign(dx) * -0.18 }));
@@ -3276,7 +3277,7 @@ const drainfield = async (c: VfxCtx) => {
   const glows = quads.map((k) => c.scene.add.image(k.m.x, k.m.y, voidGlowTexture(c.scene)).setDisplaySize(gw, gh).setAlpha(0).setDepth(FLOOR_FX + 2).setBlendMode(Phaser.BlendModes.ADD));
   const gBase = glows.map((g) => ({ x: g.scaleX, y: g.scaleY }));
   const edges = outlineOf(c.board, slots);
-  const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x1a0630, 0).setDepth(DEPTH - 25);
+  const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x1a0630, 0).setDepth(DEPTH - 25);
   c.scene.tweens.add({ targets: dim, alpha: 0.3, duration: slow(GROW) });
   const drawPool = (u: number, hot = 0) => {
     pool.clear();
@@ -3777,7 +3778,7 @@ const allin = async (c: VfxCtx) => {
   c.sfx('heartbeatRise');
   // 1) yükseliş: büyük altın zar ve etrafında dönen paralar; kalp atışlarıyla zar şişer
   const top = { x: a.x, y: a.y - c.actor.h * 0.5 - 70 };
-  const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x1a1204, 0).setDepth(DEPTH - 25);
+  const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x1a1204, 0).setDepth(DEPTH - 25);
   c.scene.tweens.add({ targets: dim, alpha: 0.34, duration: slow(500) });
   const die = sprite(c.scene, 'diegold', '#ffd166', top.x, top.y + 50, 150, DEPTH + 40).setAlpha(0);
   const dieBase = die.scaleX;
@@ -5094,7 +5095,7 @@ export async function summonFx(scene: Phaser.Scene, unitId: string, view: Combat
       void ring(scene, f.x, f.y, { r: 120, flat: 0.34, n: 26, colors: ['#e3ccff', '#b872ff'], dur: 380, size: 10 });
     }
     // 1) zemin çatlar, ölü ışığı sızar, yer titrer (beslenmemişte soluk ve kısa)
-    const dim = scene.add.rectangle(960, 540, 1920, 1080, 0x10061a, 0).setDepth(DEPTH - 25);
+    const dim = scene.add.rectangle(960, 540, FULL_W, 1080, 0x10061a, 0).setDepth(DEPTH - 25);
     scene.tweens.add({ targets: dim, alpha: fed ? 0.4 : 0.2, duration: slow(500) });
     const glow = scene.add.ellipse(f.x, f.y, 40, 14, glowHex, fed ? 0.5 : 0.3).setDepth(DEPTH - 35);
     scene.tweens.add({ targets: glow, scaleX: fed ? 5 : 3.6, scaleY: fed ? 3 : 2.2, alpha: fed ? 0.85 : 0.4, duration: slow(900), yoyo: true });

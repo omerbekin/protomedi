@@ -4,10 +4,25 @@
  * Phaser'ın dokunma/fare koordinatları döndürülmüş kapta bozulacağı için `installViewport` ScaleManager/InputManager'a küçük bir yama uygular.
  * DOM katmanları (ayarlar, wiki, debug, ipuçları) #stage içinde olduğu için aynı dönüşle çalışır; tarayıcı dokunuşu zaten doğru eşler.
  *
- * Saf yardımcılar (fitScale, shouldRotate, layoutFor, rotatedToStage) vitest ile sınanır; DOM kısmı `installViewport` içindedir.
+ * Saf yardımcılar (fitScale, shouldRotate, layoutFor, rotatedToStage, logicalWidthFor, stageMetrics) vitest ile sınanır; DOM kısmı `installViewport` içindedir.
+ *
+ * Geniş ekran (Ömer 2026-10-08, ultrawide 3440x1440): mantıksal yükseklik 1080 sabit; mantıksal genişlik ekran oranına göre 1920 (16:9) ile
+ * `stage.maxWidth` (~21.5:9) arasında esner (16:9'dan dar ekranda 1920 + üst/alt bant, eskisi gibi). Sahne koordinatları 1920x1080 merkez
+ * bölgede kalır; kamera dünyanın (960, 540) noktasını ortalar, fazladan genişlik iki yana eşit açılır (`src/game/stage.ts`).
+ * Tuval ekranın GERÇEK piksel çözünürlüğündedir: tuval = mantıksal boyut x render ölçeği (>= 1, üst sınırlı), kamera yakınlaştırması = render ölçeği.
  */
-export const GAME_W = 1920;
-export const GAME_H = 1080;
+import layout from '../../data/battle-layout.json';
+
+export const GAME_W = layout.width;
+export const GAME_H = layout.height;
+/** En geniş mantıksal genişlik (~21.5:9); daha geniş ekranda iki yanda siyah bant kalır. */
+export const MAX_GAME_W = layout.stage.maxWidth;
+/**
+ * Tam ekran örtüler (karartma, dokunma kalkanı, alt panel şeridi) için sabit, en geniş görünümü (+ sarsıntı payı) kaplayan yatay aralık.
+ * 16:9'da fazlası ekran dışında kalır (görüntü değişmez).
+ */
+export const FULL_X0 = (GAME_W - MAX_GAME_W) / 2 - 60;
+export const FULL_W = MAX_GAME_W + 120;
 
 /** Sahne yüksekliği bu değerlerin altındaysa html'e `short` / `compact` sınıfı konur (CSS kısa ekran düzenleri). */
 export const SHORT_STAGE_H = 520;
@@ -58,6 +73,54 @@ export function rotatedToStage(clientX: number, clientY: number, viewW: number):
   return { x: clientY, y: viewW - clientX };
 }
 
+/** Ekran oranına göre mantıksal genişlik: 1080 yükseklikte en az 1920 (16:9), en çok MAX_GAME_W. */
+export function logicalWidthFor(width: number, height: number): number {
+  if (width <= 0 || height <= 0) return GAME_W;
+  return Math.min(MAX_GAME_W, Math.max(GAME_W, Math.round((GAME_H * width) / height)));
+}
+
+export interface StageMetrics {
+  /** Mantıksal (dünya) genişlik: 1920-MAX_GAME_W. */
+  logicalW: number;
+  /** Mantıksal 1 birimin ekrandaki CSS pikseli. */
+  cssScale: number;
+  /** Tuval piksel boyutu (gerçek piksel; render ölçeği uygulanmış). */
+  canvasW: number;
+  canvasH: number;
+  /** Kamera yakınlaştırması = tuval yüksekliği / 1080 (>= 1). */
+  zoom: number;
+  /** Kameranın gösterdiği dünya genişliği (= canvasW / zoom ≈ logicalW). */
+  viewW: number;
+  /** Görünen dünyanın sol / sağ kenarı (16:9'da 0 / 1920; geniş ekranda iki yana eşit açılır). */
+  left: number;
+  right: number;
+}
+
+/** Render ölçeği 1'e bu kadar yakınsa tam 1 alınır (1920x1080 civarında yeniden örnekleme bulanıklığı olmasın). */
+const RENDER_SNAP = 0.03;
+
+/**
+ * Kapsayıcı (CSS px) ve cihaz piksel oranından sahne ölçüleri. Render ölçeği = gerçek piksel / mantıksal birim, en az 1 (küçük ekranda tuval
+ * 1920x1080 kalır ve tarayıcı küçültür: bugünkü davranış), en çok `maxRenderScale` ve tuval genişliği `maxRenderWidth` (performans sınırı).
+ */
+export function stageMetrics(width: number, height: number, dpr = 1): StageMetrics {
+  const logicalW = logicalWidthFor(width, height);
+  const cssScale = fitScale(width, height, logicalW, GAME_H);
+  const cap = Math.min(layout.stage.maxRenderScale, layout.stage.maxRenderWidth / logicalW);
+  let render = Math.max(1, Math.min(cap, cssScale * (dpr > 0 ? dpr : 1)));
+  if (render - 1 < RENDER_SNAP) render = 1;
+  const canvasH = Math.round(GAME_H * render);
+  const zoom = canvasH / GAME_H;
+  const canvasW = Math.round(logicalW * zoom);
+  const viewW = canvasW / zoom;
+  const left = (GAME_W - viewW) / 2;
+  return { logicalW, cssScale, canvasW, canvasH, zoom, viewW, left, right: left + viewW };
+}
+
+/** Ana menü / ayarlar sol sütununun yazı başlangıcı (dünya x, 16:9'da) ve geniş ekranda sütunun kayması (görünen sol kenara doğru, kenara yapışmadan). */
+export const MENU_COL_X = 140;
+export const menuColumnShift = (left: number): number => Math.round(left * 0.65);
+
 /** Elle seçilmiş döndürme kipi (adres: ?rotate=on|off). */
 export function parseRotateMode(search: string): RotateMode {
   const v = new URLSearchParams(search).get('rotate');
@@ -89,6 +152,9 @@ interface PhaserLike {
     updateBounds: () => void;
     updateCenter: () => void;
     refresh: () => void;
+    setGameSize: (w: number, h: number) => void;
+    width: number;
+    height: number;
   };
   input: {
     transformPointer: (pointer: unknown, pageX: number, pageY: number, wasMove: boolean) => void;
@@ -100,7 +166,7 @@ interface PhaserLike {
  * Phaser kapsayıcı boyutunu getBoundingClientRect (dönüşten etkilenir) yerine offsetWidth/Height ile okur; döndürülmüşken tuval sınırları
  * ve dokunma eşlemesi sahne yerel koordinatlarında hesaplanır.
  */
-export function installViewport(game: unknown, stage: HTMLElement, initialMode: RotateMode = 'auto'): void {
+export function installViewport(game: unknown, stage: HTMLElement, initialMode: RotateMode = 'auto', onStage?: (m: StageMetrics) => void): void {
   const g = game as PhaserLike;
   currentMode = initialMode;
   const root = document.documentElement;
@@ -164,8 +230,24 @@ export function installViewport(game: unknown, stage: HTMLElement, initialMode: 
     root.style.setProperty('--view-h', `${h}px`);
     root.style.setProperty('--stage-w', `${layout.stageW}px`);
     root.style.setProperty('--stage-h', `${layout.stageH}px`);
+    // Geniş ekran + gerçek piksel: oyun kapsayıcısının (#game, çentik payları düşülmüş) oranından mantıksal genişlik ve tuval boyutu
+    const parent = g.scale.parent;
+    const m = stageMetrics(parent?.offsetWidth ?? layout.stageW, parent?.offsetHeight ?? layout.stageH, window.devicePixelRatio || 1);
     g.scale.getParentBounds();
-    g.scale.refresh();
+    if (g.scale.width !== m.canvasW || g.scale.height !== m.canvasH) g.scale.setGameSize(m.canvasW, m.canvasH);
+    else g.scale.refresh();
+    // Oyun alanının kapsayıcı içindeki bantları: DOM katmanları (sağ üst düğmeler, debug) ekranın değil oyun alanının köşesine hizalanır
+    const c = g.scale.canvas;
+    if (parent) {
+      root.style.setProperty('--game-l', `${Math.max(0, c.offsetLeft)}px`);
+      root.style.setProperty('--game-t', `${Math.max(0, c.offsetTop)}px`);
+      root.style.setProperty('--game-r', `${Math.max(0, parent.offsetWidth - c.offsetLeft - c.offsetWidth)}px`);
+      root.style.setProperty('--game-b', `${Math.max(0, parent.offsetHeight - c.offsetTop - c.offsetHeight)}px`);
+    }
+    // DOM katmanları için: mantıksal 1 birimin CSS pikseli ve sol sütunun oyun alanı solundan uzaklığı (ayarlar ekranı ana menü sütunuyla hizalı)
+    root.style.setProperty('--gu', `${m.cssScale}px`);
+    root.style.setProperty('--menu-x', `${(MENU_COL_X + menuColumnShift(m.left) - m.left) * m.cssScale}px`);
+    onStage?.(m);
   };
   relayout = apply;
   const schedule = (): void => {

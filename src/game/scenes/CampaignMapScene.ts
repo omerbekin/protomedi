@@ -39,7 +39,11 @@ import {
   type NodeVis,
 } from '../../campaign';
 import { characterTexture, preloadAssets } from '../assets';
-import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
+import { preloadCampaignArt } from '../campaign-art';
+import { edgeFillers, mapArt } from '../map-art';
+import { placeArt } from '../wide-map';
+import { onStageResize, stageView } from '../stage';
+import { FULL_W, FULL_X0 } from '../../ui/viewport';
 import { H, W, classCard, crown, hpBar, openModal, parchmentPlate, type Modal } from '../campaign-ui';
 import { MENU_SCENE, current, markJourneyStart, save, session, setState, startCampaignBattle, storage } from '../campaign-session';
 import { classAvatar, classLogoBadge, ensureGlow, goldText, makeMenuButton, serif } from '../menu-ui';
@@ -54,6 +58,9 @@ import { mountMenuToggle } from '../../ui/game-menu';
  * parşömen etiketler, bölge başlıkları, lejant, sis; lider önde, takımın silüetleri arkada yol boyunca yürür (dokununca atlanır).
  * Kurallar src/campaign/ içindedir; bu sahne yalnızca çizer ve oyuncunun seçimlerini kurallara iletir.
  * İki kamera: ana kamera haritayı (yakınlaştırma 1-1,5x, sürükleyerek kaydırma), arayüz kamerası sabit katmanı gösterir.
+ * Geniş ekran (src/game/stage.ts): kameraları sahne kendisi kurar (customStageCamera); gerçek yakınlaştırma = render ölçeği x harita yakınlaştırması.
+ * Geniş (21:9) harita görseli varsa eski 16:9 haritanın bölgesi dünyada 0-1920 x 0-1080'e oturur (düğüm konumları değişmez), kalanı yanlara taşar;
+ * kamera sınırı görselin kapsamıdır. Geniş görsel yoksa eski görsel + yanlarda karartılmış/bulanık aynalı uzantı.
  */
 
 const TYPE_COLOR: Record<NodeType, number> = { town: 0x3b5f86, battle: 0x6b4a33, elite: 0x8e2a22, event: 0x4a3f8f, treasure: 0x9a7a2a, boss: 0xa3191c };
@@ -67,6 +74,12 @@ type Pt = { x: number; y: number };
 
 export class CampaignMapScene extends Phaser.Scene {
   static readonly KEY = 'CampaignMapScene';
+  /** Kameraları stage.ts değil bu sahne kurar (iki kamera + harita yakınlaştırması). */
+  readonly customStageCamera = true;
+  /** Oyuncunun harita yakınlaştırması (1-ZOOM_MAX); kameranın gerçek yakınlaştırması bunun render ölçeğiyle çarpımı. */
+  private mapZoom = 1;
+  /** Harita görselinin dünyadaki yatay kapsamı (kamera sınırı). */
+  private terrainX = { left: 0, right: W };
 
   private map!: CampaignMap;
   private world!: Phaser.GameObjects.Container;
@@ -106,6 +119,8 @@ export class CampaignMapScene extends Phaser.Scene {
     this.pauseMenu = null;
     this.tip = null;
     this.stripTweens = [];
+    this.mapZoom = 1;
+    this.terrainX = { left: 0, right: W };
   }
 
   preload(): void {
@@ -122,10 +137,9 @@ export class CampaignMapScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#0b0705');
     this.world = this.add.container(0, 0);
     this.ui = this.add.container(0, 0).setDepth(1000);
-    this.uiCam = this.cameras.add(0, 0, W, H);
+    this.uiCam = this.cameras.add(0, 0, stageView.canvasW, stageView.canvasH);
     this.cameras.main.ignore(this.ui);
     this.uiCam.ignore(this.world);
-    this.cameras.main.setBounds(0, 0, W, H);
 
     this.drawTerrain();
     this.dyn = this.add.container(0, 0);
@@ -136,8 +150,10 @@ export class CampaignMapScene extends Phaser.Scene {
     this.ui.add(this.hud);
     this.renderHud();
     this.bindCamera();
+    this.layoutCameras(true);
+    onStageResize(this, () => this.layoutCameras(false));
     if (document.documentElement.classList.contains('compact') || document.documentElement.classList.contains('short')) {
-      this.cameras.main.setZoom(ZOOM_MAX);
+      this.setMapZoom(ZOOM_MAX);
       this.centerOn(this.s.at);
     }
     this.events.on('update', (_t: number, dt: number) => this.animateDashes(dt));
@@ -185,7 +201,11 @@ export class CampaignMapScene extends Phaser.Scene {
         },
       });
     // Ayarlar ekranı menünün üstünde açılır; Back / Esc onu kapatınca bu menü yeniden görünür
-    items.push({ label: 'Settings', run: () => setSettingsOpen(true) });
+    // Ayarlar sütunu açıkken menü penceresi gizlenir (ana menü sütun görünümü); Back / Esc ile geri gelir
+    items.push({ label: 'Settings', run: () => {
+      m.root.setVisible(false);
+      setSettingsOpen(true, () => m.root.active && m.root.setVisible(true));
+    } });
     items.push({ label: 'Back to Main Menu', run: () => this.scene.start(MENU_SCENE) });
     const m = openModal(this, this.ui, { title: 'Menu', width: 640, height: 190 + items.length * 100 });
     items.forEach((it, i) => m.root.add(makeMenuButton(this, W / 2, m.area.y + 46 + i * 100, 460, 82, it.label, it.run, { primary: !!it.primary, size: it.primary ? 32 : 28 }).container));
@@ -239,13 +259,19 @@ export class CampaignMapScene extends Phaser.Scene {
   // ------------------------------------------------------------ arazi (sabit)
 
   private drawTerrain(): void {
-    const bg = this.map.background;
-    if (hasCampaignArt(this, bg)) {
-      const img = this.add.image(W / 2, H / 2, campaignArtKey(bg)).setDisplaySize(W, H);
-      this.world.add(img);
+    const art = mapArt(this, this.map);
+    if (art) {
+      const img = this.add.image(0, 0, art.key).setOrigin(0, 0);
+      // Eski 16:9 haritanın bölgesi dünyada 0-1920 x 0-1080'e oturur (düğüm konumları bu bölgeye göre)
+      const p = placeArt(img.width, img.height, art.region, { x: 0, y: 0, w: W, h: H });
+      img.setPosition(p.x, p.y).setScale(p.scale);
+      this.terrainX = { left: Math.min(0, p.left), right: Math.max(W, p.right) };
+      const fill = edgeFillers(this, art.key, 0);
+      fill.place(img);
+      this.world.add([...fill.items, img]);
     } else {
       const g = this.add.graphics();
-      g.fillGradientStyle(0xd9c497, 0xd9c497, 0xb59a68, 0xb59a68, 1).fillRect(0, 0, W, H);
+      g.fillGradientStyle(0xd9c497, 0xd9c497, 0xb59a68, 0xb59a68, 1).fillRect(FULL_X0, 0, FULL_W, H);
       this.world.add(g);
     }
     // Ashen Plain: arka planda kül rengi ova yok, kodla gri-kül ton
@@ -257,8 +283,8 @@ export class CampaignMapScene extends Phaser.Scene {
     }
     // Yumuşak kenar karartması
     const v = this.add.graphics();
-    v.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.35, 0.35, 0, 0).fillRect(0, 0, W, 90);
-    v.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.4, 0.4).fillRect(0, H - 120, W, 120);
+    v.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.35, 0.35, 0, 0).fillRect(FULL_X0, 0, FULL_W, 90);
+    v.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.4, 0.4).fillRect(FULL_X0, H - 120, FULL_W, 120);
     this.world.add(v);
     // Bölge başlıkları haritada yazılmaz (Ömer 2026-10-08); yalnızca bölge geçişinde ortada kısa bant (regionBanner).
   }
@@ -606,10 +632,10 @@ export class CampaignMapScene extends Phaser.Scene {
         im.setPosition(p.x, p.y - 6 - bob);
         if (Math.abs(ahead.x - p.x) > 0.5) im.setFlipX(ahead.x < p.x);
       });
-      if (this.cameras.main.zoom > 1.01) this.cameras.main.centerOn(this.caravan[0]?.x ?? 0, this.caravan[0]?.y ?? 0);
+      if (this.mapZoom > 1.01) this.cameras.main.centerOn(this.caravan[0]?.x ?? 0, this.caravan[0]?.y ?? 0);
     };
     const tween = this.tweens.add({ targets: state, d: len, duration, ease: 'Sine.easeInOut', onUpdate: place, onComplete: () => finish() });
-    const skip = this.add.zone(0, 0, W, H).setOrigin(0, 0).setInteractive();
+    const skip = this.add.zone(FULL_X0, 0, FULL_W, H).setOrigin(0, 0).setInteractive();
     this.ui.add(skip);
     const hint = serif(this, W / 2, 310, 'Tap to skip', 20, '#f3e4c4', { bold: false, stroke: 3 }).setOrigin(0.5).setAlpha(0.8);
     this.ui.add(hint);
@@ -643,7 +669,7 @@ export class CampaignMapScene extends Phaser.Scene {
       const b = this.input.pointer2;
       if (a.isDown && b.isDown) {
         const d = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
-        if (pinch > 0) cam.setZoom(Phaser.Math.Clamp(cam.zoom * (d / pinch), 1, ZOOM_MAX));
+        if (pinch > 0) this.setMapZoom(this.mapZoom * (d / pinch));
         pinch = d;
         this.drag.moved = true;
         this.drag.x = p.x;
@@ -668,8 +694,29 @@ export class CampaignMapScene extends Phaser.Scene {
   }
 
   private zoomBy(d: number): void {
+    this.setMapZoom(Math.round((this.mapZoom + d) * 10) / 10);
+  }
+
+  private setMapZoom(z: number): void {
+    this.mapZoom = Phaser.Math.Clamp(z, 1, ZOOM_MAX);
+    this.cameras.main.setZoom(stageView.zoom * this.mapZoom);
+  }
+
+  /**
+   * Kameralar (kurulumda ve ekran boyutu değişince): tuval boyutu, render ölçeği, harita sınırı. Harita kamerası baktığı noktayı korur;
+   * arayüz kamerası 1920x1080 arayüzü ortalar, köşe öğeleri (başlık, lejant) görünen alanın köşelerine yeniden yerleşir.
+   */
+  private layoutCameras(first: boolean): void {
     const cam = this.cameras.main;
-    cam.setZoom(Phaser.Math.Clamp(Math.round((cam.zoom + d) * 10) / 10, 1, ZOOM_MAX));
+    const mid = first ? { x: W / 2, y: H / 2 } : { x: cam.midPoint.x, y: cam.midPoint.y };
+    cam.setSize(stageView.canvasW, stageView.canvasH);
+    cam.setBounds(this.terrainX.left, 0, this.terrainX.right - this.terrainX.left, H);
+    cam.setZoom(stageView.zoom * this.mapZoom);
+    cam.centerOn(mid.x, mid.y);
+    this.uiCam.setSize(stageView.canvasW, stageView.canvasH);
+    this.uiCam.setZoom(stageView.zoom);
+    this.uiCam.centerOn(W / 2, H / 2);
+    if (!first) this.renderHud();
   }
 
   private centerOn(id: string): void {
@@ -687,7 +734,7 @@ export class CampaignMapScene extends Phaser.Scene {
     const L = this.hud;
     // Kartuş (sol üst): yalnızca harita adı (Ömer 2026-10-08). Durak/mod/zorluk/yuva Party penceresinde.
     // Çerçevesiz yazı; okunurluk için kontur + yumuşak gölge.
-    L.add(goldText(this, 40, 26, this.map.title, 56, 8).setOrigin(0, 0).setShadow(3, 4, '#000000', 8, true, true));
+    L.add(goldText(this, stageView.left + 40, 26, this.map.title, 56, 8).setOrigin(0, 0).setShadow(3, 4, '#000000', 8, true, true));
     // Takım şeridi (üst orta). Ömer 2026-10-08: ayrı Party düğmesi yok; herhangi bir kahraman portresine dokunmak Party penceresini açar.
     // Hücre 112 px (telefonda da >= 44 gerçek px); fareyle üstüne gelince büyür + altın halka, şerit yavaşça nabız atar (tıklanabilir).
     const team = activeHeroes(s);
@@ -744,7 +791,7 @@ export class CampaignMapScene extends Phaser.Scene {
   private renderLegend(): void {
     const L = this.hud;
     const w = 300;
-    const x = W - 24 - w;
+    const x = stageView.right - 24 - w;
     const open = this.legendOpen;
     const h = open ? 168 : 50;
     const y = H - 24 - h;
@@ -991,7 +1038,7 @@ export class CampaignMapScene extends Phaser.Scene {
     this.ui.add(c);
     const g = this.add.graphics();
     g.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0, 0).fillRect(0, 0, 1, 1);
-    g.fillStyle(0x0c0805, 0.75).fillRect(0, H / 2 - 80, W, 160);
+    g.fillStyle(0x0c0805, 0.75).fillRect(FULL_X0, H / 2 - 80, FULL_W, 160);
     c.add(g);
     c.add(goldText(this, W / 2, H / 2 - 18, r.title.toUpperCase(), 58, 10).setOrigin(0.5));
     c.add(this.add.text(W / 2, H / 2 + 42, r.tagline, { fontFamily: SERIF, fontSize: '26px', fontStyle: 'italic', color: '#e8d9b8' }).setResolution(2).setOrigin(0.5));

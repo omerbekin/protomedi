@@ -16,6 +16,7 @@ import { GameMenu, isGameMenuOpen } from './ui/game-menu';
 import { lockInput, onInputLockChange, unlockInput } from './ui/input-lock';
 import { createFullscreenButton } from './ui/fullscreen';
 import { installViewport, parseRotateMode } from './ui/viewport';
+import { installStage, setStageMetrics } from './game/stage';
 import { WikiPanel } from './wiki/view';
 import { debugState } from './game/debug-state';
 import './style.css';
@@ -46,7 +47,8 @@ const game = new Phaser.Game({
   height: layout.height,
   backgroundColor: '#000000',
   antialias: true,
-  // Oran korunarak (FIT) görünür alanın en büyük 16:9 kısmı; yerleşim/döndürme src/ui/viewport.ts
+  // Oran korunarak (FIT); tuval boyutu ekran oranı ve gerçek piksel çözünürlüğüyle src/ui/viewport.ts > stageMetrics'ten gelir (geniş ekran:
+  // mantıksal genişlik 1920-2580, yükseklik 1080; kamera yakınlaştırması src/game/stage.ts). Yerleşim/döndürme src/ui/viewport.ts
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [firstScene, ...otherScenes.filter((sc) => sc !== firstScene)],
 });
@@ -59,7 +61,8 @@ if (import.meta.env.DEV) (window as unknown as { __game: Phaser.Game }).__game =
 if (import.meta.env.DEV || ['localhost', '127.0.0.1'].includes(window.location.hostname)) (window as unknown as { __mp: typeof mp }).__mp = mp;
 
 // --- Screen layout: fills the visible area, follows the address bar, rotates the stage on upright phones ---
-installViewport(game, document.getElementById('stage')!, parseRotateMode(window.location.search));
+installStage(game);
+installViewport(game, document.getElementById('stage')!, parseRotateMode(window.location.search), setStageMetrics);
 
 // --- Debug menu ---
 const debug = new DebugMenu(document.getElementById('ui-root')!, DEBUG_TABS, DEBUG_INFO_TAB);

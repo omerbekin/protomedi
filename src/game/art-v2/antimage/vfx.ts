@@ -8,6 +8,7 @@
  * Skill -> anahtar: mana_burn -> 'manasteal', drain_field -> 'drainfield', spell_ward -> 'spellward', void_strike -> 'voidstrike'
  * Promise VURUŞ ANINDA çözülür; tüm süreler k.slow() ile skillSlowdown'a uyar.
  */
+import { FULL_W } from '../../../ui/viewport'; // geniş ekran: tam ekran karartma görünen alanın tamamını kaplar
 import type Phaser from 'phaser';
 import type { CombatantView } from '../../combatant-view';
 import type { VfxCtx } from '../../vfx';
@@ -395,7 +396,7 @@ const voidstrike: V2Vfx = async (c, k) => {
       const p = k.spot(t);
       const v = c.scene.add.image(p.x, p.y, voidTex(k, c.scene)).setDisplaySize(10, 10).setDepth(k.DEPTH + 30);
       const halo = glow(c, k, p.x, p.y, 40, 0x7d3fb0, 0.8, k.DEPTH + 29);
-      const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x10041c, 0).setDepth(k.DEPTH - 25);
+      const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x10041c, 0).setDepth(k.DEPTH - 25);
       c.scene.tweens.add({ targets: dim, alpha: 0.32, duration: k.slow(300) });
       c.scene.tweens.add({ targets: v, displayWidth: 86, displayHeight: 86, duration: k.slow(320), ease: 'Quad.easeOut' });
       c.scene.tweens.add({ targets: halo, displayWidth: 240, displayHeight: 240, alpha: 0.6, duration: k.slow(320) });

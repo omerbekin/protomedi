@@ -17,6 +17,7 @@
  * Abyssal Fury (madde 262) yüklü saldırılar: Double Strike / Whirlwind / Charge'ta saldıranın yükü bu kullanımda harcandıysa
  * (`furious(c)`: c.usage'daki abyssal_fury yük olayları) kılıç izi ve savuruş kızıl tonlu, iz biraz daha uzun.
  */
+import { FULL_W } from '../../../ui/viewport'; // geniş ekran: tam ekran karartma görünen alanın tamamını kaplar
 import type Phaser from 'phaser';
 import type { V2Vfx } from '../types';
 import type { VfxCtx } from '../../vfx';
@@ -481,7 +482,7 @@ const warcry: V2Vfx = async (c, k) => {
   const len = bladeLen(a);
   c.sfx('abyssRumble');
   // 1) çatlak + karanlık
-  const dark = c.scene.add.rectangle(960, 540, 1920, 1080, 0x12040a, 0).setDepth(k.DEPTH - 30);
+  const dark = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x12040a, 0).setDepth(k.DEPTH - 30);
   c.scene.tweens.add({ targets: dark, alpha: 0.42, duration: k.slow(320), yoyo: true, hold: k.slow(900), onComplete: () => dark.destroy() });
   k.cracks(c.scene, f.x, f.y, { len: 150, n: 9, flat: 0.32, dur: 1300 });
   const glow = c.scene.add.ellipse(f.x, f.y, 40, 14, 0xc0203a, 0.0).setDepth(k.FLOOR_FX + 3).setBlendMode(k.Phaser.BlendModes.ADD);

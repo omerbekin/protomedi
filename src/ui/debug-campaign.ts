@@ -181,7 +181,7 @@ export function registerCampaignDebug(game: Phaser.Game, debug: DebugMenu): void
     else game.scene.start('MainMenuScene', { view });
   };
   const views: Array<['menu' | 'play' | 'settings' | 'mp', string, string, string]> = [
-    ['menu', 'Main menu', 'frame', 'Open the main menu (Play · Multiplayer · Settings · Codex)'],
+    ['menu', 'Main menu', 'frame', 'Open the main menu (Play · Settings · Codex)'],
     ['play', 'Play cards', 'sword', 'Open the main menu on the Play cards (Campaign · Quick Battle · Multiplayer)'],
     ['settings', 'Menu settings', 'gear', 'Open the main menu on its Settings column'],
     ['mp', 'Menu multiplayer', 'team', 'Open the main menu on its Multiplayer column (name, Host, Join)'],

@@ -18,6 +18,7 @@ import { cornerOrnaments, frameRect, glowRect, GOLD, makePanel } from '../ui-fra
 import type { MpTeamHooks } from '../mp-hooks';
 import { toggleGameMenu } from '../../ui/game-menu';
 import { debugState } from '../debug-state';
+import { worldXY } from '../stage';
 
 const { width: W, height: H, colors } = layout;
 const { rows: ROWS, lanes: LANES } = content.GRID;
@@ -209,16 +210,20 @@ export class TeamSelectScene extends Phaser.Scene {
     this.refresh();
     this.cameras.main.fadeIn(380, 6, 3, 1);
 
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+    // İşaretçi dünya koordinatına çevrilir (geniş ekran / gerçek piksel kamerası: pointer.x tuval pikselidir)
+    this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
+      const p = worldXY(this, ptr);
       this.onDragMove(p);
       this.onCardDragMove(p);
       this.onCardHover(p);
     });
-    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+    this.input.on('pointerup', (ptr: Phaser.Input.Pointer) => {
+      const p = worldXY(this, ptr);
       this.onDragEnd(p, false);
       this.onCardDragEnd(p, false);
     });
-    this.input.on('pointerupoutside', (p: Phaser.Input.Pointer) => {
+    this.input.on('pointerupoutside', (ptr: Phaser.Input.Pointer) => {
+      const p = worldXY(this, ptr);
       this.onDragEnd(p, true);
       this.onCardDragEnd(p, true);
     });
@@ -836,7 +841,8 @@ export class TeamSelectScene extends Phaser.Scene {
       outer.setDepth(15);
       this.hideTip();
     });
-    zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
+    zone.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+      const p = worldXY(this, ptr);
       this.tweens.add({ targets: outer, scale: scale * 0.97, duration: 70 });
       this.cardDrag = { id: def.id, sx: p.x, sy: p.y, moved: false, over: null };
     });
@@ -852,7 +858,7 @@ export class TeamSelectScene extends Phaser.Scene {
   }
 
   /** Moving over a card: stat cells and skill icons get their own tooltip. */
-  private onCardHover(p: Phaser.Input.Pointer): void {
+  private onCardHover(p: { x: number; y: number }): void {
     if (this.cardDrag?.moved || this.drag?.moved) return;
     for (const c of this.cards.values()) {
       const r = this.cardRect(c);
@@ -1074,7 +1080,8 @@ export class TeamSelectScene extends Phaser.Scene {
     body.add([hov, x]);
     const zone = this.add.zone(0, 0, SLOT_W, SLOT_H).setInteractive({ useHandCursor: true });
     body.add(zone);
-    zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
+    zone.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+      const p = worldXY(this, ptr);
       if (this.editable(side)) this.drag = { side, from: i, sx: p.x, sy: p.y, moved: false, over: null };
     });
     zone.on('pointerover', () => {
@@ -1117,7 +1124,7 @@ export class TeamSelectScene extends Phaser.Scene {
     return this.slotRects.find((s) => (!side || s.side === side) && x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h);
   }
 
-  private makeGhost(def: CombatantDef, side: Side | null, p: Phaser.Input.Pointer): Phaser.GameObjects.Container {
+  private makeGhost(def: CombatantDef, side: Side | null, p: { x: number; y: number }): Phaser.GameObjects.Container {
     const g = this.add.graphics();
     g.fillStyle(0x120c07, 0.95).fillRect(-72, -50, 144, 100);
     frameRect(g, -72, -50, 144, 100, { bevel: 3 });
@@ -1126,7 +1133,7 @@ export class TeamSelectScene extends Phaser.Scene {
     return this.add.container(p.x, p.y, [g, head, name]).setDepth(6000).setAlpha(0.92).setScale(1.05);
   }
 
-  private onDragMove(p: Phaser.Input.Pointer): void {
+  private onDragMove(p: { x: number; y: number }): void {
     const d = this.drag;
     if (!d) return;
     if (!d.moved && Math.hypot(p.x - d.sx, p.y - d.sy) > 14) {
@@ -1144,7 +1151,7 @@ export class TeamSelectScene extends Phaser.Scene {
     }
   }
 
-  private onDragEnd(p: Phaser.Input.Pointer, outside: boolean): void {
+  private onDragEnd(p: { x: number; y: number }, outside: boolean): void {
     const d = this.drag;
     if (!d) return;
     this.drag = undefined;
@@ -1167,7 +1174,7 @@ export class TeamSelectScene extends Phaser.Scene {
 
   // --- Drag: from a class card onto a slot ---
 
-  private onCardDragMove(p: Phaser.Input.Pointer): void {
+  private onCardDragMove(p: { x: number; y: number }): void {
     const d = this.cardDrag;
     if (!d) return;
     if (!d.moved && Math.hypot(p.x - d.sx, p.y - d.sy) > 14) {
@@ -1185,7 +1192,7 @@ export class TeamSelectScene extends Phaser.Scene {
     }
   }
 
-  private onCardDragEnd(p: Phaser.Input.Pointer, outside: boolean): void {
+  private onCardDragEnd(p: { x: number; y: number }, outside: boolean): void {
     const d = this.cardDrag;
     if (!d) return;
     this.cardDrag = undefined;

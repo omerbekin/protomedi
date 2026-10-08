@@ -2,7 +2,9 @@ import Phaser from 'phaser';
 import { formatLobbyCode, normalizeLobbyCode } from '../../net/lobby-code';
 import { sanitizeName } from '../../net/protocol';
 import { copyText, promptCode, promptName, toast } from '../../ui/mp-overlay';
-import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
+import { preloadCampaignArt } from '../campaign-art';
+import { mapArt } from '../map-art';
+import { getMap } from '../../campaign';
 import { W, H } from '../campaign-ui';
 import { buildBackdrop, goldText, makeMenuButton, serif } from '../menu-ui';
 import { mp, MP_SCENE } from '../mp-client';
@@ -34,7 +36,8 @@ export class MultiplayerScene extends Phaser.Scene {
   }
 
   create(): void {
-    buildBackdrop(this, W, H, hasCampaignArt(this, 'valdoria-bg') ? campaignArtKey('valdoria-bg') : null);
+    const art = mapArt(this, getMap('valdoria')); // geniş harita görseli varsa o (eski 16:9 bölgesi eski yerinde)
+    buildBackdrop(this, W, H, art?.key ?? null, art?.region);
     this.layer = this.add.container(0, 0).setDepth(100);
     this.input.keyboard?.on('keydown-ESC', () => !debugState.uiPaused && toggleGameMenu()); // Esc: sağ üstteki Menu
     this.off = mp.onChange(() => this.scene.isActive() && this.draw());

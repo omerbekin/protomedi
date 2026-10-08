@@ -5,6 +5,11 @@
   "subtitle": "Campaign Map",
   "blurb": "From Mill Road to Castle Morvane: 17 stops, 3 choice points, 12 stops per run.",
   "background": "valdoria-bg",
+  "backgroundWide": {
+    "_not": "Geniş (21:9) harita görseli (Ömer 2026-10-08, ChatGPT outpaint, 1916x821). region = eski 16:9 haritanın (valdoria-bg, 1672x941) bu görselde kapladığı dikdörtgen [x0, y0, x1, y1] (kesir): SIFT özellik eşleştirmesiyle ölçüldü (1435 eşleşme, benzerlik dönüşümü: ölçek 0,8202, dönme 0, ortalama hata 1 px). Düğüm konumları (pos) eski haritaya göre kalır; yeni görsel takılırsa yalnızca image + region değişir (src/game/wide-map.ts). Görsel yoksa eski 16:9 görsel kullanılır.",
+    "image": "valdoria-bg-wide",
+    "region": [0.08229, 0.00077, 0.79804, 0.94083]
+  },
   "start": "1",
   "stopsPerRun": 12,
   "visibility": 2,

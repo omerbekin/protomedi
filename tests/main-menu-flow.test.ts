@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { MAIN_ITEMS, backTarget, backdropFor, campaignButtons, initialView, moveSelection } from '../src/game/main-menu-flow';
 
 describe('ana menü akışı (taslak menu-flow.html, animasyon 1)', () => {
-  it('ana menü: Play · Multiplayer · Settings · Codex (bu sırayla)', () => {
-    expect(MAIN_ITEMS.map((i) => i.label)).toEqual(['Play', 'Multiplayer', 'Settings', 'Codex']);
+  it('ana menü: Play · Settings · Codex (bu sırayla; Multiplayer Play kartlarında)', () => {
+    expect(MAIN_ITEMS.map((i) => i.label)).toEqual(['Play', 'Settings', 'Codex']);
   });
 
   it('Play: harita ~1,18 yaklaşır ve hafif kararır; Settings / Multiplayer: kararır ve bulanıklaşır; menü: sade', () => {

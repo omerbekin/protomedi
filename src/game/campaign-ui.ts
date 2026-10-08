@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { content } from '../engine';
 import { classAvatar, classLogoBadge, goldText, makeMenuButton, serif } from './menu-ui';
 import { GOLD, SERIF, makePanel } from './ui-frame';
+import { FULL_W, FULL_X0 } from '../ui/viewport';
 
 /**
  * Sefer ekranlarının ortak parçaları (ana menü ve harita): pencere (modal), sınıf kartı, can çubuğu, parşömen plaka.
@@ -44,7 +45,7 @@ export function openModal(
   const y = o.y ?? H / 2 - h / 2;
   const root = scene.add.container(0, 0);
   layer.add(root);
-  const dim = scene.add.rectangle(0, 0, W, H, 0x050302, o.dim ?? 0.55).setOrigin(0, 0).setInteractive();
+  const dim = scene.add.rectangle(FULL_X0, 0, FULL_W, H, 0x050302, o.dim ?? 0.55).setOrigin(0, 0).setInteractive(); // geniş ekranda da tüm alan
   root.add(dim);
   root.add(makePanel(scene, x, y, w, h, { top: 0x2e2218, bottom: 0x110b07, bevel: 5, alpha: 0.98 }));
   root.add(goldText(scene, W / 2, y + 52, o.title, 48, 3).setOrigin(0.5));

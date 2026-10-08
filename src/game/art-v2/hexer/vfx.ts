@@ -18,6 +18,7 @@
  *   'omentransfer' : Ill Omen geçişi. c.actor = ölen birim (kaynak), c.targets = alıcı(lar). Promise pul alıcıya oturunca çözülür.
  *   'withertick'   : Wither tiki (taşıyanın tur başı). c.targets = taşıyan(lar). Ayak dibinde 0,4 sn yeşil-gri buhar.
  */
+import { FULL_W } from '../../../ui/viewport'; // geniş ekran: tam ekran karartma görünen alanın tamamını kaplar
 import type Phaser from 'phaser';
 import type { V2Vfx } from '../types';
 import type { VfxCtx } from '../../vfx';
@@ -224,7 +225,7 @@ const doomMark: V2Vfx = async (c, k) => {
   const d = facing(c);
   c.actor.play('cast');
   c.sfx('doomBreath');
-  const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x0c0410, 0).setDepth(k.DEPTH - 25);
+  const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x0c0410, 0).setDepth(k.DEPTH - 25);
   c.scene.tweens.add({ targets: dim, alpha: 0.3, duration: k.slow(420) });
   // asa vuruşu + ayak mührü + kandil kararır
   const fa = feetOf(c.actor);

@@ -1,8 +1,13 @@
 import Phaser from 'phaser';
 import { content } from '../../engine';
-import { CONFIG, deleteSave, deleteSlot, latestSave, listSaves, migrateSaves, readSaves, slotSummaries, type CampaignMode, type Difficulty, type SaveEntry, type SlotSummary } from '../../campaign';
+import { CONFIG, deleteSave, deleteSlot, getMap, latestSave, listSaves, migrateSaves, readSaves, slotSummaries, type CampaignMode, type Difficulty, type SaveEntry, type SlotSummary } from '../../campaign';
 import { backgroundKey, hasBackground, preloadAssets } from '../assets';
 import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
+import { blurredTexture, edgeFillers, mapArt } from '../map-art';
+import { coverShift, focusCrop, placeArt } from '../wide-map';
+import layout from '../../../data/battle-layout.json';
+import { onStageResize, stageView, worldXY } from '../stage';
+import { FULL_W, FULL_X0, MENU_COL_X, menuColumnShift } from '../../ui/viewport';
 import { H, W, crown, hpBar, openModal, type Modal } from '../campaign-ui';
 import { MAP_SCENE, loadEntry, startNewCampaign, storage } from '../campaign-session';
 import { classAvatar, classLogoBadge, ensureGlow, fitText, goldText, makeMenuButton, serif } from '../menu-ui';
@@ -32,7 +37,7 @@ const dateText = (iso: string): string => {
 };
 
 // --- Yerleşim (1920x1080) ---
-const COL_X = 140; // sol sütunun yazı başlangıcı
+const COL_X = MENU_COL_X; // sol sütunun yazı başlangıcı (ayarlar ekranı DOM sütunu da aynı: src/ui/viewport.ts)
 const COL_W = 560; // ana menü yazı satırlarının genişliği
 const PANEL_W = 760; // Settings / Multiplayer satırlarının genişliği (sağda değer/denetim)
 const SHADE_W = 980; // soldan sağa açılan gölge
@@ -69,7 +74,7 @@ interface Row {
 
 /**
  * Ana menü (Ömer 2026-10-08, taslak menu-flow.html (onaydan sonra silindi), animasyon 1 "March to the map"; saf kararlar `src/game/main-menu-flow.ts`):
- *  - Menü: arkada sefer haritası + soldan sağa açılan gölge; sol sütunda logo ve kutusuz yazı listesi Play · Multiplayer · Settings · Codex
+ *  - Menü: arkada sefer haritası + soldan sağa açılan gölge; sol sütunda logo ve kutusuz yazı listesi Play · Settings · Codex (Multiplayer Play kartlarında, 2026-10-08)
  *    (seçili satırın önünde kor rengi elmas + hafif parıltı; fare, dokunma, klavye yukarı/aşağı/Enter). Açıklama yazısı yok.
  *  - Play: harita yaklaşır, menü sola kayar, üç kart (Campaign · Quick Battle · Multiplayer) aşağıdan yükselir; sol üstte '◂ Back' / Esc.
  *    Campaign kartı: Continue (kayıt varsa) · New (yuva -> mod + zorluk) · Load (yuva -> kayıtlar; kayıt yoksa pasif).
@@ -88,9 +93,16 @@ export class MainMenuScene extends Phaser.Scene {
   private busyUntil = 0;
   private bg: Phaser.GameObjects.Image | null = null;
   private bgBase = 1;
+  /** Arka plan merkezinin taban konumu (yakınlaşmasız; geniş ekranda boşluk kalmayacak kadar kaydırılmış). */
+  private bgCenter = { x: W / 2, y: H / 2 };
+  private bgPlace: { cx: number; cy: number; w: number } | null = null;
+  private placeFillers: ((img: Phaser.GameObjects.Image) => void) | null = null;
+  private vignette!: Phaser.GameObjects.Image;
+  /** Sol sütunun yatay kayması: geniş ekranda sütun ekranın sol kenarına doğru kayar (16:9'da 0). */
+  private colX = 0;
   private look = { zoom: 1, dark: 0, blur: 0 };
   private darkRect!: Phaser.GameObjects.Rectangle;
-  private blurFx: { strength: number } | null = null;
+  private bgBlur: Phaser.GameObjects.Image | null = null;
   private lookTween: Phaser.Tweens.Tween | null = null;
 
   private menuCol!: Phaser.GameObjects.Container;
@@ -123,7 +135,8 @@ export class MainMenuScene extends Phaser.Scene {
     this.menuSel = 0;
     this.cardSel = 0;
     this.busyUntil = 0;
-    this.blurFx = null;
+    this.bgBlur = null;
+    this.bg = null;
     this.lookTween = null;
     this.cleanups = [];
     this.promptOpen = false;
@@ -138,10 +151,10 @@ export class MainMenuScene extends Phaser.Scene {
   create(): void {
     migrateSaves(storage()); // eski tek-liste kayıtlar Slot 1'e taşınır
     if (mp.active) mp.leave(); // ana menüye dönmek multiplayer lobisinden ayrılmaktır
-    this.buildBackground();
     this.buildMenuColumn();
     this.buildCards();
     this.buildBack();
+    this.buildBackground(); // geniş ekran yerleşimi sütunu ve Back'i de konumlar (onStageResize)
     this.modalLayer = this.add.container(0, 0).setDepth(1000);
 
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onKey(e));
@@ -166,13 +179,22 @@ export class MainMenuScene extends Phaser.Scene {
 
   private buildBackground(): void {
     this.cameras.main.setBackgroundColor('#0d0a07');
-    const key = hasCampaignArt(this, 'valdoria-bg') ? campaignArtKey('valdoria-bg') : null;
-    if (key) {
-      this.bg = this.add.image(W / 2, H / 2, key).setDepth(0);
-      this.bgBase = Math.max(W / this.bg.width, H / this.bg.height) * 1.04; // taslaktaki -%4 taşma
+    // Geniş (21:9) harita görseli varsa o (eski 16:9 haritanın bölgesi eski yerine oturur; geniş ekranda yanları görünür), yoksa 16:9 görsel
+    const art = mapArt(this, getMap('valdoria'));
+    if (art) {
+      this.bg = this.add.image(W / 2, H / 2, art.key).setDepth(0);
+      // Eski kural: 16:9 harita ekranı %4 taşarak kaplar. Aynı dikdörtgen geniş görselin bölgesine uygulanır.
+      const [x0, y0, x1, y1] = art.region;
+      const rw = (x1 - x0) * this.bg.width;
+      const rh = (y1 - y0) * this.bg.height;
+      const k = Math.max(W / rw, H / rh) * 1.04; // taslaktaki -%4 taşma
+      const p = placeArt(this.bg.width, this.bg.height, art.region, { x: W / 2 - (rw * k) / 2, y: H / 2 - (rh * k) / 2, w: rw * k, h: rh * k });
+      this.bgBase = p.scale;
+      this.bgPlace = { cx: (p.left + p.right) / 2, cy: (p.top + p.bottom) / 2, w: p.right - p.left };
+      this.placeFillers = edgeFillers(this, art.key, 0).place;
       this.bg.setScale(this.bgBase);
-      const pre = (this.bg as unknown as { preFX?: { addBlur: (q?: number, x?: number, y?: number, s?: number) => { strength: number } } }).preFX;
-      if (pre) this.blurFx = pre.addBlur(0, 2, 2, 0); // WebGL yoksa bulanıklık yok (yalnızca kararma)
+      // Bulanıklık: önceden bulanıklaştırılmış kopya üstte, saydamlığı 'blur' ile (WebGL preFX büyük görselde kayık/kırpık çiziyordu)
+      this.bgBlur = this.add.image(W / 2, H / 2, blurredTexture(this, art.key, 6)).setDepth(0).setAlpha(0);
     }
     const vign = canvasTex(this, 'mm-vign', 480, 270, (ctx) => {
       const g = ctx.createRadialGradient(288, 135, 0, 288, 135, 300);
@@ -181,19 +203,41 @@ export class MainMenuScene extends Phaser.Scene {
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, 480, 270);
     });
-    this.add.image(W / 2, H / 2, vign).setDisplaySize(W, H).setDepth(1);
-    this.darkRect = this.add.rectangle(0, 0, W, H, 0x000000, 0).setOrigin(0, 0).setDepth(2);
+    this.vignette = this.add.image(W / 2, H / 2, vign).setDisplaySize(W, H).setDepth(1);
+    this.darkRect = this.add.rectangle(FULL_X0, 0, FULL_W, H, 0x000000, 0).setOrigin(0, 0).setDepth(2);
+    onStageResize(this, () => this.layoutStage());
+  }
+
+  /** Geniş ekran yerleşimi (sahne kurulunca ve ekran boyutu değişince): arka plan kayması, vinyet, sol sütun ve Back konumu. */
+  private layoutStage(): void {
+    const { left, right, viewW } = stageView;
+    if (this.bgPlace) {
+      const half = this.bgPlace.w / 2;
+      const dx = coverShift({ left: this.bgPlace.cx - half, right: this.bgPlace.cx + half }, left, right);
+      this.bgCenter = { x: this.bgPlace.cx + dx, y: this.bgPlace.cy };
+    }
+    this.vignette.setDisplaySize(viewW, H);
+    this.colX = menuColumnShift(left); // sütun ekranın soluna yaklaşır ama kenara yapışmaz (16:9'da 0)
+    if (!this.tweens.isTweening(this.menuCol)) this.menuCol.setX(this.view === 'menu' ? this.colX : this.hiddenColX());
+    if (this.panel && !this.tweens.isTweening(this.panel)) this.panel.setX(this.colX);
+    this.back.setX(left + 58);
     this.applyLook();
+  }
+
+  /** Gizli sütun konumu: gölgesiyle birlikte görünen alanın solunda. */
+  private hiddenColX(): number {
+    return stageView.left - (SHADE_W + 40);
   }
 
   private applyLook(): void {
     const { zoom, dark, blur } = this.look;
     if (this.bg) {
       this.bg.setScale(this.bgBase * zoom);
-      this.bg.setPosition(PIVOT.x + (W / 2 - PIVOT.x) * zoom, PIVOT.y + (H / 2 - PIVOT.y) * zoom);
+      this.bg.setPosition(PIVOT.x + (this.bgCenter.x - PIVOT.x) * zoom, PIVOT.y + (this.bgCenter.y - PIVOT.y) * zoom);
+      this.placeFillers?.(this.bg);
+      this.bgBlur?.setPosition(this.bg.x, this.bg.y).setDisplaySize(this.bg.displayWidth, this.bg.displayHeight).setAlpha(blur);
     }
     this.darkRect.setFillStyle(0x000000, dark);
-    if (this.blurFx) this.blurFx.strength = blur;
   }
 
   private tweenLook(view: MenuView, instant: boolean): void {
@@ -221,16 +265,19 @@ export class MainMenuScene extends Phaser.Scene {
   // ------------------------------------------------------------ sol sütun: ana menü
 
   /** Sütunun arkasındaki gölge: solda koyu, sağa doğru açılır (sütunla birlikte kayar). */
-  private columnShade(): Phaser.GameObjects.Image {
-    const key = canvasTex(this, 'mm-shade', 256, 4, (ctx) => {
-      const g = ctx.createLinearGradient(0, 0, 256, 0);
-      g.addColorStop(0, 'rgba(8,6,4,0.85)');
-      g.addColorStop(0.7, 'rgba(8,6,4,0.55)');
-      g.addColorStop(1, 'rgba(8,6,4,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, 256, 4);
-    });
-    return this.add.image(0, 0, key).setOrigin(0, 0).setDisplaySize(SHADE_W, H);
+  private columnShade(): Phaser.GameObjects.Graphics {
+    // Köşe renkli dolgu (doku değil): eski 256 px doku gölgenin bittiği yerde ince koyu bir çizgi bırakıyordu
+    const g = this.add.graphics();
+    const c = 0x080604;
+    const mid = Math.round(SHADE_W * 0.7);
+    g.fillGradientStyle(c, c, c, c, 0.85, 0.55, 0.85, 0.55).fillRect(0, 0, mid, H);
+    g.fillGradientStyle(c, c, c, c, 0.55, 0, 0.55, 0).fillRect(mid, 0, SHADE_W - mid, H);
+    return g;
+  }
+
+  /** Gölgenin sola uzantısı (geniş ekranda sütun sağa kayınca sol kenara kadar aynı koyuluk; 16:9'da ekran dışı). */
+  private shadeExtension(): Phaser.GameObjects.Rectangle {
+    return this.add.rectangle(-800, 0, 800, H, 0x080604, 0.85).setOrigin(0, 0);
   }
 
   /** Kutusuz yazı satırı: elmas + yazı (+ isteğe bağlı sağ taraf) + ince ayırıcı çizgi. Dokunma alanı satırın tamamı. */
@@ -271,7 +318,7 @@ export class MainMenuScene extends Phaser.Scene {
 
   private buildMenuColumn(): void {
     const col = (this.menuCol = this.add.container(0, 0).setDepth(20));
-    col.add(this.columnShade());
+    col.add([this.shadeExtension(), this.columnShade()]);
     if (hasLogo(this)) col.add(addLogo(this, COL_X + 300, 290, 600, 210)); // assets/branding/logo.png
     else col.add(fitText(goldText(this, COL_X + 300, 290, 'EMBERS OF VALDORIA', 64, 4).setOrigin(0.5), 600));
     MAIN_ITEMS.forEach((it, i) => {
@@ -326,7 +373,7 @@ export class MainMenuScene extends Phaser.Scene {
 
   private slideMenu(shown: boolean, instant: boolean): void {
     this.tweens.killTweensOf(this.menuCol);
-    const x = shown ? 0 : -(SHADE_W + 40);
+    const x = shown ? this.colX : this.hiddenColX();
     if (shown) this.menuCol.setVisible(true);
     if (instant) {
       this.menuCol.setPosition(x, 0).setAlpha(shown ? 1 : 0).setVisible(shown);
@@ -356,7 +403,7 @@ export class MainMenuScene extends Phaser.Scene {
   private buildBack(): void {
     const t = serif(this, 0, 0, '◂ Back', 36, TXT, { spacing: 2, stroke: 3 }).setOrigin(0, 0.5);
     const zone = this.add.zone(t.width / 2, 0, t.width + 60, 100).setInteractive({ useHandCursor: true });
-    this.back = this.add.container(58, 64, [t, zone]).setDepth(40).setAlpha(0).setVisible(false);
+    this.back = this.add.container(stageView.left + 58, 64, [t, zone]).setDepth(40).setAlpha(0).setVisible(false);
     zone.on('pointerover', () => t.setColor(TXT_ON));
     zone.on('pointerout', () => t.setColor(TXT));
     zone.on('pointerup', () => this.ready() && this.goBack());
@@ -368,13 +415,18 @@ export class MainMenuScene extends Phaser.Scene {
     const latest = latestSave(storage());
     const anySaves = slotSummaries(storage()).some((x) => x && x.saveCount > 0);
     const campaignArt = hasCampaignArt(this, 'valdoria-bg') ? campaignArtKey('valdoria-bg') : null;
+    // Kart görselleri (Ömer 2026-10-08): Quick Battle = Proving Grounds (öğleden sonra), Multiplayer = Duelling Ring (ay ışığı); yoksa eskileri
     const art = (id: string) => (hasBackground(this, id) ? backgroundKey(id) : null);
     const camp = campaignButtons(!!latest, anySaves);
     const runCamp = (id: 'continue' | 'new' | 'load') => (id === 'continue' && latest ? this.loadSave(latest) : id === 'new' ? this.chooseSlot() : this.loadSlots());
+    const focusOf = (key: string | null): readonly [number, number] | null => {
+      const id = key?.startsWith('bg:') ? key.slice(3) : null;
+      return (id && (layout.backgrounds.cardFocus as unknown as Record<string, [number, number]>)[id]) || null;
+    };
     const specs: Array<{ name: string; art: string | null; line?: string; buttons?: typeof camp; run: () => void }> = [
       { name: 'Campaign', art: campaignArt, buttons: camp, run: () => runCamp(camp[0]!.id) },
-      { name: 'Quick Battle', art: art('castle-hall'), line: 'Pick two teams', run: () => this.scene.start('TeamSelectScene') },
-      { name: 'Multiplayer', art: art('kings-bridge'), line: 'Fight a friend online', run: () => this.setView('mp') },
+      { name: 'Quick Battle', art: art('proving-grounds-sunny-afternoon') ?? art('castle-hall'), line: 'Pick two teams', run: () => this.scene.start('TeamSelectScene') },
+      { name: 'Multiplayer', art: art('duelling-ring-moon') ?? art('kings-bridge'), line: 'Fight a friend online', run: () => this.setView('mp') },
     ];
     specs.forEach((s, i) => {
       const cx = W / 2 + (i - 1) * (CARD_W + CARD_GAP);
@@ -385,10 +437,10 @@ export class MainMenuScene extends Phaser.Scene {
       c.add(base);
       if (s.art) {
         const img = this.add.image(0, 0, s.art).setAlpha(0.6);
-        const sc = Math.max(CARD_W / img.width, CARD_H / img.height);
-        const cw = CARD_W / sc;
-        const ch = CARD_H / sc;
-        img.setCrop((img.width - cw) / 2, (img.height - ch) / 2, cw, ch).setScale(sc);
+        // Odak noktası (veri: battle-layout.json > backgrounds.cardFocus) kartın tam ortasında; kart boşluksuz dolar
+        const fc = focusCrop(img.width, img.height, CARD_W, CARD_H, focusOf(s.art));
+        img.setCrop(fc.cropX, fc.cropY, fc.cropW, fc.cropH).setScale(fc.scale);
+        img.setOrigin((fc.cropX + fc.cropW / 2) / img.width, (fc.cropY + fc.cropH / 2) / img.height);
         c.add(img);
       }
       const shadeKey = canvasTex(this, 'mm-cardshade', 4, 256, (ctx) => {
@@ -472,19 +524,19 @@ export class MainMenuScene extends Phaser.Scene {
     if (old) {
       this.tweens.killTweensOf(old);
       if (instant) old.destroy(true);
-      else this.tweens.add({ targets: old, alpha: 0, x: -30, duration: 220, onComplete: () => old.destroy(true) });
+      else this.tweens.add({ targets: old, alpha: 0, x: old.x - 30, duration: 220, onComplete: () => old.destroy(true) });
     }
     if (!kind) return;
-    const p = (this.panel = this.add.container(0, 0).setDepth(25));
-    p.add(this.columnShade());
+    const p = (this.panel = this.add.container(this.colX, 0).setDepth(25));
+    p.add([this.shadeExtension(), this.columnShade()]);
     p.add(goldText(this, COL_X, 330, kind === 'settings' ? 'Settings' : 'Multiplayer', 66, 3).setOrigin(0, 0.5));
     if (kind === 'settings') this.buildSettings(p);
     else this.buildMultiplayer(p);
     this.panelSel = 0;
     this.selectPanel(0);
     if (instant) return;
-    p.setAlpha(0).setX(-30);
-    this.tweens.add({ targets: p, alpha: 1, x: 0, duration: 450, delay: 250, ease: 'Cubic.easeOut' });
+    p.setAlpha(0).setX(this.colX - 30);
+    this.tweens.add({ targets: p, alpha: 1, x: this.colX, duration: 450, delay: 250, ease: 'Cubic.easeOut' });
   }
 
   private selectPanel(i: number): void {
@@ -534,7 +586,7 @@ export class MainMenuScene extends Phaser.Scene {
     const track = this.add.zone(trackX + trackW / 2, 0, trackW + 40, ROW_H - 8).setInteractive({ useHandCursor: true });
     const fromPointer = (ptr: Phaser.Input.Pointer) => {
       const root = track.parentContainer;
-      const lx = ptr.x - (root?.x ?? 0) - (root?.parentContainer?.x ?? 0) - trackX;
+      const lx = worldXY(this, ptr).x - (root?.x ?? 0) - (root?.parentContainer?.x ?? 0) - trackX;
       set((lx / trackW) * 10, false);
     };
     let dragging = false;

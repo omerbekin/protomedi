@@ -2,6 +2,23 @@
   "_not": "Savaş ekranı yerleşimi (1920x1080 HD). Koordinatlar karakterin ayak noktasıdır. characterSize: placeholder çizim boyutu; spriteBox: karakterin ekranda sığdırıldığı kutu (oran korunur). Renkler geçici.",
   "width": 1920,
   "height": 1080,
+  "stage": {
+    "_not": "Geniş ekran (src/ui/viewport.ts > stageMetrics): mantıksal yükseklik 1080 sabit, mantıksal genişlik ekran oranına göre width (16:9) ile maxWidth (~21.5:9) arasında esner; savaş/menü koordinatları 1920x1080 merkez bölgede kalır, kamera ortalar. Tuval gerçek piksel çözünürlüğünde çizilir (render ölçeği >= 1), üst sınır maxRenderWidth genişlik ve maxRenderScale kat.",
+    "maxWidth": 2580,
+    "maxRenderWidth": 3840,
+    "maxRenderScale": 2
+  },
+  "backgrounds": {
+    "_not": "Savaş arka planı havuzları (Ömer 2026-10-08; src/game/battle-background.ts): Quick Battle 'quick', çevrimiçi savaş 'multiplayer' havuzundan savaş seed'ine göre biri (iki oyuncu aynı seed = aynı arka plan; rematch yeni seed). Sefer kendi kuralını kullanır (karşılaşma > düğüm > bölge > savaşın varsayılanı castle-hall). offsetY: arka plan başına dikey kaydırma (dünya px, + aşağı; zemin çizgisini birimlerin ayağına oturtmak için), yoksa 0.",
+    "quick": ["proving-grounds-sunny-afternoon", "proving-grounds-sunset", "proving-grounds-rain"],
+    "multiplayer": ["duelling-ring-moon", "duelling-ring-storm", "duelling-ring-snow"],
+    "offsetY": {},
+    "cardFocus": {
+      "_not": "Play kartı görsellerinin odak noktası [x, y] (görselin kesri): kartın tam ortasına gelir, kart boşluksuz dolar (gerekirse yakınlaşır; src/game/wide-map.ts > focusCrop). Ölçüm 2026-10-09: Quick Battle kalenin parmaklıklı kapısı, Multiplayer büyük taş kemerin açıklığı.",
+      "proving-grounds-sunny-afternoon": [0.403, 0.46],
+      "duelling-ring-moon": [0.525, 0.28]
+    }
+  },
   "characterSize": {
     "width": 140,
     "height": 200

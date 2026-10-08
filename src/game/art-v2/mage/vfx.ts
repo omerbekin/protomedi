@@ -8,6 +8,7 @@
  * Skill -> anahtar: fire_bolt -> 'fireball', blizzard -> 'blizzard', mana_barrier -> 'barrier', meteor -> 'meteor'
  * Promise VURUŞ ANINDA çözülür; kuyruk (sönen parçacıklar) arkada akar. Tüm süreler k.slow() ile skillSlowdown'a uyar.
  */
+import { FULL_W } from '../../../ui/viewport'; // geniş ekran: tam ekran karartma görünen alanın tamamını kaplar
 import type Phaser from 'phaser';
 import type { CombatantView } from '../../combatant-view';
 import type { VfxCtx } from '../../vfx';
@@ -312,7 +313,7 @@ const blizzard: V2Vfx = async (c, k) => {
   const cloudY = yTop - 290;
   const wind = c.board === 'enemy' ? 1 : -1; // büyücüden uzağa
   // 1) karartma + bulut (iki katman topak, rüzgârla yuvarlanarak gelir)
-  const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x081830, 0).setDepth(k.DEPTH - 25);
+  const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x081830, 0).setDepth(k.DEPTH - 25);
   c.scene.tweens.add({ targets: dim, alpha: 0.3, duration: k.slow(360) });
   const puffs: Img[] = [];
   const span = x1 - x0 + 160;
@@ -537,7 +538,7 @@ const meteor: V2Vfx = async (c, k) => {
   const cx = cell.x;
   const cy = cell.y - 30;
   // gök kızarır, mühür açılır
-  const dim = c.scene.add.rectangle(960, 540, 1920, 1080, 0x220608, 0).setDepth(k.DEPTH - 25);
+  const dim = c.scene.add.rectangle(960, 540, FULL_W, 1080, 0x220608, 0).setDepth(k.DEPTH - 25);
   c.scene.tweens.add({ targets: dim, alpha: 0.36, duration: k.slow(380) });
   const skyX = cx - f * 300;
   const skyY = 215;
