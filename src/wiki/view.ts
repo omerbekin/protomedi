@@ -94,6 +94,7 @@ function articleGroups(list: WikiArticle[]): HTMLElement[] {
 
 function skillBlock(s: WikiSkill): HTMLElement {
   const meta = h('div', { class: 'wk-meta' },
+    h('span', { class: 'wk-chip', text: s.range, title: 'Melee: reaches the front rows only. Ranged: reaches anyone. Support: targets an ally. Self: only the caster.' }),
     h('span', { class: 'wk-badge', text: s.targetBadge, title: s.targetText }),
     s.shape ? shapeGrid(s.shape) : null,
     h('span', { class: 'wk-chip', text: `Cost: ${s.cost}` }),
@@ -102,7 +103,7 @@ function skillBlock(s: WikiSkill): HTMLElement {
   return h('div', { class: 'wk-skill', style: { '--accent': s.accent } },
     icon(s.icon, s.accent, 'wk-icon big', ownerOfSkill(s.id)),
     h('div', { class: 'wk-skill-body' },
-      h('div', { class: 'wk-skill-name' }, h('b', { text: s.name }), ...s.elements.map((e) => h('span', { class: 'wk-el', text: e, style: { color: ELEMENT_COLOR[e] ?? '#fff', 'border-color': ELEMENT_COLOR[e] ?? '#fff' } }))),
+      h('div', { class: 'wk-skill-name' }, h('b', { text: s.slot ? `${s.slot}. ${s.name}` : s.name }), ...s.elements.map((e) => h('span', { class: 'wk-el', text: e, style: { color: ELEMENT_COLOR[e] ?? '#fff', 'border-color': ELEMENT_COLOR[e] ?? '#fff' } }))),
       meta,
       h('ul', { class: 'wk-lines' }, ...s.lines.map((t, i) => h('li', { text: t, style: lineColor(s.kinds[i]) ? { color: lineColor(s.kinds[i])! } : {} }))),
       skillArt(s.id)));

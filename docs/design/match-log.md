@@ -79,6 +79,8 @@ Global skill'ler (`global skills:` satırı): madde 258'den beri sabit kapı yok
 
 Lucky Escape (madde 258): `result` satırında `E0:Gambler -> P1:Warrior: killing blow IGNORED (Lucky Escape), 0 dmg, hp 35` ardından `P1:Warrior passive: Lucky Escape`; can ve kalkan değişmez.
 
+Boss CC bağışıklığı ve Charge ön sıra (madde 271): `result` satırında `E0:Warrior "The Bridge Warden" is IMMUNE to stun (crowd control; from P0:Warrior)` ardından `... passive: Immune` (durum uygulanmadı); Charge sonrası `P0:Warrior steps into the front row cell 4 -> 1 (after Charge)`. Aday satırında `position N` terimi (ön sıraya geçişin değeri: melee kazancı - yakın dövüş riski - telgraf yükü) ve `{advance to cell 1: +N}` notu; boss hedefe Stun/Slow/Silence `control`/`silence` değeri 0, Taunt boss'un hasarını yönlendirmez (`protect`).
+
 ## Örnek soru ve cevap
 
 "Warrior (E1) neden Double Strike kullandı, Whirlwind değil?" -> kaydın `#32` bloğu, `WHY` satırı: iki adayın da SCORE dökümü yazar (ör. Double Strike `damage 24.9 + kill 31.0 + pressure 3.1` = 59, Whirlwind `damage 18.2 + kill 31.0 + pressure 2.0 + cost -7.5` = 43.7): ikisi de Anti-Mage'i öldürüyor, Whirlwind'in ikinci hedefi zayıf ve MP bedeli var; en yüksek puanlı seçilir.

@@ -55,6 +55,29 @@ describe('Wiki kataloğu (sağ üst kitap simgesi)', () => {
     for (const c of wiki.classes) expect(c.skills).toHaveLength(4);
   });
 
+  it('skill yuvası (1-4) sahibin skills dizisine uyar; Melee/Ranged/Support/Self etiketi veriden türer', () => {
+    for (const u of [...wiki.classes, ...wiki.summons]) {
+      const def = content.classes[u.id] ?? content.summons[u.id]!;
+      expect(u.skills.map((s) => s.slot), u.id).toEqual(def.skills.map((_, i) => i + 1));
+      for (const s of u.skills) {
+        const sk = content.skills[s.id]!;
+        if (sk.motion === 'melee') expect(s.range, s.id).toBe('Melee');
+        else if (sk.target === 'self') expect(s.range, s.id).toBe('Self');
+        else if (['single_ally', 'dead_ally', 'all_allies'].includes(sk.target)) expect(s.range, s.id).toBe('Support');
+        else expect(s.range, s.id).toBe('Ranged');
+      }
+    }
+    // düz skill listesi: sahibine göre gruplu, grup içinde yuva sırasıyla
+    const bySlot = new Map<string, number>();
+    for (const s of wiki.skills) {
+      if (s.slot === null) continue;
+      expect(s.slot, s.id).toBeGreaterThan(bySlot.get(s.owner.id) ?? 0);
+      bySlot.set(s.owner.id, s.slot);
+    }
+    const bossText = JSON.stringify(wiki.mechanics.filter((a) => a.id.startsWith('boss-')));
+    for (const b of Object.values(content.bosses)) b.skills.forEach((id, i) => expect(bossText).toContain(`${i + 1}. ${content.skills[id]!.name} [`));
+  });
+
   it('tüm skill listelenir; ad, hedef rozeti, bedel, cooldown ve açıklaması boş değildir', () => {
     expect(wiki.skills.map((s) => s.id).sort()).toEqual(Object.keys(content.skills).sort());
     for (const s of wiki.skills) {

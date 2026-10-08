@@ -137,9 +137,34 @@ export class CombatantView {
     this.magicShieldFill = scene.add.rectangle(-hpBar.width / 2, this.shieldY - 7, 0, 6, color(colors.magicShield)).setOrigin(0, 0.5);
     // Ad plakası: sefer özel adı ('Bandit Chief') ya da class adı; elit altın, boss kızıl yazı + üstünde küçük rütbe rozeti
     const tier = tierStyle(combatant.tier);
-    const name = scene.add.text(0, this.hpY - hpBar.height - 4, unitName(combatant), { ...textStyle(30, tier?.hex), fontFamily: SERIF }).setOrigin(0.5, 1);
-    const maxNameW = hpBar.width * 1.7; // uzun özel adlar ('Bandit Chief') komşu hücrenin adına taşmasın
-    if (name.width > maxNameW) name.setScale(maxNameW / name.width, 1);
+    const isBoss = tier?.tier === 'boss';
+    const nameStyle: Phaser.Types.GameObjects.Text.TextStyle = { ...textStyle(isBoss ? 36 : 30, tier?.hex), fontFamily: SERIF };
+    if (isBoss) {
+      // Boss: kalın koyu kenar + ince kor/altın parıltı (BOSS rozetiyle uyumlu); tek ve büyük olduğu için geniş alan
+      nameStyle.stroke = '#12060a';
+      nameStyle.strokeThickness = 7;
+      nameStyle.shadow = { offsetX: 0, offsetY: 0, color: '#f0a43a', blur: 10, stroke: true, fill: true };
+    }
+    const name = scene.add.text(0, this.hpY - hpBar.height - 4, unitName(combatant), nameStyle).setOrigin(0.5, 1);
+    if (isBoss) {
+      // Çok uzunsa iki satıra böl (orta boşluktan), hâlâ taşıyorsa ORANI KORUYARAK küçült
+      const maxBossW = hpBar.width * 2.2;
+      const full = unitName(combatant);
+      if (name.width > maxBossW && full.includes(' ')) {
+        const mid = full.length / 2;
+        let cut = -1;
+        for (let i = 0; i < full.length; i++) if (full[i] === ' ' && (cut < 0 || Math.abs(i - mid) < Math.abs(cut - mid))) cut = i;
+        name.setText(`${full.slice(0, cut)}\n${full.slice(cut + 1)}`).setAlign('center');
+      }
+      if (name.width > maxBossW) name.setScale(maxBossW / name.width);
+    } else if (tier) {
+      // Elit: oranı bozan sıkıştırma yok, orantılı küçült
+      const maxNameW = hpBar.width * 2;
+      if (name.width > maxNameW) name.setScale(maxNameW / name.width);
+    } else {
+      const maxNameW = hpBar.width * 1.7; // uzun özel adlar ('Bandit Chief') komşu hücrenin adına taşmasın
+      if (name.width > maxNameW) name.setScale(maxNameW / name.width, 1);
+    }
     const tierBadge: Phaser.GameObjects.GameObject[] = [];
     if (tier) {
       const label = scene.add.text(0, name.y - name.height - 2, tier.label, { ...textStyle(16, '#1a0f08'), fontStyle: 'bold', stroke: tier.hex, strokeThickness: 0 }).setOrigin(0.5, 1);

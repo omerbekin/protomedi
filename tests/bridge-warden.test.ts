@@ -270,16 +270,26 @@ describe('Chain Hook çekmesi (M6) ve Ash Brand (M4)', () => {
 });
 
 describe('Unyielding (M9)', () => {
-  it('Stun Warden\'a Stagger olur (tek eylem); diğer debuff\'lar 1 tur kısa (en az 1)', () => {
+  it('madde 271: Warden CC\'ye bağışık (Stun/Slow/Silence işlemez, Stagger de olmaz); diğer debuff\'lar 1 tur kısa (en az 1)', () => {
     const b = make();
     const w = warden(b);
+    for (const k of ['stun', 'slow', 'silence']) {
+      b.debugAddStatus(w.uid, k, 3);
+      expect(w.statuses.some((s) => s.kind === k)).toBe(false);
+    }
+    expect(w.statuses.some((s) => s.kind === 'staggered')).toBe(false);
+    b.debugAddStatus(w.uid, 'wound', 3);
+    expect(w.statuses.find((s) => s.kind === 'wound')?.turns).toBe(3 + W.boss!.unyielding!.debuffDurationDelta);
+    b.debugAddStatus(w.uid, 'blinded', 1);
+    expect(w.statuses.find((s) => s.kind === 'blinded')?.turns).toBe(1);
+  });
+
+  it('madde 271: rütbesiz kurulan Warden da (boss tanımı) bağışık', () => {
+    const b = make(3, 'turns', { ...TEAMS, units: { enemies: { 1: { displayName: 'The Bridge Warden' } } } });
+    const w = warden(b);
+    expect(w.tier).toBeUndefined();
     b.debugAddStatus(w.uid, 'stun', 2);
-    expect(w.statuses.some((s) => s.kind === 'stun')).toBe(false);
-    expect(w.statuses.some((s) => s.kind === 'staggered')).toBe(true);
-    b.debugAddStatus(w.uid, 'slow', 3);
-    expect(w.statuses.find((s) => s.kind === 'slow')?.turns).toBe(3 + W.boss!.unyielding!.debuffDurationDelta);
-    b.debugAddStatus(w.uid, 'wound', 1);
-    expect(w.statuses.find((s) => s.kind === 'wound')?.turns).toBe(1);
+    expect(w.statuses.some((s) => s.kind === 'stun' || s.kind === 'staggered')).toBe(false);
   });
 });
 

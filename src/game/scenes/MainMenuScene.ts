@@ -9,6 +9,7 @@ import { buildBackdrop, classAvatar, classLogoBadge, fitText, goldText, makeMenu
 import { makePanel } from '../ui-frame';
 import { mp, MP_SCENE } from '../mp-client';
 import { addLogo, hasLogo, preloadLogo } from '../branding';
+import { setSettingsOpen } from '../../ui/settings';
 
 export interface MainMenuData {
   /** 'load': Load Game penceresi açık başlar (yenilgi sonrası "Load Game"). */
@@ -70,13 +71,14 @@ export class MainMenuScene extends Phaser.Scene {
     items.push({ label: 'Load Game', run: () => this.loadSlots(), enabled: anySaves });
     items.push({ label: 'Quick Battle', run: () => this.scene.start('TeamSelectScene'), sub: 'Pick two teams and fight one battle' });
     items.push({ label: 'Multiplayer', run: () => this.scene.start(MP_SCENE), sub: 'Quick Battle against a friend online' });
-    let y = 380;
+    items.push({ label: 'Settings', run: () => setSettingsOpen(true) }); // sağ üstteki dişliyle aynı ayarlar paneli
+    let y = 370;
     for (const it of items) {
       const b = makeMenuButton(this, W / 2, y, 560, 96, it.label, () => (it.enabled === false ? b.shake() : it.run()), { primary: !!it.primary, size: it.primary ? 42 : 36 });
       if (it.enabled === false) b.setEnabled(false);
       L.add(b.container);
       if (it.sub) L.add(serif(this, W / 2, y + 62, it.sub, 19, '#a8977a', { bold: false, stroke: 2 }).setOrigin(0.5));
-      y += it.sub ? 136 : 116;
+      y += it.sub ? 128 : 108;
     }
     if (corrupt) L.add(serif(this, W / 2, H - 50, 'A damaged save file was ignored.', 20, '#d88a7e', { bold: false, stroke: 2 }).setOrigin(0.5));
     if (this.openOnStart === 'load' && anySaves) this.loadSlots();

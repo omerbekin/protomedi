@@ -1008,9 +1008,48 @@ export class Battle {
     return { avg, min, max };
   }
 
+  /**
+   * Kontrol bağışıklığı (madde 271): birim formulas.json > ccImmunity.tiers rütbesinde mi (boss; data/bosses boss tanımlı birim de)? Elitler değil. Saf.
+   */
+  ccImmune(c: Pick<Combatant, 'tier' | 'boss'>): boolean {
+    const imm = this.setup.formulas.ccImmunity;
+    if (!imm) return false;
+    return (c.tier !== undefined && imm.tiers.includes(c.tier)) || c.boss !== undefined;
+  }
+
+  /** Bu durum bu birime işlemez mi (CC durumu + bağışık birim)? Önizleme ve YZ de bunu okur. Saf. */
+  statusBlocked(c: Pick<Combatant, 'tier' | 'boss'>, kind: string): boolean {
+    return !!this.statusDef(kind)?.cc && this.ccImmune(c);
+  }
+
+  /** Birim taunt'a uymaz mı (boss: tek hedefli skill'leri taunt'lı düşmana zorlanmaz; madde 271)? Saf. */
+  ignoresTaunt(c: Pick<Combatant, 'tier' | 'boss'>): boolean {
+    return !!this.setup.formulas.ccImmunity?.taunt && this.ccImmune(c);
+  }
+
+  /** Birim çekilemez/itilemez mi (boss bağışıklığı ya da Unyielding)? Saf. */
+  immuneToDisplacement(c: Combatant): boolean {
+    return !!c.boss?.unyielding?.immuneDisplacement || (!!this.setup.formulas.ccImmunity?.displacement && this.ccImmune(c));
+  }
+
+  /**
+   * advanceToFront (Warrior Charge; madde 271): skill sonrası kullanıcının geçeceği ön sıra hücresi; zaten ön sıradaysa, kendi tahtasında değilse ya da ön
+   * sırada boş hücre yoksa null. Öncelik: kendi şeridinin ön hücresi; doluysa ön sıradaki en yakın boş hücre (şerit farkı en az, eşitlikte küçük şerit).
+   * Boş = üstünde canlı birim yok (ceset hücresi boş sayılır, Move kuralı). `slot`: varsayımsal başlangıç hücresi (YZ). Saf.
+   */
+  advanceDestination(c: Combatant, slot = c.slot): number | null {
+    if (c.hp <= 0 || c.inert || c.board !== c.side || this.rowOf(slot) === 0) return null;
+    const lanes = this.setup.formulas.formation.lanes;
+    const lane = this.laneOf(slot);
+    const free = (s: number) => !this.combatants.some((o) => o.hp > 0 && o.uid !== c.uid && o.board === c.board && o.slot === s);
+    const order = Array.from({ length: lanes }, (_, l) => l).sort((a, b) => Math.abs(a - lane) - Math.abs(b - lane) || a - b);
+    for (const l of order) if (free(l)) return l;
+    return null;
+  }
+
   /** Çekme (pull laneFront) hedefi bu birimi nereye götürür (kendi şeridinin en öndeki boş hücresi; yoksa null). Saf. */
   pullDestination(c: Combatant): number | null {
-    if (c.inert || c.board !== c.side || c.boss?.unyielding?.immuneDisplacement) return null;
+    if (c.inert || c.board !== c.side || this.immuneToDisplacement(c)) return null;
     const lanes = this.setup.formulas.formation.lanes;
     for (let row = 0; row < this.rowOf(c.slot); row++) {
       const to = row * lanes + this.laneOf(c.slot);
@@ -1468,7 +1507,7 @@ export class Battle {
         }
         // Backstab: yalnızca arkası boş hedefler (menzil gibi bir erişim kuralı; taunt bundan SONRA uygulanır: arkası dolu taunter seçilemez)
         if (skill.requiresOpenBehind && !this.debugCasting) list = list.filter((c) => this.openBehindProblem(c) === null);
-        if (skill.target === 'single_enemy' && !this.debugCasting) {
+        if (skill.target === 'single_enemy' && !this.debugCasting && !this.ignoresTaunt(actor)) {
           const taunters = list.filter((c) => c.statuses.some((s) => s.kind === 'taunt'));
           if (taunters.length > 0) list = taunters;
         }
@@ -1531,7 +1570,7 @@ export class Battle {
         const p = this.openBehindProblem(target);
         if (p) return p;
       }
-      const tauntingFoe = this.living(target.side).some((c) => c.statuses.some((s) => s.kind === 'taunt'));
+      const tauntingFoe = !this.ignoresTaunt(actor) && this.living(target.side).some((c) => c.statuses.some((s) => s.kind === 'taunt'));
       return tauntingFoe ? 'Must target the taunting enemy' : 'Out of reach';
     }
     return 'Invalid target';
@@ -2237,6 +2276,15 @@ export class Battle {
     }
     stage = undefined;
     if (skill.telegraph) this.createTelegraph(actor, skill, targets, centerCells, emit);
+    // advanceToFront (Warrior Charge, madde 271): kullanıcı ön sırada değilse ön sıraya geçer (önce kendi şeridi; isabet etse de etmese de)
+    if (skill.advanceToFront && actor.hp > 0) {
+      const to = this.advanceDestination(actor);
+      if (to !== null) {
+        const from = actor.slot;
+        actor.slot = to;
+        emit({ type: 'moved', actor: actor.uid, from, to, cause: skill.id, by: actor.uid, advance: true });
+      }
+    }
 
     for (const s of ownAttackEnds) {
       if (!actor.statuses.includes(s)) continue;
@@ -2524,6 +2572,12 @@ export class Battle {
 
   /** `cause`: görsel neden (skill etkisinin `cause` alanı, ör. 'vines'); `status` olayına aynen yazılır. */
   private addStatus(target: Combatant, status: Status, emit: Emit, cause?: string): void {
+    // Kontrol bağışıklığı (madde 271): boss rütbesi CC durumlarını (statuses.json > cc: Stun, Slow, Silence) yemez; durum uygulanmaz, 'Immune' yazısı
+    if (this.statusBlocked(target, status.kind)) {
+      emit({ type: 'immune', target: target.uid, status: status.kind, source: status.source, ...(cause ? { cause } : {}) });
+      emit({ type: 'passive', actor: target.uid, passive: 'cc_immune', name: 'Immune' });
+      return;
+    }
     // Boss kontrol direnci (Unyielding): Stun yerine Stagger (bir eylem kaybı); diğer debuff'lar 1 tur kısa (en az 1; yığılan ve kuralla süren durumlar hariç)
     const uy = target.boss?.unyielding;
     if (uy) {

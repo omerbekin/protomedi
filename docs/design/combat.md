@@ -19,6 +19,10 @@ HP, MP/Kaynak, ATK, DEF, MAG, RES, SPD, CRIT, EVA. Formüller `data/formulas.jso
 ## Durum efektleri (taslak liste)
 Zehir, yanma, sersemleme (tur kaybı), yavaşlatma, hızlandırma, kalkan, taunt, lanet. Taunt'ı olan birim kontrol (CC) durumu (şu an yalnızca Stun; veride `breaksTaunt`) yerse taunt o anda silinir. Her efektin süresi tur/tik cinsinden veri dosyasında tanımlı.
 
+**Boss CC bağışıklığı (madde 271, Ömer 2026-10-08: "Boss'lar CC yemesin. Ama Omen, Wound, ignite gibi skill'leri yesin"):** `formulas.json > ccImmunity.tiers` (`boss`; elitler DEĞİL; `data/bosses` boss tanımlı birim de) rütbesindeki birimler `statuses.json > cc: true` durumlarını (Stun, Vine Snare kökü dahil; Slow; Silence) yemez: durum uygulanmaz, olay `immune {target, status, source}` + `passive 'Immune'` (yüzen yazı); skill'in hasarı normal. `taunt: true`: boss'un tek hedefli skill'leri taunt'lı düşmana zorlanmaz; `displacement: true`: çekilemez/itilemez. Uygulanır: Wound, Omen/Doom, Wither, zemin hasarı, Overextended, Blinded, Jinxed (bu ikisi CC sayılmadı: Ömer'e soruldu). Warden'ın Staggered'ı (Mooring kırılması) boss mekaniğidir, aynen işler. Önizleme `TargetPreview.immune` + 'Immune: Stun' satırı; YZ boss'a CC değeri vermez; skill açıklamasında 'Bosses are immune to ...'. API `battle.ccImmune / statusBlocked / ignoresTaunt / immuneToDisplacement`.
+
+**Charge ön sıraya geçiş (madde 271, `SkillDef.advanceToFront`):** skill kullanıldıktan sonra (isabet etse de etmese de) kullanıcı kendi tahtasında sıra 0'da değilse: önce kendi şeridinin ön hücresi (boşsa), değilse ön sıradaki en yakın boş hücre (şerit farkı en az, eşitlikte küçük şerit); ön sıra doluysa yerinde kalır. Boş = canlı birim yok (ceset hücresi olur). Olay `moved {cause: skill, by, advance: true}`; `battle.advanceDestination`, önizleme `TargetPreview.advance`, YZ terimi `position` (`ai.json > value.advanceMeleeShare / advanceRiskShare`). Sahnede birimin evi efekt başlamadan yeni hücre yapılır: Charge'ın dönüşü doğrudan yeni hücreye gider.
+
 ## Ömer'e açık sorular
 `open-questions.md` içinde.
 

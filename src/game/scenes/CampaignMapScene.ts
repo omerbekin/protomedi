@@ -45,6 +45,8 @@ import { MENU_SCENE, current, markJourneyStart, save, session, setState, startCa
 import { classAvatar, classLogoBadge, ensureGlow, goldText, makeMenuButton, serif } from '../menu-ui';
 import { GOLD, SERIF, makePanel } from '../ui-frame';
 import { sortByPrimary } from '../class-order';
+import { debugState } from '../debug-state';
+import { isSettingsOpen, setSettingsOpen } from '../../ui/settings';
 
 /**
  * Sefer haritası (campaign.md 6): arka plan görseli, yollar (düz = tek yol, kesik = seçimli) ve altlarında boyalı toprak izi, düğüm rozetleri,
@@ -77,6 +79,7 @@ export class CampaignMapScene extends Phaser.Scene {
   private caravan: Phaser.GameObjects.Image[] = [];
   private walking: { finish: () => void } | null = null;
   private modal: Modal | null = null;
+  private pauseMenu: Modal | null = null;
   private tip: Phaser.GameObjects.Container | null = null;
   private dashT = 0;
   private drag = { down: false, moved: false, x: 0, y: 0 };
@@ -97,6 +100,7 @@ export class CampaignMapScene extends Phaser.Scene {
     this.caravan = [];
     this.walking = null;
     this.modal = null;
+    this.pauseMenu = null;
     this.tip = null;
   }
 
@@ -133,7 +137,91 @@ export class CampaignMapScene extends Phaser.Scene {
       this.centerOn(this.s.at);
     }
     this.events.on('update', (_t: number, dt: number) => this.animateDashes(dt));
+    this.mountMenuButton();
+    this.input.keyboard?.on('keydown-ESC', () => this.onEscape());
     this.advance();
+  }
+
+  // ------------------------------------------------------------ oyun menüsü (sağ üst Menu düğmesi / Esc)
+
+  /** Sağ üstteki DOM simge sırasına (tam ekran / wiki / ayarlar) hizalı "Menu" düğmesi; sahne kapanınca kaldırılır. */
+  private mountMenuButton(): void {
+    const root = document.getElementById('ui-root');
+    if (!root) return;
+    root.querySelector('.campaign-menu-toggle')?.remove();
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'settings-toggle campaign-menu-toggle';
+    b.textContent = 'Menu';
+    b.title = 'Menu (Esc)';
+    b.setAttribute('aria-label', 'Menu');
+    const fs = root.querySelector<HTMLElement>('.fullscreen-toggle');
+    const fsShown = !!fs && !fs.hidden && getComputedStyle(fs).display !== 'none';
+    Object.assign(b.style, {
+      right: `calc(${fsShown ? 176 : 120}px + var(--sar, 0px))`,
+      width: 'auto',
+      minWidth: '76px',
+      padding: '0 14px',
+      color: '#f3e4c4',
+      fontFamily: SERIF,
+      fontWeight: 'bold',
+      fontSize: '18px',
+      letterSpacing: '1px',
+    });
+    b.addEventListener('click', () => this.toggleMenu());
+    root.append(b);
+    this.events.once('shutdown', () => {
+      b.remove();
+      setSettingsOpen(false);
+    });
+  }
+
+  private toggleMenu(): void {
+    if (this.pauseMenu) this.closeMenu();
+    else this.openMenu();
+  }
+
+  private closeMenu(): void {
+    this.pauseMenu?.close();
+    this.pauseMenu = null;
+  }
+
+  /** Resume / Save (Normal) / Settings / Back to Main Menu. */
+  private openMenu(): void {
+    if (this.pauseMenu || this.walking) return;
+    const s = this.s;
+    const items: Array<{ label: string; run: () => void; primary?: boolean }> = [{ label: 'Resume', primary: true, run: () => this.closeMenu() }];
+    if (canSaveManually(s) && !this.modal)
+      items.push({
+        label: `Save  ${saveCount(storage(), s.slot)}/${CONFIG.rules.maxSaves.normal}`,
+        run: () => {
+          save('manual');
+          this.closeMenu();
+          this.renderHud(); // "Game saved" bildirimi
+        },
+      });
+    items.push({ label: 'Settings', run: () => { this.closeMenu(); setSettingsOpen(true); } });
+    items.push({ label: 'Back to Main Menu', run: () => this.scene.start(MENU_SCENE) });
+    const m = openModal(this, this.ui, { title: 'Menu', width: 640, height: 190 + items.length * 100 });
+    items.forEach((it, i) => m.root.add(makeMenuButton(this, W / 2, m.area.y + 46 + i * 100, 460, 82, it.label, it.run, { primary: !!it.primary, size: it.primary ? 32 : 28 }).container));
+    this.pauseMenu = m;
+  }
+
+  /** Esc: önce açık ayarlar paneli / menü / kart / ipucu kapanır; hiçbiri yoksa menü açılır. */
+  private onEscape(): void {
+    if (debugState.uiPaused) return; // wiki açık: Esc wiki'nindir
+    if (isSettingsOpen()) return setSettingsOpen(false);
+    if (this.pauseMenu) return this.closeMenu();
+    if (this.walking) return this.walking.finish();
+    const step = nextStep(this.s).kind;
+    // zorunlu seçim pencereleri (kahraman, aday, veda, yeni takım) Esc ile kapanmaz: menü üstlerine açılır
+    if (this.modal && !['hero', 'recruit', 'volunteer', 'farewell', 'company'].includes(step)) {
+      this.closeModal();
+      this.renderHud();
+      return;
+    }
+    if (this.tip && !this.modal) return this.dismissTip();
+    this.openMenu();
   }
 
   // ------------------------------------------------------------ geometri
@@ -187,12 +275,7 @@ export class CampaignMapScene extends Phaser.Scene {
     v.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.35, 0.35, 0, 0).fillRect(0, 0, W, 90);
     v.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.4, 0.4).fillRect(0, H - 120, W, 120);
     this.world.add(v);
-    for (const r of this.map.regions) {
-      const x = r.label[0] * W;
-      const y = r.label[1] * H;
-      this.world.add(serif(this, x, y - 14, r.title.toUpperCase(), 30, '#f5ead0', { spacing: 7, stroke: 5 }).setOrigin(0, 0.5).setAlpha(0.92));
-      this.world.add(this.add.text(x + 4, y + 14, r.tagline, { fontFamily: SERIF, fontSize: '18px', fontStyle: 'italic', color: '#efe2c2', stroke: '#1a1008', strokeThickness: 4 }).setResolution(2).setOrigin(0, 0.5).setAlpha(0.9));
-    }
+    // Bölge başlıkları haritada yazılmaz (Ömer 2026-10-08); yalnızca bölge geçişinde ortada kısa bant (regionBanner).
   }
 
   // ------------------------------------------------------------ yollar, düğümler, sis (duruma göre yeniden çizilir)
@@ -367,13 +450,13 @@ export class CampaignMapScene extends Phaser.Scene {
       c.add([cg, ct]);
     }
     if (n.id === this.map.start && v !== 'current') c.add(serif(this, 0, -r - 18, 'START', 14, '#f3d9a0', { spacing: 2, stroke: 3 }).setOrigin(0.5));
-    // gidilebilecek düğüm: nabız + dokunma
-    if (option) {
+    // gidilebilecek düğüm ya da üzerinde eylem bekleyen mevcut düğüm (savaş, kasaba...): nabız + dokunma
+    if (option || (v === 'current' && this.actionHere())) {
       this.tweens.add({ targets: c, scale: { from: 1, to: 1.08 }, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
     const zone = this.add.zone(0, 0, 110 * scale, 110 * scale).setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Circle(55 * scale, 55 * scale, 55 * scale), hitAreaCallback: Phaser.Geom.Circle.Contains });
     zone.on('pointerup', () => {
-      if (this.drag.moved || this.walking || this.modal) return;
+      if (this.drag.moved || this.walking || this.modal || this.pauseMenu) return;
       this.onNodeTap(n.id, v);
     });
     c.add(zone);
@@ -567,7 +650,22 @@ export class CampaignMapScene extends Phaser.Scene {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       this.drag = { down: true, moved: false, x: p.x, y: p.y };
     });
+    // İki parmakla sıkıştırma = yakınlaştırma (+/- düğmeleri kaldırıldı)
+    this.input.addPointer(1);
+    let pinch = 0;
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      const a = this.input.pointer1;
+      const b = this.input.pointer2;
+      if (a.isDown && b.isDown) {
+        const d = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
+        if (pinch > 0) cam.setZoom(Phaser.Math.Clamp(cam.zoom * (d / pinch), 1, ZOOM_MAX));
+        pinch = d;
+        this.drag.moved = true;
+        this.drag.x = p.x;
+        this.drag.y = p.y;
+        return;
+      }
+      pinch = 0;
       if (!this.drag.down || !p.isDown) return;
       const dx = p.x - this.drag.x;
       const dy = p.y - this.drag.y;
@@ -600,15 +698,9 @@ export class CampaignMapScene extends Phaser.Scene {
     this.hud.removeAll(true);
     const s = this.s;
     const L = this.hud;
-    // Kartuş (sol üst)
-    L.add(makePanel(this, 24, 20, 470, 196, { top: 0x2a2017, bottom: 0x0f0a07, bevel: 4, alpha: 0.94 }));
-    L.add(goldText(this, 48, 38, this.map.title, 56, 8).setOrigin(0, 0));
-    L.add(serif(this, 52, 104, this.map.subtitle.toUpperCase(), 17, '#c9b27a', { bold: false, spacing: 4, stroke: 2 }));
-    L.add(this.add.text(52, 132, this.map.blurb, { fontFamily: SERIF, fontSize: '17px', color: '#e8d9b8', wordWrap: { width: 420 } }).setResolution(2));
-    L.add(serif(this, 52, 178, `Stop ${stopNumber(s)} / ${this.map.stopsPerRun}`, 20, '#f3d9a0'));
-    // Kartuş: mod + genel zorluk (sefer boyunca sabit) + yuva
-    const diff = CONFIG.difficulties[s.difficulty]?.name ?? s.difficulty;
-    L.add(serif(this, 200, 180, `${s.mode === 'ironman' ? 'IRONMAN' : 'NORMAL'} · ${diff.toUpperCase()} · SLOT ${s.slot + 1}`, 15, s.mode === 'ironman' ? '#e08a7a' : '#c9b27a', { spacing: 2, stroke: 3 }));
+    // Kartuş (sol üst): yalnızca harita adı (Ömer 2026-10-08). Durak/mod/zorluk/yuva Party penceresinde.
+    // Çerçevesiz yazı; okunurluk için kontur + yumuşak gölge.
+    L.add(goldText(this, 40, 26, this.map.title, 56, 8).setOrigin(0, 0).setShadow(3, 4, '#000000', 8, true, true));
     // Takım şeridi (üst orta)
     const team = activeHeroes(s);
     const lead = leaderOf(s);
@@ -630,79 +722,33 @@ export class CampaignMapScene extends Phaser.Scene {
     }
     // Lejant (sağ alt, katlanabilir)
     this.renderLegend();
-    // Alt düğmeler
-    L.add(makeMenuButton(this, 110, 270, 170, 70, 'Menu', () => this.scene.start(MENU_SCENE), { size: 28 }).container);
-    if (canSaveManually(s)) {
-      L.add(
-        makeMenuButton(this, 300, 270, 170, 70, 'Save', () => {
-          if (this.walking || this.modal) return;
-          save('manual');
-          this.renderHud();
-        }, { size: 28 }).container,
-      );
-      L.add(serif(this, 400, 270, `${saveCount(storage(), s.slot)}/${CONFIG.rules.maxSaves.normal}`, 18, '#c9b27a', { bold: false, stroke: 3 }).setOrigin(0, 0.5));
-    }
-    // Yakınlaştırma (sol)
-    L.add(makeMenuButton(this, 60, 370, 72, 64, '+', () => this.zoomBy(0.25), { size: 34 }).container);
-    L.add(makeMenuButton(this, 60, 442, 72, 64, '-', () => this.zoomBy(-0.25), { size: 34 }).container);
+    // Menu: sağ üstteki DOM simge sırasında (tam ekran / wiki / ayarlar ile hizalı; bkz. mountMenuButton). Save menünün içinde.
     if (session.notice) {
       const t = serif(this, W / 2, 310, session.notice, 24, '#f3e4c4', { stroke: 4 }).setOrigin(0.5);
       L.add(t);
       this.tweens.add({ targets: t, alpha: 0, delay: 2200, duration: 600 });
       session.notice = '';
     }
-    this.renderAction();
   }
 
-  private actionBtn: Phaser.GameObjects.Container | null = null;
-
-  /** Alt ortadaki eylem düğmesi (Enter Battle, March to ..., Choose your road). */
-  private renderAction(): void {
-    this.actionBtn?.destroy(true);
-    this.actionBtn = null;
-    const step = nextStep(this.s);
-    let label = '';
-    let run: () => void = () => {};
-    if (step.kind === 'battle') {
-      label = 'Enter Battle';
-      run = () => this.showBattleCard();
-    } else if (step.kind === 'move') {
-      if (step.options.length === 1) {
-        const to = step.options[0]!;
-        label = `March to ${node(this.map, to).name}`;
-        run = () => this.march(to);
-      } else {
-        label = 'Choose your road';
-        run = () => this.flash('Tap one of the glowing stops to choose your road.');
-      }
-    } else if (step.kind === 'complete') {
-      label = 'Valdoria Conquered';
-      run = () => this.advance();
-    } else if (['town', 'event', 'treasure'].includes(step.kind)) {
-      label = 'Continue';
-      run = () => this.advance();
-    }
-    if (!label) return;
-    const b = makeMenuButton(this, 1260, H - 48, Math.max(400, label.length * 21), 72, label, () => !this.walking && !this.modal && run(), { primary: true, size: 30 });
-    this.actionBtn = b.container;
-    this.hud.add(b.container);
+  /** Mevcut düğümde dokunarak açılacak bir eylem var mı (savaş, kasaba, olay, hazine, sefer sonu). */
+  private actionHere(): boolean {
+    return ['battle', 'town', 'event', 'treasure', 'complete'].includes(nextStep(this.s).kind);
   }
 
+  /** Lejant (sağ alt, katlanabilir): yalnızca 6 düğüm türü, 2 sütun (~%80 boyut). */
   private renderLegend(): void {
     const L = this.hud;
-    const x = W - 400;
+    const w = 300;
+    const x = W - 24 - w;
     const open = this.legendOpen;
-    const h = open ? 430 : 60;
+    const h = open ? 168 : 50;
     const y = H - 24 - h;
-    L.add(makePanel(this, x, y, 376, h, { top: 0x2a2017, bottom: 0x0f0a07, bevel: 3, ornaments: false, alpha: 0.92 }));
-    L.add(serif(this, x + 24, y + 30, 'LEGEND', 20, '#f3d9a0', { spacing: 5 }).setOrigin(0, 0.5));
-    const tog = serif(this, x + 350, y + 30, open ? 'Hide' : 'Show', 18, '#c9b27a', { bold: false, stroke: 2 }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true });
-    tog.on('pointerup', () => {
-      this.legendOpen = !this.legendOpen;
-      this.renderHud();
-    });
-    L.add(tog);
-    const hit = this.add.zone(x + 300, y + 30, 120, 56).setInteractive({ useHandCursor: true });
+    L.add(makePanel(this, x, y, w, h, { top: 0x2a2017, bottom: 0x0f0a07, bevel: 3, ornaments: false, alpha: 0.92 }));
+    L.add(serif(this, x + 20, y + 25, 'LEGEND', 16, '#f3d9a0', { spacing: 4 }).setOrigin(0, 0.5));
+    L.add(serif(this, x + w - 20, y + 25, open ? 'Hide' : 'Show', 15, '#c9b27a', { bold: false, stroke: 2 }).setOrigin(1, 0.5));
+    // dokunma alanı >= 44 px
+    const hit = this.add.zone(x + w - 50, y + 25, 100, 50).setInteractive({ useHandCursor: true });
     hit.on('pointerup', () => {
       this.legendOpen = !this.legendOpen;
       this.renderHud();
@@ -711,30 +757,14 @@ export class CampaignMapScene extends Phaser.Scene {
     if (!open) return;
     const types: NodeType[] = ['town', 'battle', 'elite', 'treasure', 'event', 'boss'];
     types.forEach((t, i) => {
-      const cx = x + 40 + (i % 2) * 180;
-      const cy = y + 76 + Math.floor(i / 2) * 44;
+      const cx = x + 34 + (i % 2) * 144;
+      const cy = y + 66 + Math.floor(i / 2) * 36;
       const g = this.add.graphics();
-      g.fillStyle(TYPE_COLOR[t], 1).fillCircle(cx, cy, 16).lineStyle(2, 0xc9a24a, 1).strokeCircle(cx, cy, 16);
-      this.drawIcon(g, t, 0xf3e4c4, 0.42, cx, cy);
+      g.fillStyle(TYPE_COLOR[t], 1).fillCircle(cx, cy, 13).lineStyle(2, 0xc9a24a, 1).strokeCircle(cx, cy, 13);
+      this.drawIcon(g, t, 0xf3e4c4, 0.34, cx, cy);
       L.add(g);
-      L.add(serif(this, cx + 26, cy, TYPE_LABEL[t], 17, '#e8d9b8', { bold: false, stroke: 2 }).setOrigin(0, 0.5));
+      L.add(serif(this, cx + 21, cy, TYPE_LABEL[t], 14, '#e8d9b8', { bold: false, stroke: 2 }).setOrigin(0, 0.5));
     });
-    const rows: Array<[string, string, (g: Phaser.GameObjects.Graphics, cx: number, cy: number) => void]> = [
-      ['Single path', 'the only next stop', (g, cx, cy) => g.lineStyle(5, 0xf0e2c0, 1).lineBetween(cx - 18, cy, cx + 18, cy)],
-      ['Branching route', 'you pick one', (g, cx, cy) => { g.lineStyle(5, 0xe0b84a, 1).lineBetween(cx - 18, cy, cx - 6, cy).lineBetween(cx + 2, cy, cx + 14, cy); }],
-      ['Choice point', 'other roads close', (g, cx, cy) => g.lineStyle(4, 0xe0b84a, 1).strokeCircle(cx, cy, 13)],
-      ['Merge point', 'roads meet', (g, cx, cy) => { g.lineStyle(3, 0xf3d9a0, 1).lineBetween(cx - 14, cy - 7, cx - 6, cy).lineBetween(cx - 6, cy, cx - 14, cy + 7).lineBetween(cx - 2, cy - 7, cx + 6, cy).lineBetween(cx + 6, cy, cx - 2, cy + 7); }],
-      ['Fog', 'unexplored', (g, cx, cy) => g.fillStyle(0xeeeae2, 0.7).fillCircle(cx - 6, cy + 2, 9).fillCircle(cx + 6, cy, 11)],
-    ];
-    rows.forEach(([a, b, draw], i) => {
-      const cy = y + 220 + i * 40;
-      const g = this.add.graphics();
-      draw(g, x + 40, cy);
-      L.add(g);
-      L.add(serif(this, x + 72, cy, a, 17, '#e8d9b8', { bold: false, stroke: 2 }).setOrigin(0, 0.5));
-      L.add(this.add.text(x + 220, cy, b, { fontFamily: SERIF, fontSize: '14px', fontStyle: 'italic', color: '#b9a27a' }).setResolution(2).setOrigin(0, 0.5));
-    });
-    L.add(serif(this, x + 188, y + h - 22, 'N ↑   Wheel / + - to zoom, drag to pan', 13, '#a8977a', { bold: false, stroke: 2 }).setOrigin(0.5));
   }
 
   private flash(text: string): void {
@@ -831,7 +861,7 @@ export class CampaignMapScene extends Phaser.Scene {
         });
         return;
       default:
-        return; // battle / move: alt düğme
+        return; // battle / move: oyuncu nabız atan düğüme dokunur
     }
   }
 
@@ -852,18 +882,32 @@ export class CampaignMapScene extends Phaser.Scene {
     const c = this.add.container(0, 0);
     this.tip = c;
     this.ui.add(c);
-    const w = 760;
+    // Ekranın altında, ortada (lejantın solunda); sağ üst köşede küçük X kapama düğmesi
+    const w = 780;
+    const body = this.add.text(0, 0, text, { fontFamily: SERIF, fontSize: '21px', fontStyle: 'italic', color: '#2a1a0c', wordWrap: { width: w - 110 } }).setResolution(2);
+    const h = Math.max(84, body.height + 50);
     const x = W / 2 - w / 2;
-    const y = 160;
-    c.add(parchmentPlate(this, W / 2, y, w, 112));
-    c.add(serif(this, x + 26, y + 14, 'TIP', 16, '#7a4a1a', { stroke: 0, spacing: 3 }));
-    c.add(this.add.text(x + 26, y + 40, text, { fontFamily: SERIF, fontSize: '21px', fontStyle: 'italic', color: '#2a1a0c', wordWrap: { width: w - 200 } }).setResolution(2));
-    const ok = makeMenuButton(this, x + w - 90, y + 56, 140, 58, 'Got it', () => {
-      setState(markTipSeen(this.s));
-      c.destroy(true);
-      this.tip = null;
-    }, { size: 24 });
-    c.add(ok.container);
+    const y = H - 22 - h;
+    c.add(parchmentPlate(this, W / 2, y, w, h));
+    c.add(serif(this, x + 26, y + 12, 'TIP', 16, '#7a4a1a', { stroke: 0, spacing: 3 }));
+    body.setPosition(x + 26, y + 36);
+    c.add(body);
+    const cx = x + w - 26;
+    const cy = y + 24;
+    const xg = this.add.graphics();
+    xg.lineStyle(4, 0x5a3a1a, 1).lineBetween(cx - 9, cy - 9, cx + 9, cy + 9).lineBetween(cx + 9, cy - 9, cx - 9, cy + 9);
+    c.add(xg);
+    // dokunma alanı 64x64 (>= 44 px)
+    const hit = this.add.zone(cx, cy, 64, 64).setInteractive({ useHandCursor: true });
+    hit.on('pointerup', () => this.dismissTip());
+    c.add(hit);
+  }
+
+  private dismissTip(): void {
+    if (!this.tip) return;
+    setState(markTipSeen(this.s));
+    this.tip.destroy(true);
+    this.tip = null;
   }
 
   private onNodeTap(id: string, v: NodeVis): void {
@@ -873,6 +917,8 @@ export class CampaignMapScene extends Phaser.Scene {
       return this.roadCard(id);
     }
     if (id === this.s.at && step.kind === 'battle') return this.showBattleCard();
+    // kasaba/olay/hazine/sefer sonu penceresi kapatıldıysa mevcut düğüme dokunmak yeniden açar
+    if (id === this.s.at && this.actionHere()) return this.advance();
     // bilgi: görünür düğümün adı ve türü
     const n = node(this.map, id);
     if (v === 'fog') return;
@@ -883,8 +929,9 @@ export class CampaignMapScene extends Phaser.Scene {
     const n = node(this.map, nodeId);
     if (!n.encounter) return '';
     const p = enemyPreview(n.encounter);
-    const names = p.classes.map((c) => content.classes[c]?.name ?? c);
-    return `Enemies: ${names.length} · ${names.join(', ')}${p.leader ? `  (led by ${p.leader})` : ''}`;
+    // Lider zaten ad listesinde görünüyorsa "(led by ...)" tekrarlanmaz
+    const leader = p.leader && !p.names.includes(p.leader) ? `  (led by ${p.leader})` : '';
+    return `Enemies: ${p.classes.length} · ${p.names.join(', ')}${leader}`;
   }
 
   /** Seçim noktasında rota kartı: ad, tür, alt başlık, düşmanlar (d = 1), dalın ikinci durağı (d = 2). */
@@ -923,8 +970,6 @@ export class CampaignMapScene extends Phaser.Scene {
     const from = this.s.at;
     const before = node(this.map, from).region;
     this.update2(moveTo(this.s, to));
-    this.actionBtn?.destroy(true);
-    this.actionBtn = null;
     this.tip?.destroy(true);
     this.tip = null;
     this.walk(from, to, () => {
@@ -1181,6 +1226,10 @@ export class CampaignMapScene extends Phaser.Scene {
         layer.add(hpBar(this, x - 70, y + 20, 140, 12, h.hpRatio));
         layer.add(serif(this, x, y + 50, `${Math.round(h.hpRatio * 100)}% HP${h.leader ? ' · Leader' : ''}`, 16, '#b9a27a', { bold: false, stroke: 2 }).setOrigin(0.5));
       });
+      // Sefer bilgisi (haritadaki kartuştan buraya taşındı): durak + mod + zorluk + yuva
+      const diff = CONFIG.difficulties[s.difficulty]?.name ?? s.difficulty;
+      const info = `Stop ${stopNumber(s)} / ${this.map.stopsPerRun}  ·  ${s.mode === 'ironman' ? 'IRONMAN' : 'NORMAL'}  ·  ${diff.toUpperCase()}  ·  SLOT ${s.slot + 1}`;
+      layer.add(serif(this, W / 2, gy + 3 * cell + 164, info, 17, s.mode === 'ironman' ? '#e08a7a' : '#c9b27a', { bold: false, spacing: 2, stroke: 3 }).setOrigin(0.5));
     };
     draw();
   }

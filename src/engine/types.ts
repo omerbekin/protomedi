@@ -162,7 +162,10 @@ export interface BossDef {
    * `stagger` (sıradaki eylemini kaybeder) ve bekleyen `cancel` telgrafları iptal olur.
    */
   anchor?: { unit: string; armorAdd: number; magicArmorAdd: number; stagger: boolean; cancel: string[] };
-  /** Unyielding: Stun yerine Stagger (bir eylem kaybı), diğer debuff'lar 1 tur kısa (en az 1; yığılan durumlar hariç), çekme/itme yok. */
+  /**
+   * Unyielding: diğer debuff'lar 1 tur kısa (en az 1; yığılan durumlar hariç), çekme/itme yok. stunToStagger: Stun yerine Stagger (bir eylem kaybı); madde 271'den
+   * beri boss rütbesi CC'ye tamamen bağışık (formulas.json > ccImmunity) olduğundan Warden verisinde false (kural yalnızca bağışık olmayan bir birimde işlerdi).
+   */
   unyielding?: { stunToStagger: boolean; debuffDurationDelta: number; immuneDisplacement: boolean };
   /** Belirli telgraflar çözüldükten sonra boss'a verilen durum (Overextended). */
   afterResolve?: { skills: string[]; status: StatusKind; turns: number };
@@ -650,6 +653,12 @@ export interface SkillDef {
   requiresOpenBehind?: boolean;
   /** true: yakın dövüş skill'i menzil sınırı olmadan (ön sıra kuralı olmadan) herhangi bir düşmana gider (charge/dash). */
   ignoreReach?: boolean;
+  /**
+   * true (Warrior Charge; madde 271): skill kullanıldıktan sonra (isabet etse de etmese de) kullanıcı kendi tahtasının ön sırasında (sıra 0) değilse ön sıraya geçer:
+   * önce kendi şeridindeki ön hücre, o doluysa ön sıradaki en yakın boş hücre (şerit farkı en az, eşitlikte küçük şerit); ön sırada boş hücre yoksa
+   * yerinde kalır. Canlı birim olmayan hücre boştur (ceset hücresi de: Move kuralı). Olay `moved { cause: skill id, by, advance: true }`. battle.advanceDestination.
+   */
+  advanceToFront?: boolean;
   /** Yakın dövüş menzili bonusu (satır): kullanıcı ön sıranın bu kadar gerisinden de vurabilir ve düşmanın bu kadar fazla ön sırasına ulaşır. */
   reach?: number;
   /** Animasyonun çaldığı ses efektleri (data/audio.json adları); vfx yalnızca bu listedekileri çalar. */
@@ -785,6 +794,11 @@ export interface Formulas {
   turn: { threshold: number; queueLength: number };
   /** Cooldown kuralları: `maxInitial` = bir skill'in savaş başı başlangıç cooldown'unun (initialCooldown) üst sınırı. */
   cooldown: { maxInitial: number };
+  /**
+   * Kontrol bağışıklığı (madde 271, Ömer 2026-10-08: "Boss'lar CC yemesin"): `tiers` rütbesindeki birimler (Combatant.tier; boss tanımlı birimler de)
+   * statuses.json > cc durumlarını yemez; `taunt`: taunt'a uymaz (tek hedefli skill'leri taunt'lı düşmana zorlanmaz); `displacement`: çekilemez/itilemez.
+   */
+  ccImmunity?: { tiers: string[]; taunt: boolean; displacement: boolean };
   /** Raise Dead ceset tehlikesi katsayıları (madde 230; battle.corpseChoices). Yoksa varsayılan hpRef 100, çarpanlar 1,5. */
   corpseDanger?: { hpRef: number; reviverMult: number; revivableMult: number };
 }
@@ -826,6 +840,11 @@ export interface StatusDef {
   skipTurn?: boolean;
   /** true: bu durum bir birime uygulandığı AN o birimin kendi taunt'ı silinir (kontrol/CC durumu; şu an yalnızca Stun). Yeni durum eklemek tek satır. */
   breaksTaunt?: boolean;
+  /**
+   * true: kontrol etkisi (crowd control; madde 271): Stun, Slow, Silence. formulas.json > ccImmunity.tiers rütbesindeki birimler (boss) bu durumları
+   * YEMEZ (olay `immune`). Hasar/lanet/DoT/savunma debuff'ları (Wound, Omen, Wither, Blinded, Jinxed, Overextended) CC değildir.
+   */
+  cc?: boolean;
   /** false: dispel/cleanse etkileri (Spell Ward, Mana Barrier) bu durumu silemez (ör. Dark Bond bağı). Yoksa silinebilir. */
   dispellable?: boolean;
   /** İsabete (accuracy) eklenen miktar (ör. Blinded -0,30). battle.effectiveStats uygular; hit şansı yine [0, hit.max] arasına sıkıştırılır. */
@@ -1136,7 +1155,12 @@ type BattleEventBody =
   /** Global skill kullanıldı (rest / skip_turn / move_tile); ayrıntı olayları (mpRegen, turnSkipped, moved) hemen arkasından gelir. */
   | { type: 'globalUsed'; actor: string; id: string }
   /** Birim kendi tarafındaki boş yuvaya geçti (Move Tile); yeni yuva Combatant.slot'ta da güncellenir. `cause`/`by`: zorla yer değiştirme (Chain Hook çekmesi: skill id, çeken). */
-  | { type: 'moved'; actor: string; from: number; to: number; cause?: string; by?: string }
+  | { type: 'moved'; actor: string; from: number; to: number; cause?: string; by?: string; /** true: kullanıcının kendi skill'i sonrası ön sıraya geçişi (SkillDef.advanceToFront, Warrior Charge); `cause` skill id. */ advance?: boolean }
+  /**
+   * Kontrol bağışıklığı (madde 271): `target` (boss rütbesi, formulas.json > ccImmunity) bu CC durumunu (statuses.json > cc: Stun, Slow, Silence) YEMEDİ;
+   * durum uygulanmadı. `source` uygulamaya çalışan, `cause` skill etkisinin görsel nedeni (ör. 'vines'). Ardından 'passive' (name 'Immune') yüzen yazı için gelir.
+   */
+  | { type: 'immune'; target: string; status: StatusKind; source: string; cause?: string }
   /**
    * Telgraf (gecikmeli saldırı) kuruldu: `cells` işaretli hücreler (tahta `board`), `safeCells` Keystone'lar, `bound` damgalı birim (Ash Brand).
    * Çözülme: kaynağın bir sonraki turunun başında (adalet kuralı: waitFor'daki herkes oynamadan çözülmez).

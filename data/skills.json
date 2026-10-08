@@ -976,6 +976,7 @@
     "motion": "melee",
     "ignoreFrontRow": true,
     "ignoreReach": true,
+    "advanceToFront": true,
     "fx": "#ffe9b0",
     "effects": [
       {

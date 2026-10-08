@@ -428,16 +428,19 @@ Output: the widest landscape image you can make, ideally 16:9 at the highest res
 ```
 
 ### 6.2 Öğeler
-- **Kartuş (sol üst):** **VALDORIA** / *Campaign Map* / blurb + **Stop 7 / 12**; Ironman ise küçük demir maske rozeti **IRONMAN**.
-- **Bölge başlıkları:** geniş harf aralıklı serif, italik tagline; yeni bölgeye girişte ortada 2 sn'lik başlık bandı.
+- **Kartuş (sol üst):** yalnızca harita adı **VALDORIA** (Ömer 2026-10-08). Durak (Stop 7 / 12), mod (NORMAL/IRONMAN), zorluk ve yuva Party penceresinin altında.
+- **Bölge başlıkları:** haritanın üstünde yazılmaz (Ömer 2026-10-08); yeni bölgeye girişte ortada 2 sn'lik başlık bandı (şimdilik duruyor, Ömer'e soruldu).
 - **Rotalar:** patika dokusu + düz (krem, 6 px) / kesik (altın, 18/12 px) çizgi. Geçilen yol parlak; kapanan dallar soluk ve sis altında ("Road closed"); gidilebilecek yolda akan kesik animasyonu.
 - **Düğüm rozetleri:** 76 px daire, tür rengi (Town mavi `#3b5f86`, Battle kahve `#6b4a33`, Elite kırmızı `#8e2a22`, Event mor `#4a3f8f`, Treasure altın `#9a7a2a`, Boss koyu kırmızı `#a3191c`), altın kenar, piksel art ikon (çapraz kılıç, kuru kafa, taç, kale kapısı, soru işareti, sandık). **Guarded Treasure:** sandık ikonu + sağ altta küçük çapraz kılıç. Numara rozeti sağ üstte. Seçim noktası: kalın altın halka + "CHOICE · N ROADS"; birleşme noktası: rozetin solunda küçük `>>` işareti + "ROADS MEET" (yalnızca lejantta ve üstüne gelince). Final boss %20 büyük.
 - **Sis:** d >= 3 düğümler bulut katmanı altında; d = 2 düğümde rozet var ama düşman önizlemesi yok.
 - **Etiket plakası:** parşömen, ad BÜYÜK serif, alt başlık italik.
 - **Durumlar:** `cleared` (soluk + altın onay mührü), `current` (parlayan halka + kafile), `available` (nabız), `closed` (kapanan dal, soluk), `fogged`.
 - **Takım şeridi (üst orta):** aktif takım avatarları + can çubukları; `Party` düğmesi (yedek sayısı rozeti).
-- **Lejant (sağ alt):** katlanabilir.
-- **Alt düğmeler:** eylem düğmesi (`March to Ravenwood`, `Enter Battle`, `Choose your road`), `Save` (Normal), `Menu`.
+- **Lejant (sağ alt):** katlanabilir (`LEGEND` + `Hide/Show`); yalnızca 6 düğüm türü ikonu, 2 sütun. Çizgi/rota açıklamaları yok.
+- **Eylem:** ayrı eylem düğmesi YOK (Ömer 2026-10-08): nabız atan düğüme dokunmak yürür / rota kartını açar; üzerinde durulan düğüm savaş/kasaba/olay bekliyorsa o da nabız atar ve dokununca savaş kartını/pencereyi açar.
+- **Menu (sağ üst, tam ekran / wiki / ayarlar simgeleriyle aynı sırada; klavyede Esc):** `Resume`, `Save N/M` (yalnızca Normal ve açık pencere yokken), `Settings` (ayarlar paneli), `Back to Main Menu`. Esc sırası: ayarlar paneli > menü > açık kart (zorunlu seçim pencereleri hariç) > ipucu > menüyü aç. +/- yakınlaştırma düğmesi yok (tekerlek/sıkıştırma + sürükleme).
+- **İpucu (TIP) kutusu:** ekranın altında ortada; sağ üst köşesinde küçük X ile kapanır (Esc de kapatır).
+- **Ana menü:** listede `Settings` satırı (aynı ayarlar paneli).
 
 ### 6.3 Seçim noktasında rota seçimi
 Seçim düğümündeyken gidilebilir düğümler nabız atar. Dokununca rota kartı: ad, tür, alt başlık, d = 1 olduğu için savaşsa "Enemies: 4 · Cutthroat, Cutthroat, Archer, Archer" (sınıf ikonlarıyla); kartın altında o dalın ikinci durağının türü (d = 2). `Take this road` -> onay "The other roads will close for this journey." -> seçilmeyen dallar kapanır ve sis altına döner.

@@ -158,7 +158,10 @@ function describeEventBody(battle: Battle, e: BattleEvent): string | null {
       return `${L(e.source)} revives ${L(e.target)} (hp ${e.hpAfter}, mp ${e.mpAfter}${e.slot !== undefined ? `, cell ${e.slot}${e.from !== undefined && e.from !== e.slot ? `; corpse was on cell ${e.from}` : ''}` : ''})`;
     case 'mpRegen':
       return `${L(e.actor)} +${e.amount} MP (now ${e.after})${e.cause ? ` [${e.cause}]` : ''}`;
+    case 'immune':
+      return `${L(e.target)} is IMMUNE to ${e.status} (crowd control; from ${L(e.source)})${e.cause ? ` [${e.cause}]` : ''}`;
     case 'moved':
+      if (e.advance) return `${L(e.actor)} steps into the front row cell ${e.from} -> ${e.to} (after ${battle.skill(e.cause ?? '')?.name ?? e.cause})`;
       return e.cause ? `${L(e.actor)} is dragged cell ${e.from} -> ${e.to} (${battle.skill(e.cause)?.name ?? e.cause}${e.by ? ` by ${L(e.by)}` : ''})` : `${L(e.actor)} moves cell ${e.from} -> ${e.to}`;
     // Boss (The Bridge Warden; docs/design/bosses/bridge-warden.md 5): telgraf / çözülme / iptal / faz / Mooring kayıt anahtarları
     case 'telegraph': {

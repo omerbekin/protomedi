@@ -1193,6 +1193,7 @@ function scoreOption(ctx: ValueContext, profile: AiProfile, o: Option): void {
     add('tempo', o.tempo);
     add('deny', o.deny);
     add('anchor', anchorValue(ctx, o));
+    add('position', advanceValue(ctx, o));
     add('cleanse', brandCleanse(ctx, o));
   }
   const gross = Object.values(t).reduce((a, b) => a + b, 0);
@@ -1283,6 +1284,7 @@ function controlValue(ctx: ValueContext, o: Option): number {
     if (!def) continue;
     const recips = se.self ? [actor] : o.targets.filter((t) => t.hp > 0 && o.skill.effects.some((e) => (e.type === 'status' || e.type === 'randomStatus') && battle.effectAppliesTo(o.skill, e, t, actor)));
     for (const t of recips) {
+      if (battle.statusBlocked(t, se.status)) continue; // boss CC'ye bağışık (madde 271): Stun/Slow/Silence değeri 0
       const has = t.statuses.find((s) => s.kind === se.status);
       const turns = Math.max(0, se.turns - (has?.turns ?? 0));
       if (turns <= 0) continue;
@@ -1378,7 +1380,7 @@ function silenceValue(ctx: ValueContext, o: Option): number {
   let v = 0;
   for (const [uid, x] of Object.entries(o.emptyBy ?? {})) {
     const f = ctx.battle.get(uid);
-    if (!f || f.side === ctx.actor.side || !ctx.battle.statusDef(x.status)?.blocksMpSkills) continue;
+    if (!f || f.side === ctx.actor.side || !ctx.battle.statusDef(x.status)?.blocksMpSkills || ctx.battle.statusBlocked(f, x.status)) continue; // boss Silence yemez (madde 271)
     v += x.chance * (1 - (o.killP[uid] ?? 0)) * ctx.silenceDenial(f, x.mpAfter, x.turns);
   }
   return v;
@@ -1388,6 +1390,30 @@ function silenceValue(ctx: ValueContext, o: Option): number {
 function previewHitChance(o: Option, t: Combatant): number {
   if (o.dmgBy[t.uid] === undefined) return 1;
   return t === o.primary ? o.primaryHit || 1 : 0.85;
+}
+
+/**
+ * advanceToFront (Warrior Charge; madde 271) sonrası ön sıraya geçişin değeri (can-eşdeğer, basit): + yakın dövüş yeteneği kazanılıyorsa (şu an ön sıra
+ * kuralıyla melee yapamıyor, yeni hücrede yapabiliyor) birimin tur değeri x advanceMeleeShare; - yakın dövüşle gelecek beklenen ek hasar (meleeIncoming
+ * farkı) x advanceRiskShare x (2 - can oranı) (tam canlı tank yarı, yaralı birim tam öder); - bekleyen düşman telgraflarının yeni hücredeki ek yükü.
+ * Ayarlar data/ai.json > value (advanceMeleeShare, advanceRiskShare).
+ */
+function advanceValue(ctx: ValueContext, o: Option): number {
+  if (!o.skill.advanceToFront) return 0;
+  const battle = ctx.battle;
+  const actor = ctx.actor;
+  const to = battle.advanceDestination(actor);
+  if (to === null) return 0;
+  const vc = ctx.vc;
+  const meleeSkills = actor.skills.map((id) => battle.skill(id)).filter((s): s is SkillDef => !!s && s.motion === 'melee' && s.target !== 'self' && !s.ignoreFrontRow && !s.ignoreReach);
+  const canFrom = (slot: number) => meleeSkills.some((sk) => battle.canMeleeFrom(actor.uid, slot, battle.reachOf(actor, sk)));
+  const gain = meleeSkills.length > 0 && !canFrom(actor.slot) && canFrom(to) ? ctx.turnValue(actor) * (vc.advanceMeleeShare ?? 0.5) : 0;
+  const extra = Math.max(0, meleeIncoming(battle, actor, to) - meleeIncoming(battle, actor, actor.slot));
+  const risk = extra * (vc.advanceRiskShare ?? 0.5) * (2 - ratio(actor));
+  const tg = battle.telegraphs.length > 0 ? telegraphLoad(battle, actor, to) - telegraphLoad(battle, actor, actor.slot) : 0;
+  const v = gain - risk - tg;
+  if (v !== 0 && o.notes.length < 6) o.notes.push(`advance to cell ${to}: ${v > 0 ? '+' : ''}${r1(v)}`);
+  return v;
 }
 
 /**
@@ -1411,6 +1437,7 @@ function protectValue(ctx: ValueContext, o: Option): number {
     for (const i of ctx.hits) {
       if (i.target === actor.uid) continue;
       const foe = battle.get(i.foe);
+      if (foe && battle.ignoresTaunt(foe)) continue; // boss taunt'a uymaz (madde 271): onun hasarı yönlenmez
       // Yalnızca tek hedefli saldırıyla gelen hasar yönlenir; alan skill'i olan düşmanın payı yarım sayılır
       const single = foe?.skills.some((id) => battle.skill(id)?.target === 'single_enemy') ? 1 : 0.5;
       redirected += i.hit * single;
@@ -2059,7 +2086,7 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
     final,
     why,
     steps,
-    winnerRule: `value scale (difficulty ${difficulty}, horizon ${vc.horizon} turns): score = damage + pressure + kill + save + heal + shield + revive + control + protect + summon + bond + curse + mitigation + cleanse + burn + silence + tempo (+ buff for self-buffs) - overkill - patience - cost - cooldown; ${rules.pickTop && rules.pickTop > 1 ? `picks among the best ${rules.pickTop} (deterministic, seed + turn + unit)` : 'highest wins'}`,
+    winnerRule: `value scale (difficulty ${difficulty}, horizon ${vc.horizon} turns): score = damage + pressure + kill + save + heal + shield + revive + control + protect + summon + bond + curse + mitigation + cleanse + burn + silence + tempo + deny + anchor + position (+ buff for self-buffs) - overkill - patience - cost - cooldown; ${rules.pickTop && rules.pickTop > 1 ? `picks among the best ${rules.pickTop} (deterministic, seed + turn + unit)` : 'highest wins'}`,
     candidates,
     rejected,
     reserves: trace.reserves.map((r) => ({ skill: r.skill, needMp: r.need, inTurns: r.turns })),

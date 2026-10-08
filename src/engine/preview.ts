@@ -78,6 +78,10 @@ export interface TargetPreview {
   };
   /** Karakter üstü DoT (Wither): tik başına hasar (zırh/zayıflık dahil), tur sayısı, toplam. */
   dot?: { status: string; perTick: number; turns: number; total: number };
+  /** Kontrol bağışıklığı (madde 271): hedefin YEMEYECEĞİ CC durumlarının adları (boss: Stun, Slow, Silence); `statuses` satırında 'Immune: Stun'. */
+  immune?: string[];
+  /** advanceToFront (Warrior Charge; kullanıcının girdisinde): skill sonrası geçeceği ön sıra hücresi (`from` -> `to`); ön sıradaysa ya da yer yoksa tanımsız. */
+  advance?: { from: number; to: number };
 }
 
 /**
@@ -198,6 +202,12 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         if (effect.self) continue;
         const def = battle.statusDef(effect.status);
         const e = entry(target.uid);
+        if (battle.statusBlocked(target, effect.status)) {
+          // Boss: CC durumu işlemez (madde 271)
+          e.immune = [...(e.immune ?? []), def?.name ?? effect.status];
+          e.statuses = [...(e.statuses ?? []), `Immune: ${def?.name ?? effect.status}`];
+          continue;
+        }
         const chance = effect.chance !== undefined && effect.chance < 1 ? ` (${Math.round(effect.chance * 100)}% chance)` : '';
         e.statuses = [...(e.statuses ?? []), `${def?.name ?? effect.status} ${effect.turns} turns${chance}`];
       } else if (effect.type === 'damage') {
@@ -208,7 +218,9 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         for (let k = 0; k < times; k++) addDamage(target, effect, (effect.falloff ? Math.pow(effect.falloff, idx) : 1) * (side ? skill.splash!.mult ?? 1 : 1), idx > 0 || k > 0);
       } else if (effect.type === 'randomStatus') {
         const e = entry(target.uid);
-        e.statuses = [...(e.statuses ?? []), `Random: ${effect.options.map((o) => battle.statusDef(o.status)?.name ?? o.status).join(' / ')}`];
+        const blocked = effect.options.filter((o) => battle.statusBlocked(target, o.status)).map((o) => battle.statusDef(o.status)?.name ?? o.status);
+        if (blocked.length > 0) e.immune = [...(e.immune ?? []), ...blocked];
+        e.statuses = [...(e.statuses ?? []), `Random: ${effect.options.map((o) => battle.statusDef(o.status)?.name ?? o.status).join(' / ')}${blocked.length > 0 ? ` (immune to ${blocked.join(', ')})` : ''}`];
       } else if (effect.type === 'heal') {
         const r = healRange(actor.stats, effect.scale, effect.power, f);
         const missing = target.maxHp - target.hp;
@@ -261,6 +273,7 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         if (spec && emptyProcApplies(effect, target)) {
           const dmg: DamageEffect = { type: 'damage', ...spec.damage };
           const r = damageRange(battle.attackStats(actor), battle.effectiveStats(target), damageSpecFor(actor, target, dmg, f, 1, false, battle.damageTakenMult(target), battle.hunterMarkMult(actor, target)), f);
+          if (battle.statusBlocked(target, spec.status)) e.immune = [...(e.immune ?? []), battle.statusDef(spec.status)?.name ?? spec.status];
           e.emptyProc = {
             chance: spec.chance,
             status: spec.status,
@@ -284,6 +297,16 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         const o = omenPreview(battle, actor, skill, target, effect.status ?? 'omen', effect.stacks, effect.critStacks ?? effect.stacks, pool(target), effect.critDoomOnCrit === true);
         if (o) entry(target.uid).omen = o;
       }
+    }
+  }
+
+  // advanceToFront (Warrior Charge): kullanıcının skill sonrası geçeceği ön sıra hücresi (kendi girdisinde, en sonda)
+  if (skill.advanceToFront) {
+    const to = battle.advanceDestination(actor);
+    if (to !== null) {
+      const e = entry(actor.uid);
+      e.advance = { from: actor.slot, to };
+      e.statuses = [...(e.statuses ?? []), 'Then steps into the front row'];
     }
   }
 

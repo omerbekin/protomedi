@@ -41,6 +41,8 @@ describe('sefer karşılaşmaları', () => {
     expect(resolveEncounter('bridge_warden', off).def.units).toHaveLength(4);
     expect(resolveEncounter('bog_ambush').fallback).toBe(false);
     expect(enemyPreview('watchtower_chief')).toMatchObject({ classes: ['warrior', 'archer', 'archer'], leader: 'Bandit Chief' });
+    // görünen adlar: id değil, boss adı ve birleşik tekrar
+    expect(enemyPreview('bridge_warden').names).toEqual(['The Bridge Warden', '2× Iron Mooring']);
   });
 
   it('elit/boss güçlendirmesi, özel ad ve rütbe motora gider; tutorial düşmanları zayıf', () => {

@@ -20,10 +20,10 @@
       { "at": 0.33, "banner": "The span fails.", "actionsPerTurn": 3, "powerMult": 1.15, "armorMult": 0.5, "breakAnchors": true, "telegraphOnEnter": "fall_of_kings_bridge" }
     ],
     "anchor": { "unit": "iron_mooring", "armorAdd": 5, "magicArmorAdd": 5, "stagger": true, "cancel": ["breaking_span"] },
-    "unyielding": { "stunToStagger": true, "debuffDurationDelta": -1, "immuneDisplacement": true },
+    "unyielding": { "stunToStagger": false, "debuffDurationDelta": -1, "immuneDisplacement": true },
     "afterResolve": { "skills": ["breaking_span", "fall_of_kings_bridge"], "status": "overextended", "turns": 1 },
     "passives": [
-      { "id": "unyielding", "name": "Unyielding", "icon": "unyielding", "text": "Stuns only cost the Warden one action; other ailments last 1 turn less (Omens are not shortened). It cannot be pulled or pushed." },
+      { "id": "unyielding", "name": "Unyielding", "icon": "unyielding", "text": "Immune to crowd control: Stun, Slow and Silence do not take hold, taunts do not force its attacks, and it cannot be pulled or pushed. Other ailments (Wound, Omen, Withering, Blinded, Jinxed) still land but last 1 turn less (Omens are not shortened)." },
       { "id": "anchored", "name": "Anchored", "icon": "anchored", "text": "Each standing Iron Mooring gives the Warden +5 armor and +5 magic armor and lets it use Chain Hook. Breaking a Mooring staggers the Warden (it loses its next action) and cancels a pending Breaking Span." },
       { "id": "ember_heart", "name": "Ember Heart", "icon": "emberheart", "text": "At 66% HP the ember wakes: Ash Brand opens and Breaking Span grows to two rows. At 33% the span fails: the Moorings snap, the Warden acts 3 times a turn, hits 15% harder with half its armor, and at once calls the Fall of King's Bridge. A single attack can cross only one of these thresholds." }
     ]

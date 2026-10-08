@@ -150,6 +150,8 @@ Pasifler: **Unyielding**, **Anchored**, **Ember Heart** (bölüm 4).
 ## 4. Pasifler ve boss kuralları
 
 ### 4.1 Unyielding (kontrol direnci)
+> **Madde 271 (Ömer 2026-10-08) GÜNCELLEME:** boss'lar CC'ye tamamen bağışık (Stun, Slow, Silence işlemez; taunt'a uymaz; çekilemez). Aşağıdaki "Stun → Stagger" ve "Slow normal işler" kuralları ARTIK GEÇERSİZ (`unyielding.stunToStagger: false`); Charge / Vine Snare Warden'dan eylem aldırmaz. Diğer debuff'ların 1 tur kısalması ve Mooring kırılınca Stagger aynen sürer. Taunt artık Chain Hook / Ash Brand'i Defender'a çekemez (bölüm 3.4 / 8.3'teki karşı oyun kalktı).
+
 - **Stun → Stagger:** Warden'a gelen Stun tur kaybettirmez; yerine **sıradaki tek eylemini** kaybettirir (2 eylemli turda 1 eylem kalır). Stagger aynı turda üst üste binmez.
 - Diğer debuff'ların süresi 1 kısalır (en az 1). Slow, Wound, Blinded, Jinxed, Omen, Wither normal işler (Hexer/Cutthroat karşı oyunu korunur; Doom tam vurur).
 - Çekme/itme ve Move etkilerinden etkilenmez.

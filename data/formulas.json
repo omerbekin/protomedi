@@ -362,6 +362,12 @@
     "reviverMult": 1.5,
     "revivableMult": 1.5
   },
+  "ccImmunity": {
+    "_not": "Madde 271 (Ömer 2026-10-08: 'Boss'lar CC yemesin. Ama Omen, Wound, ignite gibi skill'leri yesin'): tiers rütbesindeki birimler (UnitSetup.tier; data/bosses boss tanımlı birimler de) statuses.json > cc: true durumlarını (Stun, Slow, Silence) yemez; taunt: true = taunt'a uymaz; displacement: true = çekilemez/itilemez. Elitler bağışık DEĞİL (yalnızca boss). Warden'ın kendi Staggered mekaniği (Mooring kırılınca) CC değildir, aynen işler.",
+    "tiers": ["boss"],
+    "taunt": true,
+    "displacement": true
+  },
   "turn": {
     "threshold": 100,
     "queueLength": 8

@@ -158,11 +158,22 @@ export function validateEncounters(): string[] {
   return errors;
 }
 
-/** Bir düğümün düşman önizlemesi (sınıf id'leri, ön sıradan arkaya). */
-export function enemyPreview(encounterId: string, caps = ENGINE_CAPS): { name: string; classes: string[]; leader?: string } {
+/** Birimin oyuncuya görünen adı: karşılaşmadaki özel ad > class adı > boss adı > id. */
+function unitDisplayName(u: { class: string; name?: string }): string {
+  return u.name ?? classes[u.class]?.name ?? bosses[u.class]?.name ?? u.class;
+}
+
+/**
+ * Bir düğümün düşman önizlemesi (ön sıradan arkaya). `names`: görünen adlar, aynı ad tekrarı birleşik ("2× Iron Mooring");
+ * `classes`: sınıf id'leri (ikon/logo için).
+ */
+export function enemyPreview(encounterId: string, caps = ENGINE_CAPS): { name: string; classes: string[]; names: string[]; leader?: string } {
   const enc = resolveEncounter(encounterId, caps);
   const units = [...enc.def.units].sort((a, b) => a.slot - b.slot);
-  return { name: enc.def.name, classes: units.map((u) => u.class), leader: units.find((u) => u.tier)?.name };
+  const counts = new Map<string, number>();
+  for (const u of units) counts.set(unitDisplayName(u), (counts.get(unitDisplayName(u)) ?? 0) + 1);
+  const names = [...counts].map(([n, k]) => (k > 1 ? `${k}× ${n}` : n));
+  return { name: enc.def.name, classes: units.map((u) => u.class), names, leader: units.find((u) => u.tier)?.name };
 }
 
 export const partySize = (s: CampaignState): number => activeHeroes(s).length;

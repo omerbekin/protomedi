@@ -2175,6 +2175,10 @@ export class BattleScene extends Phaser.Scene {
         this.currentUsage = this.usageRec.usageOf(e); // efekt bu kullanımda gerçekte ne olduğunu bilsin (VfxCtx.usage)
         // Backstab: the cell behind the target the vfx teleports into (visual only; the formation does not change)
         this.skillBehind = e.behindSlot !== undefined && e.behindBoard ? this.cellPos(e.behindBoard, e.behindSlot) : undefined;
+        // advanceToFront (Warrior Charge, madde 271): skill sonrası ön sıraya geçiş; birimin "evi" efekt başlamadan yeni hücreye alınır, böylece efektin
+        // dönüşü (returnHome) doğrudan yeni hücreye gider. Ardından gelen 'moved' (advance) olayı yalnızca dönüş olmadıysa yürütür.
+        const adv = this.currentUsage.events.find((x) => x.type === 'moved' && x.advance && x.actor === e.actor);
+        if (adv?.type === 'moved' && actor) this.rehome(e.actor, this.cellPos(actor.board, adv.to));
         return this.playSkillMotion(e.actor, e.skill, e.targets, e.anchor ?? e.center, this.skillResults.get(e), e.cells, e.stages, e.board);
       }
       case 'resource': {
@@ -2256,7 +2260,12 @@ export class BattleScene extends Phaser.Scene {
       case 'moved': {
         const view = this.views.get(e.actor);
         const c = this.battle.get(e.actor);
-        if (view && c) {
+        if (view && c && e.advance) {
+          // Charge sonrası ön sıra: skill efektinin dönüşü zaten yeni hücreye gidiyor (rehome); dönüş tween'i yoksa ve birim orada değilse yürür
+          const to = this.cellPos(c.board, e.to);
+          await this.wait(slow(120));
+          if (!this.tweens.isTweening(view.container) && (Math.abs(view.container.x - to.x) > 1 || Math.abs(view.container.y - to.y) > 1)) await view.moveTo(to.x, to.y);
+        } else if (view && c) {
           const to = this.cellPos(c.board, e.to);
           playSfx(this, 'armorRun', SHARED_KEY);
           await view.moveTo(to.x, to.y);
@@ -2526,6 +2535,14 @@ export class BattleScene extends Phaser.Scene {
       case 'battleStart':
         return;
     }
+  }
+
+  /** Charge (advanceToFront): the view's home cell becomes `to` without moving it now (the skill effect's return carries it there). */
+  private rehome(uid: string, to: { x: number; y: number }): void {
+    const view = this.views.get(uid) as unknown as { homeX: number; baseY: number } | undefined;
+    if (!view) return;
+    view.homeX = to.x;
+    view.baseY = to.y;
   }
 
   /** Sets the displayed Rage right away (no animation) and redraws the bar if it belongs to the acting unit. */

@@ -47,6 +47,10 @@ export interface AiValueConfig {
   reserveValueShare: number;
   /** Mana yakmanın "engellenen hamle" değerinde ufuk çarpanı (MP kaybı yenilenene kadar sürer: birimin ufuktaki turu x bu). */
   manaHorizonMult: number;
+  /** advanceToFront (Charge) sonrası ön sıraya geçiş: melee yeteneği kazanılırsa birimin tur değeri x bu pay (madde 271; yoksa 0,5). */
+  advanceMeleeShare?: number;
+  /** advanceToFront: yakın dövüşle gelecek beklenen ek hasar x bu pay x (2 - can oranı) bedeli (madde 271; yoksa 0,5). */
+  advanceRiskShare?: number;
 }
 
 /**

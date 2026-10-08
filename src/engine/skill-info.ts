@@ -275,6 +275,7 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       if (em) {
         const def = defs.statuses?.[em.status];
         const el = em.damage.element ?? 'physical';
+        if (def?.cc && formulas.ccImmunity?.tiers.includes('boss')) add(`Bosses are immune to ${def.name} (crowd control); they still take the damage`);
         add(`Each target left with 0 MP (or already at 0) has a ${pct(em.chance)} chance (rolled separately) to be ${def?.name ?? em.status} for ${em.turns} turn${em.turns > 1 ? 's' : ''}${def ? ` (${def.text})` : ''} and take ${pct(em.damage.power)} ${ATTRIBUTE_NAME[em.damage.scale]} (${raw(em.damage.scale, em.damage.power)}) ${el} damage; it cannot miss but can crit`, el);
       }
     } else if (e.type === 'taunt') {
@@ -296,9 +297,12 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       }
       if (e.chance !== undefined && e.chance < 1) add(`${pct(e.chance)} chance per target hit (rolled separately) to apply ${def?.name ?? e.status} for ${e.turns} turn${e.turns > 1 ? 's' : ''}${how}${def ? `: ${def.text}` : ''}`, undefined);
       else add(`${e.self ? 'You gain' : 'Applies'} ${def?.name ?? e.status}${skill.target === 'area_any' ? who : ''} for ${e.turns} turn${e.turns > 1 ? 's' : ''}${how}${def ? `: ${def.text}` : ''}`, undefined);
+      if (def?.cc && !e.self && formulas.ccImmunity?.tiers.includes('boss')) add(`Bosses are immune to ${def.name} (crowd control)`);
     } else if (e.type === 'randomStatus') {
       const total = e.options.reduce((a, o) => a + o.weight, 0);
       add(`Random effect on each target hit: ${e.options.map((o) => `${defs.statuses?.[o.status]?.name ?? o.status} ${o.turns} turn${o.turns > 1 ? 's' : ''} (${pct(o.weight / total)})`).join(', ')}`);
+      const ccNames = e.options.map((o) => defs.statuses?.[o.status]).filter((d) => d?.cc).map((d) => d!.name);
+      if (ccNames.length > 0 && formulas.ccImmunity?.tiers.includes('boss')) add(`Bosses are immune to ${ccNames.join(' and ')} (crowd control)`);
     } else if (e.type === 'ground') {
       const g = defs.grounds?.[e.ground];
       add(`Leaves ${g?.name ?? e.ground} on the area for ${e.turns} turns: ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)}) damage at the start of each enemy turn there`, g?.element);
@@ -362,6 +366,7 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
   if (skill.effects.some((e) => e.type === 'damage' && e.guaranteedCrit)) add(`Always a critical hit (x${formulas.attributes.critMult}); it can still miss`, 'physical');
   if (skill.requiresOpenBehind) add('Only targets with an empty cell right behind them (a living unit there blocks it; a corpse does not); never a unit in the back row');
   if (skill.motion === 'melee' && skill.target !== 'self') add(skill.requiresOpenBehind ? 'Slips behind any enemy, strikes, and returns' : skill.ignoreReach ? 'Charges at any enemy' : skill.reach ? `Melee: front ${skill.reach + 1} rows only (reach +${skill.reach})` : 'Melee: front row only');
+  if (skill.advanceToFront) add('If you are not in the front row, you then step into the front row: the front cell of your own lane, or the nearest empty front cell if that one is taken (you stay put if the front row is full)');
   // Oranlı bedel (Wail of the Dead: mevcut canın %20'si): açıklama satırı; başlık skillCostLabel
   if (isRatioCost(skill.cost)) add(`Costs ${pct(skill.cost.ofCurrent!)} of current ${skill.cost.resource.toUpperCase()} (rounded, at least 1)${skill.cost.resource === 'hp' ? ': it can never bring you below 1 HP' : ''}`);
   const initialTurns = Math.min(formulas.cooldown?.maxInitial ?? 0, Math.floor(skill.initialCooldown ?? 0));

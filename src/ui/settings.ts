@@ -119,6 +119,7 @@ export class SettingsMenu {
     if (hooks.flow) this.buildFlow(hooks.flow);
     root.append(toggle, this.panel);
     hooks.onVolume(Number(slider.value));
+    registerSettingsMenu(this);
   }
 
   /** New Game / Team Select rows. An unfinished battle asks "Leave the current battle?" (Yes / No) first. */
@@ -205,4 +206,20 @@ export class SettingsMenu {
     this.panel.hidden = !open;
     if (open) this.refreshFlow();
   }
+
+  get isOpen(): boolean {
+    return this.open;
+  }
+}
+
+/** Sahnelerden (ana menü, sefer haritası menüsü) ayarlar panelini açıp kapatmak için tek örnek. */
+let instance: SettingsMenu | null = null;
+export function registerSettingsMenu(menu: SettingsMenu): void {
+  instance = menu;
+}
+export function setSettingsOpen(open: boolean): void {
+  instance?.setOpen(open);
+}
+export function isSettingsOpen(): boolean {
+  return instance?.isOpen ?? false;
 }

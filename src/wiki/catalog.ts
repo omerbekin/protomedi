@@ -58,12 +58,18 @@ export interface WikiSkill {
   cost: string;
   cooldown: string;
   initialCooldown: string;
+  /** Sahibinin `skills` dizisindeki yuva (1-4, düğme/tuş sırası); sahibi yoksa null. */
+  slot: number | null;
+  /** Melee (motion melee) | Ranged | Support (dost hedefli) | Self (yalnızca kendine). */
+  range: SkillRange;
   lines: string[];
   kinds: Array<string | undefined>;
   /** AOE şekil skill'inde küçük şekil şeması (kapsanan hücreler + anchor); diğerlerinde yok. */
   shape?: MiniShape;
   search: string;
 }
+
+export type SkillRange = 'Melee' | 'Ranged' | 'Support' | 'Self';
 
 export interface WikiStatRow {
   key: string;
@@ -163,6 +169,20 @@ export function skillElements(skill: SkillDef): Element[] {
   return [...new Set(out.filter(Boolean))];
 }
 
+/** Etiket: engine'in melee kuralı (`motion === 'melee'`); kendine = Self; dost hedefli = Support; kalanı (büyü, alan, gökten, ok) Ranged. */
+export function skillRange(skill: SkillDef): SkillRange {
+  if (skill.motion === 'melee') return 'Melee';
+  if (skill.target === 'self') return 'Self';
+  if (skill.target === 'single_ally' || skill.target === 'dead_ally' || skill.target === 'all_allies') return 'Support';
+  return 'Ranged';
+}
+
+function slotOf(skillId: string, owner: Owner): number | null {
+  const def = unitDefs()[owner.id];
+  const i = def ? def.skills.indexOf(skillId) : -1;
+  return i >= 0 ? i + 1 : null;
+}
+
 export function buildSkill(skill: SkillDef): WikiSkill {
   const owner = skillOwner(skill.id);
   const def = unitDefs()[owner.id];
@@ -181,15 +201,21 @@ export function buildSkill(skill: SkillDef): WikiSkill {
     cost: info.cost,
     cooldown: info.cooldown,
     initialCooldown: info.initialCooldown,
+    slot: slotOf(skill.id, owner),
+    range: skillRange(skill),
     lines: info.lines,
     kinds: info.kinds,
     ...(wikiMiniGrid(skill) ? { shape: wikiMiniGrid(skill)! } : {}),
-    search: searchText(skill.name, owner.name, info.targetBadge, info.target, info.cost, ...info.lines, ...elements, TARGET_BADGE[skill.target], TARGET_TEXT[skill.target]),
+    search: searchText(skill.name, owner.name, skillRange(skill), info.targetBadge, info.target, info.cost, ...info.lines, ...elements, TARGET_BADGE[skill.target], TARGET_TEXT[skill.target]),
   };
 }
 
 export function buildSkills(): WikiSkill[] {
-  return allSkills().map(buildSkill);
+  // Sahibe göre grupla; sahibin içinde 1-2-3-4 yuva sırası
+  const list = allSkills().map(buildSkill);
+  const ownerOrder = new Map<string, number>();
+  list.forEach((s) => { if (!ownerOrder.has(s.owner.id)) ownerOrder.set(s.owner.id, ownerOrder.size); });
+  return list.sort((a, b) => ownerOrder.get(a.owner.id)! - ownerOrder.get(b.owner.id)! || (a.slot ?? 99) - (b.slot ?? 99));
 }
 
 // ---------------------------------------------------------------- birimler (class + çağrı)
@@ -677,7 +703,7 @@ function bossArticles(): WikiArticle[] {
       if (!sk) return [];
       const info = describeSkill(sk, def.stats, f, unitDefs(), effectDefs());
       const when = sk.minPhase && sk.minPhase > 1 ? ` (from phase ${sk.minPhase})` : '';
-      return [`${sk.name}${when}: ${info.lines.join('; ')}${sk.cooldown ? `; cooldown ${sk.cooldown}` : ''}`];
+      return [`${def.skills.indexOf(id) + 1}. ${sk.name} [${skillRange(sk)}]${when}:${info.lines.join('; ')}${sk.cooldown ? `; cooldown ${sk.cooldown}` : ''}`];
     });
     const over = b.afterResolve ? content.statuses[b.afterResolve.status] : undefined;
     out.push(
@@ -689,6 +715,7 @@ function bossArticles(): WikiArticle[] {
           `Fall of King's Bridge cracks the whole board except one Keystone per lane (gold arch stone): stand on a Keystone.`,
           ...(b.phases ?? []).map((ph, i) => `Phase ${i + 2} at ${pctOf(ph.at)} HP: "${ph.banner}"${ph.actionsPerTurn ? `; ${ph.actionsPerTurn} actions per turn` : ''}${ph.powerMult ? `; hits ${pctOf(ph.powerMult - 1)} harder` : ''}${ph.armorMult ? `; armor x${ph.armorMult}` : ''}${ph.breakAnchors ? '; the Moorings snap' : ''}.`),
           'A single attack can cross only one phase threshold; extra damage stops just above the next one.',
+          'Bosses are immune to crowd control (Stun, Slow, Silence, Taunt, pulls and pushes): the hit still lands, the effect does not ("Immune"). Damage-over-time and curses (Wound, Omen, Withering, burning ground) still work.',
           ...(b.anchor ? [`Each standing ${anchor?.name ?? b.anchor.unit} gives +${b.anchor.armorAdd} armor and +${b.anchor.magicArmorAdd} magic armor. Breaking one staggers the Warden (it loses its next action) and cancels a pending Breaking Span.`] : []),
           ...(over ? [`${over.name}: after a collapse the Warden ${over.text.charAt(0).toLowerCase()}${over.text.slice(1)}.`] : []),
           ...(b.passives ?? []).map((x) => `${x.name}: ${x.text}`),
