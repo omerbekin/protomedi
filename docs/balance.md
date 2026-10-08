@@ -23,6 +23,87 @@ Sayılar `data/balance.json` dosyasındadır; `npm run sim` raporu ve `tests/bal
 - `tests/balance-checks.ts > PENDING_BALANCE` (class bandı): **boş**. Hexer bu turda bantta (%48) olduğu için listeden çıkarıldı.
 - `tests/balance-checks.ts > PENDING_SKILLS` (skill bandı): **boş**. Abyssal Cry (madde 262 yeni tasarımı) hazır olanlardan ~%69 kullanılıyor; 2026-10-08 ikinci turda listeden çıkarıldı.
 
+## Sefer dengesi — 2026-10-08 (balance-tester, Opus; madde 264)
+
+### Sefer simülatörü (`npm run sim:campaign`)
+- Kod: `src/sim/campaign.ts` (çekirdek; testler de kullanır) + `src/sim/campaign-cli.ts` (rapor). Kullanım: `npm run sim:campaign -- [sefer] [ilk seed] [easy|medium|hard|all] [medium|easy|both] [--jobs=N] [--attempts=N] [--json=dosya]`; varsayılan 240 sefer, tüm zorluklar, iki oyuncu vekili, çekirdek sayısı kadar paralel iş.
+- Akış gerçek sefer mantığıyla (`src/campaign`) birebir: rastgele kahraman -> Ravenwood'da 3 adaydan rastgele biri -> Watchtower -> Ashford'da 11 sınıftan rastgele 3 kişilik yeni takım (otomatik dizilim) -> Valdren Keep'ten ayrılırken rastgele aday = 4 kişi. 12 rota eşit sayıda oynanır (koşu no % 12). Can taşıma `applyBattle` / `moveTo` ile (zafer +%20, düşen %20 ile kalkar, boss zaferi ve kasaba tam can).
+- **Oyuncu vekili:** oyuncu tarafını da YZ oynar. Medium YZ = "iyi oyuncu" (hedefler buna göre), Easy YZ = "ortalama oyuncu" (yalnızca bilgi). Düşman tarafı zorluğun YZ'si + zorluğun düşman çarpanları.
+- **Yenilgi = son kayda dönüş:** aynı düğüm aynı takım durumuyla yeniden denenir (kayıt zaferden sonra alındığı için takım birebir aynıdır); deneme sayacıyla savaş seed'i değişir. **10 denemede geçilemeyen düğüm "takıldı"** sayılır: sefer "bitmedi" olur, ölçüm için düğüm zorla geçilip sefer sürer (sonraki düğümler de ölçülsün diye).
+- Ölçümler: düğüm başına ilk denemede kazanma, ortalama deneme, savaşa giriş/çıkış canı, zaferde düşen karakter, savaş süresi; rota başına bitirme oranı ve sefer başına yenilgi; sınıf başına (asıl takımda iken) bitirme oranı; en zor/en kolay düğümler.
+- **Kategoriler:** tutorial = Ashford öncesi savaşlar (1 Mill Road, 2 Ravenwood, 3 Watchtower: elit olsa da tutorial); elit = 8C, 11A; boss = 9, 12; normal = kalan savaşlar (korunan hazine 6B, 8A dahil).
+
+### Hedefler (ÖNERİ; Ömer onayı bekliyor; `data/campaign/balance.json > targets`)
+İlk denemede kazanma, oyuncu vekili Medium YZ, taşınan canla:
+
+| Zorluk | Tutorial | Normal | Elit | Boss |
+|---|---|---|---|---|
+| Easy | %93-100 | %85-97 | %72-87 | %57-77 |
+| Medium | %88-97 | %75-85 | %60-70 | %45-60 |
+| Hard | %75-92 | %57-70 | %42-55 | %25-40 |
+
+### Sonuç (960 sefer, seed 1.., 12 rota x 80; oyuncu vekili Medium YZ)
+
+| Zorluk | | Tutorial | Normal | Elit | Boss | Seferi bitirme | Yenilgi / sefer |
+|---|---|---|---|---|---|---|---|
+| Easy | önce | %41,1 | %51,2 | %6,5 | %29,2 | %0,4 | 37,6 |
+| | **sonra** | **%99,3** | **%95,7** | **%86,8** | **%67,9** | **%79,0** | **3,7** |
+| Medium | önce | %18,8 | %29,7 | %2,0 | %31,5 | %0 | 52,3 |
+| | **sonra** | **%95,0** | **%80,2** | **%63,5** | **%50,9** | **%60,6** | **8,6** |
+| Hard | önce | %19,7 | %28,4 | %1,5 | %30,4 | %0 | 51,9 |
+| | **sonra** | **%91,1** | **%66,4** | **%44,3** | **%33,2** | **%39,4** | **15,2** |
+
+"Önce" ölçümü 240 sefer: eski karşılaşmalarda tutorial bile çoğu zaman geçilemiyordu (Mill Road %44, Ravenwood %8, Watchtower %4; Dragon's Spine, Siege Line, Castle Morvane %0). Hard eskiden Medium'la aynıydı (yalnızca YZ farkı).
+
+Ortalama oyuncu vekili (Easy YZ), sonra (tutorial / normal / elit / boss, bitirme): Easy %97 / 79 / 69 / 39, %52; Medium %86 / 50 / 39 / 26, %25; Hard %81 / 35 / 29 / 13, %8.
+
+Düğüm başına ilk deneme (Medium, sonra): 1 Mill Road %99, 2 Ravenwood %98, 3 Watchtower %88, 5A %82, 5B %81, 6B %78, 8A %80, 8B %73, 8C %70, 9 King's Bridge %56, 10 %81, 11A %59, 11B %83, 12 Castle Morvane %46. En zor: 12, 9, 11A; en kolay (tutorial dışı): 11B, 5A, 10. Savaş süresi (tüm birimlerin turları): tutorial 12-28, normal 27-50, elit 20-43, King's Bridge 71, Castle Morvane 49.
+
+Rota bitirme (Medium, sonra; rota başına 80 sefer): %52-70. Tek elitli rotalar (8A/8B + 11B) %64-70, iki elitli %52-64, üç elitli (8C + 11A) %54. Alt yol (5A-6A, 9 savaş) ile üst yol (5B-6B, 10 savaş) farkı küçük (%61 / %60). Easy %72-88, Hard %21-55.
+
+Sınıf (asıl takımda iken seferi bitirme, Medium): Paladin %90, Druid %80, Warrior %65, Defender %60, Undead %58, Mage %58, Cutthroat %55, Archer %52, Gambler %52, Anti-Mage %49, Hexer %49. Can taşındığı için şifa ve diriltme seferde 4'e 4 savaştakinden çok daha değerli (class sayılarına dokunulmadı; soru).
+
+### Bitirmeyi düşüren asıl şey: can taşıma sarmalı (soru)
+Medium'da seferlerin ~%39'u bir düğümü 10 denemede geçemiyor; neredeyse hepsi **King's Bridge (%22)** ve **Castle Morvane (%21)**. Sebep durum: boss'a düşük canla (önceki savaşta düşen karakter %20 ile) girilince "son kayıt" hep aynı kötü durumdan başlıyor. Castle Morvane'de takımın ortalama giriş canı %60 altındaysa kazanma %14, %80 üstündeyse %80. Ironman'da bu kalıcı kilit demek. Aynı karşılaşmalarla kural denemeleri (Medium, 240 sefer, ayarın ortasındaki karşılaşmalarla):
+
+| Kural | Boss ilk deneme | Seferi bitirme | Yenilgi / sefer |
+|---|---|---|---|
+| Şimdiki (zafer +%20, düşen %20) | %51 | %57 | 9,5 |
+| Düşen %50 ile kalkar | %62 | %79 | 5,7 |
+| Zafer +%30, düşen %40 | %64 | %83 | 5,3 |
+| Boss düğümüne varınca tam iyileşme ("kamp") | %80 | %90 | 4,3 |
+
+Kurallar Ömer kararı olduğu için değiştirilmedi. Seçilen kural sonra boss (ve kısmen elit) sayılarını yeniden ayarlamayı gerektirir.
+
+### Zorluk tanımları (`campaign.json > difficulties`)
+- Yeni alanlar (`src/campaign`, küçük kod + test): `enemy` = seferdeki TÜM düşmanlara eklenen güçlendirme (hpMult, statMult, powerMult, armorAdd, magicArmorAdd; karşılaşmanın kendi `mods`'u ile çarpanlar çarpılır, düz ekler toplanır), `enemyTier` = elit/boss'a ek, `rules` = bu zorlukta victoryHeal / reviveRatio / bossVictoryHeal üstüne yazımı (altyapı hazır, şimdilik kullanılmıyor). Karşılaşma sayıları Medium'a göredir. İleride loot vb. alanlar aynı yere eklenir.
+- **Easy:** Easy YZ (hata yapan, ufku kısa); düşman zayıflatması gerekmedi (YZ farkı yeterli).
+- **Medium:** Medium YZ; karşılaşmalar veride yazıldığı gibi.
+- **Hard:** Hard YZ + tüm düşmanlar **+%12 can, +%5 güç**, boss'lar ayrıca **+%10 can, +%10 güç**. (Denenen: +%15 can / +%10 güç elitleri %36'ya indirdi; +%8 stat elit %40, normal %69; boss eki olmadan boss %41.)
+- Hızlı savaşta zorluk yok (Medium): değişmedi. Wiki > Campaign zorluk satırı veriden türetilir.
+
+### Karşılaşma değişiklikleri (`data/campaign/encounters.json`; Medium tabanı; can = hpMult, stat = statMult, güç = powerMult)
+- Mill Road – Road Thug + Cutpurse: can 0,5 -> 0,4, stat 0,7 -> 0,6, güç 0,5 (yeni). Eski hal "çok zayıf" görünse de tek kahramana karşı 2 düşmanın sıra avantajı + arkası hep boş tek kahramana Cutpurse'ün Backstab'ı yüzünden ilk deneme %44'tü (can tabanı 30 ile tutorial düşmanları bile güçlendi).
+- Ravenwood – 5 haydut: can 0,5 -> 0,4, stat 0,7 -> 0,6, güç 0,4.
+- Ruined Watchtower – Bandit Chief can 1,8 -> 1,1, stat 1,15 -> 0,9, güç 0,7; okçular tutorial zayıflatması (0,4 / 0,6 / 0,5).
+- Misty Marsh – 3 düşman can 0,75, güç 0,85.
+- Iron Pass – iki Cutthroat -> Cutthroat + Warrior (uç kombinasyon: çift Backstab 3 kişilik takımın arka safını eritiyordu, %19); can 0,75, güç 0,8.
+- Dwarven Mine – can 0,7, stat 0,9, güç 0,8 (üst yolda ikinci savaş, eksik canla girilir).
+- St. Brann's Abbey – can 0,8, güç 0,85 (çift Paladin korundu: bir Paladin'i Mage yapmak zorlaştırdı).
+- Mercenary Camp – can 0,85, güç 0,9.
+- Black Cathedral (elit) – 5 -> 4 düşman (Mage çıktı); High Priest can 1,8 -> 1,4, stat 1,15 -> 1,1; diğerleri can 0,8, güç 0,8.
+- King's Bridge (boss) – Bridge Warden can 6 -> 6,5 (stat 1,5, 2 eylem aynı).
+- Ashen Plain – can 0,8, güç 0,85.
+- Dragon's Spine (elit) – 5 -> 4 (bir Cutthroat çıktı); Drake Priest can 1,8 -> 1,2, stat 1,15 -> 1; diğerleri can 0,6, stat 0,9, güç 0,75.
+- Siege Line – 5 -> 4 (bir Archer çıktı); can 0,7, stat 0,9, güç 0,85.
+- Castle Morvane (final) – 5 -> 4 (Warrior çıktı); Lord Morvane can 3,0 -> 2,5, stat 1,35 -> 1,2; eskort can 0,6, stat 0,95, güç 0,75.
+- Bölge III düşmanlarının Bölge II'den "zayıf" görünmesinin sebebi taşınan can: takım bu savaşlara ortalama %60-70 canla giriyor.
+
+### Testler
+- `tests/campaign-balance.test.ts`: Medium, 120 sefer (seed 7001), her kategori hedef ± 8 puan (`balance.json > test`); eğri iner (tutorial > normal > elit > boss); 12 rota oynandı.
+- `tests/campaign-difficulty.test.ts`: 48 sefer (seed 9001), normal/elit/boss için Easy > Medium > Hard en az 5 puan arayla, tutorial Easy >= Medium >= Hard; zorluk çarpanlarının birleşme kuralı ve Hard'ın düşmanlara (boss'a ek) gerçekten uygulandığı.
+- İkisi paralel ~40 sn.
+
 ## Denge turu 2 — 2026-10-08 (balance-tester, Opus; madde 263; Abyssal Cry yeniden tasarımı + Guard yarım tur sonrası)
 
 ### Ölçüm

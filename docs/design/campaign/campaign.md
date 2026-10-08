@@ -358,7 +358,7 @@ Her durağın öğrettiği şey (borderlands-flow referansından, Ashford 4'e ta
 ### 5.1 Can taşıma (Ömer: taşınır)
 - Her karakterin can oranı (0-1) savaştan savaşa taşınır. MP her savaşta dolu başlar (öneri). Rage, cooldown, statü, çağrılar taşınmaz.
 - Savaşta düşen karakter: zaferden sonra can maks'ının **%20**'siyle kalkar (provizyon `reviveRatio`).
-- **Zafer sonrası toparlanma (Ömer kararı v3):** her zaferden sonra hayatta kalanlar can maks'ının **%20**'sini geri alır (`victoryHeal 0.2`). İleride zorluk seviyesi gelirse bu oran zorluğa göre değişebilir (ör. Story %35, Standard %20, Hard %10: yalnızca not, karar değil).
+- **Zafer sonrası toparlanma (Ömer kararı v3):** her zaferden sonra hayatta kalanlar can maks'ının **%20**'sini geri alır (`victoryHeal 0.2`). Zorluğa göre değiştirme altyapısı var (`campaign.json > difficulties.<x>.rules`, madde 264) ama kullanılmıyor: oranlar her zorlukta aynı. Sefer simülasyonu bu kuralın boss'larda bir "can sarmalı" yarattığını gösterdi (açık soru, madde 264).
 - **Büyük boss zaferi** (`type: boss`: King's Bridge; Castle Morvane haritayı bitirir): **tam iyileşme** (Ömer kararı v3, `bossVictoryHeal 1.0`). Elitlerden sonra tam iyileşme yok.
 - Kasaba (4, 7): tam iyileşme.
 - **İleri iş (Ömer):** eşyalar / skill ağacıyla savaş öncesi iyileşme (iksir, kamp, "Field Medic" yeteneği). Şimdi değil.
@@ -465,29 +465,29 @@ Seçim düğümündeyken gidilebilir düğümler nabız atar. Dokununca rota kar
 - **Tek dev düşman:** tek birim, çok yüksek can, büyük çizim, **tur başına ek eylem** (ör. her turunda 2 eylem ya da sayaç eşiğine 2 kez ulaşma) ve kontrol etkilerine kısmi direnç; sıra sistemi tek birime az tur verdiği için ek eylem şart. Kullanım: **King's Bridge (9)**: The Bridge Warden (dev taş-zırhlı bekçi; görünüm Defender'ın büyütülmüşü, ileride özel sprite).
 - Motor desteği gelene kadar 9 da lider + eskort olarak oynanır (veride `fallback` karşılaşması).
 
-### 7.2 Karşılaşma listesi (PROVİZYON)
-Yuva = sıra*3+şerit (0 en ön). `(w)` = tutorial zayıflatması (`hpMult 0.5, statMult 0.7`), `+` elit lider (`hpMult 1.8, statMult 1.15`), `++` bölge boss'u, `+++` final boss (`hpMult 3.0, statMult 1.35, spriteScale 1.4`).
+### 7.2 Karşılaşma listesi (sayılar sefer dengesi 2026-10-08, madde 264; Medium tabanı)
+Yuva = sıra*3+şerit (0 en ön). Kısaltma: (w) = tutorial zayıflatması (`hpMult 0.4, statMult 0.6, powerMult 0.5`); `c` can (hpMult), `s` stat (statMult), `g` güç (powerMult); belirtilmeyen 1. Sayılar Medium içindir; Easy/Hard farkı `campaign.json > difficulties`'ten gelir (bkz. 7.4). Ayrıntı ve eski değerler: `docs/balance.md > Sefer dengesi`.
 
 | Node | Encounter id | English name | Takım (oyuncu) | Düşman | Units (yuva) | Motor desteği yokken |
 |---|---|---|---|---|---|---|
-| 1 Mill Road | `mill_road_thugs` | Road Thugs | 1 | 2 | Warrior (w) (1), Cutthroat (w) (0) | 1 vs 1: Warrior (1) |
-| 2 Ravenwood | `ravenwood_pack` | Ravenwood Outlaws | 2 | 5 | Cutthroat (w) (0), Warrior (w) (1), Cutthroat (w) (2), Archer (w) (6), Archer (w) (8): ön sıra dolu, alan saldırısına davet | 2 vs 3: ön sıra 0, 1, 2 |
-| 3 Ruined Watchtower | `watchtower_chief` | The Bandit Chief | 2 | 3 | **Bandit Chief** Warrior+ (1), Archer (w) (6), Archer (w) (8) | 2 vs 2: Warrior (1), Archer (7) |
-| 5A Misty Marsh | `bog_ambush` | Bog Lurkers | 3 | 3 | Warrior (1), Druid (6), Hexer (8) (Witch's Hut'un hizmetkârları; ileride hazır Treant + "ambush") | aynı |
-| 5B Iron Pass | `iron_pass_ambush` | Iron Pass Ambush | 3 | 3 | Cutthroat (0), Cutthroat (2), Archer (7) | aynı (pusu ileride) |
-| 6B Dwarven Mine | `mine_wardens` | Mine Wardens | 3 | 3 | Defender (0), Warrior (1), Archer (7) | aynı |
-| 8A St. Brann's Abbey | `vault_keepers` | Vault Keepers | 4 | 4 | Defender (1), Paladin (6), Anti-Mage (8), Paladin (10) | aynı |
-| 8B Mercenary Camp | `mercenary_camp` | Sellswords | 4 | 4 | Defender (1), Warrior (0), Gambler (4), Archer (7) | aynı |
-| 8C Black Cathedral | `black_cathedral` | The Undying Choir | 4 | 5 | **High Priest** Undead+ (7), Undead (6), Defender (1), Hexer (4), Mage (10) (+ ileride 2 hazır Skeleton) | lidersiz aynı |
-| 9 King's Bridge | `bridge_warden` | The Bridge Warden | 4 | 1 (dev) | **Bridge Warden** Defender (hpMult 6, statMult 1.5, spriteScale 2, 2 eylem/tur) (1) | `bridge_warden_escort`: Warden Defender++ (1), Archer (6), Archer (8), Paladin (10) |
-| 10 Ashen Plain | `ashen_plain` | Ashen Revenants | 4 | 4 | Warrior (0), Warrior (2), Undead (7), Mage (6) | aynı (lanetli zemin ileride) |
-| 11A Dragon's Spine | `dragons_spine` | Cult of the Drake | 4 | 5 | **Drake Priest** Mage+ (7), Mage (6), Druid (8), Cutthroat (0), Cutthroat (2) | lidersiz aynı |
-| 11B Siege Line | `siege_line` | Morvane's Vanguard | 4 | 5 | Defender (0), Defender (2), Warrior (1), Archer (6), Archer (8) | aynı |
-| 12 Castle Morvane | `lord_morvane` | Lord Morvane | 4 | 5 | **Lord Morvane** Undead+++ (7), Defender (1), Warrior (0), Paladin (10), Anti-Mage (6) | lidersiz aynı |
+| 1 Mill Road | `mill_road_thugs` | Road Thugs | 1 | 2 | Road Thug Warrior (w) (1), Cutpurse Cutthroat (w) (0) | 1 vs 1: Warrior (1) |
+| 2 Ravenwood | `ravenwood_pack` | Ravenwood Outlaws | 2 | 5 | Cutthroat (0), Warrior (1), Cutthroat (2), Archer (6), Archer (8), hepsi c0,4 s0,6 g0,4: ön sıra dolu, alan saldırısına davet | 2 vs 3: ön sıra 0, 1, 2 |
+| 3 Ruined Watchtower | `watchtower_chief` | The Bandit Chief | 2 | 3 | **Bandit Chief** Warrior elit c1,1 s0,9 g0,7 (1), Archer (w) (6), Archer (w) (8) | 2 vs 2: Warrior (1), Archer (7) |
+| 5A Misty Marsh | `bog_ambush` | Bog Lurkers | 3 | 3 | Warrior (1), Druid (6), Hexer (8); c0,75 g0,85 | aynı |
+| 5B Iron Pass | `iron_pass_ambush` | Iron Pass Ambush | 3 | 3 | Cutthroat (0), Warrior (2), Archer (7); c0,75 g0,8 (eskiden çift Cutthroat) | aynı |
+| 6B Dwarven Mine | `mine_wardens` | Mine Wardens | 3 | 3 | Defender (0), Warrior (1), Archer (7); c0,7 s0,9 g0,8 | aynı |
+| 8A St. Brann's Abbey | `vault_keepers` | Vault Keepers | 4 | 4 | Defender (1), Paladin (6), Anti-Mage (8), Paladin (10); c0,8 g0,85 | aynı |
+| 8B Mercenary Camp | `mercenary_camp` | Sellswords | 4 | 4 | Warrior (0), Defender (1), Gambler (4), Archer (7); c0,85 g0,9 | aynı |
+| 8C Black Cathedral | `black_cathedral` | The Undying Choir | 4 | 4 | **High Priest** Undead elit c1,4 s1,1 (7), Undead (6), Defender (1), Hexer (4); diğerleri c0,8 g0,8 (Mage çıkarıldı) | lidersiz aynı |
+| 9 King's Bridge | `bridge_warden` | The Bridge Warden | 4 | 1 (dev) | **Bridge Warden** Defender c6,5 s1,5, spriteScale 2, 2 eylem/tur (1) | `bridge_warden_escort` |
+| 10 Ashen Plain | `ashen_plain` | Ashen Revenants | 4 | 4 | Warrior (0), Warrior (2), Undead (7), Mage (6); c0,8 g0,85 | aynı (lanetli zemin ileride) |
+| 11A Dragon's Spine | `dragons_spine` | Cult of the Drake | 4 | 4 | **Drake Priest** Mage elit c1,2 (7), Mage (6), Druid (8), Cutthroat (0); diğerleri c0,6 s0,9 g0,75 (bir Cutthroat çıkarıldı) | lidersiz aynı |
+| 11B Siege Line | `siege_line` | Morvane's Vanguard | 4 | 4 | Defender (0), Defender (2), Warrior (1), Archer (6); c0,7 s0,9 g0,85 (bir Archer çıkarıldı) | aynı |
+| 12 Castle Morvane | `lord_morvane` | Lord Morvane | 4 | 4 | **Lord Morvane** Undead boss c2,5 s1,2, spriteScale 1,4 (7), Defender (1), Paladin (10), Anti-Mage (6); eskort c0,6 s0,95 g0,75 (Warrior çıkarıldı) | lidersiz aynı |
 
-v3 notu: oyuncu takım boyutları yeni katılım düzenine göre (Ashford sonrası 3, Valdren Keep sonrası 4, 5. karakter açık) ve düşman sayıları buna göre bir azaltıldı. 5. karakter gelirse Bölge III karşılaşmalarına birer birim geri eklenir.
+v3 notu: oyuncu takım boyutları yeni katılım düzenine göre (Ashford sonrası 3, Valdren Keep sonrası 4, 5. karakter açık) ve düşman sayıları buna göre bir azaltıldı. 5. karakter gelirse Bölge III karşılaşmalarına birer birim geri eklenir. (Madde 264: 8C, 11A, 11B, 12 dengede 4 düşmana indi.)
 
-Taslak (`data/campaign/encounters.json`):
+Taslak biçim (v1; güncel sayılar `data/campaign/encounters.json` ve yukarıdaki tablo):
 ```json
 {
   "mill_road_thugs": {
@@ -507,9 +507,32 @@ Taslak (`data/campaign/encounters.json`):
 ```
 Kurallar (testlenecek): sınıflar `randomPool` içinde (Geometer yok), yuvalar 0-11 ve tekrarsız, `fallback` varsa geçerli.
 
-### 7.3 Zorluk eğrisi (PROVİZYON; balance-tester doğrulayacak)
-| Durak | 1 | 2 | 3 E | 5 | 8 | 9 B | 10 | 11 | 12 FB |
-|---|---|---|---|---|---|---|---|---|---|
+### 7.3 Zorluk eğrisi (ölçüldü: `npm run sim:campaign`, madde 264)
+Hedef (ÖNERİ, Ömer onayı bekliyor): ilk denemede kazanma, oyuncu tarafı Medium YZ ("iyi oyuncu" vekili), taşınan canla. Ölçüm: 960 sefer, rastgele kahraman/adaylar/Ashford takımı, 12 rota eşit.
+
+| Kategori (düğümler) | Hedef Medium | Ölçülen Easy | Ölçülen Medium | Ölçülen Hard |
+|---|---|---|---|---|
+| Tutorial (1, 2, 3) | %88-97 | %99 | %95 | %91 |
+| Normal (5A, 5B, 6B, 8A, 8B, 10, 11B) | %75-85 | %96 | %80 | %66 |
+| Elit (8C, 11A) | %60-70 | %87 | %64 | %44 |
+| Boss (9, 12) | %45-60 | %68 | %51 | %33 |
+| Seferi bitirme (10 denemede takılmadan) | | %79 | %61 | %39 |
+
+Medium düğüm başına: 1 %99, 2 %98, 3 %88, 5A %82, 5B %81, 6B %78, 8A %80, 8B %73, 8C %70, 9 %56, 10 %81, 11A %59, 11B %83, 12 %46. Rota bitirme %52-70 (elit sayısı arttıkça düşer). Bitirmeyi asıl düşüren, boss'lara düşük canla girilince "son kayıt"ın hep aynı kötü durumdan başlaması (bkz. `docs/balance.md > Sefer dengesi`, open-questions madde 264).
+
+### 7.4 Zorluk seviyeleri (madde 256 + 264)
+Sefer başında seçilir, sonra değişmez. Tanım `campaign.json > difficulties`:
+
+| | Easy | Medium | Hard |
+|---|---|---|---|
+| Düşman YZ'si (`ai`) | Easy (hata yapar, ufku 1 tur) | Medium (tam terazi) | Hard (odak ateşi, fazla vurmama) |
+| Tüm düşmanlar (`enemy`) | aynı | aynı | +%12 can, +%5 güç |
+| Elit/boss eki (`enemyTier`) | yok | yok | boss +%10 can, +%10 güç |
+| Can taşıma (`rules`) | aynı (%20 / %20) | aynı | aynı |
+
+`enemy`/`enemyTier` karşılaşmanın kendi `mods`'u ile birleşir (çarpanlar çarpılır, zırh ekleri toplanır); `rules` bu zorlukta `victoryHeal`, `reviveRatio`, `bossVictoryHeal`'i değiştirebilir (altyapı hazır, kullanılmıyor). İleride loot vb. aynı yere eklenir. Hızlı savaşta zorluk yok (Medium).
+
+---|---|---|---|---|---|---|---|---|---|
 | Takım / düşman | 1 / 2w | 2 / 5w | 2 / 3 | 3 / 3 | 4 / 4-5 | 4 / dev | 4 / 4 | 4 / 5 | 4 / 5 |
 | Hedef YZ-vs-YZ oyuncu kazanma (taşınan canla) | %95 | %90 | %70 | %80 | %80 (8A), %70 (8B), %60 (8C E) | %55 | %75 | %65 (11B), %55 (11A E) | %50 |
 
@@ -548,9 +571,9 @@ Kurallar (testlenecek): sınıflar `randomPool` içinde (Geometer yok), yuvalar 
 
 ## 9.1 Madde 256 kararları (uygulandı)
 - **Kayıt:** 3 sefer yuvası; her yuvada o seferin kendi kayıtları (Normal en fazla 5, Ironman 1). Load Game önce yuva, sonra kayıtlar; Continue en son oynanan yuva. 5.2'deki "en fazla 5" artık yuva başınadır.
-- **Genel zorluk:** Easy / Medium / Hard, sefer başında seçilir, sonra değişmez (`campaign.json > difficulties`; şimdilik yalnızca yapay zeka zorluğu; ileride savaş zorluğu, loot).
+- **Genel zorluk:** Easy / Medium / Hard, sefer başında seçilir, sonra değişmez (`campaign.json > difficulties`; YZ + Hard'da düşman çarpanları, bkz. 7.4; ileride loot).
 - **5. karakter:** açık (karar beklenmiyor); takım şimdilik en fazla 4.
-- **Tutorial düşmanlarının gücü:** şimdilik olduğu gibi; sınıfların kendi dengesi bitince sefer moblarına göre ayarlanacak (balance-tester).
+- **Tutorial düşmanlarının gücü:** sefer dengesinde (madde 264) ayarlandı: eski "çok zayıf" sayılar tek kahramana karşı aslında çok güçlüydü (Mill Road ilk deneme %44); yeni değerler 7.2.
 
 ## 10. Ömer'e açık sorular (v5)
 

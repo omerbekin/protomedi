@@ -132,7 +132,7 @@ export function describePassive(passive: PassiveDef, stats: Stats, formulas: For
       return `Deal +${pct(e.bonus)} damage to targets suffering from ${list} (every hit, crits included).`;
     }
     case 'omenTransfer':
-      return `When an enemy carrying your Omens dies, its Omens pass to the nearest enemy (at most ${e.maxOnArrival} arrive; if Doom killed it, ${e.onDoomKill} passes). Passed Omens keep the time they had left and never trigger Doom. Works only while you live.`;
+      return `When an enemy carrying your Omens dies, its Omens pass to the nearest enemy (at most ${e.maxOnArrival} arrive; if Doom killed it, ${e.onDoomKill} passes; a kill by a skill that detonates Omens passes none). Passed Omens keep the time they had left and never trigger Doom. Works only while you live.`;
   }
 }
 
@@ -320,12 +320,15 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       const detonates = skill.effects.some((x) => x.type === 'detonate' && x.status === kind);
       add(`Adds ${e.stacks} ${name}${crit} to every enemy hit`, 'dark');
       if (doom && def?.maxStacks && !detonates) add(`At ${def.maxStacks} Omens, Doom strikes at once: ${pct(doom.powerPerStack)} ${ATTRIBUTE_NAME[doom.scale]} (${raw(doom.scale, doom.powerPerStack)}) ${doom.element} damage per Omen; it cannot miss but can crit`, doom.element);
+      if (doom && def?.maxStacks && !detonates && e.critDoomOnCrit) add(`A critical ${skill.name} that completes ${def.maxStacks} Omens makes the Doom a critical hit`, doom.element);
+      if (def?.burstOnExpire && def.duration && !detonates) add(def.refreshOnStack ? `Each new Omen resets the ${def.duration}-turn timer; when it runs out, the Omens burst into Doom` : `After ${def.duration} turns the Omens burst into Doom (new Omens do not extend the timer)`);
     } else if (e.type === 'detonate') {
       const def = defs.statuses?.[e.status];
       const doom = def?.doom;
       if (doom) add(`Then Doom strikes at once with every Omen on the target, x${e.mult}: ${pct(doom.powerPerStack * e.mult)} ${ATTRIBUTE_NAME[doom.scale]} (${raw(doom.scale, doom.powerPerStack * e.mult)}) ${doom.element} damage per Omen; it cannot miss but can crit`, doom.element);
       else add(`Detonates ${e.status} x${e.mult}`);
       add('On a miss nothing happens: the Omens stay');
+      if (e.noTransferOnKill) add('Every Omen on the target is spent; if this kills it, nothing passes on (Ill Omen does not trigger)');
     } else if (e.type === 'dot') {
       const def = defs.statuses?.[e.status];
       add(`${def?.name ?? e.status} for ${e.turns} turns: ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)}) ${def?.dot?.element ?? ''} damage at the start of each of its turns (cannot miss or crit; recasting renews it)`.replace('  ', ' '), def?.dot?.element);
@@ -336,6 +339,18 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       if (skill.excludeSelf) add('Cannot target yourself');
     }
   }
+  // Boss skill kuralları (The Bridge Warden): çekme, telgraf (gecikmeli saldırı), faz ve yardımcı şartları
+  if (skill.effects.some((e) => e.type === 'pull')) add('Drags the target to the front-most empty cell of its own lane');
+  const tg = skill.telegraph;
+  if (tg) {
+    if (tg.kind === 'brand') add(`Delayed: brands the target now; at the start of your next turn the brand bursts on the branded unit and everyone right next to it (${tg.area?.shape === 'plus' ? 'a cross around it' : 'around it'}). Dispel or death removes it`);
+    else if (tg.wholeBoard) add(`Delayed: cracks the whole enemy board except ${tg.keystones?.perLane ?? 1} Keystone cell per lane; it collapses at the start of your next turn`);
+    else add('Delayed: marks the cells now; they collapse at the start of your next turn');
+    add('Every enemy gets at least one turn before it lands; it cannot miss. One area warning and one brand at a time, at most one new warning per turn');
+  }
+  for (const [ph, area] of Object.entries(skill.areaByPhase ?? {})) add(`From phase ${ph}: ${shapeText(area).replace(/^Hits/, 'hits').replace(/; your cursor cell.*$/, '')}`);
+  if (skill.minPhase && skill.minPhase > 1) add(`Only from phase ${skill.minPhase}`);
+  if (skill.requiresAlly) add(`Needs a standing ${units[skill.requiresAlly]?.name ?? skill.requiresAlly}`);
   const turnCost = skill.turnCost !== undefined && skill.turnCost > 0 && skill.turnCost < 1 ? skill.turnCost : 1;
   if (turnCost < 1) add(turnCost === 0.5 ? 'Takes half a turn: your next turn comes in half the usual time' : `Takes ${pct(turnCost)} of a turn: your next turn comes sooner`);
   const waves = skill.target === 'area_enemies' || skill.target === 'area_any' ? stageText(skill.area) : '';

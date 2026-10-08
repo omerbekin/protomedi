@@ -19,7 +19,7 @@ import { BACKUP_VFX, VFX_KINDS } from '../ui/vfx-kinds';
 // ---------------------------------------------------------------- ortak
 
 export interface Owner {
-  kind: 'class' | 'summon' | 'other';
+  kind: 'class' | 'summon' | 'boss' | 'other';
   id: string;
   name: string;
 }
@@ -28,6 +28,7 @@ export interface Owner {
 export function skillOwner(skillId: string): Owner {
   for (const def of Object.values(content.classes)) if (def.skills.includes(skillId)) return { kind: 'class', id: def.id, name: def.name };
   for (const def of Object.values(content.summons)) if (def.skills.includes(skillId)) return { kind: 'summon', id: def.id, name: def.name };
+  for (const def of Object.values(content.bosses)) if (def.skills.includes(skillId)) return { kind: 'boss', id: def.id, name: def.name };
   return { kind: 'other', id: 'other', name: 'Other' };
 }
 
@@ -217,7 +218,7 @@ export function avatarMap(files: Record<string, string>): Record<string, string>
 
 export interface CharacterEntry {
   id: string;
-  kind: 'class' | 'summon';
+  kind: 'class' | 'summon' | 'boss';
   name: string;
   spriteId: string;
   color: string;
@@ -276,12 +277,12 @@ const toEntry = (kind: CharacterEntry['kind'], def: CombatantDef, files: AssetFi
 };
 
 export function buildCharacters(files: AssetFiles): CharacterEntry[] {
-  return [...Object.values(content.classes).map((d) => toEntry('class', d, files)), ...Object.values(content.summons).map((d) => toEntry('summon', d, files))];
+  return [...Object.values(content.classes).map((d) => toEntry('class', d, files)), ...Object.values(content.summons).map((d) => toEntry('summon', d, files)), ...Object.values(content.bosses).map((d) => toEntry('boss', d, files))];
 }
 
 /** Hiçbir class/çağrıya bağlı olmayan sprite klasörleri ve avatar dosyaları (id listesi). */
 export function orphanAssets(files: AssetFiles): { sprites: string[]; avatars: string[]; old: string[] } {
-  const known = new Set([...Object.values(content.classes), ...Object.values(content.summons)].map((d) => d.spriteId));
+  const known = new Set([...Object.values(content.classes), ...Object.values(content.summons), ...Object.values(content.bosses)].map((d) => d.spriteId));
   const outside = (ids: string[]) => ids.filter((id) => !known.has(id)).sort();
   // Varyant avatarı (<id>-<varyant>.png) bağlıdır: sahibi biliniyorsa ve idle-<varyant>.png varsa
   const sprites = groupByDir(files.sprites);
@@ -314,22 +315,24 @@ export function buildIcons(): IconEntry[] {
   const add = (icon: string, kind: IconUseKind, label: string, accent?: string): void => {
     uses.set(icon, [...(uses.get(icon) ?? []), { kind, label, ...(accent ? { accent } : {}) }]);
   };
-  const colorOf = (owner: Owner): string | undefined => (content.classes[owner.id] ?? content.summons[owner.id])?.color;
+  const colorOf = (owner: Owner): string | undefined => (content.classes[owner.id] ?? content.summons[owner.id] ?? content.bosses[owner.id])?.color;
   for (const s of allSkills()) {
     const owner = skillOwner(s.id);
     add(s.icon, 'skill', `${s.name} (${owner.name})`, s.fx || colorOf(owner));
   }
   // Global eylemler (Rest / Skip Turn / Move: data/global-skills.json) savaşta düğme olarak çizilir: ikonları da kullanılıyor
   for (const g of Object.values(content.globalSkills)) if (g.icon) add(g.icon, 'skill', `${g.name} (global action)`, UI_COLOR);
-  for (const def of [...Object.values(content.classes), ...Object.values(content.summons)]) {
+  for (const def of [...Object.values(content.classes), ...Object.values(content.summons), ...Object.values(content.bosses)]) {
     add(def.logo, 'logo', `${def.name} logo`, def.color);
     if (def.passive) add(def.passive.icon, 'passive', `${def.name}: ${def.passive.name}`, def.color);
+    for (const bp of def.boss?.passives ?? []) add(bp.icon, 'passive', `${def.name}: ${bp.name}`, def.color);
   }
   for (const [stat, icon] of Object.entries(STAT_ICON)) add(icon, 'stat', STAT_LABEL[stat as keyof typeof STAT_LABEL], STAT_COLOR[stat as keyof typeof STAT_COLOR]);
   for (const [id, st] of Object.entries(content.statuses)) add(st.icon, 'status', st.name || id, st.color);
   for (const [id, g] of Object.entries(content.grounds)) add(g.icon, 'ground', g.name || id, g.color);
   for (const icon of UI_ICONS) add(icon, 'ui', 'UI (debug dock / settings)', UI_COLOR);
   add(UI_ICON.hourglass, 'ui', 'Cooldown badge', UI_COLOR);
+  add('keystone', 'ui', "Keystone: safe cell of the Fall of King's Bridge", UI_COLOR);
   return ICON_KINDS.map((name) => {
     const list = uses.get(name) ?? [];
     return { name, uses: list, category: list[0]?.kind ?? 'spare', accent: list.find((u) => u.accent)?.accent ?? '#e8c47e' };
@@ -395,7 +398,7 @@ export function buildPalette(): PaletteGroups {
   const ui = Object.entries(colors).flatMap(([name, v]) => (typeof v === 'string' ? [{ name, hex: v }] : []));
   const element = Object.entries(layout.colors.element).map(([name, hex]) => ({ name, hex }));
   const stat = Object.entries(STAT_COLOR).map(([name, hex]) => ({ name, hex }));
-  const classes = [...Object.values(content.classes), ...Object.values(content.summons)].map((d) => ({ name: d.name, hex: d.color }));
+  const classes = [...Object.values(content.classes), ...Object.values(content.summons), ...Object.values(content.bosses)].map((d) => ({ name: d.name, hex: d.color }));
   return { ui, element, stat, classes };
 }
 

@@ -1,0 +1,5 @@
+{
+  "_not": "Multiplayer ayarları (docs/design/multiplayer.md). signalingUrl: Ömer'in Cloudflare Worker adresi, wss:// ile (ör. wss://protomedi-lobby.HESAP.workers.dev). Boşsa Multiplayer menüsü 'Server not configured' der. iceServers: WebRTC'nin dış adres bulma (STUN) sunucuları; Cloudflare'in herkese açık STUN'u, hesap gerekmez. TURN yok (Ömer onayı bekliyor).",
+  "signalingUrl": "",
+  "iceServers": [{ "urls": "stun:stun.cloudflare.com:3478" }]
+}

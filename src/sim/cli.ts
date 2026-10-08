@@ -23,7 +23,7 @@ const r: SimResult = groups.length === 1 ? groups[0]!.r : mergeResults(groups.ma
 const total = r.runs;
 const size = content.battles[content.DEFAULT_BATTLE]?.random?.size;
 
-console.log('Proto denge simülatörü');
+console.log('Embers of Valdoria denge simülatörü');
 console.log('======================');
 console.log(`Savaş: ${content.DEFAULT_BATTLE} (her seed'de farklı takımlar), takım ${sizes.partySize ?? size}'e ${sizes.enemySize ?? size}. Yapay zeka vs yapay zeka (Medium).`);
 console.log(`Seed grupları: ${groups.map((g) => `${g.seed}..${g.seed + runs - 1}`).join(' ve ')} (grup başına ${runs} savaş, toplam ${total}).`);

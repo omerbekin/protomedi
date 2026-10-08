@@ -716,3 +716,121 @@ body {
   width: min(520px, calc(var(--stage-w, 100vw) - 190px - var(--sar) - var(--sal)));
 }
 
+
+/* --- Multiplayer (src/ui/mp-overlay.ts): bağlantı şeridi, bildirim, kod giriş kutusu --- */
+.mp-banner {
+  position: fixed;
+  top: calc(8px + var(--sat));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(var(--stage-w, 100vw) - 200px);
+  padding: 10px 18px;
+  font: bold 16px Georgia, 'Times New Roman', serif;
+  color: #f3e4c4;
+  background: rgba(40, 24, 10, 0.92);
+  border: 2px solid #c79a3e;
+  border-radius: 6px;
+  z-index: 35;
+  text-align: center;
+  pointer-events: none;
+}
+.mp-banner[data-kind='error'] {
+  border-color: #d9584a;
+  background: rgba(60, 14, 10, 0.94);
+}
+.mp-banner[data-kind='info'] {
+  border-color: #6ec1ff;
+}
+.mp-banner[hidden],
+.mp-toast[hidden] {
+  display: none;
+}
+.mp-toast {
+  position: fixed;
+  bottom: calc(70px + var(--sab));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  font: bold 15px Georgia, 'Times New Roman', serif;
+  color: #f3e4c4;
+  background: rgba(20, 14, 8, 0.92);
+  border: 1px solid #8a6a32;
+  border-radius: 6px;
+  z-index: 35;
+  pointer-events: none;
+}
+.mp-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 3, 2, 0.6);
+  z-index: 40;
+}
+.mp-modal-box {
+  width: min(440px, calc(var(--stage-w, 100vw) - 32px));
+  padding: 20px;
+  background: linear-gradient(#2e2218, #110b07);
+  border: 2px solid #c79a3e;
+  border-radius: 8px;
+  color: #f3e4c4;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+.mp-modal-title {
+  font-size: 26px;
+  font-weight: bold;
+  color: #ffe29a;
+  text-align: center;
+}
+.mp-modal-hint {
+  margin: 8px 0 12px;
+  font-size: 15px;
+  color: #b9a27a;
+  text-align: center;
+}
+.mp-code-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 12px;
+  font: bold 30px monospace;
+  letter-spacing: 6px;
+  text-align: center;
+  text-transform: uppercase;
+  color: #ffe29a;
+  background: #0c0806;
+  border: 2px solid #8a6a32;
+  border-radius: 6px;
+}
+.mp-modal-err {
+  min-height: 20px;
+  margin-top: 6px;
+  font-size: 14px;
+  color: #e08a7a;
+  text-align: center;
+}
+.mp-modal-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 10px;
+}
+.mp-btn {
+  min-width: 120px;
+  min-height: 48px;
+  font: bold 18px Georgia, 'Times New Roman', serif;
+  color: #f3e4c4;
+  background: linear-gradient(#5c4128, #24170d);
+  border: 2px solid #8a6a32;
+  border-radius: 6px;
+}
+.mp-btn.primary {
+  background: linear-gradient(#9a6a28, #3f220c);
+  border-color: #e8c47e;
+}
+.mp-code-input.mp-name-input {
+  font: bold 24px Georgia, 'Times New Roman', serif;
+  letter-spacing: 1px;
+  text-transform: none;
+}

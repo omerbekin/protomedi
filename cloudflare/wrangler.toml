@@ -1,0 +1,19 @@
+# Embers of Valdoria lobi / signaling sunucusu (Cloudflare Worker + Durable Object). Kurulum: README.md
+name = "protomedi-lobby"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+# Kullanım verisi gönderilmez
+send_metrics = false
+
+# Kod başına bir Durable Object (ücretsiz planda SQLite tabanlı DO kullanılır)
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "Lobby"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Lobby"]
+
+[vars]
+# Yalnızca bu adreslerden açılan oyun bağlanabilir (virgülle ayrılır; ":*" herhangi bir port)
+ALLOWED_ORIGINS = "https://omerbekin.github.io,http://localhost:*,http://127.0.0.1:*"

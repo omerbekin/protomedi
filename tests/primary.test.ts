@@ -302,7 +302,8 @@ describe('Str primary: Resilience savaşta', () => {
       const grounds = skill.effects.filter((e) => e.type === 'ground');
       if (grounds.length === 0) continue;
       const b = calmAll(new Battle(content.battleSetup('first-battle', 2, 'test', { party: ['mage', 'paladin', 'undead', 'archer'], enemies: ['warrior', 'defender', 'archer', 'mage'] })));
-      const actor = b.combatants.find((c) => c.side === 'party' && c.skills.includes(skillId))!;
+      const actor = b.combatants.find((c) => c.side === 'party' && c.skills.includes(skillId));
+      if (!actor) continue; // boss skill'i (Breaking Span: telgraflı, zemin çözülmede; tests/bridge-warden.test.ts)
       const victim = b.combatants.find((c) => c.side === 'enemy' && c.defId === 'warrior')!;
       victim.hp = victim.maxHp = 100000;
       victim.stats.resilience = 1;

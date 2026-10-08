@@ -41,7 +41,7 @@ const MIGRATED: Record<string, { owner: string; area: Record<string, unknown> }>
 };
 
 /** Madde 220'den sonra doğrudan şekil modeliyle eklenen alan skill'leri (migrasyon değil): Cutthroat Saltire Cut (x) ve Smoke Bomb (area_any), Druid Vine Snare. */
-const ADDED_LATER = ['x_cut', 'smoke_bomb', 'vine_snare', 'withering_curse']; // withering_curse: Hexer (rect 2x3, stages row)
+const ADDED_LATER = ['x_cut', 'smoke_bomb', 'vine_snare', 'withering_curse', 'breaking_span']; // withering_curse: Hexer (rect 2x3, stages row)
 
 describe('rect: tüm boyutlar 1x1 .. 4x3 (rows = sıra, cols = şerit), iki tahta, her anchor', () => {
   for (let R = 1; R <= fm.rows; R++)

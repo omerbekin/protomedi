@@ -143,7 +143,7 @@ export interface WikiFiles {
 // ---------------------------------------------------------------- skill'ler
 
 const allSkills = (): SkillDef[] => Object.entries(content.skills).map(([id, s]) => ({ ...s, id: s.id ?? id }));
-const unitDefs = (): Record<string, CombatantDef> => ({ ...content.classes, ...content.summons });
+const unitDefs = (): Record<string, CombatantDef> => ({ ...content.classes, ...content.summons, ...content.bosses });
 const effectDefs = () => ({ statuses: content.statuses, grounds: content.grounds });
 
 /** Skill'in sahibine ait stat (açıklamadaki "(123)" gibi hesaplanmış sayılar için); sahibi yoksa ilk class. */
@@ -412,6 +412,18 @@ function silenceArticle(): WikiArticle {
   ], sil?.color ?? '#9b59d0');
 }
 
+/** "Multiplayer" makalesi (multiplayer-dev; docs/design/multiplayer.md): lobi, takım seçimi, sıra, kopma kuralı (60 sn). */
+function multiplayerArticle(): WikiArticle {
+  return article('multiplayer', 'Basics', 'Multiplayer', 'team', [
+    p('Main Menu > Multiplayer plays a Quick Battle against a friend online. One player presses Host lobby and gets a 6-letter lobby code; the friend opens the game, presses Join lobby and types the code, or simply opens the invite link (Copy invite link).'),
+    p('When both players press Ready, each picks a team of 4 for their own side: the host plays the left side, the guest the right side. The other team stays hidden until both are ready, then the battle starts the same way on both screens.'),
+    p("In battle you only control your own units, on their turns; during the other player's turns the panel says Opponent's turn. Both games check every move, so a move that breaks the rules is refused."),
+    p('If the connection drops, the battle pauses and a countdown runs. A player who comes back within 60 seconds (even after reloading the page) continues where the battle stopped; otherwise the player who stayed wins. Leaving the battle on purpose gives the win to the other player.'),
+    p('After the battle: Rematch (both must agree; you pick teams again) or Back to lobby.'),
+    p('You can set a short name in the lobby (Change name); only your opponent sees it. The random seed of each battle is made from a secret number of each player, so neither player can pick it. If a direct link between the two browsers is not possible, the game connects through the server instead.'),
+  ]);
+}
+
 /**
  * "Curses" makalesi (Hexer; docs/design/classes/hexer.md 8.7): Omen yığını, Doom, süre bitimi, Misfortune, Withering, Jinxed ve Ill Omen. Sayılar
  * data/statuses.json ve skill/pasif verisinden. Yığılan durum (maxStacks + doom) yoksa makale yok.
@@ -425,6 +437,8 @@ function curseArticles(): WikiArticle[] {
   const dur = om.duration ?? 3;
   const crit = allSkills().flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'omen' }> => e.type === 'omen' && (e.status ?? 'omen') === omenId)).find((e) => e.critStacks !== undefined && e.critStacks > e.stacks);
   const detonators = allSkills().flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'detonate' }> => e.type === 'detonate' && e.status === omenId).map((e) => `${s.name} (x${num(e.mult)})`));
+  const noTransfer = allSkills().filter((s) => s.effects.some((e) => e.type === 'detonate' && e.status === omenId && e.noTransferOnKill)).map((s) => s.name);
+  const critDoomers = allSkills().filter((s) => s.effects.some((e) => e.type === 'omen' && (e.status ?? 'omen') === omenId && e.critDoomOnCrit)).map((s) => s.name);
   const dots = Object.values(content.statuses).filter((d) => d.dot);
   const jinx = Object.values(content.statuses).filter((d) => d.endsOnOwnAttack);
   const passives = Object.values(content.classes).filter((c) => c.passive?.effect.type === 'omenTransfer');
@@ -433,12 +447,16 @@ function curseArticles(): WikiArticle[] {
     article('curses', 'Special rules', 'Curses: Omen, Doom, Withering', om.icon, [
       p(`Some attacks leave a ${om.name} on their target (${cursers.join(', ') || 'none yet'}). Omens stack up to ${max}${crit ? `; a critical curse leaves ${crit.critStacks}` : ''}. A curse that misses leaves nothing.`),
       list(...[
-        `Timer: the first Omen starts a ${dur}-turn timer (counted on the cursed unit's own turns). New Omens never renew or extend it.`,
+        om.refreshOnStack
+          ? `Timer: the first Omen starts a ${dur}-turn timer (counted on the cursed unit's own turns). Every new Omen from a curse resets it to ${dur} turns; Omens passed on by Ill Omen do not.`
+          : `Timer: the first Omen starts a ${dur}-turn timer (counted on the cursed unit's own turns). New Omens never renew or extend it.`,
         `Doom: when the ${max === 3 ? 'third' : `${max}th`} Omen lands, Doom strikes at once: ${pct(doom.powerPerStack)} of the curser's ${STAT_LABEL[doom.scale]} as ${doom.element} ${doom.damageType} damage for every Omen, then the Omens are spent. Doom cannot miss or be dodged, but it can crit (the curser's crit chance); armor of its kind, shields and Lucky Escape work as usual.`,
         `Timer runs out: the Omens do not fade quietly. At the start of the cursed unit's turn (after ground and Withering damage, before regeneration) they burst into Doom, one share per Omen${doom.expireMult !== 1 ? ` (x${num(doom.expireMult)})` : ''}, using the curser's Luck and crit chance from when the last Omen was added. If the unit dies earlier that turn, no Doom happens.`,
         'Guard: a Doom set off by a skill is part of that hit, so a guarding ally shares it. A Doom from a timer running out is a curse, not a skill hit: guard never takes any of it.',
+        critDoomers.length > 0 ? `Critical Doom: a critical ${critDoomers.join(' or ')} that completes ${max} Omens makes the Doom a critical hit (no separate roll). Other curses roll Doom's crit as usual.` : '',
         `Misfortune: each Omen lowers the cursed unit's crit chance by ${pct(Math.abs(om.critDeltaPerStack ?? 0))} (never below 0%).`,
         detonators.length > 0 ? `Detonate: ${detonators.join(', ')} sets off Doom at once with every Omen on the target, however many there are, multiplied as shown; it does not also trigger a second Doom.` : '',
+        noTransfer.length > 0 ? `${noTransfer.join(', ')} spends every Omen on the target, its own new Omen included. If its hit or its Doom kills the target, the Omens are gone: nothing passes on (Ill Omen does not trigger).` : '',
         'A curse outlives its caster: Omens and Withering keep running after the curser falls, and the timer Doom still bursts.',
         'Two cursers on the same side fill the same Omen stack.',
       ].filter((x) => x !== '')),
@@ -618,6 +636,7 @@ export function buildMechanics(): WikiArticle[] {
       p('Some mana burns take a share of the target\'s maximum MP instead of a fixed amount: a big mana pool loses more. See Silence for what happens when a target runs dry.'),
     ]),
     silenceArticle(),
+    multiplayerArticle(),
   );
   // Sefer (campaign-dev): sayılar data/campaign/campaign.json ve harita verisinden
   {
@@ -633,12 +652,65 @@ export function buildMechanics(): WikiArticle[] {
           'Your party: you start alone, a companion joins in the forest, and at the first village the escort stays behind and you form a new company of three from every class. The first hero you pick leads; the leader walks in front on the map. Another hero joins when you leave the city.',
           `Health carries over between battles. After a victory survivors regain ${Math.round(r.victoryHeal * 100)}% of their maximum HP and fallen heroes get up with ${Math.round(r.reviveRatio * 100)}%; after a boss everyone is fully healed; towns heal everyone. Mana starts full in every battle.`,
           `Saving: there are ${r.slots} campaign slots, one journey each, and every journey keeps its own saves. Normal saves after every victory and whenever you press Save on the map (up to ${r.maxSaves.normal} saves per journey; the oldest is replaced). Ironman keeps a single save, written only after a victory. If you are defeated, you go back to your last save.`,
-          `Difficulty: Easy, Medium or Hard, chosen when the journey starts; it cannot be changed later. For now it sets how well the enemies play.`,
+          `Difficulty: Easy, Medium or Hard, chosen when the journey starts; it cannot be changed later. ${difficultyText()}`,
         ),
       ]),
     );
   }
+  out.push(...bossArticles());
   return out;
+}
+
+/**
+ * Boss makaleleri (data/bosses; The Bridge Warden): sayılar veriden (can, faz eşikleri, skill açıklamaları skill-info'dan, Mooring canı/zırhı).
+ * Mekanikler: telgraf (gecikmeli saldırı), fazlar, bağlı yardımcı (Iron Mooring), Stagger, Overextended.
+ */
+function bossArticles(): WikiArticle[] {
+  const out: WikiArticle[] = [];
+  for (const def of Object.values(content.bosses)) {
+    const b = def.boss;
+    if (!b) continue;
+    const anchor = b.anchor ? content.bosses[b.anchor.unit] : undefined;
+    const pctOf = (x: number) => `${Math.round(x * 100)}%`;
+    const skillLines = def.skills.flatMap((id) => {
+      const sk = content.skills[id];
+      if (!sk) return [];
+      const info = describeSkill(sk, def.stats, f, unitDefs(), effectDefs());
+      const when = sk.minPhase && sk.minPhase > 1 ? ` (from phase ${sk.minPhase})` : '';
+      return [`${sk.name}${when}: ${info.lines.join('; ')}${sk.cooldown ? `; cooldown ${sk.cooldown}` : ''}`];
+    });
+    const over = b.afterResolve ? content.statuses[b.afterResolve.status] : undefined;
+    out.push(
+      article(`boss-${def.id}`, 'Bosses', def.name, def.logo, [
+        p(`${def.name} guards King's Bridge. It has ${def.stats.hp} HP (before difficulty), acts more than once each turn and fights in phases.${anchor ? ` Two ${anchor.name}s (${anchor.stats.hp} HP, ${anchor.stats.armor} armor) stand behind it: they never act and cannot be healed.` : ''}`),
+        list(
+          'Warnings: Breaking Span, Ash Brand and the Fall of King\'s Bridge do not hit at once. The marked cells crack (or a unit is branded) and the attack lands at the start of the Warden\'s next turn, before it acts. Every hero gets at least one turn in between: move out of the marked cells (Move) or take the hit. These hits cannot miss.',
+          'Ash Brand follows the branded unit: it bursts on the unit and everyone right next to it, wherever it stands. A dispel (Mana Barrier) removes it; if the branded unit falls, the brand fades.',
+          `Fall of King's Bridge cracks the whole board except one Keystone per lane (gold arch stone): stand on a Keystone.`,
+          ...(b.phases ?? []).map((ph, i) => `Phase ${i + 2} at ${pctOf(ph.at)} HP: "${ph.banner}"${ph.actionsPerTurn ? `; ${ph.actionsPerTurn} actions per turn` : ''}${ph.powerMult ? `; hits ${pctOf(ph.powerMult - 1)} harder` : ''}${ph.armorMult ? `; armor x${ph.armorMult}` : ''}${ph.breakAnchors ? '; the Moorings snap' : ''}.`),
+          'A single attack can cross only one phase threshold; extra damage stops just above the next one.',
+          ...(b.anchor ? [`Each standing ${anchor?.name ?? b.anchor.unit} gives +${b.anchor.armorAdd} armor and +${b.anchor.magicArmorAdd} magic armor. Breaking one staggers the Warden (it loses its next action) and cancels a pending Breaking Span.`] : []),
+          ...(over ? [`${over.name}: after a collapse the Warden ${over.text.charAt(0).toLowerCase()}${over.text.slice(1)}.`] : []),
+          ...(b.passives ?? []).map((x) => `${x.name}: ${x.text}`),
+        ),
+        list(...skillLines),
+      ]),
+    );
+  }
+  return out;
+}
+
+/** Sefer zorluk satırı (campaign.json > difficulties): her zorluğun metni + düşman güçlendirmesi yüzde olarak. */
+function difficultyText(): string {
+  type Mods = { hpMult?: number; powerMult?: number; statMult?: number };
+  const pct = (m: number | undefined, label: string) => (m && m !== 1 ? `${m > 1 ? '+' : ''}${Math.round((m - 1) * 100)}% ${label}` : '');
+  const mods = (m?: Mods) => [pct(m?.hpMult, 'HP'), pct(m?.statMult, 'stats'), pct(m?.powerMult, 'power')].filter(Boolean).join(', ');
+  return Object.values(campaignConfig.difficulties as Record<string, { name: string; text: string; enemy?: Mods; enemyTier?: Record<string, Mods> }>)
+    .map((d) => {
+      const extra = [mods(d.enemy) && `enemies ${mods(d.enemy)}`, ...Object.entries(d.enemyTier ?? {}).map(([t, m]) => mods(m) && `${t === 'boss' ? 'bosses' : `${t}s`} another ${mods(m)}`)].filter(Boolean).join('; ');
+      return `${d.name}: ${d.text.replace(/\.$/, '')}${extra ? ` (${extra})` : ''}.`;
+    })
+    .join(' ');
 }
 
 // ---------------------------------------------------------------- durumlar, zeminler, elementler

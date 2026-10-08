@@ -26,7 +26,7 @@
     "id": "ill_omen",
     "name": "Ill Omen",
     "icon": "soul",
-    "text": "When a cursed enemy dies, its Omens pass to the nearest enemy (at most 2; a Doom kill passes 1). Passed Omens never trigger Doom.",
+    "text": "When a cursed enemy dies, its Omens pass to the nearest enemy (at most 2; a Doom kill passes 1, a Doom Mark kill passes none). Passed Omens never trigger Doom.",
     "effect": {
       "type": "omenTransfer",
       "status": "omen",

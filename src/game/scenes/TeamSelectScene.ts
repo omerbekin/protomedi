@@ -15,6 +15,7 @@ import { skillMiniGrid } from '../../ui/shape-diagram';
 import { drawQuadTile } from '../shape-draw';
 import type { SideSizes } from '../team-select-model';
 import { cornerOrnaments, frameRect, glowRect, GOLD, makePanel } from '../ui-frame';
+import type { MpTeamHooks } from '../mp-hooks';
 
 const { width: W, height: H, colors } = layout;
 const { rows: ROWS, lanes: LANES } = content.GRID;
@@ -27,6 +28,8 @@ export interface TeamSelectData {
   teams: Teams;
   /** Takım boyutları (her taraf 1-12); yoksa takımların doluluğu, o da yoksa adres/varsayılan 4-4. */
   sizes: SideSizes;
+  /** Multiplayer (src/game/mp-client.ts): yalnızca kendi tarafını seçer, 4'e 4 sabit, START yerine READY; rakibin takımı savaşa kadar gizli. */
+  mp?: MpTeamHooks;
 }
 
 /** Boyut seçicinin ayarları (START düğmesinin sağında). */
@@ -120,13 +123,52 @@ export class TeamSelectScene extends Phaser.Scene {
   private status?: Phaser.GameObjects.Text;
   private statusTween?: Phaser.Tweens.Tween;
   private starting = false;
+  /** Multiplayer kancaları (yoksa tek oyunculu Quick Battle). */
+  mp: MpTeamHooks | undefined = undefined;
+  private mpOff: (() => void) | null = null;
+  private mpCover?: Phaser.GameObjects.Container;
+  private mpSent = '';
+  private mpSyncing = false;
 
   constructor() {
     super(TeamSelectScene.KEY);
   }
 
+  /** Multiplayer'da düzenlenebilen taraf (yalnızca kendi tarafı); tek oyunculuda iki taraf da. */
+  private editable(side: Side): boolean {
+    return !this.mp || this.mp.localSide === side;
+  }
+
   init(data: Partial<TeamSelectData>): void {
     const pad = (cells: string[]) => Array.from({ length: CELLS }, (_, i) => cells[i] ?? '');
+    this.mp = data.mp;
+    this.mpOff?.();
+    this.mpOff = null;
+    this.mpCover = undefined;
+    this.mpSent = '';
+    if (this.mp) {
+      // Multiplayer: 4'e 4 sabit; kendi takımımız (rövanşta önceki seçim, yoksa rastgele), rakibinki gizli (boş)
+      const local = this.mp.localSide;
+      this.sizes = { party: 4, enemies: 4 };
+      this.teams = { party: this.emptyCells(), enemies: this.emptyCells() };
+      if (this.mp.initial) this.teams[local] = trimToSize(pad(this.mp.initial), 4);
+      else this.randomize(local, false);
+      this.active = local;
+      this.sizeUi = {};
+      this.sizeSummaryText = undefined;
+      this.slotLayer = { party: undefined, enemies: undefined };
+      this.headLayer = { party: undefined, enemies: undefined };
+      this.activeGlow = { party: undefined, enemies: undefined };
+      this.slotRects = [];
+      this.cards = new Map();
+      this.drag = undefined;
+      this.cardDrag = undefined;
+      this.pop = undefined;
+      this.tip = undefined;
+      this.tipTimer = undefined;
+      this.starting = false;
+      return;
+    }
     // Sizes: given by the caller, else the size of the given teams, else the page address (?party=3&enemies=8) / default 4-4
     if (data.sizes) this.sizes = { party: clampSize(data.sizes.party), enemies: clampSize(data.sizes.enemies) };
     else if (data.teams) this.sizes = { party: clampSize(teamCount(data.teams.party) || this.sizes.party), enemies: clampSize(teamCount(data.teams.enemies) || this.sizes.enemies) };
@@ -179,6 +221,14 @@ export class TeamSelectScene extends Phaser.Scene {
       this.onCardDragEnd(p, true);
     });
     this.input.keyboard?.on('keydown-ENTER', () => this.start());
+    if (this.mp) {
+      this.mpOff = this.mp.onChange(() => !this.mpSyncing && this.scene.isActive() && this.refresh());
+      this.events.once('shutdown', () => {
+        this.mpOff?.();
+        this.mpOff = null;
+      });
+      this.refresh();
+    }
   }
 
   // --- State ---
@@ -194,6 +244,7 @@ export class TeamSelectScene extends Phaser.Scene {
   }
 
   private ready(): boolean {
+    if (this.mp) return isTeamFull(this.teams[this.mp.localSide], 4);
     return isTeamFull(this.teams.party, this.sizes.party) && isTeamFull(this.teams.enemies, this.sizes.enemies);
   }
 
@@ -202,7 +253,7 @@ export class TeamSelectScene extends Phaser.Scene {
   }
 
   private setActive(side: Side): void {
-    if (this.active === side) return;
+    if (this.active === side || !this.editable(side)) return;
     this.active = side;
     this.updateActiveVisuals();
     this.updateCards();
@@ -210,6 +261,19 @@ export class TeamSelectScene extends Phaser.Scene {
 
   private start(): void {
     if (this.starting) return;
+    if (this.mp) {
+      // READY / NOT READY: ikisi de hazır olunca kurucu savaşı başlatır (mp-client sahneyi değiştirir)
+      if (!this.ready()) {
+        this.startBtn?.shake();
+        this.setStatus(this.missingText(), colors.lethal, true);
+        return;
+      }
+      const cells = [...this.teams[this.mp.localSide]];
+      this.mpSent = cells.join(',');
+      this.mp.setTeam(cells, !this.mp.myReady());
+      if (this.scene.isActive()) this.refresh();
+      return;
+    }
     if (!this.ready()) {
       this.startBtn?.shake();
       this.setStatus(this.missingText(), colors.lethal, true);
@@ -232,7 +296,7 @@ export class TeamSelectScene extends Phaser.Scene {
 
   /** New Game from the settings menu: random teams of the chosen sizes, straight into a battle (same as the result screen's New Game). */
   newGame(): void {
-    if (this.starting) return;
+    if (this.starting || this.mp) return;
     this.starting = true;
     this.hideTip(true);
     this.scene.start('BattleScene', { seed: newSeed(), mode: 'turns', battleId: content.DEFAULT_BATTLE, partySize: this.sizes.party, enemySize: this.sizes.enemies, teams: undefined });
@@ -258,6 +322,10 @@ export class TeamSelectScene extends Phaser.Scene {
     if (!def) return;
     let side = cell?.side ?? this.active;
     let i = cell?.i ?? -1;
+    if (!this.editable(side)) {
+      this.setStatus('You can only pick your own team', colors.lethal, true);
+      return;
+    }
     const replacing = cell !== undefined && !!this.teams[side][i];
     if (!replacing && this.count(side) >= this.sizes[side]) {
       this.setStatus(this.ready() ? 'Both teams are full. Tap a champion to remove it, or drag to rearrange.' : `${SIDE_NAME[side]} team is full (${this.sizes[side]}). Change the size below, or tap a champion to remove it.`, colors.lethal, true);
@@ -270,7 +338,7 @@ export class TeamSelectScene extends Phaser.Scene {
     const card = this.cards.get(id);
     if (card) this.flyAvatar(card, side, i);
     this.pop = { side, cell: i, delay: card && !cell ? 230 : 0 };
-    if (this.count(side) >= this.sizes[side] && this.count(this.other(side)) < this.sizes[this.other(side)]) side = this.other(side);
+    if (this.count(side) >= this.sizes[side] && this.count(this.other(side)) < this.sizes[this.other(side)] && this.editable(this.other(side))) side = this.other(side);
     this.active = side;
     this.refresh();
   }
@@ -307,7 +375,7 @@ export class TeamSelectScene extends Phaser.Scene {
     const swordR = this.add.image(x + w - 56, y + h / 2, ensureIcon(this, 'sword', '#e8c47e', false)).setDisplaySize(50, 50).setDepth(22).setFlipX(true);
     swordL.setAngle(-8);
     swordR.setAngle(8);
-    const shadow = serif(this, cx + 2, y + h / 2 + 4, 'ProtoMedi', 66, '#000000', { stroke: 0 }).setOrigin(0.5).setDepth(22).setAlpha(0.55);
+    const shadow = serif(this, cx + 2, y + h / 2 + 4, 'Embers of Valdoria', 66, '#000000', { stroke: 0 }).setOrigin(0.5).setDepth(22).setAlpha(0.55);
     const title = goldText(this, cx, y + h / 2 + 1, 'ProtoMedi', 66, 3).setOrigin(0.5).setDepth(23);
     void shadow;
     // Light sweep across the plaque
@@ -377,7 +445,8 @@ export class TeamSelectScene extends Phaser.Scene {
         tg.fillPoints([{ x: tx - d * 5, y: PANEL_Y + 90 }, { x: tx + d * 5, y: PANEL_Y + 96 }, { x: tx - d * 5, y: PANEL_Y + 102 }], true);
       }
     }
-    // Dice / clear
+    // Dice / clear (multiplayer: yalnızca kendi panelinde)
+    if (!this.editable(side)) return;
     const bx = px + PANEL_W - 34;
     this.iconButton(bx - 26, PANEL_Y + 40, 'cross', 'Clear team', () => {
       this.teams[side] = this.emptyCells();
@@ -391,8 +460,14 @@ export class TeamSelectScene extends Phaser.Scene {
   }
 
   private buildFooter(): void {
-    this.startBtn = makeMenuButton(this, W / 2, 1018, 500, 88, 'START BATTLE', () => this.start(), { primary: true, size: 42 });
+    this.startBtn = makeMenuButton(this, W / 2, 1018, 500, 88, this.mp ? 'READY' : 'START BATTLE', () => this.start(), { primary: true, size: 42 });
     this.startBtn.container.setDepth(30);
+    if (this.mp) {
+      const local = this.mp.localSide;
+      makeMenuButton(this, 380, 1018, 360, 66, 'Randomize', () => this.randomize(local), { size: 28 }).container.setDepth(30);
+      this.status = serif(this, W / 2, 957, '', 22, colors.muted, { stroke: 3 }).setOrigin(0.5).setDepth(30);
+      return;
+    }
     const rand = makeMenuButton(
       this,
       380,
@@ -821,6 +896,32 @@ export class TeamSelectScene extends Phaser.Scene {
     this.tweens.add({ targets: this.headLayer[side], x: { from: 8, to: 0 }, duration: 260, ease: 'Bounce.easeOut' });
   }
 
+  /** Multiplayer: rakip panelinin örtüsü (takımı gizli; yalnızca hazır durumu); takım değiştiyse hazır bozulur. */
+  private refreshMp(): void {
+    const m = this.mp;
+    if (!m) return;
+    const cells = this.teams[m.localSide];
+    const key = cells.join(',');
+    if (key !== this.mpSent) {
+      this.mpSent = key;
+      // takım değişti: yeniden hazır olunmalı (gönderimin olayı bu sahneyi iç içe yeniden çizmesin)
+      this.mpSyncing = true;
+      m.setTeam([...cells], false);
+      this.mpSyncing = false;
+    }
+    const other = this.other(m.localSide);
+    this.mpCover?.destroy();
+    const px = PANEL_X[other];
+    const c = this.add.container(0, 0).setDepth(16);
+    const g = this.add.graphics();
+    g.fillStyle(0x070403, 0.72).fillRect(px + 12, PANEL_Y + 84, PANEL_W - 24, PANEL_H - 96);
+    c.add(g);
+    const ready = m.opponentReady();
+    c.add(goldText(this, px + PANEL_W / 2, PANEL_Y + PANEL_H / 2 - 22, ready ? 'OPPONENT IS READY' : 'OPPONENT IS CHOOSING...', 40, 4).setOrigin(0.5));
+    c.add(serif(this, px + PANEL_W / 2, PANEL_Y + PANEL_H / 2 + 30, `${m.opponentName()}'s team is revealed when the battle starts`, 20, '#b9a27a', { bold: false, stroke: 2 }).setOrigin(0.5));
+    this.mpCover = c;
+  }
+
   private refresh(): void {
     this.hideTip(true);
     this.slotRects = [];
@@ -837,6 +938,16 @@ export class TeamSelectScene extends Phaser.Scene {
     this.sizeSummaryText?.setText(sizeSummary(this.sizes));
     const ok = this.ready();
     this.startBtn?.setEnabled(ok);
+    if (this.mp) {
+      this.refreshMp();
+      const me = this.mp.myReady();
+      for (const o of this.startBtn?.container.list ?? []) if (o instanceof Phaser.GameObjects.Text) o.setText(me ? 'NOT READY' : 'READY');
+      if (!ok) this.setStatus(this.missingText(), colors.lethal);
+      else if (me) this.setStatus(this.mp.opponentReady() ? 'Both ready - starting...' : 'Waiting for your opponent to be ready', '#ffe29a');
+      else this.setStatus('Your team is complete - press READY', '#ffe29a');
+      this.pop = undefined;
+      return;
+    }
     if (ok) this.setStatus('Both teams are ready - the battle awaits', '#ffe29a');
     else this.setStatus(this.missingText(), colors.lethal);
     this.pop = undefined;
@@ -958,7 +1069,7 @@ export class TeamSelectScene extends Phaser.Scene {
     const zone = this.add.zone(0, 0, SLOT_W, SLOT_H).setInteractive({ useHandCursor: true });
     body.add(zone);
     zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      this.drag = { side, from: i, sx: p.x, sy: p.y, moved: false, over: null };
+      if (this.editable(side)) this.drag = { side, from: i, sx: p.x, sy: p.y, moved: false, over: null };
     });
     zone.on('pointerover', () => {
       this.tweens.add({ targets: [hov, x], alpha: 1, duration: 120 });

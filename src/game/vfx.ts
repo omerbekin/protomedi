@@ -10,6 +10,7 @@ import { playSfx } from './audio';
 import { ensureIcon } from './icons';
 import { cellOutlineEdges } from './cell-style';
 import { cellQuad } from './shape-geometry';
+import * as WARDEN from './vfx-warden';
 
 /**
  * Skill efektleri (VFX): hepsi piksel art. Küçük 16x16'lık sprite'lar (ikonlar + efekt sprite'ları) tamsayı katıyla büyütülür,
@@ -811,6 +812,8 @@ const GROUND_LOOK: Record<string, GroundLook> = {
   holy_fire: { base: [0xbc9142, 0.36], mid: [0xffe49c, 0.56], rim: [0xffe2a0, 0.3], edge: [0xecca70, 0.78], shadow: [0x24180a, 0.28] },
   // yanık toprak: kömür zemin, kızıl-turuncu kor ışığı
   burning: { base: [0x2a140e, 0.5], mid: [0xff6a32, 0.66], rim: [0xff9a50, 0.42], edge: [0xf08a46, 0.9], shadow: [0x0e0605, 0.32] },
+  // Flooded Planks (Bridge Warden, Breaking Span): bulanık nehir suyu basmış ıslak köprü kalasları (deniz yeşili, soğuk parıltı)
+  flooded_planks: { base: [0x1f3f42, 0.52], mid: [0x6fb0b0, 0.4], rim: [0xbfe6e6, 0.3], edge: [0x8fcaca, 0.75], shadow: [0x061012, 0.3] },
 };
 
 const rgba = (rgb: number, a: number) => `rgba(${(rgb >> 16) & 255},${(rgb >> 8) & 255},${rgb & 255},${Math.max(0, Math.min(1, a))})`;
@@ -853,6 +856,7 @@ export function groundArea(scene: Phaser.Scene, groundId: string, board: 'party'
   const holy = groundId === 'holy_fire';
   const burning = groundId === 'burning';
   const poison = groundId === 'poison';
+  const flooded = groundId === 'flooded_planks';
   const cells = slots.map((s, i) => ({ s, q: quadOf(board, s, 1), m: cellMid(board, s), ph: i * 1.7 + rnd(0, 6) }));
   const first = cells[0]!.m;
   const order = cells.map((k) => Math.hypot(k.m.x - first.x, k.m.y - first.y));
@@ -1022,6 +1026,22 @@ export function groundArea(scene: Phaser.Scene, groundId: string, board: 'party'
         // sıvı yüzeyi: yavaş kayan yumuşak parlama (küçük, karenin içinde)
         const c = quadAt(q, 0.5 + 0.22 * Math.sin(t * 0.5 + k.ph), 0.5 + 0.18 * Math.cos(t * 0.7 + k.ph));
         for (let s = 0; s < 3; s++) fx.fillStyle(0xc4e8a4, 0.05 + s * 0.02).fillEllipse(c.x, c.y, 58 - s * 18, 13 - s * 4);
+      } else if (flooded) {
+        // su altındaki kalaslar (koyu ahşap şeritler, derzler) + üstünde yavaş kayan iki dalga çizgisi
+        for (let p = 0; p < 3; p++) {
+          const v0 = 0.14 + p * 0.29;
+          fx.fillStyle(0x4a2e1a, 0.32).fillPoints([quadAt(q, 0.06, v0), quadAt(q, 0.94, v0), quadAt(q, 0.94, v0 + 0.2), quadAt(q, 0.06, v0 + 0.2)], true);
+          const j = quadAt(q, 0.3 + p * 0.2, v0);
+          const j2 = quadAt(q, 0.3 + p * 0.2, v0 + 0.2);
+          fx.lineStyle(1.5, 0x15101c, 0.35).lineBetween(j.x, j.y, j2.x, j2.y);
+        }
+        for (let w = 0; w < 2; w++) {
+          const v = (t * 0.12 + k.ph * 0.1 + w * 0.5) % 1;
+          const a = quadAt(q, 0.12, 0.1 + v * 0.8);
+          const b = quadAt(q, 0.88, 0.1 + v * 0.8);
+          const env = Math.sin(v * Math.PI);
+          fx.lineStyle(2, 0xd8f2f0, 0.28 * env).lineBetween(a.x, a.y + Math.sin(t * 2 + w) * 1.5, b.x, b.y - Math.sin(t * 2 + w) * 1.5);
+        }
       } else if (burning) {
         // kızgın çatlak damarı (ince) + kor parıltısı (titrek)
         for (const pts of veins[ci]!) {
@@ -1097,6 +1117,21 @@ export function groundArea(scene: Phaser.Scene, groundId: string, board: 'party'
           const m = sprite(scene, 'smoke', '#5b6579', p.x, p.y - 6, 16, 31).setTint(0x2a2226).setAlpha(0.26);
           scene.tweens.add({ targets: m, y: m.y - rnd(22, 32), displayWidth: 34, displayHeight: 28, alpha: 0, duration: slow(rnd(1100, 1400)), ease: 'Quad.easeOut', onComplete: () => m.destroy() });
         }
+      } else if (flooded) {
+        // su halkası: damla düşer, yassı halka yayılır (yerinde kalır)
+        const g = scene.add.graphics().setDepth(32);
+        const bx = snap(p.x);
+        const by = snap(p.y);
+        void counter(scene, slow(rnd(700, 950)), (u) => {
+          g.clear();
+          if (!alive()) return;
+          const r = 3 + u * 16;
+          for (let i = 0; i < 12; i++) {
+            const an = (i / 12) * Math.PI * 2;
+            g.fillStyle(0xd8f2f0, 0.7 * (1 - u)).fillRect(snap(bx + Math.cos(an) * r * 1.6) - 1, snap(by + Math.sin(an) * r * 0.5) - 1, 2, 2);
+          }
+          if (u < 0.25) g.fillStyle(0xffffff, 0.8).fillRect(bx - 1, by - 8 + u * 30, 2, 3);
+        }).then(() => g.destroy());
       } else {
         // küçük kabarcık: sıvıda şişer, patlar (piksel halka + 4 sıçrantı); yerinde kalır
         const g = scene.add.graphics().setDepth(32);
@@ -4977,7 +5012,40 @@ export const VFX: Record<VfxKind, (c: VfxCtx) => Promise<void>> = {
   saltire,
   smokebomb,
   backstab,
+  // Bridge Warden (King's Bridge boss): kod src/game/vfx-warden.ts (yardımcılar VFX_BASE_KIT ile verilir; çağrı anında çözülür)
+  anchorsmash: (c) => WARDEN.anchorsmash(c, VFX_BASE_KIT),
+  breakingspan: (c) => WARDEN.breakingspan(c, VFX_BASE_KIT),
+  chainhook: (c) => WARDEN.chainhook(c, VFX_BASE_KIT),
+  ashbrand: (c) => WARDEN.ashbrand(c, VFX_BASE_KIT),
+  fallofthebridge: (c) => WARDEN.fallofthebridge(c, VFX_BASE_KIT),
 };
+
+/**
+ * Bridge Warden OLAY efektleri (skill'e bağlı değil; motor olayında sahne oynatır, VfxCtx ile: board = vurulan tahta, slots = hücreler,
+ * targets = vurulan birimler; Promise vuruş anında çözülür). Olay -> ad:
+ *  telegraphResolve (skill breaking_span)        -> breakingspancollapse
+ *  telegraphResolve (skill ash_brand)            -> ashbrandburst            (targets[0] = damgalı birim, varsa)
+ *  telegraphResolve (skill fall_of_kings_bridge) -> fallofthebridgecollapse  (Keystone = tahtada slots DIŞINDA kalan hücreler)
+ *  phase 2 / phase 3                             -> wardenphase2 / wardenphase3 (actor = Warden)
+ *  anchorBroken                                  -> mooringbreak             (actor = kırılan Mooring, targets[0] = Warden; sonra sahne birimi düşürür)
+ */
+export const WARDEN_EVENT_FX: Readonly<Record<string, (c: VfxCtx) => Promise<void>>> = {
+  breakingspancollapse: (c) => WARDEN.breakingspancollapse(c, VFX_BASE_KIT),
+  ashbrandburst: (c) => WARDEN.ashbrandburst(c, VFX_BASE_KIT),
+  fallofthebridgecollapse: (c) => WARDEN.fallofthebridgecollapse(c, VFX_BASE_KIT),
+  wardenphase2: (c) => WARDEN.wardenphase2(c, VFX_BASE_KIT),
+  wardenphase3: (c) => WARDEN.wardenphase3(c, VFX_BASE_KIT),
+  mooringbreak: (c) => WARDEN.mooringbreak(c, VFX_BASE_KIT),
+};
+
+/**
+ * Bridge Warden KALICI telgraf göstergeleri (sahne çağırır; dönen nesne destroy() ile söner). Ayrıntı: src/game/vfx-warden.ts.
+ *  wardenTelegraphCells(scene, 'span' | 'fall' | 'brand', board, slots, keystones?)  çatlak plaka nabzı (+ Keystone altın kemer taşları)
+ *  wardenBrandMark(scene, view)                                                      birimin göğsünde nabız atan Ash Brand damgası
+ */
+export const wardenTelegraphCells = (scene: Phaser.Scene, kind: 'span' | 'fall' | 'brand', board: 'party' | 'enemy', slots: number[], keystones: number[] = []) =>
+  WARDEN.telegraphCells(VFX_BASE_KIT, scene, kind, board, slots, keystones);
+export const wardenBrandMark = (scene: Phaser.Scene, view: CombatantView) => WARDEN.brandMark(VFX_BASE_KIT, scene, view);
 
 /** Yerden yükselen toz bulutu: kabaran, yükselen, sönen gri-kahve dumanlar. */
 function dustCloud(scene: Phaser.Scene, x: number, y: number, o: { n: number; spread: number; rise: number; size?: [number, number]; tint?: number; life?: number }): void {

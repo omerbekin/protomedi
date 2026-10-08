@@ -17,5 +17,11 @@
     "color": "#ffd23f",
     "element": "holy",
     "icon": "holy"
+  },
+  "flooded_planks": {
+    "name": "Flooded Planks",
+    "color": "#2f6f73",
+    "element": "physical",
+    "icon": "floodedplanks"
   }
 }

@@ -128,6 +128,19 @@ export const ICON_KINDS = [
   'backstab',
   'blinded',
   'shrouded',
+  /** Bridge Warden (King's Bridge boss): logo, 5 skill, pasifler (Unyielding, Ember Heart), durumlar (Anchored, Overextended), zemin (Flooded Planks), Iron Mooring logosu (Keystone işareti efekt sprite'ı: pixel-fx.ts). */
+  'wardenlogo',
+  'anchorsmash',
+  'breakingspan',
+  'chainhook',
+  'ashbrand',
+  'fallofthebridge',
+  'unyielding',
+  'anchored',
+  'overextended',
+  'emberheart',
+  'floodedplanks',
+  'ironmooring',
 ] as const;
 
 export type IconKind = (typeof ICON_KINDS)[number];

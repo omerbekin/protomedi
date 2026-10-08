@@ -5,8 +5,10 @@ import { preloadAssets } from '../assets';
 import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
 import { H, W, crown, hpBar, openModal, type Modal } from '../campaign-ui';
 import { MAP_SCENE, loadEntry, startNewCampaign, storage } from '../campaign-session';
-import { buildBackdrop, classAvatar, classLogoBadge, goldText, makeMenuButton, serif } from '../menu-ui';
+import { buildBackdrop, classAvatar, classLogoBadge, fitText, goldText, makeMenuButton, serif } from '../menu-ui';
 import { makePanel } from '../ui-frame';
+import { mp, MP_SCENE } from '../mp-client';
+import { addLogo, hasLogo, preloadLogo } from '../branding';
 
 export interface MainMenuData {
   /** 'load': Load Game penceresi açık başlar (yenilgi sonrası "Load Game"). */
@@ -41,15 +43,17 @@ export class MainMenuScene extends Phaser.Scene {
   preload(): void {
     preloadAssets(this);
     preloadCampaignArt(this);
+    preloadLogo(this);
   }
 
   create(): void {
     migrateSaves(storage()); // eski tek-liste kayıtlar Slot 1'e taşınır
+    if (mp.active) mp.leave(); // ana menüye dönmek multiplayer lobisinden ayrılmaktır
     buildBackdrop(this, W, H, hasCampaignArt(this, 'valdoria-bg') ? campaignArtKey('valdoria-bg') : null);
     this.layer = this.add.container(0, 0).setDepth(100);
     const L = this.layer;
-    L.add(goldText(this, W / 2, 190, 'PROTOMEDI', 120, 14).setOrigin(0.5));
-    L.add(serif(this, W / 2, 285, 'The Valdoria Campaign', 34, '#d8c49a', { bold: false, spacing: 4 }).setOrigin(0.5));
+    if (hasLogo(this)) L.add(addLogo(this, W / 2, 175, 1100, 250)); // assets/branding/logo.png varsa onu göster (görselin tamamı ortalı)
+    else L.add(fitText(goldText(this, W / 2, 190, 'EMBERS OF VALDORIA', 104, 8).setOrigin(0.5), 1700));
 
     const { corrupt } = readSaves(storage());
     const latest = latestSave(storage());
@@ -65,13 +69,14 @@ export class MainMenuScene extends Phaser.Scene {
     items.push({ label: 'New Campaign', primary: !latest, run: () => this.chooseSlot() });
     items.push({ label: 'Load Game', run: () => this.loadSlots(), enabled: anySaves });
     items.push({ label: 'Quick Battle', run: () => this.scene.start('TeamSelectScene'), sub: 'Pick two teams and fight one battle' });
-    let y = 420;
+    items.push({ label: 'Multiplayer', run: () => this.scene.start(MP_SCENE), sub: 'Quick Battle against a friend online' });
+    let y = 380;
     for (const it of items) {
       const b = makeMenuButton(this, W / 2, y, 560, 96, it.label, () => (it.enabled === false ? b.shake() : it.run()), { primary: !!it.primary, size: it.primary ? 42 : 36 });
       if (it.enabled === false) b.setEnabled(false);
       L.add(b.container);
       if (it.sub) L.add(serif(this, W / 2, y + 62, it.sub, 19, '#a8977a', { bold: false, stroke: 2 }).setOrigin(0.5));
-      y += it.sub ? 148 : 126;
+      y += it.sub ? 136 : 116;
     }
     if (corrupt) L.add(serif(this, W / 2, H - 50, 'A damaged save file was ignored.', 20, '#d88a7e', { bold: false, stroke: 2 }).setOrigin(0.5));
     if (this.openOnStart === 'load' && anySaves) this.loadSlots();

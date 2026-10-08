@@ -26,10 +26,17 @@
       },
       "killMinChance": 0.9,
       "pickTop": 3,
-      "pickWeights": [0.65, 0.23, 0.12],
+      "pickWeights": [
+        0.65,
+        0.23,
+        0.12
+      ],
       "pickWithin": 0.5,
       "globals": "restWhenIdle",
-      "note": "Madde 258 Faz 5: ufuk 1 tur; kurtarma (save) ve kontrol (Stun/Slow/Wound...) değeri yok; öldürme terimi yalnızca öldürme ihtimali >= %90 iken; puanı en iyinin en az %50'si olan en iyi 3 aday arasından belirleyici seçim (%65 / %23 / %12; savaş seed'i + tur + birimden: aynı savaş = aynı hata); Move/Skip yok, Rest yalnızca yapacak hamle yokken."
+      "note": "Madde 258 Faz 5: ufuk 1 tur; kurtarma (save) ve kontrol (Stun/Slow/Wound...) değeri yok; öldürme terimi yalnızca öldürme ihtimali >= %90 iken; puanı en iyinin en az %50'si olan en iyi 3 aday arasından belirleyici seçim (%65 / %23 / %12; savaş seed'i + tur + birimden: aynı savaş = aynı hata); Move/Skip yok, Rest yalnızca yapacak hamle yokken.",
+      "telegraph": {
+        "hookCombo": 0
+      }
     },
     "medium": {
       "note": "Tam terazi (sim ve denge bununla ölçülür; hızlı savaşın varsayılanı)."
@@ -264,6 +271,22 @@
       "mpCostWeight": 0.4,
       "hpCostWeight": 1,
       "minHpRatioForHpCost": 0.5
+    },
+    "bridge_warden": {
+      "priorities": [
+        "kill",
+        "tactic",
+        "aoe",
+        "damage"
+      ],
+      "focus": "lowest_ratio",
+      "aoeMinTargets": 2,
+      "healBelowRatio": 0,
+      "shieldBelowRatio": 0,
+      "maxSummons": 0,
+      "mpCostWeight": 0.3,
+      "hpCostWeight": 1,
+      "minHpRatioForHpCost": 0.5
     }
   },
   "global": {
@@ -287,5 +310,13 @@
       "minFrontGainShare": 0.3,
       "minAuraGain": 5
     }
+  },
+  "_telegraph": "TELGRAF (boss: The Bridge Warden, docs/design/bosses/bridge-warden.md 5 ve M11/M12; src/engine/ai.ts > telegraphOptions / telegraphDodge / anchorValue): hitShare = telgrafı atanın beklenen isabet payı (oyuncu kaçar), denyShare = kaçmak zorunda kalan her hedefin kaybedeceği turun değer payı, hookCombo = Chain Hook hedefi bekleyen çökmeye çekerse eklenen değer çarpanı (Easy 0), dodgeOpportunityShare = oyuncu vekilinin telgraftan kaçmak için Move bedeli (şimdiki hamle x pay), anchorShare = Iron Mooring kırmanın değer çarpanı. Sayılar PROVİZYON (sim:campaign ile).",
+  "telegraph": {
+    "hitShare": 0.5,
+    "denyShare": 0.5,
+    "hookCombo": 1,
+    "dodgeOpportunityShare": 1,
+    "anchorShare": 1
   }
 }

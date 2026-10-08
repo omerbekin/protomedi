@@ -240,7 +240,12 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
  * Savaş sonucu (campaign.md 5.1): zaferde hayatta kalanlar maks canın `victoryHeal` kadarını geri alır, düşenler `reviveRatio` ile kalkar;
  * boss zaferinde (type boss) herkes tam can. Savaşa girmeyenler değişmez. Yenilgide durum yalnızca sayaç olarak değişir (çağıran son kaydı yükler).
  */
-export function applyBattle(s: CampaignState, outcome: BattleOutcome, rules: CampaignRules = CONFIG.rules): CampaignState {
+/** Seferin zorluğuna göre geçerli kurallar: campaign.json > rules + difficulties[x].rules üstüne yazımları. */
+export function rulesFor(s: Pick<CampaignState, 'difficulty'>): CampaignRules {
+  return { ...CONFIG.rules, ...(CONFIG.difficulties[s.difficulty]?.rules ?? {}) };
+}
+
+export function applyBattle(s: CampaignState, outcome: BattleOutcome, rules: CampaignRules = rulesFor(s)): CampaignState {
   const t = clone(s);
   if (!outcome.victory) {
     t.stats.defeats++;

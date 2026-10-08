@@ -5,6 +5,9 @@ import { BattleScene } from './game/scenes/BattleScene';
 import { TeamSelectScene } from './game/scenes/TeamSelectScene';
 import { MainMenuScene } from './game/scenes/MainMenuScene';
 import { CampaignMapScene } from './game/scenes/CampaignMapScene';
+import { MultiplayerScene, setMultiplayerBoot } from './game/scenes/MultiplayerScene';
+import { mp } from './game/mp-client';
+import { lobbyFromSearch } from './net/lobby-code';
 import { DebugMenu } from './ui/debug-menu';
 import { DEBUG_INFO_TAB, DEBUG_TABS, registerDebugTools } from './ui/debug-tools';
 import { flowContext, startMainMenu, startNewGame, startTeamSelect } from './game/session-flow';
@@ -15,16 +18,24 @@ import { WikiPanel } from './wiki/view';
 import { debugState } from './game/debug-state';
 import './style.css';
 
-// Geliştirme sunucusunda sekme adı canlı olmadığını belirtir (canlı sürüm: ProtoMedi).
-if (import.meta.env.DEV) document.title = 'ProtoMedi (dev - NOT LIVE)';
+// Geliştirme sunucusunda sekme adı canlı olmadığını belirtir (canlı sürüm: Embers of Valdoria).
+if (import.meta.env.DEV) document.title = 'Embers of Valdoria (dev - NOT LIVE)';
 
 // Normal açılış: ana menü (Continue / New Campaign / Load Game / Quick Battle). Adreste ?seed=123 varsa menüyü atlayıp o seed'in
 // rastgele takımlarıyla doğrudan savaş (hata ayıklama / tekrar oynatma için); ?campaign=1 doğrudan sefer haritasını açar (geliştirme).
 const params = new URLSearchParams(window.location.search);
 const skipSelect = params.has('seed');
 const openCampaign = !skipSelect && params.has('campaign');
-const otherScenes = [TeamSelectScene, BattleScene, MainMenuScene, CampaignMapScene];
-const firstScene = skipSelect ? BattleScene : openCampaign ? CampaignMapScene : MainMenuScene;
+// Multiplayer: davet linki (?lobby=KOD) lobiye katılır; yenilenen sekme yarım kalan lobisine döner (docs/design/multiplayer.md)
+const lobbyCode = skipSelect || openCampaign ? null : lobbyFromSearch(window.location.search);
+const rejoin = !skipSelect && !openCampaign && !lobbyCode && !!mp.pendingRejoin();
+if (lobbyCode) {
+  setMultiplayerBoot({ join: lobbyCode });
+  params.delete('lobby'); // yenilemede tekrar katılmaya çalışmasın (yarım kalan lobi sessionStorage'dan döner)
+  window.history.replaceState(null, '', `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`);
+} else if (rejoin) setMultiplayerBoot({ rejoin: true });
+const otherScenes = [TeamSelectScene, BattleScene, MainMenuScene, CampaignMapScene, MultiplayerScene];
+const firstScene = skipSelect ? BattleScene : openCampaign ? CampaignMapScene : lobbyCode || rejoin ? MultiplayerScene : MainMenuScene;
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -38,8 +49,12 @@ const game = new Phaser.Game({
   scene: [firstScene, ...otherScenes.filter((sc) => sc !== firstScene)],
 });
 
+mp.attachGame(game);
+
 // Dev only: lets the browser console inspect the running game (window.__game)
 if (import.meta.env.DEV) (window as unknown as { __game: Phaser.Game }).__game = game;
+// Dev / local test only: multiplayer client (window.__mp) for console checks (also in a local production build on localhost)
+if (import.meta.env.DEV || ['localhost', '127.0.0.1'].includes(window.location.hostname)) (window as unknown as { __mp: typeof mp }).__mp = mp;
 
 // --- Screen layout: fills the visible area, follows the address bar, rotates the stage on upright phones ---
 installViewport(game, document.getElementById('stage')!, parseRotateMode(window.location.search));

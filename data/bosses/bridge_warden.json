@@ -1,0 +1,31 @@
+{
+  "_not": "The Bridge Warden: King's Bridge (düğüm 9) boss'u. Tasarım docs/design/bosses/bridge-warden.md (Ömer kararları 2026-10-08: tema A, Iron Mooring x2, Faz III sert, kamp YOK -> can belgedeki 480'den %10 düşük = 432, telgraf boss'un sonraki turunda çözülür). Sayılar PROVİZYON (npm run sim:campaign). Gizli boss tanımı: rastgele havuzda ve takım seçiminde YOK (data/bosses, content.bosses).",
+  "id": "bridge_warden",
+  "name": "The Bridge Warden",
+  "spriteId": "bridge_warden",
+  "color": "#5b4636",
+  "logo": "wardenlogo",
+  "frontPriority": 0,
+  "role": "Boss · Siege Giant",
+  "attributes": { "str": 25, "int": 6, "dex": 1, "luck": 4 },
+  "armor": 12,
+  "magicArmor": 6,
+  "overrides": { "hp": 432, "hpRegen": 0 },
+  "ai": "bridge_warden",
+  "skills": ["anchor_smash", "breaking_span", "chain_hook", "ash_brand", "fall_of_kings_bridge"],
+  "boss": {
+    "firstBanner": "None shall cross.",
+    "phases": [
+      { "at": 0.66, "banner": "The Ember wakes." },
+      { "at": 0.33, "banner": "The span fails.", "actionsPerTurn": 3, "powerMult": 1.15, "armorMult": 0.5, "breakAnchors": true, "telegraphOnEnter": "fall_of_kings_bridge" }
+    ],
+    "anchor": { "unit": "iron_mooring", "armorAdd": 5, "magicArmorAdd": 5, "stagger": true, "cancel": ["breaking_span"] },
+    "unyielding": { "stunToStagger": true, "debuffDurationDelta": -1, "immuneDisplacement": true },
+    "afterResolve": { "skills": ["breaking_span", "fall_of_kings_bridge"], "status": "overextended", "turns": 1 },
+    "passives": [
+      { "id": "unyielding", "name": "Unyielding", "icon": "unyielding", "text": "Stuns only cost the Warden one action; other ailments last 1 turn less (Omens are not shortened). It cannot be pulled or pushed." },
+      { "id": "anchored", "name": "Anchored", "icon": "anchored", "text": "Each standing Iron Mooring gives the Warden +5 armor and +5 magic armor and lets it use Chain Hook. Breaking a Mooring staggers the Warden (it loses its next action) and cancels a pending Breaking Span." },
+      { "id": "ember_heart", "name": "Ember Heart", "icon": "emberheart", "text": "At 66% HP the ember wakes: Ash Brand opens and Breaking Span grows to two rows. At 33% the span fails: the Moorings snap, the Warden acts 3 times a turn, hits 15% harder with half its armor, and at once calls the Fall of King's Bridge. A single attack can cross only one of these thresholds." }
+    ]
+  }
+}

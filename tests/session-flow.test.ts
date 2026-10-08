@@ -12,4 +12,8 @@ describe('ayarlar menüsü: New Game / Team Select düğmeleri', () => {
   it('etkin sahne yoksa düğme yok', () => {
     expect(flowButtons('none')).toEqual({ newGame: false, teamSelect: false, confirm: false });
   });
+  it('multiplayer: New Game / Team Select yok; canlı savaştan çıkış onay ister (ayrılmak = yenilgi)', () => {
+    expect(flowButtons('mp-live')).toEqual({ newGame: false, teamSelect: false, confirm: true });
+    expect(flowButtons('mp')).toEqual({ newGame: false, teamSelect: false, confirm: false });
+  });
 });

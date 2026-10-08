@@ -112,7 +112,27 @@ export interface AiConfig {
   difficulty?: Partial<Record<AiDifficulty, AiDifficultyConfig>>;
   /** Global skill kuralları; yoksa ya da enabled false ise yapay zeka hiç global skill kullanmaz. */
   global?: AiGlobalConfig;
+  /** Telgraflı (gecikmeli) saldırıların değeri ve onlardan kaçma (boss: The Bridge Warden; M11/M12). Yoksa DEFAULT_TELEGRAPH. */
+  telegraph?: AiTelegraphConfig;
 }
+
+/**
+ * Telgraf değer terazisi (data/ai.json > telegraph; zorluk başına difficulty.<x>.telegraph ile ezilir):
+ * - hitShare: telgrafı atan için beklenen isabet payı (oyuncu kaçacağı için iskonto): beklenen hasar x hitShare.
+ * - denyShare: kaçmak zorunda kalacak her hedefin kaybedeceği tur (tur değeri x (1 - hitShare) x denyShare).
+ * - hookCombo: Chain Hook hedefi bekleyen bir çökmenin içine çekerse o çökmenin hedefe beklenen hasarı x hitShare x hookCombo (Easy 0: kombinasyon yok).
+ * - dodgeOpportunityShare: telgraftan kaçmak için Move'un bedeli = şimdiki hamle değeri x bu (oyuncu tarafı vekili, M12).
+ * - anchorShare: bağlı yardımcıyı (Iron Mooring) kırmanın değeri çarpanı (boss'un kaybedeceği eylem + iptal olan çökme + düşen zırh).
+ */
+export interface AiTelegraphConfig {
+  hitShare: number;
+  denyShare: number;
+  hookCombo: number;
+  dodgeOpportunityShare: number;
+  anchorShare: number;
+}
+
+export const DEFAULT_TELEGRAPH: AiTelegraphConfig = { hitShare: 0.5, denyShare: 0.5, hookCombo: 1, dodgeOpportunityShare: 0.8, anchorShare: 1 };
 
 export interface AiChoice {
   /** Class skill'i ya da global skill id'si (rest / skip_turn / move_tile). */
@@ -249,6 +269,11 @@ export interface Option {
    * (x omenValueShare), isabet ve kritik (critStacks) ihtimaliyle. Anında tetiklenen Doom'un beklenen hasarı `damage`'a (ve öldürüyorsa `kills`'e) girer.
    */
   curse: number;
+  /**
+   * Telgraf değeri (can-eşdeğer): kaçmak zorunda kalacak hedeflerin kaybedeceği tur (telgrafı atan) + Chain Hook kombinasyonu (çekilen birim bekleyen çökmenin
+   * içine düşerse) + bağlı yardımcıyı kırmanın değeri (Iron Mooring: boss eylem kaybı, iptal olan çökme, düşen zırh).
+   */
+  deny: number;
   /** Maç kaydı notları (Omen/Doom/Jinx): 'omens 1->2 omenValue 5.0', 'omens 2->3 DOOM 25.2@crit 0.12', 'detonate 3 omen x1.5 = 37.8', 'omen timer 2'... */
   notes: string[];
 }
@@ -279,6 +304,9 @@ export function chooseAction(battle: Battle, actorUid: string, config: AiConfig,
   }
 }
 
+/** Bu karar boyunca telgraf ayarları (ai.json > telegraph + zorluk). */
+let activeTg: AiTelegraphConfig = DEFAULT_TELEGRAPH;
+
 /** Bu karar boyunca değer bağlamı (global skill kararları da aynı teraziyle puanlar); karar bitince temizlenir. */
 let activeCtx: ValueContext | null = null;
 
@@ -302,6 +330,7 @@ function chooseActionInner(battle: Battle, actorUid: string, config: AiConfig, t
   const focusOf = (c: Combatant) => (config.profiles[c.ai ?? config.defaultProfile] ?? config.profiles[config.defaultProfile])?.focus ?? 'lowest_ratio';
   activeCtx = new ValueContext(battle, actor, vc, focusOf);
   activeCtx.diff = rules;
+  activeTg = { ...DEFAULT_TELEGRAPH, ...(config.telegraph ?? {}), ...(rules.telegraph ?? {}) };
   const options = buildOptions(battle, actor, profile, trace);
   const pick = options.length === 0 ? null : pickClassOption(actor, profile, options, activeCtx, trace, battle);
   if (trace) {
@@ -315,7 +344,15 @@ function chooseActionInner(battle: Battle, actorUid: string, config: AiConfig, t
     if (trace) trace.global = gt;
     if (rules.globals === 'restWhenIdle') {
       // Easy: Move/Skip yok; yalnızca yapacak hamle yokken Rest (MP biriktir)
-      if (gt) gt.gate = `difficulty ${difficulty}: only Rest when there is nothing to do`;
+      if (gt) gt.gate = `difficulty ${difficulty}: only Rest when there is nothing to do (and Move to dodge a pending warning)`;
+      // Bekleyen düşman telgrafı (çöken köprü, kül damgası) açıkça görünür: ortalama oyuncu da ondan kaçar (M12)
+      if (battle.telegraphs.length > 0 && battle.canUseGlobal(actor.uid, 'move_tile').ok) {
+        const d = telegraphDodge(battle, actor, battle.freeTiles(actor.uid), optionNet(pick?.option));
+        if (d) {
+          if (gt) gt.outcome = `move_tile: dodge a pending warning (net ${r2(d.net)})`;
+          return { skillId: 'move_tile', slot: d.slot, targetUid: tileUid(d.slot), reason: 'move' };
+        }
+      }
       if (!pick && battle.canUseGlobal(actor.uid, 'rest').ok) {
         if (gt) gt.outcome = 'rest: no move to make (easy)';
         return { skillId: 'rest', reason: 'rest' };
@@ -406,7 +443,7 @@ function toChoice(option: Option, reason: AiChoice['reason']): AiChoice {
   };
 }
 
-const value = (o: Option) => o.damage + o.heal + o.selfHeal + o.shield * 0.5 + o.burn * BURN_WEIGHT + Math.max(0, o.buff) + o.mitigation + o.cleanse + o.bond + o.tempo + o.curse;
+const value = (o: Option) => o.damage + o.heal + o.selfHeal + o.shield * 0.5 + o.burn * BURN_WEIGHT + Math.max(0, o.buff) + o.mitigation + o.cleanse + o.bond + o.tempo + o.curse + o.deny;
 
 function buildOptions(battle: Battle, actor: Combatant, profile: AiProfile, trace?: AiTrace): Option[] {
   const options: Option[] = [];
@@ -497,6 +534,7 @@ function spentReserves(actor: Combatant, o: Option, reserves: Reserve[]): Reserv
 /** Bir skill'in tüm (hedef/alan) seçenekleri. Bekleme ve MP denetimi YAPMAZ (çağıran denetler). */
 function skillOptions(battle: Battle, actor: Combatant, skillId: string, profile: AiProfile): Option[] {
   const skill = battle.skill(skillId)!;
+  if (skill.telegraph) return telegraphOptions(battle, actor, skill, profile);
   const candidates = battle.validTargets(actor.uid, skillId);
   if (candidates.length === 0) return [];
   if (battle.isAreaSkill(skillId)) {
@@ -724,6 +762,7 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
     bond: 0,
     tempo: 0,
     curse: 0,
+    deny: 0,
     notes: [],
     dmgBy: {},
     killP: {},
@@ -852,6 +891,18 @@ function evaluate(battle: Battle, actor: Combatant, skill: SkillDef, targets: Co
     o.wardBurn = { amount: e.onAbsorb.burnMana, magic: e.shieldType === 'magic' };
   }
   curseValue(battle, actor, skill, previews, o, profile);
+  // Chain Hook kombinasyonu (M11): hedef, bekleyen çökmemizin işaretli hücresine çekilirse çökmenin ona beklenen hasarı (isabet x hitShare x hookCombo)
+  if (skill.effects.some((e) => e.type === 'pull') && activeTg.hookCombo > 0 && first && first.side !== actor.side) {
+    const to = battle.pullDestination(first);
+    if (to !== null) {
+      for (const t of battle.telegraphs) {
+        if (t.source !== actor.uid || t.kind !== 'area' || t.board !== first.board || !t.cells.includes(to) || t.safeCells?.includes(to) || t.cells.includes(first.slot)) continue;
+        const v = Math.min(first.hp, battle.telegraphDamage(t, first).avg) * o.primaryHit * activeTg.hitShare * activeTg.hookCombo;
+        o.deny += v;
+        if (o.notes.length < 6) o.notes.push(`hook ${unitLabel(first)} into ${t.skill} cell ${to}: +${r1(v)}`);
+      }
+    }
+  }
   // Rastgele hedefli skill: hedefler önceden bilinmez; beklenen hasar hedef sayısına oranlanır, öldürme garanti değildir
   if (skill.target === 'random_enemies' && targets.length > 0) {
     const share = Math.min(skill.count ?? 3, targets.length) / targets.length;
@@ -889,10 +940,11 @@ function curseValue(battle: Battle, actor: Combatant, skill: SkillDef, previews:
       const om = p.omen;
       const def = battle.statusDef(om.status);
       const per = def?.doom ? attributePower(actor.stats, def.doom.scale, battle.formulas) * def.doom.powerPerStack * share : 0;
-      const doomExp = (d: NonNullable<typeof om.doom>) => Math.min(left, d.hpLoss * (1 + d.critChance * (cm - 1)));
+      // sureCrit (kritik Jinx'in tamamladığı Doom, critDoomOnCrit): hpLoss zaten kritik ortalaması, ek kritik beklentisi yok
+      const doomExp = (d: NonNullable<typeof om.doom>) => Math.min(left, d.sureCrit ? d.hpLoss : d.hpLoss * (1 + d.critChance * (cm - 1)));
       const branch = (after: number, d: typeof om.doom) => (d ? { now: doomExp(d), later: 0 } : { now: 0, later: Math.max(0, after - om.before) * per });
       const nc = branch(om.after, om.doom);
-      const cr = om.afterCrit !== om.after ? branch(om.afterCrit, om.doomOnCrit) : nc;
+      const cr = om.afterCrit !== om.after || om.doomOnCrit ? branch(om.afterCrit, om.doomOnCrit) : nc;
       o.damage += h * ((1 - crit) * nc.now + crit * cr.now);
       o.curse += h * ((1 - crit) * nc.later + crit * cr.later);
       const hk = h * (1 - battle.luckyEscapeChance(target.uid)); // madde 258
@@ -902,8 +954,8 @@ function curseValue(battle: Battle, actor: Combatant, skill: SkillDef, previews:
       }
       if (o.notes.length < 6) {
         if (om.doom && om.doom.cause === 'detonate') o.notes.push(`${label}: omens ${om.before}->${om.after} detonate ${om.doom.omens} omen x${om.doom.mult} = ${r1(om.doom.avg)}@crit ${r2(om.doom.critChance)}`);
-        else if (om.doom) o.notes.push(`${label}: omens ${om.before}->${om.after} DOOM ${r1(om.doom.avg)}@crit ${r2(om.doom.critChance)}`);
-        else o.notes.push(`${label}: omens ${om.before}->${om.after} omenValue ${r1(nc.later)}${om.doomOnCrit ? ` (crit -> ${om.afterCrit}: DOOM ${r1(om.doomOnCrit.avg)})` : ''} omen timer ${om.turnsLeft}`);
+        else if (om.doom) o.notes.push(`${label}: omens ${om.before}->${om.after} DOOM ${r1(om.doom.avg)}@crit ${r2(om.doom.critChance)}${om.doomOnCrit?.sureCrit ? ' (crit -> sure crit DOOM)' : ''}`);
+        else o.notes.push(`${label}: omens ${om.before}->${om.after} omenValue ${r1(nc.later)}${om.doomOnCrit ? ` (crit -> ${om.afterCrit}: ${om.doomOnCrit.sureCrit ? 'sure crit ' : ''}DOOM ${r1(om.doomOnCrit.avg)})` : ''} omen timer ${om.turnsLeft}`);
       }
     }
     if (p.dot) {
@@ -1139,6 +1191,9 @@ function scoreOption(ctx: ValueContext, profile: AiProfile, o: Option): void {
     add('burn', burnValue(ctx, o));
     add('silence', silenceValue(ctx, o));
     add('tempo', o.tempo);
+    add('deny', o.deny);
+    add('anchor', anchorValue(ctx, o));
+    add('cleanse', brandCleanse(ctx, o));
   }
   const gross = Object.values(t).reduce((a, b) => a + b, 0);
   // Hard "uygun anı bekleme": yığın patlatan skill (Doom Mark) öldürmüyorsa ve hedefte yığın dolmaya 1 kala değilse değerinin yalnızca bir payı
@@ -1383,6 +1438,128 @@ function protectValue(ctx: ValueContext, o: Option): number {
 
 // ---------------------------------------------------------------- global skill'ler (Rest / Skip Turn / Move Tile)
 
+// ---------------------------------------------------------------- telgraflar (boss; M11 / M12)
+
+/**
+ * Telgraflı skill'in seçenekleri (M11): hasar ÇÖZÜLMEDE gelir ve oyuncu kaçabilir. Beklenen hasar/öldürme x hitShare; kaçmak zorunda kalacak her hedefin
+ * kaybedeceği tur değeri (1 - hitShare) x denyShare `deny`'ye. area: her anchor (faza göre alan; zemin değeri dahil); brand: her hedef + damganın
+ * şeklindeki komşuları; wholeBoard (Fall): tüm düşmanlar.
+ */
+function telegraphOptions(battle: Battle, actor: Combatant, skill: SkillDef, profile: AiProfile): Option[] {
+  const tg = skill.telegraph!;
+  const out: Option[] = [];
+  const candidates = battle.validTargets(actor.uid, skill.id);
+  if (candidates.length === 0) return out;
+  if (tg.kind === 'brand') {
+    for (const t of candidates) {
+      const cells = battle.brandCells(skill.id, t);
+      const near = battle.livingByDepth(t.side).filter((c) => c.uid !== t.uid && c.board === t.board && cells.includes(c.slot));
+      out.push(evaluate(battle, actor, skill, [t, ...near], t.uid, profile));
+    }
+  } else if (tg.wholeBoard) {
+    out.push(evaluate(battle, actor, skill, candidates.filter((c) => !c.inert), undefined, profile));
+  } else {
+    const seen = new Set<string>();
+    for (const { board, slot } of battle.shapeAnchorCells(actor.uid, skill.id)) {
+      const cells = battle.areaCells(skill.id, slot, board, actor.uid);
+      const key = cells.join(',');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const o = evaluate(battle, actor, skill, battle.areaWindowAt(actor.uid, skill.id, slot, board), undefined, profile, cells);
+      o.anchorSlot = slot;
+      o.cells = cells;
+      out.push(o);
+    }
+  }
+  const s = activeTg.hitShare;
+  for (const o of out) {
+    o.damage *= s;
+    for (const k of Object.keys(o.dmgBy)) o.dmgBy[k]! *= s;
+    for (const k of Object.keys(o.killP)) o.killP[k]! *= s;
+    o.kills = o.kills.filter((c) => (o.killP[c.uid] ?? 0) >= 0.5);
+    // Kaçmak için harcanacak oyuncu turları: hedef başına tur değeri x (1 - isabet payı) x denyShare
+    if (activeCtx) for (const t of o.targets) if (t.side !== actor.side && !t.inert) o.deny += activeCtx.turnValue(t) * (1 - s) * activeTg.denyShare;
+    o.notes.push(`telegraph: resolves next turn, damage x${s} (hit share), deny ${r1(o.deny)}`);
+  }
+  return out;
+}
+
+/**
+ * Bağlı yardımcıyı (Iron Mooring) vurmanın değeri (M12, oyuncu vekili): yardımcının kendi katkısı yok, değeri boss'tan gelir. Kırılırsa: boss'un bir eylemi
+ * (tur değeri; Stagger), iptal olacak bekleyen çökmenin bize beklenen hasarı, düşen zırhın ufuktaki hasar kazancı. Öldürme ihtimaliyle; öldürmeyen vuruş
+ * kalan canın götürülen payı x pressureShare kadar.
+ */
+function anchorValue(ctx: ValueContext, o: Option): number {
+  const battle = ctx.battle;
+  let v = 0;
+  for (const [uid, d] of Object.entries(o.dmgBy)) {
+    const a = battle.get(uid);
+    if (!a || a.side === ctx.actor.side || a.hp <= 0) continue;
+    const owner = battle.combatants.find((c) => c.hp > 0 && c.side === a.side && c.boss?.anchor?.unit === a.defId);
+    const anchor = owner?.boss?.anchor;
+    if (!owner || !anchor) continue;
+    let worth = anchor.stagger ? ctx.turnValue(owner) : 0;
+    for (const t of battle.telegraphs) {
+      if (t.source !== owner.uid || !anchor.cancel.includes(t.skill)) continue;
+      for (const u of battle.living(ctx.actor.side)) if (u.board === t.board && battle.telegraphCells(t).includes(u.slot)) worth += Math.min(u.hp, battle.telegraphDamage(t, u).avg) * 0.7;
+    }
+    // Zırh: boss'a ufukta vereceğimiz tahmini hasar x (zırh azalmasındaki düşüş)
+    const st = battle.effectiveStats(owner);
+    const red = (x: number) => armorReduction(Math.max(0, x), battle.formulas);
+    const gain = (1 - red(st.armor - anchor.armorAdd)) / Math.max(0.05, 1 - red(st.armor)) - 1;
+    const ourRate = ctx.ownIntents().filter((i) => i.focus.includes(owner.uid) || i.reach.includes(owner.uid)).reduce((t, i) => t + i.hit, 0);
+    worth += ourRate * ctx.vc.horizon * gain;
+    const p = o.killP[uid] ?? 0;
+    const chip = (1 - p) * Math.min(1, d / Math.max(1, a.hp + a.shield)) * ctx.vc.pressureShare;
+    v += (p + chip) * worth * activeTg.anchorShare;
+  }
+  return v;
+}
+
+/** Dostun damgasını (Ash Brand) silen dispel: damga patlamasının tarafımıza beklenen hasarı önlenir (Mana Barrier karşı oyunu). */
+function brandCleanse(ctx: ValueContext, o: Option): number {
+  const battle = ctx.battle;
+  if (!o.skill.effects.some((e) => e.type === 'dispel' && e.status === 'debuff')) return 0;
+  let v = 0;
+  for (const t of battle.telegraphs) {
+    if (t.kind !== 'brand' || !t.bound || !o.targets.some((x) => x.uid === t.bound && x.side === ctx.actor.side)) continue;
+    const cells = battle.telegraphCells(t);
+    for (const u of battle.living(ctx.actor.side)) if (u.board === t.board && cells.includes(u.slot)) v += Math.min(u.hp, battle.telegraphDamage(t, u).avg);
+  }
+  return v;
+}
+
+/**
+ * Telgraftan kaçma (M12): tarafımızın bekleyen düşman telgraflarından yiyeceği beklenen toplam hasar, kullanıcı `slot`'ta dururken (diğerleri yerinde).
+ * Yalnızca kullanıcının bir sonraki turundan ÖNCE çözülecek telgraflar (sıra tahmini; test modunda hepsi). Damgalı kullanıcı taşınırsa damga da taşınır.
+ */
+function telegraphLoad(battle: Battle, actor: Combatant, slot: number): number {
+  let total = 0;
+  const q = battle.mode === 'turns' ? battle.turnQueue() : [];
+  const start = q[0] === actor.uid ? 1 : 0;
+  const nextMine = q.indexOf(actor.uid, start);
+  const before = (uid: string) => battle.mode !== 'turns' || (() => {
+    const i = q.indexOf(uid, start);
+    return i >= 0 && (nextMine < 0 || i < nextMine);
+  })();
+  for (const t of battle.telegraphs) {
+    const src = battle.get(t.source);
+    if (!src || src.hp <= 0 || src.side === actor.side || t.board !== actor.board || !before(t.source)) continue;
+    let cells: number[];
+    if (t.kind === 'brand') {
+      const b = t.bound ? battle.get(t.bound) : undefined;
+      if (!b || b.hp <= 0) continue;
+      cells = battle.brandCells(t.skill, b.uid === actor.uid ? { ...b, slot } : b);
+    } else cells = t.cells.filter((s) => !t.safeCells?.includes(s));
+    for (const u of battle.living(actor.side)) {
+      if (u.board !== t.board || u.inert) continue;
+      const at = u.uid === actor.uid ? slot : u.slot;
+      if (cells.includes(at)) total += Math.min(u.hp + u.shield, battle.telegraphDamage(t, u).avg);
+    }
+  }
+  return total;
+}
+
 /** Class hamlesinin değeri (can-eşdeğer): beklenen hasar/şifa/kalkan/buff - bedel; hamle yoksa 0. */
 const optionNet = (o: Option | undefined): number => (o ? Math.max(0, o.score) : 0);
 
@@ -1486,7 +1663,10 @@ interface MovePlan {
 /** Move Tile için en iyi plan (yoksa null): geri çekilme (kırılgan/yaralı), öne geçme (yakın dövüşçü), aura komşuluğu. Üst üste hareket yok. */
 function bestMove(battle: Battle, actor: Combatant, g: AiGlobalConfig, vNow: number): MovePlan | null {
   const free = battle.freeTiles(actor.uid);
-  if (free.length === 0 || battle.lastActionOf(actor.uid) === 'move') return null;
+  if (free.length === 0) return null;
+  // 0) Telgraftan kaçma (M12): bekleyen düşman çökmesi/damgası tarafımıza beklenen hasarı azaltan hücre (üst üste Move kuralı burada yok: amaçlı kaçış)
+  const dodge = telegraphDodge(battle, actor, free, vNow);
+  if (battle.lastActionOf(actor.uid) === 'move') return dodge;
   const meleeSkills = actor.skills.map((id) => battle.skill(id)).filter((s): s is SkillDef => !!s && s.motion === 'melee' && s.target !== 'self' && !s.ignoreFrontRow && !s.ignoreReach);
   // O3 (madde 254): "kırılgan" = yakın dövüş skill'i yok VE canı eksik (tam canla geri çekilme yok: retreatHpRatio x 2'nin üstünde değil)
   const fragile = !actor.skills.some((id) => battle.skill(id)?.motion === 'melee') && ratio(actor) < Math.min(1, g.move.retreatHpRatio * 2);
@@ -1558,7 +1738,34 @@ function bestMove(battle: Battle, actor: Combatant, g: AiGlobalConfig, vNow: num
     if (top) plans.push(top);
   }
 
+  if (dodge) plans.push(dodge);
   return plans.length ? plans.reduce((a, b) => (b.net > a.net ? b : a)) : null;
+}
+
+/**
+ * Telgraftan kaçma planı: her boş hücre için tarafımızın bekleyen telgraflardan beklenen hasarı (telegraphLoad); en çok azaltan hücre (eşitlikte yakın
+ * dövüşü koruyan, sonra öne yakın, sonra küçük yuva). Net = önlenen hasar (+ kullanıcıyı ölümden kurtarıyorsa kurtarma) - şimdiki hamle x dodgeOpportunityShare
+ * (yakın dövüşçü melee yeteneğini kaybediyorsa + şimdiki hamlenin yarısı).
+ */
+function telegraphDodge(battle: Battle, actor: Combatant, free: number[], vNow: number): MovePlan | null {
+  if (battle.telegraphs.length === 0) return null;
+  const now = telegraphLoad(battle, actor, actor.slot);
+  if (now <= 0) return null;
+  const meleeSkills = actor.skills.map((id) => battle.skill(id)).filter((s): s is SkillDef => !!s && s.motion === 'melee' && s.target !== 'self' && !s.ignoreFrontRow && !s.ignoreReach);
+  const canMelee = (s: number) => meleeSkills.some((sk) => battle.canMeleeFrom(actor.uid, s, battle.reachOf(actor, sk)));
+  const meleeNow = canMelee(actor.slot);
+  let best: MovePlan | null = null;
+  for (const s of free) {
+    const avoided = now - telegraphLoad(battle, actor, s);
+    if (avoided <= 0) continue;
+    const threat = (slot?: number) => battle.telegraphThreat(actor.uid, slot).reduce((t, x) => t + x.avg, 0);
+    const life = actor.hp + actor.shield;
+    const saved = activeCtx && threat() >= life && threat(s) < life ? activeCtx.save(actor) * 0.5 : 0;
+    const lose = meleeNow && !canMelee(s) ? vNow * 0.5 : 0;
+    const net = avoided + saved - vNow * activeTg.dodgeOpportunityShare - lose;
+    if (net > 0 && (!best || net > best.net + 1e-9 || (Math.abs(net - best.net) < 1e-9 && s < best.slot))) best = { slot: s, net };
+  }
+  return best;
 }
 
 /**

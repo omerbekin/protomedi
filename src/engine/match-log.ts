@@ -124,7 +124,7 @@ function describeEventBody(battle: Battle, e: BattleEvent): string | null {
     case 'doom':
       return e.cause === 'expire'
         ? `DOOM (omens expired) on ${L(e.target)}: ${e.omens} omen(s) x${e.mult} (snapshot of ${L(e.source)})`
-        : `DOOM on ${L(e.target)}: ${e.omens} omen(s) x${e.mult}${e.cause === 'detonate' ? ` (detonated by ${L(e.source)}${e.skill ? ` ${battle.skill(e.skill)?.name ?? e.skill}` : ''})` : ` (completed by ${L(e.source)})`}`;
+        : `DOOM on ${L(e.target)}: ${e.omens} omen(s) x${e.mult}${e.cause === 'detonate' ? ` (detonated by ${L(e.source)}${e.skill ? ` ${battle.skill(e.skill)?.name ?? e.skill}` : ''})` : ` (completed by ${L(e.source)})`}${e.sureCrit ? ' SURE CRIT (critical Jinx)' : ''}`;
     case 'omenTransfer':
       return `Ill Omen (${L(e.source)}): ${e.stacks} omen(s) pass ${L(e.from)} -> ${L(e.to)} [${e.after}]`;
     case 'dodge':
@@ -147,7 +147,7 @@ function describeEventBody(battle: Battle, e: BattleEvent): string | null {
       if (battle.statusDef(e.status)?.attackCharges) return `${L(e.target)} +${e.status} ${e.turns} attack charge(s) (from ${L(e.source)}): ${battle.statusDef(e.status)?.text ?? ''}`;
       return `${L(e.target)} +${e.status}${e.stacks !== undefined ? ` x${e.stacks}` : ''} ${e.turns}t (from ${L(e.source)})${e.stacks !== undefined ? ` [omen timer ${e.turns}]` : ''}${e.partner ? ` bond with ${L(e.partner)}` : ''}${e.cause ? ` [${e.cause}]` : ''}`;
     case 'statusEnd':
-      return `${L(e.target)} -${e.status}${e.broken ? ' (ended early: broken / control)' : e.dispelled ? ` (DISPELLED by ${e.source ? L(e.source) : '?'}${e.cause ? ` [${e.cause}]` : ''})` : e.cause === 'bond_broken' ? ' (bond broken)' : e.cause === 'doom' ? ' (burst into Doom)' : e.cause === 'ill_omen' ? ' (passed on by Ill Omen)' : e.consumed ? ' (used up by its own attack)' : ' (expired)'}`;
+      return `${L(e.target)} -${e.status}${e.broken ? ' (ended early: broken / control)' : e.dispelled ? ` (DISPELLED by ${e.source ? L(e.source) : '?'}${e.cause ? ` [${e.cause}]` : ''})` : e.cause === 'bond_broken' ? ' (bond broken)' : e.cause === 'doom' ? ' (burst into Doom)' : e.cause === 'ill_omen' ? ' (passed on by Ill Omen)' : e.cause === 'erased' ? ' (erased: Doom Mark kill, no Ill Omen)' : e.consumed ? ' (used up by its own attack)' : ' (expired)'}`;
     case 'summon':
       return `${L(e.actor)} summons ${unitLabel(e.combatant)}${e.empowered === true ? ' EMPOWERED (fed: corpse consumed)' : e.empowered === false ? ' unfed (no corpse to consume)' : ''} (hp ${e.combatant.hp}, str ${e.combatant.stats.str}, int ${e.combatant.stats.int}, own board cell ${e.combatant.slot})`;
     case 'corpseConsumed':
@@ -159,7 +159,27 @@ function describeEventBody(battle: Battle, e: BattleEvent): string | null {
     case 'mpRegen':
       return `${L(e.actor)} +${e.amount} MP (now ${e.after})${e.cause ? ` [${e.cause}]` : ''}`;
     case 'moved':
-      return `${L(e.actor)} moves cell ${e.from} -> ${e.to}`;
+      return e.cause ? `${L(e.actor)} is dragged cell ${e.from} -> ${e.to} (${battle.skill(e.cause)?.name ?? e.cause}${e.by ? ` by ${L(e.by)}` : ''})` : `${L(e.actor)} moves cell ${e.from} -> ${e.to}`;
+    // Boss (The Bridge Warden; docs/design/bosses/bridge-warden.md 5): telgraf / çözülme / iptal / faz / Mooring kayıt anahtarları
+    case 'telegraph': {
+      const foes = battle.combatants.filter((c) => c.hp > 0 && c.board === e.board && c.side === e.board && e.cells.includes(c.slot) && !e.safeCells?.includes(c.slot));
+      if (e.kind === 'brand') return `telegraph ${e.skill} brand ${e.bound ? L(e.bound) : '?'} plus @cell ${e.bound ? battle.get(e.bound)?.slot : '?'}`;
+      return `telegraph ${e.skill} cells [${e.cells.filter((s) => !e.safeCells?.includes(s)).join(',')}]${e.safeCells ? ` keystones [${e.safeCells.join(',')}]` : ''} predicted ${foes.length} foe(s)`;
+    }
+    case 'telegraphResolve':
+      return battle.skill(e.skill)?.telegraph?.kind === 'brand'
+        ? `brand burst ${e.skill} @cells [${e.cells.join(',')}] hits ${e.hit.length}${e.hit.length ? ` [${e.hit.map(L).join(', ')}]` : ''}`
+        : `resolve ${e.skill} hit [${e.hit.map(L).join(', ')}] avoided [${e.avoided.map(L).join(', ')}]`;
+    case 'telegraphCancel':
+      return `telegraph ${e.skill} (${L(e.source)}) cancelled: ${e.cause}`;
+    case 'telegraphDelay':
+      return `telegraph ${e.skill} delayed: waiting for ${e.waiting.map(L).join(', ')} to act (fairness rule)`;
+    case 'phase':
+      return `phase ${e.phase} (hp ${e.hp}/${e.maxHp}) ${L(e.actor)}: "${e.banner}"`;
+    case 'anchorBroken':
+      return `mooring broken ${L(e.anchor)}${e.stagger ? ' -> stagger, span cancelled' : ' (snapped by phase, no stagger)'}; ${e.left} left`;
+    case 'staggered':
+      return `${L(e.actor)} is staggered: loses this action`;
     case 'passive':
       return `${L(e.actor)} passive: ${e.name}`;
     case 'turnSkipped':

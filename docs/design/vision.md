@@ -1,4 +1,4 @@
-# Vizyon (TASLAK — Ömer onaylayıp düzenleyecek)
+# Embers of Valdoria: Vizyon (TASLAK — Ömer onaylayıp düzenleyecek)
 
 ## Tür ve his
 Yandan görünümlü, sıra tabanlı parti RPG'si (Sonny benzeri). Kısa, taktiksel savaşlar; parti kompozisyonu ve hız yönetimi öne çıkar.

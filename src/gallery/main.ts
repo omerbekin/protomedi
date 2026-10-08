@@ -9,7 +9,7 @@ import './shell.css';
 const params = new URLSearchParams(window.location.search);
 const root = document.getElementById('gallery')!;
 
-if (import.meta.env.DEV) document.title = 'ProtoMedi Gallery (dev - NOT LIVE)';
+if (import.meta.env.DEV) document.title = 'Embers of Valdoria Gallery (dev - NOT LIVE)';
 
 if (params.has('embed')) {
   void import('./embed').then((m) => m.mountEmbed(params));

@@ -6,7 +6,7 @@ import type Phaser from 'phaser';
  * Asıl iş sahnelerin kendi metotlarındadır (BattleScene.newGame / goToTeamSelect, TeamSelectScene.newGame); bu dosya yalnızca hangi
  * sahnenin etkin olduğuna göre doğru olanı çağırır. Sefer savaşında (BattleScene.campaign) New Game / Team Select yoktur, yalnızca Main Menu.
  */
-export type FlowContext = 'battle-live' | 'battle-over' | 'team-select' | 'campaign-battle-live' | 'campaign-battle-over' | 'campaign' | 'main-menu' | 'none';
+export type FlowContext = 'battle-live' | 'battle-over' | 'team-select' | 'campaign-battle-live' | 'campaign-battle-over' | 'campaign' | 'mp-live' | 'mp' | 'main-menu' | 'none';
 
 interface FlowScene extends Phaser.Scene {
   newGame?(): void;
@@ -15,9 +15,11 @@ interface FlowScene extends Phaser.Scene {
   isBattleLive?(): boolean;
   /** Battle only: set when the battle was started from the campaign map. */
   campaign?: unknown;
+  /** Multiplayer (savaş ya da takım seçimi): yalnızca Main Menu; canlı savaşta onay (ayrılmak = yenilgi). */
+  mp?: unknown;
 }
 
-const KEYS = ['BattleScene', 'TeamSelectScene', 'CampaignMapScene', 'MainMenuScene'] as const;
+const KEYS = ['BattleScene', 'TeamSelectScene', 'CampaignMapScene', 'MainMenuScene', 'MultiplayerScene'] as const;
 const active = (game: Phaser.Game): FlowScene | null => {
   for (const k of KEYS) if (game.scene.isActive(k)) return game.scene.getScene(k) as FlowScene;
   return null;
@@ -28,7 +30,7 @@ export function flowButtons(ctx: FlowContext): { newGame: boolean; teamSelect: b
   return {
     newGame: ctx === 'battle-live' || ctx === 'battle-over' || ctx === 'team-select',
     teamSelect: ctx === 'battle-live' || ctx === 'battle-over',
-    confirm: ctx === 'battle-live' || ctx === 'campaign-battle-live',
+    confirm: ctx === 'battle-live' || ctx === 'campaign-battle-live' || ctx === 'mp-live',
   };
 }
 
@@ -39,6 +41,8 @@ export function flowContext(game: Phaser.Game): FlowContext {
   const scene = active(game);
   if (!scene) return 'none';
   const key = scene.scene.key;
+  if (key === 'MultiplayerScene') return 'mp';
+  if (scene.mp) return key === 'BattleScene' && scene.isBattleLive?.() ? 'mp-live' : 'mp';
   if (key === 'TeamSelectScene') return 'team-select';
   if (key === 'MainMenuScene') return 'main-menu';
   if (key === 'CampaignMapScene') return 'campaign';

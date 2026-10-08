@@ -274,6 +274,105 @@ export function gauntletFist(g: PxGrid, cx: number, top: number, s = 1): void {
   for (const k of [-6, -2, 2, 6]) g.disc(X(k), Y(16.6), 2.1 * s, 'm').disc(X(k - 0.6), Y(16), 0.8 * s, 'l');
 }
 
+// ---------- BRIDGE WARDEN (King's Bridge boss): ortak çizim parçaları (paslı zincir, gemi çapası, köprü kemeri, palamar babası) ----------
+// Palet (docs/design/bosses/bridge-warden.md 7.1, v1 jetonlarına en yakın): ıslak taş d/m, yosun S/s, pas b/k, nehir U/u/c, kor f/y/w, kül m/l.
+
+/** Paslı zincir: (x0,y0)'dan (x1,y1)'e dönüşümlü halkalar (açık halka + yandan görünen kalın halka). `r` halka yarıçapı. */
+export function rustChain(g: PxGrid, x0: number, y0: number, x1: number, y1: number, r = 1.7, body = 'b', dark = 'k', hi = 'Y'): void {
+  const len = Math.hypot(x1 - x0, y1 - y0) || 1;
+  const n = Math.max(1, Math.round(len / (r * 1.55)));
+  const dx = (x1 - x0) / len;
+  const dy = (y1 - y0) / len;
+  for (let i = 0; i <= n; i++) {
+    const x = x0 + (x1 - x0) * (i / n);
+    const y = y0 + (y1 - y0) * (i / n);
+    if (i % 2 === 0) {
+      g.ring(x, y, r, body, Math.max(0.6, r * 0.42));
+      g.set(x - r * 0.55, y - r * 0.55, hi);
+    } else {
+      g.line(x - dx * r * 0.95, y - dy * r * 0.95, x + dx * r * 0.95, y + dy * r * 0.95, dark, Math.max(0.8, r * 0.7));
+      g.line(x - dx * r * 0.6, y - dy * r * 0.6, x + dx * r * 0.2, y + dy * r * 0.2, body, 0.5);
+    }
+  }
+}
+
+/** Gemi çapası (dik; halka üstte, kollar altta). (cx, top) halkanın tepesi, `h` boy. Pas tonları. */
+export function shipAnchor(g: PxGrid, cx: number, top: number, h: number, body = 'b', dark = 'k', hi = 'Y'): void {
+  const s = h / 28;
+  // halka
+  g.ring(cx, top + 2.4 * s, 2.4 * s, dark, 1.3 * s);
+  // gövde (shank)
+  g.rect(cx - 1.5 * s, top + 4.4 * s, 3 * s, 19.5 * s, body).rect(cx - 1.5 * s, top + 4.4 * s, 1 * s, 19.5 * s, hi);
+  // çubuk (stock): halkanın altında yatay
+  g.rect(cx - 6.5 * s, top + 6 * s, 13 * s, 2.2 * s, dark).rect(cx - 6.5 * s, top + 6 * s, 13 * s, 0.8 * s, body);
+  g.disc(cx - 6.5 * s, top + 7.1 * s, 1.3 * s, dark).disc(cx + 6.5 * s, top + 7.1 * s, 1.3 * s, dark);
+  // kollar: alt yarım yay
+  g.ring(cx, top + 16.5 * s, 9.5 * s, body, 2.6 * s, 0.25, Math.PI - 0.25);
+  g.ring(cx, top + 16.5 * s, 9.5 * s, hi, 0.6 * s, 0.6, Math.PI - 0.6);
+  // taç (alt uç)
+  g.poly([cx - 2 * s, top + 24 * s, cx + 2 * s, top + 24 * s, cx, top + 27.5 * s], dark);
+  // tırnaklar (flukes): kol uçlarında yukarı-dışa bakan üçgenler
+  for (const sd of [-1, 1]) {
+    const ex = cx + sd * 9.2 * s;
+    const ey = top + 18.6 * s;
+    g.poly([ex - sd * 1.6 * s, ey + 1.6 * s, ex + sd * 3.4 * s, ey + 0.6 * s, ex + sd * 1.8 * s, ey - 4.6 * s], body);
+    g.line(ex + sd * 1.8 * s, ey - 4.6 * s, ex + sd * 0.2 * s, ey + 0.6 * s, dark, 0.6 * s);
+  }
+}
+
+/**
+ * Taş köprü kemeri: (cx, baseY) kemerin ayak çizgisi, R dış / r iç yarıçap; kemer taşları (voussoir) derzleri, üstte yol tablası.
+ * `gapAt`: bu açıdan (radyan, π..2π; 1,5π = tepe) yarıklı çizilir (çatlak kemer).
+ */
+export function bridgeArch(g: PxGrid, cx: number, baseY: number, R: number, r: number, o: { stone?: string; joint?: string; deck?: boolean; key?: string } = {}): void {
+  const stone = o.stone ?? 'm';
+  const joint = o.joint ?? 'd';
+  // dış yarım disk (yalnızca üst yarı) + ayaklar
+  g.disc(cx, baseY, R, stone);
+  g.rect(cx - R - 1, baseY, R * 2 + 2, R + 2, '.');
+  g.rect(cx - R, baseY - 0.5, R - r, 4, stone).rect(cx + r, baseY - 0.5, R - r, 4, stone);
+  // iç boşluk
+  g.disc(cx, baseY, r, '.');
+  g.rect(cx - r, baseY, r * 2, 4.5, '.');
+  // kemer taşı derzleri (radyal)
+  const n = 7;
+  for (let k = 1; k < n; k++) {
+    const a = Math.PI + (k * Math.PI) / n;
+    g.line(cx + Math.cos(a) * r, baseY + Math.sin(a) * r, cx + Math.cos(a) * R, baseY + Math.sin(a) * R, joint, 0.5);
+  }
+  // kilit taşı (tepe)
+  if (o.key) g.poly([cx - 1.6, baseY - r, cx + 1.6, baseY - r, cx + 2.3, baseY - R, cx - 2.3, baseY - R], o.key);
+  if (o.deck !== false) {
+    // kemerin omuzlarını tablaya bağlayan dolgu taşları (spandrel) + yol tablası
+    g.poly([cx - R, baseY - R * 0.2, cx - R, baseY - R, cx - R * 0.35, baseY - R], stone).poly([cx + R, baseY - R * 0.2, cx + R, baseY - R, cx + R * 0.35, baseY - R], stone);
+    g.rect(cx - R - 1, baseY - R - 1.6, R * 2 + 2, 2.6, joint).rect(cx - R - 1, baseY - R - 1.6, R * 2 + 2, 0.8, stone);
+  }
+}
+
+/** Demir palamar babası (mantar başlı kısa direk): (cx, by) taban ortası, `w` gövde genişliği. Islak demir + pas lekeleri. */
+export function mooringBollard(g: PxGrid, cx: number, by: number, w: number, h: number): void {
+  const capW = w * 1.55;
+  // gövde
+  g.rect(cx - w / 2, by - h, w, h, 'd').rect(cx - w / 2, by - h, w * 0.3, h, 'm');
+  // bel (gövdenin ortasında hafif incelme gölgesi)
+  g.rect(cx - w / 2, by - h * 0.55, w, h * 0.12, 'o');
+  // mantar başlık
+  g.ellipse(cx, by - h, capW / 2, w * 0.38, 'd');
+  g.ellipse(cx, by - h - w * 0.16, capW / 2 - 0.3, w * 0.3, 'm');
+  g.ellipse(cx - capW * 0.18, by - h - w * 0.22, capW * 0.16, w * 0.1, 'l');
+  // taban flanşı + civatalar
+  g.rect(cx - w * 0.8, by - 1.6, w * 1.6, 1.6, 'd');
+  g.set(cx - w * 0.62, by - 1.2, 'l').set(cx + w * 0.5, by - 1.2, 'l');
+  // pas lekeleri
+  g.rect(cx + w * 0.12, by - h * 0.85, w * 0.22, h * 0.25, 'b').rect(cx - w * 0.25, by - h * 0.35, w * 0.18, h * 0.2, 'b');
+}
+
+/** Kor çatlağı: zikzak kızgın damar (dış kor, iç sarı). */
+function emberCrack(g: PxGrid, pts: number[], w = 1.2): void {
+  for (let i = 2; i < pts.length; i += 2) g.line(pts[i - 2]!, pts[i - 1]!, pts[i]!, pts[i + 1]!, 'f', w + 0.8);
+  for (let i = 2; i < pts.length; i += 2) g.line(pts[i - 2]!, pts[i - 1]!, pts[i]!, pts[i + 1]!, 'y', Math.max(0.5, w - 0.4));
+}
+
 export const PIXEL_ICONS: Record<string, Draw> = {
   // ---------- WARRIOR ----------
   sword: (g) => {
@@ -1362,6 +1461,179 @@ export const PIXEL_ICONS: Record<string, Draw> = {
     for (const [x, y] of [[10, 17.5], [23, 17.5]] as const) g.disc(x, y, 2.4, 'l').disc(x + 0.5, y + 0.7, 1.3, 'm');
     g.poly([5, 23, 8, 19, 10, 26, 7, 28], 'm').poly([5, 23, 8, 19, 8, 23, 6, 25], 'l');
     g.line(11, 22, 22, 22, 'd', 1).line(11, 24.5, 22, 24.5, 'd', 1);
+  },
+
+  // ---------- BRIDGE WARDEN (boss; docs/design/bosses/bridge-warden.md 7.2) ----------
+  /** Logo: ortasından çatlamış taş köprü kemeri, çatlağın içinde kor; kemerin altında koyu nehir. */
+  wardenlogo: (g) => {
+    g.rect(1, 25.5, 30, 5, 'U').rect(1, 25.5, 30, 1, 'u');
+    g.line(4, 28, 9, 28, 'c', 0.5).line(20, 29, 26, 29, 'c', 0.5);
+    bridgeArch(g, 16, 25, 14, 7.5, { stone: 'm', joint: 'd' });
+    // yosun (derzlerde ve ayaklarda)
+    g.rect(2, 24, 3, 1.4, 'S').rect(27, 24, 3, 1.4, 'S').rect(5, 13, 2, 1, 's').rect(24.5, 14, 2, 1, 's');
+    // tepedeki çatlak: kor sızan zikzak
+    emberCrack(g, [16, 8.5, 14.8, 11.5, 17, 13.6, 15.6, 17.4], 1.3);
+    g.disc(16, 12, 2.2, 'f').disc(16, 12, 1.2, 'y').set(15.6, 11.6, 'w');
+    // kıvılcımlar
+    g.set(19.5, 6.5, 'f').set(12.5, 5.5, 'y').set(21, 4, 'f');
+  },
+  /** Anchor Smash: taşa gömülmüş paslı çapa; çarpmada taş kıymıkları ve darbe çizgileri, halkasından yukarı zincir. */
+  anchorsmash: (g) => {
+    // zincir (sol üstten halkaya)
+    rustChain(g, 2, 1, 13.5, 6.5, 1.4);
+    shipAnchor(g, 16, 5, 22);
+    // kırık taş zemin (çapanın tacını örter)
+    g.poly([0, 25, 7, 23.5, 12, 26, 20, 25.4, 25, 23.2, 32, 25, 32, 32, 0, 32], 'd');
+    g.poly([0, 25, 7, 23.5, 12, 26, 20, 25.4, 25, 23.2, 32, 25, 32, 26.4, 0, 26.6], 'm');
+    g.line(16, 26, 12.5, 29.5, 'o', 0.8).line(12.5, 29.5, 9, 30.5, 'o', 0.6).line(16, 26, 20, 30, 'o', 0.8).line(20, 30, 24, 29, 'o', 0.6);
+    g.rect(3, 28, 2, 1, 'S').rect(26, 29, 3, 1, 'S');
+    // uçuşan taş kıymıkları
+    g.poly([4, 18, 6.6, 16.6, 7.4, 19.2, 5, 20], 'm').poly([26, 17, 28.6, 18, 27.4, 20.4, 25.2, 19.4], 'm');
+    g.poly([8.4, 13.4, 9.8, 12.8, 10, 14.4], 'l').poly([23, 12.6, 24.6, 13.2, 23.4, 14.4], 'l');
+    // darbe çizgileri
+    g.line(2, 22, 5, 23, 'w', 0.6).line(30, 21.5, 27, 22.8, 'w', 0.6).line(9, 21, 10.5, 23, 'w', 0.5).line(23, 21, 21.6, 23, 'w', 0.5);
+  },
+  /** Breaking Span: ortasından kırılıp ayrılan kemer; aradan düşen kalaslar ve aşağıda su sıçraması. */
+  breakingspan: (g) => {
+    bridgeArch(g, 16, 22, 14, 7, { stone: 'm', joint: 'd' });
+    // ortada yarık: kemeri ikiye böler
+    g.poly([14.2, 5, 18, 5, 17, 9, 18.4, 12, 16.4, 16, 15.4, 16, 16.4, 12, 14.8, 9], '.');
+    emberCrack(g, [16.2, 6, 15.6, 9, 16.8, 12, 16, 15], 0.6);
+    // düşen kalaslar
+    g.line(11, 17, 14, 20.5, 'b', 1.6).line(11, 17, 14, 20.5, 'n', 0.5);
+    g.line(19.5, 18, 21, 22.5, 'b', 1.6).line(19.5, 18, 21, 22.5, 'n', 0.5);
+    g.line(15.6, 21, 17.4, 24.6, 'k', 1.4);
+    // su sıçraması (kemerin altında)
+    g.rect(2, 27, 28, 4, 'U').rect(2, 27, 28, 1, 'u');
+    g.poly([12, 27.4, 13.4, 23, 15, 26, 16.4, 21.6, 18, 26, 19.6, 23.6, 21, 27.4], 'u');
+    g.poly([14, 27, 15.2, 24.6, 16.4, 23.6, 17.6, 25, 18.6, 27], 'c');
+    g.set(13, 21.5, 'c').set(20.5, 21, 'c').set(11, 24, 'w').set(22, 24.5, 'w');
+  },
+  /** Chain Hook: paslı zincirin ucunda kıvrık demir kanca; hız çizgileri. */
+  chainhook: (g) => {
+    g.line(1, 20, 7, 20, 'l', 0.6).line(2.5, 24, 8, 24, 'm', 0.6).line(3, 16, 7.4, 16, 'm', 0.5);
+    rustChain(g, 3, 3, 15, 13.5, 1.7);
+    // kanca gövdesi (göz + boyun)
+    g.ring(16.4, 14.6, 1.6, 'd', 0.9);
+    g.line(17, 16, 19, 18.5, 'd', 2.4).line(17, 16, 19, 18.5, 'm', 0.8);
+    // kıvrık kanca (yay) + sivri uç
+    g.ring(16.5, 22.5, 6.2, 'd', 2.4, -0.7, 2.6);
+    g.ring(16.5, 22.5, 5.6, 'l', 0.6, -0.4, 1.6);
+    g.poly([10.3, 23.6, 9.4, 17.4, 13.4, 21.6], 'm');
+    g.poly([10.3, 23.6, 9.4, 17.4, 11, 21], 'l');
+    // pas lekesi
+    g.set(21.5, 25, 'b').set(19, 28, 'b');
+  },
+  /** Ash Brand: kızgın demir damga ucu; kor turuncusu, ortası parlayan kül damgası ve yükselen kül. */
+  ashbrand: (g) => {
+    // sap
+    g.line(28, 30, 19, 21, 'k', 2.4).line(28, 30, 19, 21, 'b', 1);
+    g.line(30.5, 31.5, 27, 28, 'd', 3);
+    // damga başlığı (yuvarlak kızgın plaka)
+    g.disc(13, 15, 9, 'R');
+    g.disc(13, 15, 7.8, 'r');
+    g.disc(13, 15, 6.4, 'f');
+    // damga deseni: kemer + kilit taşı (köprü yemini) parlak sarı
+    g.ring(13, 17, 4.2, 'y', 1.2, Math.PI, Math.PI * 2);
+    g.rect(8.8, 17, 1.2, 2.6, 'y').rect(16, 17, 1.2, 2.6, 'y');
+    g.poly([11.8, 11.6, 14.2, 11.6, 14.6, 13.8, 11.4, 13.8], 'w');
+    // kül ve kıvılcım
+    g.set(4, 6, 'm').set(7, 3, 'l').set(10.5, 4.5, 'm').set(19, 4, 'f').set(22, 7, 'y').set(3, 11, 'f');
+  },
+  /** Fall of King's Bridge: iki yarıya ayrılan kemer, aradan dökülen taşlar, altında koyu nehir. */
+  fallofthebridge: (g) => {
+    g.rect(0, 24, 32, 8, 'U').rect(0, 24, 32, 1.2, 'u');
+    g.line(3, 27.5, 9, 27.5, 'c', 0.5).line(22, 29.5, 29, 29.5, 'c', 0.5).line(12, 30.5, 17, 30.5, 'u', 0.5);
+    // sol yarı (sola yatık)
+    g.poly([1, 23, 1, 9, 4, 6.4, 9, 4.4, 13, 4.6, 12.4, 9, 9.6, 10.6, 7, 13.6, 6, 18, 6, 23], 'm');
+    g.poly([1, 9, 4, 6.4, 9, 4.4, 13, 4.6, 13, 6, 9.4, 5.8, 4.4, 7.8, 1, 10.4], 'd');
+    g.line(4.6, 8, 8.4, 11.4, 'd', 0.5).line(9.4, 6, 10.6, 9.8, 'd', 0.5).line(2, 14, 6.6, 15, 'd', 0.5);
+    // sağ yarı (sağa yatık, biraz aşağıda)
+    g.poly([31, 24, 31, 11, 28, 8, 23, 6.4, 19, 6.8, 19.8, 11, 22.6, 12.4, 25, 15.4, 26, 20, 26, 24], 'm');
+    g.poly([31, 11, 28, 8, 23, 6.4, 19, 6.8, 19, 8.2, 22.8, 7.8, 27.6, 9.6, 31, 12.4], 'd');
+    g.line(27.4, 9.8, 23.6, 13.2, 'd', 0.5).line(22.6, 8, 21.4, 11.8, 'd', 0.5).line(30, 16, 25.4, 17, 'd', 0.5);
+    g.rect(1, 21, 2.5, 1.2, 'S').rect(28.6, 22, 2.4, 1.2, 'S');
+    // düşen taşlar + sıçrama
+    g.poly([14.4, 10, 16.6, 9.4, 17, 11.8, 14.8, 12.4], 'm').poly([15.4, 15.6, 17.4, 15, 17.6, 17.2, 15.6, 17.6], 'd');
+    g.poly([13, 24.4, 14.2, 21, 15.6, 23.4, 16.6, 20, 17.8, 23.4, 19, 21.4, 20, 24.4], 'c');
+    g.set(12, 20, 'w').set(21, 20.4, 'w');
+  },
+  /** Unyielding (pasif): zincire sarılı taş yumruk. */
+  unyielding: (g) => {
+    // bilek (taş blok)
+    g.rect(10, 22, 12, 9.5, 'd').rect(10, 22, 4, 9.5, 'm');
+    // yumruk gövdesi
+    g.poly([6, 12, 9, 7, 24, 7, 27, 11, 27, 22, 6, 22], 'm');
+    g.poly([6, 12, 9, 7, 15, 7, 13, 22, 6, 22], 'l');
+    // parmak boğumları (taş bloklar) ve derzler
+    for (const x of [9, 13.5, 18, 22.5]) g.rect(x, 4.6, 4, 4.4, 'm').rect(x, 4.6, 4, 1.2, 'l').line(x, 4.6, x, 9, 'd', 0.5);
+    g.line(6.5, 12.6, 27, 12.6, 'd', 0.5).line(17, 13, 16.4, 22, 'd', 0.5);
+    // başparmak
+    g.poly([3, 14, 7, 12, 11, 15, 10, 19, 5, 19], 'm').poly([3, 14, 7, 12, 8, 14, 4.4, 16.6], 'l');
+    // yosun
+    g.rect(22, 18.6, 3, 1.2, 'S').rect(11, 29, 2.6, 1.2, 'S');
+    // çapraz sarılı zincir
+    rustChain(g, 2, 26, 30, 13.5, 1.4);
+    rustChain(g, 4, 9.5, 29, 19.5, 1.2);
+  },
+  /** Anchored (durum): zincir sarılı demir palamar babası (Mooring sayısı arayüzde). */
+  anchored: (g) => {
+    g.poly([3, 27, 29, 27, 31, 31.5, 1, 31.5], 'd').poly([3, 27, 29, 27, 29.6, 28.4, 2.4, 28.4], 'm');
+    g.rect(5, 29.4, 3, 1, 'S').rect(23, 29.6, 3.4, 1, 'S');
+    mooringBollard(g, 16, 27.4, 9, 15);
+    // iki tur sarılı zincir ve sola sarkan uç
+    rustChain(g, 9.6, 17.4, 22.6, 19.4, 1.25);
+    rustChain(g, 9.6, 22, 22.6, 20.6, 1.25);
+    rustChain(g, 9, 20, 1.5, 14, 1.25);
+  },
+  /** Overextended (durum): taşa saplı kalmış çapa + kırmızı aşağı ok (alınan hasar artar). */
+  overextended: (g) => {
+    shipAnchor(g, 12, 3, 20);
+    g.poly([0, 22, 24, 22, 24, 32, 0, 32], 'd').poly([0, 22, 24, 22, 24, 23.6, 0, 23.6], 'm');
+    g.line(12, 23, 9, 27, 'o', 0.7).line(12, 23, 15.6, 27.6, 'o', 0.7);
+    // kırmızı aşağı ok
+    g.rect(24, 4, 5, 14, 'r').rect(24, 4, 1.6, 14, 'f');
+    g.poly([20, 17, 33, 17, 26.5, 26], 'r').poly([20, 17, 26.5, 17, 26.5, 26], 'R');
+  },
+  /** Ember Heart (pasif): çatlak taş göğüs, çatlağın içinde kor. */
+  emberheart: (g) => {
+    // göğüs plakası (taş bloklar)
+    g.poly([4, 6, 28, 6, 30, 14, 26, 29, 6, 29, 2, 14], 'm');
+    g.poly([4, 6, 13, 6, 10, 29, 6, 29, 2, 14], 'l');
+    g.line(3, 14, 29, 14, 'd', 0.5).line(5, 22, 27, 22, 'd', 0.5).line(11, 6, 10, 14, 'd', 0.5).line(22, 14, 21, 22, 'd', 0.5).line(12, 22, 13, 29, 'd', 0.5);
+    g.rect(4, 26, 3, 1.4, 'S').rect(26, 9, 2.4, 1.2, 'S');
+    // çatlak + içte kor (kalp)
+    g.poly([15, 6, 18, 6, 19.6, 11, 22, 15, 19, 21, 18, 29, 15, 29, 14.6, 22, 11, 16, 14, 11], 'o');
+    g.poly([16, 8, 17.4, 8, 18.4, 12, 20, 15.4, 17.8, 20, 16.6, 27, 16, 22, 13, 16, 15.4, 12], 'f');
+    g.disc(16.6, 16, 3, 'f').disc(16.6, 16, 2, 'y').disc(16, 15.4, 0.8, 'w');
+  },
+  /** Flooded Planks (zemin): su basmış kırık köprü kalasları. */
+  floodedplanks: (g) => {
+    // kalaslar (eğik, biri kırık)
+    for (const [y, x0, x1] of [[9, 2, 30], [14.5, 2, 14], [14.5, 17, 30], [20, 2, 30]] as const) {
+      g.rect(x0, y, x1 - x0, 4.6, 'b').rect(x0, y, x1 - x0, 1.2, 'n').rect(x0, y + 3.6, x1 - x0, 1, 'k');
+    }
+    g.poly([14, 14.5, 15.6, 13.6, 15.2, 16.8, 14, 19.1], 'b').poly([17, 14.5, 16, 16.4, 17, 19.1], 'b');
+    g.set(6, 11, 'o').set(24, 11, 'o').set(6, 22, 'o').set(24, 22, 'o');
+    // su: kalasların üstüne yayılan dalgalı katman + sıçrantılar
+    g.poly([0, 18, 6, 16.8, 12, 18.2, 18, 16.6, 24, 18, 32, 16.8, 32, 32, 0, 32], 'u');
+    g.poly([0, 25, 7, 23.6, 14, 25.2, 21, 23.6, 32, 25, 32, 32, 0, 32], 'U');
+    g.line(3, 20.4, 9, 20, 'c', 0.6).line(15, 20.6, 22, 20, 'c', 0.6).line(6, 27.6, 12, 27.2, 'u', 0.6).line(20, 28.6, 27, 28.2, 'u', 0.6);
+    g.set(12, 15.4, 'c').set(26, 15.2, 'w').set(4, 15.6, 'c');
+  },
+  /** Iron Mooring (çağrı/yardımcı nesne logosu): kırık köprü taşına çakılı palamar babası, sola sarkan zincir, taş çatlağında kor. */
+  ironmooring: (g) => {
+    // kırık taş yığını
+    g.poly([3, 31, 4, 24, 9, 21.4, 23, 21, 28.6, 23.6, 30, 31], 'd');
+    g.poly([3, 31, 4, 24, 9, 21.4, 14, 21.2, 12, 31], 'm');
+    g.line(9, 21.4, 11, 31, 'o', 0.5).line(22, 21, 24, 31, 'o', 0.5);
+    emberCrack(g, [16, 31, 17.4, 27, 15.6, 25, 17, 22.6], 0.7);
+    g.rect(4, 29, 3, 1.2, 'S').rect(26, 23, 2.6, 1.2, 'S');
+    mooringBollard(g, 16, 22, 8, 13);
+    // iki tur zincir + sola sarkan uç
+    rustChain(g, 11.6, 13.6, 20.4, 15, 1.2);
+    rustChain(g, 11.6, 17.4, 20.4, 16.4, 1.2);
+    rustChain(g, 11, 16, 1.4, 22, 1.2);
   },
 };
 

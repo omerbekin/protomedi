@@ -61,8 +61,8 @@ export interface TargetPreview {
   /** Uygulanacak durumlar, okunur metin (ör. "Taunt 2 turns"). */
   statuses?: string[];
   /**
-   * Yığılan durum (Omen; skill isabet ederse): önce/sonra yığın (kritikte `afterCrit`), üst sınır, sayaç (`turnsLeft`: mevcut süre ya da yeni başlayacak süre;
-   * yeni Omen süreyi uzatmaz). `doom`: bu hamle Doom tetikliyorsa (yığın doluyor ya da detonate) patlama aralığı (kritik hariç; `critMax` kritikte en çok),
+   * Yığılan durum (Omen; skill isabet ederse): önce/sonra yığın (kritikte `afterCrit`), üst sınır, sayaç (`turnsLeft`: bu hamleden sonraki süre: yeni yığın ya da
+   * `refreshOnStack` ise tam süre, değilse mevcut süre). `doom`: bu hamle Doom tetikliyorsa (yığın doluyor ya da detonate) patlama aralığı (kritik hariç; `critMax` kritikte en çok),
    * patlayacak yığın, çarpan ve neden; `doomOnCrit`: kritik lanet (critStacks) yığını farklı yaparsa o durumdaki patlama (kritiksiz doldurmuyorsa
    * yalnızca kritikte tetiklenir; detonate'te daha büyük patlama).
    */
@@ -281,7 +281,7 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         const perTick = battle.dotTickDamage(effect.status, Math.max(amount, old), target);
         entry(target.uid).dot = { status: effect.status, perTick, turns: effect.turns, total: perTick * effect.turns };
       } else if (effect.type === 'omen') {
-        const o = omenPreview(battle, actor, skill, target, effect.status ?? 'omen', effect.stacks, effect.critStacks ?? effect.stacks, pool(target));
+        const o = omenPreview(battle, actor, skill, target, effect.status ?? 'omen', effect.stacks, effect.critStacks ?? effect.stacks, pool(target), effect.critDoomOnCrit === true);
         if (o) entry(target.uid).omen = o;
       }
     }
@@ -313,13 +313,15 @@ export interface DoomPreview {
   mult: number;
   cause: 'complete' | 'detonate';
   hpLoss: number;
+  /** true: bu Doom KESİN kritik (kritik Jinx'in tamamladığı Doom, critDoomOnCrit): `critChance` 1, `hpLoss` kritik ortalamasıyla. */
+  sureCrit?: boolean;
 }
 
 /**
  * Omen etkisinin hedefteki önizlemesi (isabet ederse): yığın önce/sonra, sayaç ve tetiklenecekse Doom aralığı (Hexer'in o anki ölçek statı ve kritik şansı;
  * gerçek patlamayla aynı battle.doomRange). `p`: skill'in hasar etkilerinden sonra hedefte kalan can/kalkan (önizleme havuzu).
  */
-function omenPreview(battle: Battle, actor: Combatant, skill: SkillDef, target: Combatant, kind: string, stacks: number, critStacks: number, p: { hp: number; shield: number; magicShield: number }): TargetPreview['omen'] {
+function omenPreview(battle: Battle, actor: Combatant, skill: SkillDef, target: Combatant, kind: string, stacks: number, critStacks: number, p: { hp: number; shield: number; magicShield: number }, critDoomOnCrit = false): TargetPreview['omen'] {
   const def = battle.statusDef(kind);
   if (!def?.maxStacks) return undefined;
   const max = def.maxStacks;
@@ -328,16 +330,32 @@ function omenPreview(battle: Battle, actor: Combatant, skill: SkillDef, target: 
   const after = Math.min(max, before + stacks);
   const afterCrit = Math.min(max, before + critStacks);
   const det = skill.effects.find((e): e is Extract<SkillEffect, { type: 'detonate' }> => e.type === 'detonate' && e.status === kind);
-  const doomAt = (omens: number): DoomPreview | undefined => {
+  const doomAt = (omens: number, sureCrit = false): DoomPreview | undefined => {
     const doom = def.doom;
     if (!doom || (!det && omens < max)) return undefined;
     const mult = det ? det.mult : 1;
     const r = battle.doomRange(target, kind, omens, mult, actor.stats[doom.scale] * (actor.stats.spellPowerMult ?? 1)); // = Battle.doomStat
     if (!r) return undefined;
     const soak = doom.damageType === 'magic' ? p.magicShield + p.shield : p.shield;
-    return { min: r.min, max: r.max, avg: r.avg, critMax: Math.round(r.max * actor.stats.critMult), critChance: battle.effectiveStats(actor).critChance, omens, mult, cause: det ? 'detonate' : 'complete', hpLoss: Math.min(p.hp, Math.max(0, r.avg - soak)) };
+    const avg = sureCrit ? r.avg * actor.stats.critMult : r.avg;
+    return {
+      min: r.min,
+      max: r.max,
+      avg: r.avg,
+      critMax: Math.round(r.max * actor.stats.critMult),
+      critChance: sureCrit ? 1 : battle.effectiveStats(actor).critChance,
+      omens,
+      mult,
+      cause: det ? 'detonate' : 'complete',
+      hpLoss: Math.min(p.hp, Math.max(0, avg - soak)),
+      ...(sureCrit ? { sureCrit: true } : {}),
+    };
   };
   const doom = doomAt(after);
-  const doomCrit = afterCrit !== after ? doomAt(afterCrit) : undefined;
-  return { status: kind, before, after, afterCrit, max, turnsLeft: cur ? cur.turns : (def.duration ?? 3), ...(doom ? { doom } : {}), ...(doomCrit ? { doomOnCrit: doomCrit } : {}) };
+  // Kritik lanet yığını farklı yaparsa o durumun patlaması; critDoomOnCrit (Jinx) ve otomatik Doom ise o Doom KESİN kritik
+  // (yığın kritikte de aynı olsa bile: 2 Omen'li hedefe kritik Jinx -> kesin kritik Doom)
+  const sureCritDoom = critDoomOnCrit && !det && afterCrit >= max;
+  const doomCrit = afterCrit !== after || sureCritDoom ? doomAt(afterCrit, sureCritDoom) : undefined;
+  const turnsLeft = !cur ? (def.duration ?? 3) : def.refreshOnStack ? Math.max(cur.turns, def.duration ?? 3) : cur.turns;
+  return { status: kind, before, after, afterCrit, max, turnsLeft, ...(doom ? { doom } : {}), ...(doomCrit ? { doomOnCrit: doomCrit } : {}) };
 }

@@ -30,6 +30,10 @@ HEADS = {
     'warrior': (623, 0, 265),
     'cutthroat': (550, 0, 285),
     'hexer': (375, 0, 290),
+    # King's Bridge boss (2026-10-08): yüz (pas ızgaralı taş baş) + göğüs çatlağı (kor) birlikte
+    'bridge_warden': (870, 190, 450),
+    # Warden'ın yardımcı nesnesi: palamar babasının başı ve sarılı zincir
+    'iron_mooring': (968, 20, 600),
 }
 
 # Görünüm varyantları: id -> [varyant]. Kaynak <id>-<varyant>.png, çıktı sprites/<id>/idle-<varyant>.png + avatars/<id>-<varyant>.png.
@@ -37,6 +41,10 @@ HEADS = {
 VARIANTS = {
     'hexer': ['hood'],
 }
+
+# Sprite'ı yatay aynalanacaklar: Iron Mooring yalnızca düşman tarafında durur (motor düşmanı çevirir); kaynakta zincir sola uzanır,
+# aynalanınca oyunda zincir SOLA, yani önündeki Warden'a doğru uzanır.
+FLIP_SPRITE = {'iron_mooring'}
 
 def main():
     os.makedirs(SRC_KEEP, exist_ok=True)
@@ -72,6 +80,8 @@ def main():
             sp.paste(c, (m, m))
             h = SPRITE_H; w = round(sp.width * h / sp.height)
             sp = sp.resize((w, h), Image.LANCZOS)
+            if cid in FLIP_SPRITE:
+                sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
             d = os.path.join(ROOT, 'assets', 'sprites', cid)
             old = os.path.join(ROOT, 'assets', 'sprites_old', cid)
             os.makedirs(d, exist_ok=True)

@@ -1,0 +1,16 @@
+{
+  "_not": "Sefer dengesi hedefleri (docs/balance.md > Sefer dengesi; open-questions.md). Düğüm kategorisi başına ILK DENEMEDE kazanma oranı (%), oyuncu tarafı Medium YZ ('iyi oyuncu' vekili), taşınan canla. Kategoriler: tutorial = Ashford öncesi savaşlar (1, 2, 3), elite / boss = düğüm türü, normal = kalan savaşlar (korunan hazine dahil). Hedefler ÖNERİ (Ömer onayı bekliyor). npm run sim:campaign raporu ve tests/campaign-balance.test.ts buradan okur.",
+  "targets": {
+    "easy": { "tutorial": [93, 100], "normal": [85, 97], "elite": [72, 87], "boss": [57, 77] },
+    "medium": { "tutorial": [88, 97], "normal": [75, 85], "elite": [60, 70], "boss": [45, 60] },
+    "hard": { "tutorial": [75, 92], "normal": [57, 70], "elite": [42, 55], "boss": [25, 40] }
+  },
+  "test": {
+    "_not": "Test: Medium zorluk, Medium vekil, seed'li küçük örnek; bant = hedef ± tolerans (örnek küçük olduğu için). Zorluk sıralaması: her kategoride Easy > Medium > Hard.",
+    "runs": 120,
+    "firstSeed": 7001,
+    "tolerance": 8,
+    "orderRuns": 48,
+    "orderSeed": 9001
+  }
+}

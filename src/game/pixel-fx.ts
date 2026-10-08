@@ -1,5 +1,5 @@
 import { blade, crystal, leafShape, sparkle, type Draw, type PxGrid } from './pixel-art';
-import { gauntletFist, goldCoin, holyHammer, isoDie, playingCard, thorn, towerShield } from './pixel-icons';
+import { gauntletFist, goldCoin, holyHammer, isoDie, playingCard, rustChain, shipAnchor, thorn, towerShield } from './pixel-icons';
 
 /** Efekt (VFX) sprite'ları (32x32): ikon olmayan, animasyonlarda kullanılan çizimler. Aynı jetonlar, aynı araçlar. */
 export const PIXEL_FX: Record<string, Draw> = {
@@ -246,6 +246,50 @@ export const PIXEL_FX: Record<string, Draw> = {
   },
   dust: (g) => {
     g.disc(16, 16, 10, 'm').disc(13, 13, 6, 'l');
+  },
+  /** Bridge Warden: zincirli dev gemi çapası (Anchor Smash'te savrulup inen, Breaking Span / Fall'da köprüye saplanan). Halka üstte. */
+  anchor: (g) => {
+    shipAnchor(g, 16, 1, 30);
+    g.set(13, 9, 'n').set(19.5, 26, 'n');
+  },
+  /** Bridge Warden: palamar zincirinin kıvrık demir kancası (Chain Hook; göz üstte, uç sola kıvrık). */
+  hook: (g) => {
+    g.ring(16, 4, 3, 'd', 1.6);
+    g.line(16, 7, 16, 14, 'd', 3).line(15, 7, 15, 14, 'm', 1);
+    g.ring(16, 20, 9, 'd', 3.4, -0.5, Math.PI + 0.2);
+    g.ring(16, 20, 8, 'l', 0.8, -0.2, 1.8);
+    g.poly([6.4, 21.4, 5, 11, 11.6, 17.6], 'm').poly([6.4, 21.4, 5, 11, 8, 16.4], 'l');
+    g.set(22, 26, 'b').set(18, 28.4, 'b');
+  },
+  /** Bridge Warden: tek paslı zincir halkası (kopan zincirin parçaları). */
+  chainlink: (g) => {
+    rustChain(g, 6, 16, 26, 16, 5);
+  },
+  /** Bridge Warden: kırık ıslak köprü kalası (Breaking Span / Fall çözülmesinde havada döner). */
+  plank: (g) => {
+    g.poly([2, 12, 26, 10, 29, 14, 27, 19, 4, 21, 1, 17], 'b');
+    g.poly([2, 12, 26, 10, 27, 12.4, 2.4, 14.6], 'n');
+    g.poly([29, 14, 31, 11, 30.4, 16, 27, 19], 'k');
+    g.line(6, 17.4, 22, 16, 'k', 0.6).set(8, 15, 'o').set(21, 13.6, 'o');
+    g.rect(4, 19, 4, 1, 'S');
+  },
+  /** Bridge Warden: Keystone işareti, altın kenarlı kemer kilit taşı (Fall of King's Bridge'in güvenli hücreleri; telgraf göstergesi). */
+  keystone: (g) => {
+    g.poly([4, 3, 28, 3, 22, 29, 10, 29], 'Y');
+    g.poly([6.6, 5.4, 25.4, 5.4, 20.4, 26.6, 11.6, 26.6], 'm');
+    g.poly([6.6, 5.4, 12, 5.4, 15, 26.6, 11.6, 26.6], 'l');
+    g.line(4, 3, 28, 3, 'y', 1).line(4, 3, 10, 29, 'y', 0.8);
+    g.line(9, 13, 23, 13, 'd', 0.5).line(10.6, 20, 21.4, 20, 'd', 0.5);
+    g.rect(18, 22, 2.6, 1.2, 'S');
+    sparkle(g, 26, 25, 3, 'y');
+    sparkle(g, 5, 13, 2.2, 'w');
+  },
+  /** Bridge Warden: Ash Brand damgası (birimin göğsünde nabız atan kızgın kemer işareti). */
+  brandmark: (g) => {
+    g.disc(16, 16, 13, 'R').disc(16, 16, 11, 'r').disc(16, 16, 9, 'f');
+    g.ring(16, 19, 6, 'y', 2, Math.PI, Math.PI * 2);
+    g.rect(9, 19, 2, 4, 'y').rect(21, 19, 2, 4, 'y');
+    g.poly([14, 8, 18, 8, 18.8, 12, 13.2, 12], 'w');
   },
 };
 

@@ -120,16 +120,18 @@ describe('Omen (yığın, süre, Resilience)', () => {
     expect(ofType(ev, 'statusEnd').some((e) => e.status === 'omen' && e.cause === 'doom')).toBe(true);
   });
 
-  it('süre ilk Omen\'le başlar, yeni Omen süreyi YENİLEMEZ (Ö2); Resilience zarı yalnızca ilk eklemede', () => {
+  it('süre ilk Omen\'le başlar, skill ile eklenen her yeni Omen süreyi TAM süreye yeniler (refreshOnStack; Ö2 güncellendi 2026-10-08); Resilience zarı yalnızca ilk eklemede', () => {
+    expect(OMEN.refreshOnStack).toBe(true);
     const b = sure(arena([['hexer', 4]], [['warrior', 0]]));
     const h = P(b, 4);
     const w = E(b, 0);
     cast(b, h.uid, 'evil_eye', w.uid);
     expect(omenOf(w)!.turns).toBe(DUR);
-    omenOf(w)!.turns = DUR - 1; // bir tur geçti
-    cast(b, h.uid, 'evil_eye', w.uid);
+    omenOf(w)!.turns = 1; // iki tur geçti
+    const ev0 = cast(b, h.uid, 'evil_eye', w.uid);
     expect(omenOf(w)!.stacks).toBe(2);
-    expect(omenOf(w)!.turns).toBe(DUR - 1);
+    expect(omenOf(w)!.turns).toBe(DUR);
+    expect(ofType(ev0, 'status').find((e) => e.status === 'omen')).toMatchObject({ stacks: 2, turns: DUR });
     // Resilience (STR primary): ilk eklemede zar (1 = kesin) süreyi 1 kısaltır; sonraki Omen'de zar yok (passive olayı yok)
     const b2 = sure(arena([['hexer', 4]], [['warrior', 0]]));
     const w2 = E(b2, 0);
@@ -139,10 +141,10 @@ describe('Omen (yığın, süre, Resilience)', () => {
     expect(ofType(ev, 'passive').some((e) => e.name === 'Resilience')).toBe(true);
     ev = cast(b2, P(b2, 4).uid, 'evil_eye', w2.uid);
     expect(ofType(ev, 'passive').some((e) => e.name === 'Resilience')).toBe(false);
-    expect(omenOf(w2)!.turns).toBe(DUR - 1);
+    expect(omenOf(w2)!.turns).toBe(DUR); // yenileme tam süre, Resilience zarı yok
   });
 
-  it('turns modunda: ilk Omen\'den sonra taşıyanın 3. tur başında yığın sayısı kadar Doom (expire, x expireMult); arada eklenen Omen sayacı uzatmaz', () => {
+  it('turns modunda: SON Omen\'den sonra taşıyanın 3. tur başında yığın sayısı kadar Doom (expire, x expireMult); arada eklenen Omen sayacı yeniler', () => {
     const b = sure(arena([['hexer', 4]], [['warrior', 0]], 'turns'));
     const h = P(b, 4);
     const w = E(b, 0);
@@ -150,17 +152,18 @@ describe('Omen (yığın, süre, Resilience)', () => {
     const start = b.log.length;
     cast(b, h.uid, 'evil_eye', w.uid);
     let added = false;
+    let start2 = start;
     for (let i = 0; i < 40 && !b.log.slice(start).some((e) => e.type === 'doom'); i++) {
-      if (!added && b.currentUid === h.uid && omenOf(w)) {
-        const before = omenOf(w)!.turns;
+      if (!added && b.currentUid === h.uid && omenOf(w) && omenOf(w)!.turns < DUR) {
+        start2 = b.log.length;
         const ev = cast(b, h.uid, 'evil_eye', w.uid);
         added = true;
-        expect(ofType(ev, 'status').find((e) => e.status === 'omen')).toMatchObject({ stacks: 2, turns: before }); // sayaç uzamadı (olay, sıra ilerlemeden önceki an)
+        expect(ofType(ev, 'status').find((e) => e.status === 'omen')).toMatchObject({ stacks: 2, turns: DUR }); // sayaç yenilendi
       } else b.skipTurn();
     }
     expect(added).toBe(true);
-    // Doom, ilk Omen'den sonraki DUR. kendi tur başında: önceki tur başları DUR - 1, Doom'dan hemen sonra taşıyanın turnStart'ı gelir
-    const after = b.log.slice(start);
+    // Doom, SON Omen'den sonraki DUR. kendi tur başında: arada DUR - 1 tur başı, Doom'dan hemen sonra taşıyanın turnStart'ı gelir
+    const after = b.log.slice(start2);
     const di = after.findIndex((e) => e.type === 'doom');
     const wStarts = after.map((e, i) => (e.type === 'turnStart' && e.actor === w.uid ? i : -1)).filter((i) => i >= 0);
     expect(wStarts.filter((i) => i < di).length).toBe(DUR - 1);
@@ -629,5 +632,163 @@ describe('Wiki', () => {
     const text = art.blocks.flatMap((b) => (b.kind === 'p' ? [b.text] : b.kind === 'list' ? b.items : [])).join(' ');
     for (const w of ['Doom', 'timer', 'Misfortune', 'Withering', 'Jinxed', 'Ill Omen', 'guard', String(MAX)]) expect(text, w).toContain(w);
     for (const id of ['omen', 'wither', 'jinxed']) expect(wiki.statuses.find((s) => s.id === id)!.usedBy.length, id).toBeGreaterThan(0);
+  });
+});
+
+// Ömer kararları 2026-10-08: (1) Doom Mark tüm Omen'leri harcar; vuruşu ya da patlaması öldürürse Ill Omen ÇALIŞMAZ (detonate noTransferOnKill).
+// (2) Kritik Jinx yığını 3'e tamamlarsa Doom KESİN kritik (omen critDoomOnCrit). Her iki kural iki modda ve belirleyici.
+describe('Doom Mark öldürünce Omen silinir; kritik Jinx -> kritik Doom (2026-10-08)', () => {
+  const detonate = () => S.doom_mark!.effects.find((e) => e.type === 'detonate') as Extract<(typeof S)[string]['effects'][number], { type: 'detonate' }>;
+  const jinxCritBonus = () => (S.jinx!.effects.find((e) => e.type === 'damage') as { critBonus?: number }).critBonus ?? 0;
+  /** Hedefe hazır Omen yığını (Hexer'in snapshot'ıyla). */
+  const plant = (w: Combatant, h: Combatant, stacks: number) => w.statuses.push({ kind: 'omen', turns: DUR, source: h.uid, stacks, snapStat: luck(h), snapCrit: 0, snapCritMult: h.stats.critMult });
+  /** turns modunda Hexer'in turuna gelinir. */
+  const ready = (b: Battle, h: Combatant) => {
+    if (b.mode === 'turns') nextTurnOf(b, h.uid);
+  };
+  const setup = (mode: 'test' | 'turns', seed = 1) => {
+    const b = sure(arena([['hexer', 4]], [['warrior', 0], ['warrior', 1]], mode, seed));
+    b.noCooldowns = true; // turns modunda Doom Mark'ın başlangıç cooldown'u testi engellemesin
+    const log = new MatchLog(b, { version: 'test' });
+    const h = P(b, 4);
+    ready(b, h);
+    return { b, log, h, w: E(b, 0), n: E(b, 1) };
+  };
+
+  it('veri: Doom Mark detonate noTransferOnKill; yalnızca Jinx omen etkisi critDoomOnCrit taşır', () => {
+    expect(detonate().noTransferOnKill).toBe(true);
+    expect(omenEffect('jinx').critDoomOnCrit).toBe(true);
+    for (const id of ['evil_eye', 'withering_curse', 'doom_mark']) expect(omenEffect(id).critDoomOnCrit, id).toBeFalsy();
+  });
+
+  for (const mode of ['test', 'turns'] as const) {
+    it(`[${mode}] Doom Mark yığının tamamını (kendi +Omen'i dahil) patlatır, yığın 0; patlama öldürürse Omen geçmez (Ill Omen yok)`, () => {
+      const s0 = setup(mode);
+      plant(s0.w, s0.h, MAX - 1);
+      s0.b.debug.crit = 'always'; // kritik +2: yığın sınırda kesilir, yine hepsi harcanır
+      const ev0 = cast(s0.b, s0.h.uid, 'doom_mark', s0.w.uid);
+      expect(ofType(ev0, 'doom')).toHaveLength(1);
+      expect(ofType(ev0, 'doom')[0]).toMatchObject({ omens: MAX, cause: 'detonate' });
+      expect(s0.b.stacksOf(s0.w.uid, 'omen')).toBe(0);
+
+      const { b, h, w, n } = setup(mode);
+      plant(w, h, 2);
+      w.hp = previewSkill(b, h.uid, 'doom_mark', w.uid)[0]!.damage!.max + 1; // vuruş öldürmez, Doom öldürür
+      const ev = cast(b, h.uid, 'doom_mark', w.uid);
+      expect(ofType(ev, 'doom')).toHaveLength(1);
+      expect(ofType(ev, 'death').some((e) => e.target === w.uid)).toBe(true);
+      expect(ofType(ev, 'omenTransfer')).toHaveLength(0);
+      expect(ofType(ev, 'passive').some((e) => e.passive === hx.passive!.id)).toBe(false);
+      expect(omenOf(n)).toBeUndefined();
+      expect(omenOf(w)).toBeUndefined();
+    });
+
+    it(`[${mode}] Doom Mark VURUŞU öldürürse: Doom yok, Omen silinir (statusEnd erased), Ill Omen yok; Evil Eye vuruşuyla ölümde yığın geçer, otomatik Doom ölümünde onDoomKill geçer`, () => {
+      const { b, log, h, w, n } = setup(mode);
+      plant(w, h, 2);
+      w.hp = 1;
+      const ev = cast(b, h.uid, 'doom_mark', w.uid);
+      expect(ofType(ev, 'death').some((e) => e.target === w.uid)).toBe(true);
+      expect(ofType(ev, 'doom')).toHaveLength(0);
+      expect(ofType(ev, 'omenTransfer')).toHaveLength(0);
+      expect(ofType(ev, 'statusEnd').some((e) => e.target === w.uid && e.status === 'omen' && e.cause === 'erased')).toBe(true);
+      expect(omenOf(w)).toBeUndefined();
+      expect(omenOf(n)).toBeUndefined();
+      expect(log.serialize()).toContain('erased: Doom Mark kill');
+
+      // karşılaştırma (kural değişmedi): Evil Eye vuruşuyla ölüm -> tüm yığın geçer
+      const s2 = setup(mode);
+      plant(s2.w, s2.h, 2);
+      s2.w.hp = 1;
+      expect(ofType(cast(s2.b, s2.h.uid, 'evil_eye', s2.w.uid), 'omenTransfer')[0]).toMatchObject({ from: s2.w.uid, to: s2.n.uid, stacks: 2 });
+      // otomatik Doom ile ölüm -> onDoomKill (1) geçer
+      const s3 = setup(mode);
+      plant(s3.w, s3.h, MAX - 1);
+      s3.w.hp = previewSkill(s3.b, s3.h.uid, 'evil_eye', s3.w.uid)[0]!.damage!.max + 1;
+      const pe = hx.passive!.effect as { onDoomKill: number };
+      expect(ofType(cast(s3.b, s3.h.uid, 'evil_eye', s3.w.uid), 'omenTransfer')[0]).toMatchObject({ from: s3.w.uid, stacks: pe.onDoomKill });
+    });
+
+    it(`[${mode}] kritik Jinx 3'e tamamlarsa Doom KESİN kritik (zar yok: doom sureCrit); kritiksiz Jinx ve Evil Eye kritiği normal`, () => {
+      // Hexer'in kendi kritik şansı 1 - critBonus (Doom zarı tek başına bazen iskalardı); Jinx vuruşu critBonus ile kesin kritik
+      const cc = 1 - jinxCritBonus();
+      expect(cc).toBeLessThan(1);
+      for (let seed = 1; seed <= 12; seed++) {
+        const { b, log, h, w } = setup(mode, seed);
+        h.stats.critChance = cc;
+        plant(w, h, MAX - 2);
+        const ev = cast(b, h.uid, 'jinx', w.uid);
+        expect(ofType(ev, 'omen')[0]).toMatchObject({ crit: true, stacks: MAX });
+        const d = ofType(ev, 'doom');
+        expect(d, `seed ${seed}`).toHaveLength(1);
+        expect(d[0]).toMatchObject({ cause: 'complete', sureCrit: true });
+        expect(ofType(ev, 'damage').filter((e) => e.status === 'omen').every((e) => e.crit), `seed ${seed}`).toBe(true);
+        expect(log.serialize()).toContain('SURE CRIT');
+      }
+      // Jinx kritiksiz (debug never): sureCrit yok, Doom kritik değil
+      const s2 = setup(mode);
+      plant(s2.w, s2.h, MAX - 1);
+      s2.b.debug.crit = 'never';
+      const ev2 = cast(s2.b, s2.h.uid, 'jinx', s2.w.uid);
+      expect(ofType(ev2, 'doom')[0]!.sureCrit).toBeUndefined();
+      expect(ofType(ev2, 'damage').filter((e) => e.status === 'omen').some((e) => e.crit)).toBe(false);
+      // Evil Eye kritiği 3'e tamamlar: Doom kendi zarını atar (sureCrit yok)
+      const s3 = setup(mode);
+      s3.h.stats.critChance = 1;
+      plant(s3.w, s3.h, MAX - 2);
+      const ev3 = cast(s3.b, s3.h.uid, 'evil_eye', s3.w.uid);
+      expect(ofType(ev3, 'omen')[0]).toMatchObject({ crit: true, stacks: MAX });
+      expect(ofType(ev3, 'doom')[0]!.sureCrit).toBeUndefined();
+    });
+
+    it(`[${mode}] determinizm: aynı seed + aynı girdi = aynı olaylar (kritik Jinx, Doom Mark öldürme)`, () => {
+      const run = () => {
+        const { b, h, w, n } = setup(mode, 7);
+        h.stats.critChance = 0.5;
+        plant(w, h, 1);
+        plant(n, h, 1);
+        const a = cast(b, h.uid, 'jinx', w.uid);
+        if (mode === 'turns') nextTurnOf(b, h.uid);
+        n.hp = 5;
+        const c = cast(b, h.uid, 'doom_mark', n.uid);
+        return JSON.stringify([a, c]);
+      };
+      expect(run()).toBe(run());
+    });
+  }
+
+  it("önizleme: Jinx tamamlarsa doomOnCrit sureCrit (critChance 1); Evil Eye'da yok; refreshOnStack -> turnsLeft tam süre", () => {
+    const { b, h, w } = setup('test');
+    plant(w, h, MAX - 1);
+    const pj = previewSkill(b, h.uid, 'jinx', w.uid)[0]!.omen!;
+    expect(pj.doom!.sureCrit).toBeUndefined();
+    expect(pj.doomOnCrit).toMatchObject({ sureCrit: true, critChance: 1, omens: MAX });
+    expect(pj.doomOnCrit!.hpLoss).toBeGreaterThan(pj.doom!.hpLoss);
+    expect(previewSkill(b, h.uid, 'evil_eye', w.uid)[0]!.omen!.doomOnCrit).toBeUndefined();
+    const st = omenOf(w)!;
+    st.stacks = MAX - 2;
+    expect(previewSkill(b, h.uid, 'jinx', w.uid)[0]!.omen!.doomOnCrit).toMatchObject({ sureCrit: true });
+    expect(previewSkill(b, h.uid, 'evil_eye', w.uid)[0]!.omen!.doomOnCrit!.sureCrit).toBeUndefined();
+    st.turns = 1;
+    expect(previewSkill(b, h.uid, 'evil_eye', w.uid)[0]!.omen!.turnsLeft).toBe(DUR);
+    // AI notu kesin kritik Doom'u gösterir
+    const ex = explainChoice(b, h.uid, NO_GLOBAL);
+    expect(JSON.stringify(ex)).toContain('sure crit DOOM');
+  });
+
+  it('skill-info, pasif metni ve wiki yeni kuralları anlatır', () => {
+    const defs = { statuses: content.statuses, grounds: content.grounds };
+    const info = (id: string) => describeSkill(S[id]!, hx.stats, content.formulas, {}, defs).lines.join(' | ');
+    expect(info('jinx')).toContain(`A critical Jinx that completes ${MAX} Omens makes the Doom a critical hit`);
+    expect(info('evil_eye')).not.toContain('makes the Doom a critical hit');
+    expect(info('evil_eye')).toContain('resets the');
+    expect(info('doom_mark')).toContain('Ill Omen does not trigger');
+    expect(describePassive(hx.passive!, hx.stats, content.formulas)).toContain('passes none');
+    const wiki = buildWiki({ sprites: {}, avatars: {} });
+    const art = wiki.mechanics.find((a) => a.id === 'curses')!;
+    const text = art.blocks.flatMap((x) => (x.kind === 'p' ? [x.text] : x.kind === 'list' ? x.items : [])).join(' ');
+    expect(text).toContain('Critical Doom');
+    expect(text).toContain('nothing passes on');
+    expect(text).toContain('resets it');
   });
 });

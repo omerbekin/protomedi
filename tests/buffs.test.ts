@@ -36,12 +36,14 @@ describe('buff / debuff tanımları (data/statuses.json)', () => {
         expect(def.dispellable, id).toBe(false);
         continue;
       }
+      // Boss durumları (Bridge Warden): etkisi motor kuralıyla (untilResolved: Ash Brand telgrafı, Staggered eylem kaybı, Anchored zırh eki)
+      if (def.untilResolved) continue;
       expect(def.speedMult !== undefined || def.damageTakenMult !== undefined || def.healTakenMult !== undefined || def.skipTurn === true || def.accuracyDelta !== undefined || def.evasionDelta !== undefined || def.critDelta !== undefined || def.critDeltaPerStack !== undefined || def.maxStacks !== undefined || def.dot !== undefined || def.blocksMpSkills === true || def.attackCharges !== undefined, id).toBe(true);
     }
   });
 
   it('yer etkileri (zehir, yanan zemin) tanımlı', () => {
-    expect(Object.keys(content.grounds).sort()).toEqual(['burning', 'holy_fire', 'poison']);
+    expect(Object.keys(content.grounds).sort()).toEqual(['burning', 'flooded_planks', 'holy_fire', 'poison']);
   });
 });
 

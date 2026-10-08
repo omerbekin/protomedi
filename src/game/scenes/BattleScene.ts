@@ -17,7 +17,7 @@ import type { ResultAction, ResultScreen } from '../result-screen';
 import { debugState, effectiveTimeScale, tweaksSummary } from '../debug-state';
 import { testMode, testModeSummary } from '../test-mode';
 import { LONG_PRESS_MS, LONG_PRESS_SLOP, UNIT_SELECT_EVENT, UnitSelection, isSelectModifier, pickUnitAt } from '../unit-select';
-import { corpseDrainFx, groundArea, meleeApproach, summonFx } from '../vfx';
+import { corpseDrainFx, groundArea, meleeApproach, summonFx, WARDEN_EVENT_FX, wardenBrandMark, wardenTelegraphCells } from '../vfx';
 import { VFX_KIT, resolveSkillVfx, skillSfxAllowed } from '../vfx-versions';
 import { CODE_SFX, SHARED_KEY, onVersionsChange, ownerOfSkill, ownerOfUnit, statusOwner } from '../asset-versions';
 import { statusBadge } from '../art-registry';
@@ -42,6 +42,7 @@ import type { RaiseFlow, RaiseInputs } from '../raise-dead-flow';
 import type { CorpseMarker } from '../corpse-marker';
 import { isDeltaStat, previewStatusText, statDir, statSources } from '../stat-delta';
 import { areaBoards, areaHoverSpecs, areaTone, blockedTargets } from '../target-cells';
+import type { MpBattleHooks, MpResultInfo } from '../mp-hooks';
 
 export interface BattleSceneData {
   seed: number;
@@ -57,6 +58,10 @@ export interface BattleSceneData {
   campaign?: CampaignBattleHooks;
   /** Sefer genel zorluğu (yapay zeka): TODO(engine-dev) AI girdisi gelince motora iletilecek; şimdilik yalnızca saklanır. */
   difficulty?: 'easy' | 'medium' | 'hard';
+  /** Savaş arka planı (assets/backgrounds/<ad>): sefer karşılaşma/düğüm/bölge seçimi; dosya yoksa savaşın varsayılan arka planı. */
+  background?: string;
+  /** Multiplayer savaşı (src/game/mp-client.ts): savaş lockstep'ten gelir, yalnızca yerel taraf oynanır, YZ yok. */
+  mp?: MpBattleHooks;
 }
 
 /** Sefer bağlamı: savaş bitince sonuç ekranının düğmeleri (Continue / Load Last Save / Load Game / Main Menu). src/game/campaign-session.ts */
@@ -106,6 +111,13 @@ export class BattleScene extends Phaser.Scene {
   campaign: CampaignBattleHooks | undefined = undefined;
   /** Sefer genel zorluğu (yalnızca sefer savaşında; bkz. BattleSceneData.difficulty). */
   difficulty: 'easy' | 'medium' | 'hard' | undefined = undefined;
+  /** Sefer savaş arka planı (BattleSceneData.background). */
+  background: string | undefined = undefined;
+  /** Multiplayer kancaları (yoksa tek oyunculu). */
+  mp: MpBattleHooks | undefined = undefined;
+  /** Bu ekranda oynayan insanın tarafı: tek oyunculuda daima 'party'; multiplayer'da katılan 'enemy' (sağ). */
+  localSide: 'party' | 'enemy' = 'party';
+  private mpOff: Array<() => void> = [];
   /** Takım boyutları (rastgele takım çekilirken; savaş başlayınca gerçek boyuttan okunur). */
   partySize = initialSizes().party;
   enemySize = initialSizes().enemies;
@@ -132,6 +144,8 @@ export class BattleScene extends Phaser.Scene {
   private cellZones: Phaser.GameObjects.Zone[] = [];
   private cellHover: { board: 'party' | 'enemy'; slot: number } | null = null;
   private groundViews = new Map<string, Phaser.GameObjects.Container>();
+  /** Bekleyen telgrafların (Bridge Warden) kalıcı göstergeleri: telgraf id -> çatlak hücreler + (damgada) birim üstü işaret. */
+  private telegraphViews = new Map<string, { cells?: { destroy(): void }; mark?: { destroy(): void }; kind: 'span' | 'fall' | 'brand' }>();
   private badgeKeys = new Map<string, string>();
   /** Skill kullanımlarının olay özeti (VfxCtx.usage; src/game/skill-usage.ts): olaylar motor yayarken kaydedilir, efekt oynarken okunur. */
   private usageRec = new UsageRecorder();
@@ -188,6 +202,12 @@ export class BattleScene extends Phaser.Scene {
     if ('teams' in data) this.teams = data.teams;
     this.campaign = data.campaign;
     this.difficulty = data.difficulty;
+    this.background = data.background;
+    this.mp = data.mp;
+    this.localSide = data.mp?.localSide ?? 'party';
+    for (const off of this.mpOff) off();
+    this.mpOff = [];
+    if (this.mp) this.autoPlay = false;
     if (data.partySize !== undefined) this.partySize = clampSize(data.partySize);
     if (data.enemySize !== undefined) this.enemySize = clampSize(data.enemySize);
     this.moveMode = null;
@@ -215,6 +235,7 @@ export class BattleScene extends Phaser.Scene {
     this.cellZones = [];
     this.cellHover = null;
     this.groundViews = new Map();
+    this.telegraphViews = new Map();
     this.badgeKeys = new Map();
     this.usageRec = new UsageRecorder();
     this.currentUsage = undefined;
@@ -233,18 +254,23 @@ export class BattleScene extends Phaser.Scene {
 
   create(): void {
     const def = content.battles[this.battleId];
-    this.drawBackground(def?.background ?? '');
+    // Sefer arka planı (varsa ve dosyası yüklüyse), yoksa savaşın varsayılanı (castle-hall)
+    this.drawBackground(this.background && hasBackground(this, this.background) ? this.background : (def?.background ?? ''));
     this.drawSlots();
 
-    this.battle = new Battle(content.battleSetup(this.battleId, this.seed, this.mode, this.teams ? { ...this.teams } : { partySize: this.partySize, enemySize: this.enemySize }, false));
+    // Multiplayer: savaş iki istemcide aynı kurulan lockstep savaşıdır (src/net/lockstep.ts)
+    this.battle = this.mp ? this.mp.battle : new Battle(content.battleSetup(this.battleId, this.seed, this.mode, this.teams ? { ...this.teams } : { partySize: this.partySize, enemySize: this.enemySize }, false));
     // Gerçek boyutlar (takım seçiminden gelen hücre listeleri dahil): "New Game" ve Team Select bunları korur
     this.partySize = this.battle.combatants.filter((c) => c.side === 'party' && !c.summoned).length || this.partySize;
     this.enemySize = this.battle.combatants.filter((c) => c.side === 'enemy' && !c.summoned).length || this.enemySize;
     for (const c of this.battle.combatants) if (c.maxRage !== undefined) this.rageShown.set(c.uid, c.rage ?? 0);
-    this.battle.freeMp = BattleScene.freeMp;
-    this.battle.freeRage = testMode.unlimitedRage;
-    this.battle.noCooldowns = testMode.noCooldowns;
-    Object.assign(this.battle.debug, debugState.flags);
+    // Debug/Test Mode switches never leak into campaign or multiplayer battles (normal costs and cooldowns there; multiplayer would desync)
+    if (!this.mp) {
+      this.battle.freeMp = !this.campaign && BattleScene.freeMp;
+      this.battle.freeRage = !this.campaign && testMode.unlimitedRage;
+      this.battle.noCooldowns = !this.campaign && testMode.noCooldowns;
+      Object.assign(this.battle.debug, debugState.flags);
+    }
     this.applyDebugTiming();
     this.bindSkillHotkeys();
     this.bindUnitSelect();
@@ -274,10 +300,49 @@ export class BattleScene extends Phaser.Scene {
     this.hint = this.add.text(W / 2, layout.commandPanel.y - 60, '', textStyle(38, colors.selected)).setOrigin(0.5).setDepth(4400).setVisible(false);
 
     this.drawCommandPanel();
+    if (this.mp) this.bindMultiplayer(this.mp);
     this.settle(); // the first unit may be an enemy: let the AI start
     // Sanat sürümü değişince (debug > Versions) ikonlar, logolar ve durum rozetleri hemen yeni sürümle çizilir
     const offVersions = onVersionsChange(() => this.onVersionsChanged());
     this.events.once('shutdown', offVersions);
+  }
+
+  /** Multiplayer: rakibin hamlesi gelince olaylar oynatılır ve sıra devredilir; savaş dışı bitiş (kopma, ayrılma, desync) sonuç ekranını açar. */
+  private bindMultiplayer(mp: MpBattleHooks): void {
+    this.mpOff.push(
+      mp.onRemote(() => {
+        if (!this.scene.isActive()) return;
+        this.clearSelection();
+        this.busy = true;
+        this.refreshCommands();
+        this.settle();
+      }),
+    );
+    // Bağlantı koptu / geri geldi: panel yazısı ve giriş kilidi tazelenir (dönüşte eylemi olmayan birim için pas da gider)
+    this.mpOff.push(
+      mp.onStatus(() => {
+        if (this.scene.isActive() && !this.busy) this.settle();
+      }),
+    );
+    this.mpOff.push(
+      mp.onEnded((info) => {
+        if (!this.scene.isActive()) return;
+        this.eventQueue = this.eventQueue.then(() => this.showMpResult(info));
+      }),
+    );
+    this.events.once('shutdown', () => {
+      for (const off of this.mpOff) off();
+      this.mpOff = [];
+    });
+    const done = mp.result();
+    if (done && !this.battle.winner) this.eventQueue = this.eventQueue.then(() => this.showMpResult(done));
+  }
+
+  private showMpResult(info: MpResultInfo): void {
+    if (!this.scene.isActive()) return;
+    this.clearSelection();
+    this.refreshCommands();
+    this.showResult(info.victory, false, info);
   }
 
   /** Per-unit badge refresh (statuses, ground effects underfoot, armor from auras): cheap, only redraws when something changed. */
@@ -498,7 +563,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.busy || this.battle.winner) return false;
     if (this.battle.mode === 'test') return true;
     const actor = this.battle.currentActor;
-    return !!actor && actor.side === 'party' && !this.autoPlay && actor.uid === this.uiActor;
+    return !!actor && actor.side === this.localSide && !this.autoPlay && actor.uid === this.uiActor && (!this.mp || this.mp.canAct());
   }
 
   /** The currently selected skill (for the debug panel and tests). */
@@ -513,6 +578,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** Debug: toggle AI control of the player's party (turns mode). */
   toggleAutoPlay(): void {
+    if (this.mp) return; // multiplayer: YZ yok
     this.autoPlay = !this.autoPlay;
     this.refreshCommands();
     this.settle();
@@ -520,7 +586,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** Debug: skip the current unit's turn (turns mode). */
   skipCurrentTurn(): void {
-    if (this.battle.mode !== 'turns' || this.busy || this.battle.winner) return;
+    if (this.mp || this.battle.mode !== 'turns' || this.busy || this.battle.winner) return;
     this.clearSelection();
     this.busy = true;
     this.refreshCommands();
@@ -634,16 +700,18 @@ export class BattleScene extends Phaser.Scene {
 
   /** True while the battle is undecided (no winner yet); the settings menu asks for confirmation only then. */
   isBattleLive(): boolean {
-    return !!this.battle && !this.battle.winner;
+    return !!this.battle && !this.battle.winner && !this.mp?.result();
   }
 
   /** New Game: fresh random seed and random teams of the same sizes, skips team select (result screen and settings menu share this). */
   newGame(): void {
+    if (this.mp) return;
     this.scene.restart({ seed: newSeed(), teams: undefined, partySize: this.partySize, enemySize: this.enemySize });
   }
 
   /** Back to the team selection screen. */
   goToTeamSelect(): void {
+    if (this.mp) return;
     // Cell lists (index = slot, '' = empty) so the formation survives the round trip
     const ids = (side: 'party' | 'enemy') => {
       const cells: string[] = Array.from({ length: content.CELL_COUNT }, () => '');
@@ -1482,7 +1550,10 @@ export class BattleScene extends Phaser.Scene {
     this.clearSelection();
     this.hideInfoTip();
     this.hideUnitTip();
-    if (!this.battle.useSkill(actor, skill, target || undefined, slot, board, corpseUid).ok) return;
+    if (this.mp) {
+      // Multiplayer: hamle lockstep'ten geçer (sınanır, uygulanır, rakibe gider)
+      if (!this.mp.submit({ skillId: skill, ...(target ? { targetUid: target } : {}), ...(slot !== undefined ? { slot } : {}), ...(board ? { board } : {}), ...(corpseUid ? { corpseUid } : {}) })) return;
+    } else if (!this.battle.useSkill(actor, skill, target || undefined, slot, board, corpseUid).ok) return;
     this.busy = true;
     this.refreshCommands();
     this.settle();
@@ -1508,7 +1579,8 @@ export class BattleScene extends Phaser.Scene {
     this.clearSelection();
     this.hideInfoTip();
     this.hideUnitTip();
-    if (!this.battle.useGlobal(actor, id, slot).ok) {
+    const ok = this.mp ? this.mp.submit({ skillId: id, ...(slot !== undefined ? { slot } : {}) }) : this.battle.useGlobal(actor, id, slot).ok;
+    if (!ok) {
       this.refreshCommands();
       return;
     }
@@ -2013,6 +2085,17 @@ export class BattleScene extends Phaser.Scene {
       if (battle.mode !== 'turns' || battle.winner) return;
       const actor = battle.currentActor;
       if (!actor) return;
+      if (this.mp) {
+        // Multiplayer: YZ yok. Rakibin sırasında beklenir (onRemote); kendi birimimizin hiçbir eylemi yoksa otomatik pas gönderilir.
+        if (actor.side !== this.localSide || !this.mp.canAct()) return;
+        if (actor.summoned ? battle.hasUsableSkill(actor.uid) : battle.legalActions(actor.uid).length > 0) return;
+        if (this.mp.submit(null)) {
+          this.busy = true;
+          this.refreshCommands();
+          this.settle();
+        }
+        return;
+      }
       const idle = actor.side === 'enemy' && debugState.enemyAiOff && !this.autoPlay; // debug: enemies do nothing
       const aiTurn = actor.side === 'enemy' || this.autoPlay;
       if (!aiTurn && (actor.summoned ? battle.hasUsableSkill(actor.uid) : battle.legalActions(actor.uid).length > 0)) return; // the player's move (class skills or Rest / Skip / Move)
@@ -2088,7 +2171,7 @@ export class BattleScene extends Phaser.Scene {
         this.closeStageGate();
         const actor = this.battle.get(e.actor);
         const skill = content.skills[e.skill];
-        if (actor && skill) this.announce(`${actor.side === 'enemy' ? 'Enemy ' : ''}${unitName(actor)} uses ${skill.name}`);
+        if (actor && skill) this.announce(`${actor.side !== this.localSide ? 'Enemy ' : ''}${unitName(actor)} uses ${skill.name}`);
         this.currentUsage = this.usageRec.usageOf(e); // efekt bu kullanımda gerçekte ne olduğunu bilsin (VfxCtx.usage)
         // Backstab: the cell behind the target the vfx teleports into (visual only; the formation does not change)
         this.skillBehind = e.behindSlot !== undefined && e.behindBoard ? this.cellPos(e.behindBoard, e.behindSlot) : undefined;
@@ -2160,7 +2243,7 @@ export class BattleScene extends Phaser.Scene {
         const view = this.views.get(e.actor);
         const def = this.battle.globalDef(e.id);
         if (actor && def) {
-          const who = `${actor.side === 'enemy' ? 'Enemy ' : ''}${unitName(actor)}`;
+          const who = `${actor.side !== this.localSide ? 'Enemy ' : ''}${unitName(actor)}`;
           this.announce(def.kind === 'rest' ? `${who} uses Rest` : def.kind === 'skip' ? `${who} skips the turn` : `${who} moves`);
         }
         if (def?.kind === 'rest') {
@@ -2178,6 +2261,7 @@ export class BattleScene extends Phaser.Scene {
           playSfx(this, 'armorRun', SHARED_KEY);
           await view.moveTo(to.x, to.y);
         }
+        this.refreshBrandCells(e.actor); // damgalı birim taşındı: Ash Brand hücreleri onu izler
         this.refreshCommands();
         return;
       }
@@ -2382,7 +2466,7 @@ export class BattleScene extends Phaser.Scene {
           await this.wait(slow(320)); // chosen skip: already announced by globalUsed
           return;
         }
-        if (actor) this.announce(`${actor.side === 'enemy' ? 'Enemy ' : ''}${unitName(actor)} ${e.stunned ? 'is stunned and loses the turn' : 'has nothing to cast and skips the turn'}`);
+        if (actor) this.announce(`${actor.side !== this.localSide ? 'Enemy ' : ''}${unitName(actor)} ${e.stunned ? 'is stunned and loses the turn' : 'has nothing to cast and skips the turn'}`);
         await this.wait(500);
         return;
       }
@@ -2401,8 +2485,43 @@ export class BattleScene extends Phaser.Scene {
         this.refreshCommands();
         return;
       }
+      // --- Boss (The Bridge Warden): telgraf göstergeleri, çözülme/faz/Mooring efektleri (src/game/vfx-warden.ts) ---
+      case 'telegraph':
+        this.showTelegraph(e.id, e.skill, e.kind, e.board, e.cells, e.safeCells, e.bound);
+        await this.wait(slow(200));
+        return;
+      case 'telegraphCancel':
+        this.clearTelegraph(e.id);
+        if (e.cause === 'anchor' || e.cause === 'dispel') this.announce(`${content.skills[e.skill]?.name ?? e.skill} is cancelled`);
+        return;
+      case 'telegraphDelay':
+        return;
+      case 'telegraphResolve': {
+        const kind = this.telegraphViews.get(e.id)?.kind;
+        this.clearTelegraph(e.id);
+        const tg = content.skills[e.skill]?.telegraph;
+        const key = tg?.kind === 'brand' ? 'ashbrandburst' : tg?.wholeBoard || kind === 'fall' ? 'fallofthebridgecollapse' : 'breakingspancollapse';
+        await this.runWardenFx(key, { actor: this.views.get(e.source), targets: e.hit.flatMap((u) => this.views.get(u) ?? []), board: e.board, slots: e.cells, event: e, skillId: e.skill });
+        return;
+      }
+      case 'phase':
+        this.announce(e.banner);
+        await this.runWardenFx(e.phase >= 3 ? 'wardenphase3' : 'wardenphase2', { actor: this.views.get(e.actor), targets: [], event: e, skillId: 'anchor_smash' });
+        return;
+      case 'anchorBroken': {
+        const w = this.views.get(e.owner);
+        await this.runWardenFx('mooringbreak', { actor: this.views.get(e.anchor), targets: w ? [w] : [], event: e, skillId: 'chain_hook' });
+        return;
+      }
+      case 'staggered': {
+        const actor = this.battle.get(e.actor);
+        this.views.get(e.actor)?.floatText('Staggered', colors.targetHighlight, 44);
+        if (actor) this.announce(`${actor.side === 'enemy' ? 'Enemy ' : ''}${unitName(actor)} is staggered and loses an action`);
+        await this.wait(slow(400));
+        return;
+      }
       case 'battleEnd':
-        this.showResult(e.winner === 'party');
+        this.showResult(e.winner === this.localSide);
         return;
       case 'battleStart':
         return;
@@ -2737,6 +2856,74 @@ export class BattleScene extends Phaser.Scene {
     const container = this.add.container(0, 0, items).setDepth(30);
     this.tweens.add({ targets: container, alpha: 0.65, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.groundViews.set(e.id, container);
+  }
+
+  /** Telgraf göstergesi: Span çatlak plakaları, Fall (+ Keystone'lar), Ash Brand (damgalının göğsünde işaret + artı hücreleri). */
+  private showTelegraph(id: string, skillId: string, kind: 'area' | 'brand', board: 'party' | 'enemy', cells: number[], safe?: number[], bound?: string): void {
+    const vk: 'span' | 'fall' | 'brand' = kind === 'brand' ? 'brand' : content.skills[skillId]?.telegraph?.wholeBoard ? 'fall' : 'span';
+    this.clearTelegraph(id);
+    const entry: { cells?: { destroy(): void }; mark?: { destroy(): void }; kind: 'span' | 'fall' | 'brand' } = { kind: vk };
+    try {
+      entry.cells = wardenTelegraphCells(this, vk, board, cells.filter((c) => !safe?.includes(c)), safe ?? []);
+      const v = bound ? this.views.get(bound) : undefined;
+      if (v) entry.mark = wardenBrandMark(this, v);
+    } catch (err) {
+      console.warn('[warden] telgraf göstergesi çizilemedi', err);
+    }
+    this.telegraphViews.set(id, entry);
+  }
+
+  private clearTelegraph(id: string): void {
+    const t = this.telegraphViews.get(id);
+    if (!t) return;
+    t.cells?.destroy();
+    t.mark?.destroy();
+    this.telegraphViews.delete(id);
+  }
+
+  /** Damgalı birim hareket edince (Move, Chain Hook) damganın artı hücreleri yeni hücresine taşınır. */
+  private refreshBrandCells(uid: string): void {
+    for (const t of this.battle.telegraphs) {
+      const view = t.bound === uid ? this.telegraphViews.get(t.id) : undefined;
+      if (!view) continue;
+      view.cells?.destroy();
+      try {
+        view.cells = wardenTelegraphCells(this, 'brand', t.board, this.battle.telegraphCells(t));
+      } catch {
+        view.cells = undefined;
+      }
+    }
+  }
+
+  /** Warden olay efekti (vfx.ts > WARDEN_EVENT_FX): VfxCtx board = vurulan tahta, slots = hücreler, targets = vurulan birimler. Hata savaşı durdurmaz. */
+  private async runWardenFx(key: string, o: { actor: CombatantView | undefined; targets: CombatantView[]; board?: 'party' | 'enemy'; slots?: number[]; event: BattleEvent; skillId: string }): Promise<void> {
+    const fx = WARDEN_EVENT_FX[key];
+    const actor = o.actor ?? o.targets[0];
+    const skill = content.skills[o.skillId];
+    if (!fx || !actor || !skill) return;
+    const board = o.board ?? (o.targets[0] ?? actor).combatant.board;
+    const ctx: VfxCtx = {
+      scene: this,
+      actor,
+      targets: o.targets,
+      skill,
+      board,
+      cells: (o.slots ?? []).map((sl) => this.cellPos(board, sl)),
+      slots: o.slots ?? [],
+      releaseStage: () => undefined,
+      lunge: () => meleeApproach(this, actor, o.targets),
+      windUp: (hex, anim = 'cast') => actor.windUp(hex, anim),
+      sfx: (id) => playSfx(this, id, SHARED_KEY),
+      gate: () => undefined,
+      foes: [...this.views.values()].filter((v) => v.combatant.side !== actor.combatant.side && v.combatant.hp > 0),
+      viewOf: (uid) => this.views.get(uid),
+      event: o.event,
+    };
+    try {
+      await fx(ctx);
+    } catch (err) {
+      console.warn(`[warden] ${key} efekti hata verdi`, err);
+    }
   }
 
   private removeGroundView(id: string): void {
@@ -3261,6 +3448,7 @@ export class BattleScene extends Phaser.Scene {
 
   private turnLabel(actor: Combatant): string {
     if (this.battle.mode === 'test') return 'Test mode';
+    if (this.mp) return actor.side === this.localSide ? (this.mp.canAct() ? 'Your turn' : 'Waiting for connection') : `${this.mp.names().remote}'s turn`;
     if (actor.side === 'enemy') return 'Enemy turn';
     return this.autoPlay ? 'Auto (AI)' : 'Your turn';
   }
@@ -3318,10 +3506,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** End-of-battle screen (src/game/result-screen.ts). `preview` = debug: shows it without ending the battle. */
-  showResult(victory: boolean, preview = false): void {
+  showResult(victory: boolean, preview = false, mpInfo?: MpResultInfo): void {
     this.resultScreen?.destroy();
+    const mp = this.mp && !preview ? this.mp : undefined;
+    const info = mpInfo ?? (mp ? mp.result() : null);
     this.resultScreen = showResultScreen(this, {
       victory,
+      ...(mp ? { localSide: this.localSide, headings: mp.names(), actions: mp.resultActions(), ...(info?.title ? { title: info.title } : {}), ...(info?.subtitle ? { subtitle: info.subtitle } : {}) } : {}),
       battle: this.battle,
       stats: this.stats,
       avatar: (unit, cx, cy, size) => this.avatarImage(unit, cx, cy, size),
@@ -3329,7 +3520,7 @@ export class BattleScene extends Phaser.Scene {
       onTeamSelect: () => this.goToTeamSelect(),
       matchData: () => this.matchLogData(),
       preview,
-      actions: this.campaign && !preview ? this.campaign.resultActions(victory, this.battle) : undefined,
+      ...(mp ? {} : { actions: this.campaign && !preview ? this.campaign.resultActions(victory, this.battle) : undefined }),
     });
   }
 }

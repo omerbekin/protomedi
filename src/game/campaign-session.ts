@@ -130,6 +130,8 @@ export function startCampaignBattle(scene: Phaser.Scene): BattlePlan | null {
     enemySize: plan.enemies.filter(Boolean).length,
     // Genel zorluk (yapay zeka): engine-dev AI girdisini hazırlıyor; BattleScene şimdilik yalnızca taşır
     difficulty: plan.difficulty,
+    // Savaş arka planı (karşılaşma > düğüm > bölge; dosya yoksa savaşın varsayılanı): King's Bridge = kings-bridge
+    ...(plan.background ? { background: plan.background } : {}),
     campaign: { resultActions: (victory, battle) => resultActions(game, plan, victory, battle) },
   };
   scene.scene.start(BATTLE_SCENE, data);

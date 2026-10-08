@@ -1,10 +1,10 @@
-import { CELL_COUNT, randomPool } from '../engine/content';
+import { bosses, CELL_COUNT, classes, randomPool } from '../engine/content';
 import { CONFIG, ENCOUNTERS, getMap } from './data';
 import { node } from './graph';
 import { battleSeed } from './seed';
 import { activeHeroes, heroById } from './state';
 import type { UnitSetup } from '../engine/types';
-import type { BattleOutcome, CampaignState, Difficulty, EncounterDef } from './types';
+import type { BattleOutcome, CampaignState, Difficulty, DifficultyEnemyMods, EncounterDef, UnitMods } from './types';
 
 /**
  * Karşılaşmalar ve savaş motoruna köprü (saf). Savaş kurallarına dokunmaz: mevcut giriş noktasının istediği hücre listelerini
@@ -61,6 +61,19 @@ export interface BattlePlan {
   background?: string;
 }
 
+/**
+ * Karşılaşma birimi güçlendirmesi + genel zorluğun düşman güçlendirmesi (campaign.json > difficulties[x].enemy):
+ * çarpanlar (hpMult, statMult, powerMult) çarpılır, düz ekler (armorAdd, magicArmorAdd) toplanır. İkisi de yoksa undefined.
+ */
+export function withDifficulty(mods: UnitMods | undefined, diff: DifficultyEnemyMods | undefined): UnitMods | undefined {
+  if (!diff || !Object.keys(diff).length) return mods ? { ...mods } : undefined;
+  const out: UnitMods = { ...(mods ?? {}) };
+  for (const k of ['hpMult', 'statMult', 'powerMult'] as const)
+    if (diff[k] !== undefined && diff[k] !== 1) out[k] = Math.round((out[k] ?? 1) * diff[k]! * 1000) / 1000;
+  for (const k of ['armorAdd', 'magicArmorAdd'] as const) if (diff[k]) out[k] = (out[k] ?? 0) + diff[k]!;
+  return Object.keys(out).length ? out : undefined;
+}
+
 export function battlePlan(s: CampaignState, attempt = 0, caps = ENGINE_CAPS): BattlePlan {
   const map = getMap(s.mapId);
   const n = node(map, s.at);
@@ -76,7 +89,16 @@ export function battlePlan(s: CampaignState, attempt = 0, caps = ENGINE_CAPS): B
     });
   if (caps.unitMods)
     for (const u of enc.def.units) {
-      const setup: UnitSetup = { ...(u.mods ? { modifiers: { ...u.mods } } : {}), ...(u.name ? { displayName: u.name } : {}), ...(u.tier ? { tier: u.tier } : {}) };
+      const diff = CONFIG.difficulties[s.difficulty];
+      // noTierMods: rütbe eki (enemyTier) bu birime uygulanmaz (The Bridge Warden: fazları/telgrafları zaten zor; sim ölçümü, open-questions)
+      const mods = withDifficulty(withDifficulty(u.mods, diff?.enemy), u.tier && !u.noTierMods ? diff?.enemyTier?.[u.tier] : undefined);
+      const setup: UnitSetup = {
+        ...(mods ? { modifiers: mods } : {}),
+        ...(u.name ? { displayName: u.name } : {}),
+        ...(u.tier ? { tier: u.tier } : {}),
+        ...(u.lockSkills?.length ? { lockSkills: [...u.lockSkills] } : {}),
+        ...(u.initialCooldownBonus ? { initialCooldownBonus: u.initialCooldownBonus } : {}),
+      };
       if (Object.keys(setup).length) enemies[u.slot] = setup;
     }
   return {
@@ -90,7 +112,8 @@ export function battlePlan(s: CampaignState, attempt = 0, caps = ENGINE_CAPS): B
     heroOrder: partyHeroOrder(s),
     units: { party, enemies },
     difficulty: CONFIG.difficulties[s.difficulty]?.ai ?? CONFIG.defaultDifficulty,
-    background: map.regions.find((r) => r.id === n.region)?.battleBackground,
+    // Arka plan önceliği: karşılaşma > düğüm > bölge (dosya yoksa sahne varsayılan arka plana düşer)
+    background: enc.def.background ?? n.battleBackground ?? map.regions.find((r) => r.id === n.region)?.battleBackground,
   };
 }
 
@@ -115,7 +138,7 @@ export function outcomeFrom(plan: Pick<BattlePlan, 'heroOrder'>, victory: boolea
   return { victory, units };
 }
 
-/** Karşılaşma verisinin doğrulaması: sınıflar rastgele havuzda (test class'ı yok), yuvalar 0..11 ve tekrarsız, yedek geçerli. */
+/** Karşılaşma verisinin doğrulaması: sınıflar rastgele havuzda (test class'ı yok), yuvalar 0..11 ve tekrarsız, yedek geçerli, kilitli skill'ler sınıfın skill'i. */
 export function validateEncounters(): string[] {
   const errors: string[] = [];
   for (const [id, def] of Object.entries(ENCOUNTERS)) {
@@ -124,8 +147,11 @@ export function validateEncounters(): string[] {
     const slots = def.units.map((u) => u.slot);
     if (new Set(slots).size !== slots.length) errors.push(`${id}: duplicate slots`);
     for (const u of def.units) {
-      if (!randomPool.includes(u.class)) errors.push(`${id}: class ${u.class} is not a playable class`);
+      // Boss tanımları (data/bosses: The Bridge Warden, Iron Mooring) istisna: oynanabilir class değiller ama karşılaşmada kullanılır
+      if (!randomPool.includes(u.class) && !bosses[u.class]) errors.push(`${id}: class ${u.class} is not a playable class`);
       if (!Number.isInteger(u.slot) || u.slot < 0 || u.slot >= CELL_COUNT) errors.push(`${id}: slot ${u.slot} out of range`);
+      for (const sk of u.lockSkills ?? []) if (!classes[u.class]?.skills.includes(sk)) errors.push(`${id}: ${u.class} has no skill ${sk} to lock`);
+      if (u.initialCooldownBonus !== undefined && (!Number.isInteger(u.initialCooldownBonus) || u.initialCooldownBonus < 0)) errors.push(`${id}: bad initialCooldownBonus`);
     }
     if (def.fallback && (!ENCOUNTERS[def.fallback] || ENCOUNTERS[def.fallback]!.fallback)) errors.push(`${id}: bad fallback ${def.fallback}`);
   }

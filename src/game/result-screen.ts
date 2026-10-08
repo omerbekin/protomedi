@@ -61,6 +61,13 @@ export interface ResultScreenOptions {
   preview?: boolean;
   /** Sefer savaşı: New Game / Team Select yerine bu düğmeler (Continue, Load Last Save, Load Game, Main Menu). Enter = ilk düğme. */
   actions?: ResultAction[];
+  /** Multiplayer: yerel oyuncunun tarafı (katılan sağ taraf = 'enemy'); yoksa 'party'. */
+  localSide?: 'party' | 'enemy';
+  /** Multiplayer: başlık ve alt yazı yerine (ör. 'NO CONTEST', 'Your opponent left the battle'). */
+  title?: string;
+  subtitle?: string;
+  /** Multiplayer: sütun başlıkları (yerel ve rakip oyuncunun adı). */
+  headings?: { local: string; remote: string };
 }
 
 /** Sonuç ekranının özel düğmesi (sefer bağlamı: src/game/campaign-session.ts). */
@@ -117,14 +124,15 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   const plaque = scene.add.container(0, -50).setAlpha(0);
   const panelParts = makePanel(scene, px, py, plaqueW, plaqueH, { top: victory ? 0x3a2b16 : 0x2c1613, bottom: 0x120a06, edge: accent.edge, light: accent.light, bevel: 5 });
   plaque.add(panelParts);
-  const title = victory ? goldText(scene, W / 2, py + 58, 'VICTORY', 96, 8) : serif(scene, W / 2, py + 58, 'DEFEAT', 96, '#c4695d', { spacing: 8 });
+  const local = o.localSide ?? 'party';
+  const title = victory ? goldText(scene, W / 2, py + 58, o.title ?? 'VICTORY', 96, 8) : serif(scene, W / 2, py + 58, o.title ?? 'DEFEAT', 96, '#c4695d', { spacing: 8 });
   title.setOrigin(0.5);
   if (!victory) title.setTint(0xd98a7e, 0xd98a7e, 0x8a3a32, 0x8a3a32);
   plaque.add(title);
   plaque.add(ornamentLine(scene, W / 2, py + 118, 300, accent.edge, accent.light));
-  const myUnits = battle.combatants.filter((c) => c.side === 'party' && !c.summoned);
+  const myUnits = battle.combatants.filter((c) => c.side === local && !c.summoned);
   const standing = myUnits.filter((c) => c.hp > 0).length;
-  const sub = victory ? 'The enemy line is broken' : 'Your party has fallen';
+  const sub = o.subtitle ?? (victory ? 'The enemy line is broken' : 'Your party has fallen');
   plaque.add(serif(scene, W / 2, py + 148, sub, 26, accent.text, { bold: false, spacing: 1 }).setOrigin(0.5));
   plaque.add(serif(scene, W / 2, py + 176, `${stats.turns} turns  -  ${standing} of ${myUnits.length} heroes standing`, 18, '#9c8a68', { bold: false, stroke: 2 }).setOrigin(0.5));
   plaque.setSize(plaqueW, plaqueH);
@@ -152,7 +160,7 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   root.add(summary);
   scene.tweens.add({ targets: summary, y: 0, alpha: 1, duration: 480, ease: 'Cubic.easeOut', delay: 380 });
 
-  const winnerSide = victory ? 'party' : 'enemy';
+  const winnerSide = victory ? local : local === 'party' ? 'enemy' : 'party';
   const roster = (side: 'party' | 'enemy') => battle.combatants.filter((c) => c.side === side && !c.summoned).sort((a, b) => a.slot - b.slot);
   // MVP: yalnızca Victory'de oyuncu tarafının en çok hasar vereni (hiç hasar yoksa yok)
   const winners = roster(winnerSide);
@@ -161,7 +169,7 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   const rowItems: Phaser.GameObjects.Container[] = [];
   (['party', 'enemy'] as const).forEach((side, col) => {
     const cx0 = sx + 30 + col * (colW + 0);
-    const heading = side === 'party' ? 'YOUR PARTY' : 'ENEMY';
+    const heading = o.headings ? (side === local ? o.headings.local : o.headings.remote).toUpperCase() : side === local ? 'YOUR PARTY' : 'ENEMY';
     const head = serif(scene, cx0 + 14, sy + 30, heading, 26, side === winnerSide ? '#f3d9a0' : '#a8977a', { spacing: 4 }).setOrigin(0, 0.5);
     summary.add(head);
     const cols = [colW - 215, colW - 135, colW - 55]; // DMG / TAKEN / HEAL merkez x (sütun içi)

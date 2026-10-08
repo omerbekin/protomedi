@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ENCOUNTERS,
@@ -35,7 +37,7 @@ describe('sefer karşılaşmaları', () => {
     const off = { unitMods: false, startHp: false };
     expect(resolveEncounter('mill_road_thugs').id).toBe('mill_road_thugs');
     expect(resolveEncounter('mill_road_thugs', off).id).toBe('mill_road_thug_solo');
-    expect(resolveEncounter('bridge_warden').def.units).toHaveLength(1);
+    expect(resolveEncounter('bridge_warden').def.units.map((u) => u.class)).toEqual(['bridge_warden', 'iron_mooring', 'iron_mooring']);
     expect(resolveEncounter('bridge_warden', off).def.units).toHaveLength(4);
     expect(resolveEncounter('bog_ambush').fallback).toBe(false);
     expect(enemyPreview('watchtower_chief')).toMatchObject({ classes: ['warrior', 'archer', 'archer'], leader: 'Bandit Chief' });
@@ -55,6 +57,10 @@ describe('sefer karşılaşmaları', () => {
     const m = at('1');
     const thug = battleSummary(m.battle).units.find((u) => u.side === 'enemy' && u.classId === 'warrior')!;
     expect(thug.maxHp).toBeLessThan(content.classes.warrior!.stats.hp);
+    // Arka plan önceliği: karşılaşma > düğüm > bölge; King's Bridge kendi arka planını kullanır, dosyası diskte var
+    expect(at('9').plan.background).toBe('kings-bridge');
+    expect(existsSync(join(__dirname, '..', 'assets', 'backgrounds', 'kings-bridge.webp'))).toBe(true);
+    expect(at('3').plan.background).toBe(map.regions.find((r) => r.id === map.nodes.find((n) => n.id === '3')!.region)?.battleBackground);
     const b = at('9');
     const warden = b.battle.combatants.find((c) => c.side === 'enemy')!;
     expect(warden.tier).toBe('boss');
@@ -97,5 +103,28 @@ describe('sefer karşılaşmaları', () => {
       expect(battle.get(`party-${i}`)!.defId).toBe(hero.class);
     });
     expect(plan.enemies.filter(Boolean)).toHaveLength(4);
+  });
+});
+
+describe('tutorial düşmanlarında ultimate yok (lockSkills), Bandit Chief ultimate\'ı geç gelir (initialCooldownBonus)', () => {
+  const ULTS: Record<string, string> = Object.fromEntries(['warrior', 'cutthroat', 'archer'].map((c) => [c, content.classes[c]!.skills[3]!]));
+  it('Mill Road, Ravenwood, Watchtower: normal düşmanların 4. yuva skill\'i kilitli; elit lider kilitsiz ama +1 başlangıç cooldown\'u; motora gider', () => {
+    for (const [node, enc] of [['1', 'mill_road_thugs'], ['2', 'ravenwood_pack'], ['3', 'watchtower_chief']] as const) {
+      for (const u of ENCOUNTERS[enc]!.units) {
+        if (u.tier) {
+          expect(u.lockSkills, enc).toBeUndefined();
+          expect(u.initialCooldownBonus, enc).toBe(1);
+        } else expect(u.lockSkills, `${enc} ${u.class}`).toEqual([ULTS[u.class]]);
+      }
+      const s = debugTeleport(newCampaign({ mode: 'normal', seed: 4 }), node);
+      const plan = battlePlan(s);
+      const battle = new Battle(content.battleSetup(content.DEFAULT_BATTLE, plan.seed, 'turns', { party: plan.party, enemies: plan.enemies, units: plan.units }, false));
+      for (const c of battle.combatants.filter((x) => x.side === 'enemy')) {
+        if (c.tier) {
+          expect(c.lockedSkills).toBeUndefined();
+          expect(c.cooldowns[ULTS[c.defId]!]).toBeGreaterThanOrEqual(1);
+        } else expect(c.lockedSkills, `${node} ${c.defId}`).toEqual([ULTS[c.defId]]);
+      }
+    }
   });
 });

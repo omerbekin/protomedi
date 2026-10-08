@@ -13,7 +13,18 @@ export interface DifficultyDef {
   /** Yapay zeka zorluğu (savaş kurulumuna iletilir). */
   ai: Difficulty;
   text: string;
+  /**
+   * Seferdeki TÜM düşman birimlerine eklenen güçlendirme/zayıflatma (karşılaşmanın kendi `mods`'u ile birleşir: çarpanlar çarpılır, düz ekler toplanır).
+   * Yalnızca güç alanları: hpMult, statMult, powerMult, armorAdd, magicArmorAdd. Yoksa düşmanlar veride yazıldığı gibi.
+   */
+  enemy?: DifficultyEnemyMods;
+  /** Rütbeli birimlere (elit lider / boss) `enemy`'nin ÜSTÜNE eklenen güçlendirme (aynı birleşme kuralı). */
+  enemyTier?: Partial<Record<UnitTier, DifficultyEnemyMods>>;
+  /** Bu zorlukta sefer kurallarının üstüne yazılanlar (ör. zafer sonrası toparlanma `victoryHeal`). Yoksa campaign.json > rules. */
+  rules?: Partial<Pick<CampaignRules, 'victoryHeal' | 'reviveRatio' | 'bossVictoryHeal'>>;
 }
+
+export type DifficultyEnemyMods = Pick<UnitModifiers, 'hpMult' | 'statMult' | 'powerMult' | 'armorAdd' | 'magicArmorAdd'>;
 
 export interface RecruitDef {
   offer: number;
@@ -35,6 +46,8 @@ export interface MapNode {
   /** Etiket plakasının yeri (varsayılan rozetin altı). */
   label?: 'above' | 'below';
   encounter?: string;
+  /** Düğümün savaş arka planı (bölgeninkini ezer; karşılaşmanınki bunu ezer). */
+  battleBackground?: string;
   event?: string;
   treasure?: string;
   recruit?: RecruitDef;
@@ -92,11 +105,19 @@ export interface EncounterUnit {
   tier?: UnitTier;
   boss?: string;
   mods?: UnitMods;
+  /** true: zorluğun rütbe eki (campaign.json > difficulties[x].enemyTier) bu birime uygulanmaz; genel `enemy` eki uygulanır. */
+  noTierMods?: boolean;
+  /** Bu karşılaşmada kullanamayacağı skill'ler (motor: UnitSetup.lockSkills; ör. tutorial düşmanında ultimate yok). */
+  lockSkills?: string[];
+  /** Başlangıç cooldown'u eki (motor: UnitSetup.initialCooldownBonus; cooldown'lu her skill'e, maxInitial'ı aşabilir). */
+  initialCooldownBonus?: number;
 }
 
 export interface EncounterDef {
   name: string;
   units: EncounterUnit[];
+  /** Savaş arka planı (assets/backgrounds/<ad>.webp|png|jpg); öncelik: karşılaşma > düğüm > bölge > varsayılan. */
+  background?: string;
   fallback?: string;
   fallbackOnly?: boolean;
 }

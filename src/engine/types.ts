@@ -121,6 +121,94 @@ export interface CombatantData {
   ai?: string;
   skills: string[];
   passive?: PassiveDef;
+  /**
+   * Boss kuralları (data/bosses; The Bridge Warden, docs/design/bosses/bridge-warden.md): fazlar, bağlı yardımcı nesne (Iron Mooring), kontrol direnci.
+   * Yalnızca boss tanımlarında; class/çağrılarda yok.
+   */
+  boss?: BossDef;
+  /**
+   * true: SIRA ALMAYAN yardımcı nesne (Iron Mooring): turu yok, eylemi yok, şifa/kalkan almaz, ceset bırakmaz, savaşın bitişinde sayılmaz
+   * (tarafında yalnızca inert birimler kalırsa o taraf kaybeder). Hedeflenebilir, alan skill'lerine girer.
+   */
+  inert?: boolean;
+}
+
+/** Boss fazı (Ember Heart): can oranı `at`'ın altına (<=) inince girilir. Faz numarası 1'den başlar (faz 1 = başlangıç; phases[0] = faz 2). */
+export interface BossPhaseDef {
+  /** Eşik: maks canın bu oranı (yuvarlanmış can değeri) ve altı. */
+  at: number;
+  /** Faz bandı metni (oyun içi, İngilizce): "The Ember wakes." */
+  banner: string;
+  /** Bu fazdan itibaren tur başına eylem sayısı. */
+  actionsPerTurn?: number;
+  /** Skill gücü çarpanı (Stats.spellPowerMult ile çarpılır). */
+  powerMult?: number;
+  /** Zırh ve büyü zırhı çarpanı (taban zırh; Mooring eki ayrı). */
+  armorMult?: number;
+  /** true: girişte kalan bağlı yardımcılar (Iron Mooring) kopar: Stagger ve iptal VERMEDEN ölür. */
+  breakAnchors?: boolean;
+  /** Girişte eylem harcamadan telgraflanan skill (Fall of King's Bridge); sonra skill'in normal cooldown'u başlar. Bekleyen alan telgrafı bunun yerine iptal olur. */
+  telegraphOnEnter?: string;
+}
+
+/** Boss kuralları (CombatantData.boss). */
+export interface BossDef {
+  /** Faz 1'in bandı (savaş başı bilgi; wiki). */
+  firstBanner?: string;
+  /** Faz 2, 3... (eşik sırasıyla azalan `at`). Faz kilidi: tek bir eylem en fazla bir eşik geçer; fazla hasar eşiğin 1 altında durur. */
+  phases?: BossPhaseDef[];
+  /**
+   * Bağlı yardımcı nesne (Anchored): `unit` id'li canlı her dost birim bu boss'a armorAdd / magicArmorAdd verir. Biri ölünce (kırılınca) boss
+   * `stagger` (sıradaki eylemini kaybeder) ve bekleyen `cancel` telgrafları iptal olur.
+   */
+  anchor?: { unit: string; armorAdd: number; magicArmorAdd: number; stagger: boolean; cancel: string[] };
+  /** Unyielding: Stun yerine Stagger (bir eylem kaybı), diğer debuff'lar 1 tur kısa (en az 1; yığılan durumlar hariç), çekme/itme yok. */
+  unyielding?: { stunToStagger: boolean; debuffDurationDelta: number; immuneDisplacement: boolean };
+  /** Belirli telgraflar çözüldükten sonra boss'a verilen durum (Overextended). */
+  afterResolve?: { skills: string[]; status: StatusKind; turns: number };
+  /** Oyuncuya gösterilen boss pasifleri (yalnızca bilgi: wiki, tooltip; kurallar yukarıda). */
+  passives?: Array<{ id: string; name: string; icon: string; text: string }>;
+}
+
+/**
+ * Telgraflı (gecikmeli) skill (SkillDef.telegraph): kullanılınca hasar o an GELMEZ; hücreler işaretlenir, sahibinin bir SONRAKİ turunun başında
+ * çözülür (skill'in `effects`'i o anda işaretli hücrelerdeki birimlere, isabet zarı YOK). kind:
+ * - area: skill'in alanı (area_enemies + area) ya da `fall` ile karşı tahtanın tamamı eksi Keystone'lar.
+ * - brand: tek hedef damgalanır (`status`); çözülmede damgalının O ANKİ hücresi merkezli `area` (plus) vurulur. Dispel / ölüm iptal eder.
+ */
+export interface TelegraphDef {
+  kind: 'area' | 'brand';
+  /** brand: damga durumu (statuses.json, untilResolved). */
+  status?: StatusKind;
+  /** brand: çözülme şekli (damgalının hücresi anchor). */
+  area?: AreaDef;
+  /** area: tahtanın TAMAMI (all_enemies), `keystones` hariç. */
+  wholeBoard?: boolean;
+  /** Güvenli hücreler (Keystone): şerit başına `perLane` hücre, sıraları seed'li; hepsi aynı sırada olmaz. */
+  keystones?: { perLane: number };
+}
+
+/** Bekleyen telgraf (battle.telegraphs). */
+export interface Telegraph {
+  id: string;
+  /** Telgrafı atan birim. */
+  source: string;
+  skill: string;
+  kind: 'area' | 'brand';
+  /** Hücrelerin tahtası (karşı taraf). */
+  board: Side;
+  /** İşaretli hücreler (area; brand'de damgalının anlık plus'ı, bilgi). */
+  cells: number[];
+  /** Güvenli hücreler (Keystone). */
+  safeCells?: number[];
+  /** brand: damgalı birim. */
+  bound?: string;
+  /** Adalet kuralı (M3): bu birimler (oluşturulduğu an karşı tarafta canlı ve sersem olmayan) en az bir kez oynamadan çözülmez. */
+  waitFor: string[];
+  /** Kurulurken işaretli hücrelerde duran karşı taraf birimleri (çözülmede kaçanlar = avoided). */
+  marked: string[];
+  /** Oluşturulduğu turdaki battle.turnsTaken (test modunda sahibin sonraki eylemini ayırt etmek için). */
+  createdAt: number;
 }
 
 /** Çalışma zamanı tanımı: veri + türetilmiş stat'lar. */
@@ -153,6 +241,10 @@ export interface CombatantDef {
   overrides?: Partial<Stats>;
   /** Sınıfa özel taban isabet (CombatantData.accuracyBase aynen; yoksa formulas.json). */
   accuracyBase?: number;
+  /** Boss kuralları (CombatantData.boss aynen). */
+  boss?: BossDef;
+  /** Sıra almayan yardımcı nesne (CombatantData.inert aynen). */
+  inert?: boolean;
 }
 
 /**
@@ -215,6 +307,15 @@ export interface UnitSetup {
    * bırakmaz, başlangıç cooldown'u yok), sahibi ve süresi yoktur. content.battleSetup bunu `data/summons/` id'leri için kendisi verir.
    */
   summoned?: boolean;
+  /**
+   * Başlangıç cooldown'u eki (sefer tutorial'ı: elit liderin ultimate'ı geç gelsin): birimin COOLDOWN'LU her skill'inin (cooldown ya da initialCooldown
+   * > 0; Rage'li Abyssal Cry gibi initialCooldown'u olmayan ultimate'lar dahil) başlangıç cooldown'una eklenir; cooldown'suz temel saldırılar etkilenmez.
+   * Toplam formulas.json > cooldown.maxInitial sınırını AŞABİLİR (sınır skill verisi içindir; bu kurulum seçeneği bilinçli bir senaryo tercihi).
+   * Yalnızca turns modunda, çağrılarda yok (initialCooldown kuralıyla aynı).
+   */
+  initialCooldownBonus?: number;
+  /** Bu savaşta kullanamayacağı skill id'leri (ör. tutorial düşmanında ultimate yok). Skill listede kalır; canUse 'Locked'; YZ seçmez. İki modda. */
+  lockSkills?: string[];
 }
 
 /** Savaş sonu özetinde tek birim (src/engine/battle-summary.ts > battleSummary). */
@@ -425,15 +526,30 @@ export type SkillEffectKind =
    * (o hedefe bu skill'de en az bir KRİTİK vuruş geldiyse `critStacks`). Hasarı olmayan skill'de tüm hedeflere. Yığın maxStacks'e ulaşınca durumun
    * `doom` patlaması anında tetiklenir (aynı skill'de `detonate` etkisi varsa tetiklenmez: patlatmayı detonate yapar). `status` yoksa 'omen'.
    */
-  | { type: 'omen'; status?: StatusKind; stacks: number; critStacks?: number }
-  /** Hedefteki yığını (en az 1) durumun `doom` patlamasıyla, `mult` çarpanıyla anında patlatır (Doom Mark); yalnızca isabet eden hedeflerde. */
-  | { type: 'detonate'; status: StatusKind; mult: number }
+  | {
+      type: 'omen';
+      status?: StatusKind;
+      stacks: number;
+      critStacks?: number;
+      /** true: bu etkinin KRİTİK vuruşla eklediği yığın (critStacks) yığını maxStacks'e tamamlarsa, tetiklenen Doom KESİN kritik olur (kendi zarı atılmaz; Jinx). */
+      critDoomOnCrit?: boolean;
+    }
+  /**
+   * Hedefteki yığını (en az 1) durumun `doom` patlamasıyla, `mult` çarpanıyla anında patlatır (Doom Mark); yalnızca isabet eden hedeflerde.
+   * `noTransferOnKill`: bu skill'in vuruşu ya da patlaması hedefi öldürürse hedefin yığını SİLİNİR, Ill Omen (omenTransfer) çalışmaz (hiç geçmez).
+   */
+  | { type: 'detonate'; status: StatusKind; mult: number; noTransferOnKill?: boolean }
   /**
    * Karakter üstü zamanla hasar (DoT; `hot`'un aynası): vurulan hedeflere `status` durumunu `turns` tur verir; tik miktarı uygulama anında sabitlenir
    * (scale x power). Tik: taşıyanın kendi turunun başında, zemin tiklerinden sonra; büyü zırhı/zayıflık uygulanır, isabet/kritik yok, Guard'a
    * aktarılmaz (origin 'status'). Yeniden uygulanınca süre yenilenir, büyük miktar kalır. Element/hasar türü durum tanımının `dot` alanından.
    */
-  | { type: 'dot'; status: StatusKind; scale: Attribute; power: number; turns: number };
+  | { type: 'dot'; status: StatusKind; scale: Attribute; power: number; turns: number }
+  /**
+   * Çekme (Chain Hook, M6): İSABET EDEN (hasar yoksa tüm) hedef, kendi tahtasında kendi şeridinin EN ÖNDEKİ boş (canlı birim olmayan) hücresine
+   * taşınır (yalnızca önünde boş hücre varsa). Olay `moved { cause: skill id, by }`. Boss kontrol direnci (unyielding.immuneDisplacement) etkilenmez.
+   */
+  | { type: 'pull'; to: 'laneFront' };
 
 /**
  * Kalkan emilim kancaları (generic; her kalkan türünde çalışır: physical / magic). Kalkan ayaktayken bir SKILL vuruşunun hasarını emdiğinde tetiklenir
@@ -557,6 +673,14 @@ export interface SkillDef {
    * İsteğe bağlı `stages`: şeklin hücreleri aşamalara bölünür, vuruşlar aşama sırasıyla gelir (olaylarda `stage`).
    */
   area?: AreaDef;
+  /** Telgraflı (gecikmeli) skill (bkz. TelegraphDef): etkiler kullanılınca değil, sahibin bir sonraki turunun başında işaretli hücrelere uygulanır. */
+  telegraph?: TelegraphDef;
+  /** Skill'in kullanılabilmesi için tarafında canlı olması gereken birim id'si (Chain Hook: 'iron_mooring'; canUse 'Needs a standing Mooring'). */
+  requiresAlly?: string;
+  /** Boss fazı şartı: kullanıcının fazı bu ve üstüyse kullanılabilir (Ash Brand 2, Fall 3; fazsız birimde faz 1). */
+  minPhase?: number;
+  /** Faza göre alan (Breaking Span: faz 2'den itibaren rect 2x3): anahtar = faz numarası; kullanıcının fazına eşit/küçük en büyük anahtar geçerli. */
+  areaByPhase?: Record<string, AreaDef>;
 }
 
 /**
@@ -677,7 +801,7 @@ export type Side = 'party' | 'enemy';
  * Durum türleri. 'thorns' (eski Thorn Shield) motorda ve veride KALDIRILDI (madde 222); ad yalnızca src/game/scenes/BattleScene.ts eski bir
  * `e.status === 'thorns'` karşılaştırması yaptığı için tür listesinde duruyor (ui-dev silince buradan da silinecek). Hiçbir skill/durum tanımı onu üretmez.
  */
-export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns' | 'blinded' | 'shrouded' | 'dark_bond' | 'omen' | 'wither' | 'jinxed' | 'silence' | 'abyssal_fury';
+export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns' | 'blinded' | 'shrouded' | 'dark_bond' | 'omen' | 'wither' | 'jinxed' | 'silence' | 'abyssal_fury' | 'overextended' | 'staggered' | 'ash_brand' | 'anchored';
 
 /** Yığılan durumun patlaması (Hexer Doom): hasar = scale statı x powerPerStack x yığın x çarpan; büyü zırhı/kalkan uygulanır, isabet zarı YOK, kritik zarı VAR. */
 export interface DoomDef {
@@ -723,8 +847,10 @@ export interface StatusDef {
   tickAtTurnEnd?: boolean;
   /** Yığılan durum: en çok bu kadar yığın (Omen 3). Yığın maxStacks'e ulaşınca `doom` anında patlar. */
   maxStacks?: number;
-  /** Yığılan durumun süresi (ilk yığınla başlar; yeni yığın süreyi YENİLEMEZ, madde Ö2). */
+  /** Yığılan durumun süresi (ilk yığınla başlar). */
   duration?: number;
+  /** true: skill ile eklenen her yeni yığın süreyi tam `duration`'a YENİLER (Ömer 2026-10-08, Ö2 güncellendi). Ill Omen geçişi yenilemez. */
+  refreshOnStack?: boolean;
   /** true: süre dolunca yığın sessizce düşmez, yığın sayısı kadar `doom` patlar (taşıyanın tur başı; Wither tikinden sonra, yenilenmeden önce). */
   burstOnExpire?: boolean;
   /** Patlama tanımı (yığılan durum). */
@@ -744,6 +870,8 @@ export interface StatusDef {
    * vuruş, önizleme, YZ); türetilmiş değerler (can, kritik, zırh...), şifa ve kalkan değişmez.
    */
   attackAttrPct?: Partial<Record<Attribute, number>>;
+  /** true: süre turla azalmaz; durum onu koyan kural kaldırana kadar sürer (Ash Brand: telgraf çözülünce/iptal olunca; Anchored: Mooring sayısı, Staggered: kaybedilen eylem). */
+  untilResolved?: boolean;
 }
 
 /** data/grounds.json girişi: yerde kalan etki türü. */
@@ -862,6 +990,16 @@ export interface Combatant {
   modifiers?: UnitModifiers;
   /** Tur başına eylem sayısı (modifiers.actionsPerTurn > 1 ise; yoksa 1). */
   actionsPerTurn?: number;
+  /** Bu savaşta kullanılamayan skill'ler (UnitSetup.lockSkills; canUse 'Locked'). Skill listede kalır. */
+  lockedSkills?: string[];
+  /** Başlangıç cooldown'u eki (UnitSetup.initialCooldownBonus; cooldown'lu skill'lere). */
+  initialCooldownBonus?: number;
+  /** Boss kuralları (tanımdan; bkz. BossDef). */
+  boss?: BossDef;
+  /** Boss fazı (1 = başlangıç); boss olmayan birimde tanımsız. */
+  phase?: number;
+  /** Sıra almayan yardımcı nesne (Iron Mooring; bkz. CombatantData.inert). */
+  inert?: boolean;
 }
 
 /** Aşamalı alan skill'inin bir aşaması (skillUsed.stages): o aşamanın hücreleri (boşlar dahil) ve vurulacak birimler. Dizin = aşama numarası. */
@@ -967,11 +1105,11 @@ type BattleEventBody =
    * Doom patlaması (ardından normal 'damage' olayı gelir: status 'omen', element 'dark'). cause: complete (yığın doldu, anında), expire (süre doldu, taşıyanın
    * tur başı; origin 'status', Guard yok), detonate (Doom Mark; `skill`). `omens` tüketilen yığın, `mult` çarpan.
    */
-  | { type: 'doom'; source: string; target: string; omens: number; mult: number; cause: 'complete' | 'expire' | 'detonate'; skill?: string }
+  | { type: 'doom'; source: string; target: string; omens: number; mult: number; cause: 'complete' | 'expire' | 'detonate'; skill?: string; /** Kesin kritik Doom (kritik Jinx tamamladı; critDoomOnCrit). */ sureCrit?: boolean }
   /** Ill Omen geçişi: `from` ölen, `to` alıcı, `stacks` geçen yığın, `after` alıcının yeni yığını; `source` pasifin sahibi (Hexer). */
   | { type: 'omenTransfer'; source: string; from: string; to: string; stacks: number; after: number }
   /**
-   * Durum bitti. `cause: 'doom'`: yığın Doom ile patladı; `cause: 'ill_omen'`: ölen birimin yığını Ill Omen ile geçti. `broken`: taunt kırıldı (UI "Taunt broken"). `dispelled`: bir dispel/cleanse sildi (`source` silen birim, `cause` skill id'si:
+   * Durum bitti. `cause: 'doom'`: yığın Doom ile patladı; `cause: 'ill_omen'`: ölen birimin yığını Ill Omen ile geçti; `cause: 'erased'`: Doom Mark (noTransferOnKill) öldürdü, yığın silindi (geçmedi). `broken`: taunt kırıldı (UI "Taunt broken"). `dispelled`: bir dispel/cleanse sildi (`source` silen birim, `cause` skill id'si:
    * 'spell_ward' (saldıranın buff'ı) / 'mana_barrier' (dostun debuff'ı)). `cause: 'bond_broken'`: Dark Bond bağı ölüm ya da yeni bağ yüzünden koptu.
    */
   | { type: 'statusEnd'; target: string; status: StatusKind; broken?: boolean; dispelled?: boolean; source?: string; cause?: string; /** endsOnOwnAttack (Jinxed): taşıyanın saldırısı durumu tüketti. */ consumed?: boolean }
@@ -997,8 +1135,25 @@ type BattleEventBody =
   | { type: 'rage'; actor: string; delta: number; after: number; max: number }
   /** Global skill kullanıldı (rest / skip_turn / move_tile); ayrıntı olayları (mpRegen, turnSkipped, moved) hemen arkasından gelir. */
   | { type: 'globalUsed'; actor: string; id: string }
-  /** Birim kendi tarafındaki boş yuvaya geçti (Move Tile); yeni yuva Combatant.slot'ta da güncellenir. */
-  | { type: 'moved'; actor: string; from: number; to: number }
+  /** Birim kendi tarafındaki boş yuvaya geçti (Move Tile); yeni yuva Combatant.slot'ta da güncellenir. `cause`/`by`: zorla yer değiştirme (Chain Hook çekmesi: skill id, çeken). */
+  | { type: 'moved'; actor: string; from: number; to: number; cause?: string; by?: string }
+  /**
+   * Telgraf (gecikmeli saldırı) kuruldu: `cells` işaretli hücreler (tahta `board`), `safeCells` Keystone'lar, `bound` damgalı birim (Ash Brand).
+   * Çözülme: kaynağın bir sonraki turunun başında (adalet kuralı: waitFor'daki herkes oynamadan çözülmez).
+   */
+  | { type: 'telegraph'; id: string; source: string; skill: string; kind: 'area' | 'brand'; board: Side; cells: number[]; safeCells?: number[]; bound?: string }
+  /** Telgraf çözüldü: `cells` o anki hücreler, `hit` vurulan birimler, `avoided` telgraf kurulurken işaretli hücrede olup kaçanlar. Ardından hasar/zemin olayları gelir. */
+  | { type: 'telegraphResolve'; id: string; source: string; skill: string; board: Side; cells: number[]; hit: string[]; avoided: string[] }
+  /** Telgraf iptal: cause 'anchor' (Mooring kırıldı), 'source_dead', 'bound_dead', 'dispel', 'phase' (faz girişinde yerini Fall aldı). */
+  | { type: 'telegraphCancel'; id: string; source: string; skill: string; cause: string }
+  /** Telgraf adalet kuralı yüzünden ertelendi (karşı tarafta henüz oynamayan birim var). */
+  | { type: 'telegraphDelay'; id: string; source: string; skill: string; waiting: string[] }
+  /** Boss fazı değişti (Ember Heart): `phase` yeni faz (2, 3...), `hp`/`maxHp`, `banner` faz bandı metni. */
+  | { type: 'phase'; actor: string; phase: number; hp: number; maxHp: number; banner: string }
+  /** Bağlı yardımcı (Iron Mooring) kırıldı: `owner` boss, `stagger` boss bir eylem kaybedecek mi (faz kopuşunda false), kalan yardımcı sayısı. */
+  | { type: 'anchorBroken'; anchor: string; owner: string; stagger: boolean; left: number }
+  /** Birim Stagger yüzünden bu eylemini kaybetti (Unyielding / Mooring kırılması). */
+  | { type: 'staggered'; actor: string }
   /** Bir pasif tetiklendi (UI kısa bir yazı gösterir). */
   | { type: 'passive'; actor: string; passive: string; name: string }
   /** `extra`: tur başına birden çok eylemli birimin (UnitModifiers.actionsPerTurn) aynı turdaki ek eylemi; tur başı işlemleri yapılmadı. */

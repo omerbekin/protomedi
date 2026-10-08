@@ -69,6 +69,12 @@ export const VFX_KINDS = [
   'saltire',
   'smokebomb',
   'backstab',
+  /** Bridge Warden (boss; src/game/vfx-warden.ts): skill efektleri (Anchor Smash, Breaking Span telgrafı, Chain Hook, Ash Brand, Fall of King's Bridge telgrafı). */
+  'anchorsmash',
+  'breakingspan',
+  'chainhook',
+  'ashbrand',
+  'fallofthebridge',
 ] as const;
 
 /** Kullanılmayan ama bilerek saklanan yedek efektler. */

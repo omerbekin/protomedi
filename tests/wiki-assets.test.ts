@@ -54,13 +54,13 @@ describe('Wiki > Assets: ortak katalog (src/gallery/catalog.ts)', () => {
   });
 
   it('her class ve çağrının sprite ve avatar dosyası katalogda bulunur (gizli class dahil)', () => {
-    const defs = [...Object.values(content.classes), ...Object.values(content.summons)];
+    const defs = [...Object.values(content.classes), ...Object.values(content.summons), ...Object.values(content.bosses)]; // boss tanımları (data/bosses) da
     expect(catalog.characters.map((c) => c.id).sort()).toEqual(defs.map((d) => d.id).sort());
     for (const c of catalog.characters) {
       expect(c.idleUrl, `${c.id}: assets/sprites/${c.spriteId}/idle.png yok`).not.toBeNull();
       expect(c.avatarUrl, `${c.id}: assets/avatars/${c.spriteId}.png yok`).not.toBeNull();
       expect(c.missing, c.id).toEqual([]);
-      expect(c.skills.length, c.id).toBe(content.classes[c.id]?.skills.length ?? content.summons[c.id]!.skills.length);
+      expect(c.skills.length, c.id).toBe((content.classes[c.id] ?? content.summons[c.id] ?? content.bosses[c.id])!.skills.length);
     }
   });
 

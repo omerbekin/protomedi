@@ -18,7 +18,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 const PLACEHOLDER_SPRITE_CLASSES: string[] = [];
 /** Kendi görseli henüz çizilmemiş, başka bir class'ın sprite'ını GEÇİCİ kullanan class'lar (class id -> ödünç spriteId). Görsel gelince listeden çıkar. */
 const BORROWED_SPRITE_CLASSES: Record<string, string> = {}; // başka class'ın görselini ödünç alan class'lar (şu an yok: Cutthroat'ın kendi görseli var)
-const everyone = { ...content.classes, ...content.summons };
+const everyone = { ...content.classes, ...content.summons, ...content.bosses }; // boss tanımları (data/bosses) da şemaya tabi
 
 describe('skill verisi', () => {
   const all = Object.entries(content.skills);
@@ -204,6 +204,11 @@ describe('skill verisi', () => {
             expect(ATTRIBUTES).toContain(e.scale);
             expect(e.power).toBeGreaterThan(0);
             expect(e.turns).toBeGreaterThan(0);
+            break;
+          case 'pull':
+            // Chain Hook: çekme yalnızca tek hedefe ve hasarla (isabet edene)
+            expect(e.to).toBe('laneFront');
+            expect(s.effects.some((x) => x.type === 'damage'), key).toBe(true);
             break;
           default:
             throw new Error(`${key}: bilinmeyen etki türü ${(e as { type: string }).type}`);
@@ -491,6 +496,8 @@ describe('görsel veri: skill ikonları, class logoları, stat ikonları, hareke
       ...Object.values(content.skills).map((s) => s.icon),
       ...Object.values(content.classes).map((c) => c.logo),
       ...Object.values(content.summons).map((c) => c.logo),
+      ...Object.values(content.bosses).flatMap((c) => [c.logo, ...(c.boss?.passives ?? []).map((x) => x.icon)]), // boss logoları ve pasifleri
+      'keystone', // Fall of King's Bridge güvenli hücre işareti (BattleScene telgraf göstergesi)
       ...Object.values(content.classes).map((c) => c.passive?.icon ?? ''),
       ...Object.values(STAT_ICON),
       ...Object.values(UI_ICON),

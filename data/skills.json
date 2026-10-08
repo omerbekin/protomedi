@@ -169,7 +169,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 2.0,
+        "power": 2,
         "element": "fire"
       }
     ],
@@ -1445,7 +1445,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 2.0
+        "power": 2
       },
       {
         "type": "status",
@@ -1643,7 +1643,7 @@
     ]
   },
   "jinx": {
-    "_not": "Hexer: uğursuzluk düğümü. Hasar + Jinxed 2 tur (isabet -%20, kritik yok; hedefin bir sonraki hasar skill'inden sonra düşer) + 1 Omen (kritikse 2). Backstab'ın garantili kritiğini bozmaz (Ö5). Madde 260 (Ömer): yerleşik +%25 kritik şansı (critBonus; kritik Jinx = 2 Omen, hasar x1,5; PROVİZYON). İkon/vfx/ses YER TUTUCU (ödünç: ikon clover, vfx bonethrow, ses chainTether + boneImpact); gerçekleri: jinx ikon/vfx, threadCinch + ceramicCrack. Sayılar PROVİZYON.",
+    "_not": "Hexer: uğursuzluk düğümü. Hasar + Jinxed 2 tur (isabet -%20, kritik yok; hedefin bir sonraki hasar skill'inden sonra düşer) + 1 Omen (kritikse 2). Backstab'ın garantili kritiğini bozmaz (Ö5). Madde 260 (Ömer): yerleşik +%25 kritik şansı (critBonus; kritik Jinx = 2 Omen, hasar x1,5; PROVİZYON). critDoomOnCrit (Ömer 2026-10-08): kritik Jinx yığını 3'e tamamlarsa o Doom KESİN kritik (kendi zarı atılmaz). İkon/vfx/ses YER TUTUCU (ödünç: ikon clover, vfx bonethrow, ses chainTether + boneImpact); gerçekleri: jinx ikon/vfx, threadCinch + ceramicCrack. Sayılar PROVİZYON.",
     "id": "jinx",
     "name": "Jinx",
     "icon": "clover",
@@ -1672,7 +1672,8 @@
       {
         "type": "omen",
         "stacks": 1,
-        "critStacks": 2
+        "critStacks": 2,
+        "critDoomOnCrit": true
       }
     ],
     "vfx": "bonethrow",
@@ -1682,7 +1683,7 @@
     ]
   },
   "doom_mark": {
-    "_not": "Hexer 4. yuva: vurur, +1 Omen (kritikse 2), sonra yığın kaç olursa olsun Doom x1,5 (Ö10; otomatik Doom bastırılır: çift patlama yok). İskada hiçbir şey olmaz. İkon/vfx/ses YER TUTUCU (ödünç: ikon voidstrike, vfx voidstrike, ses voidPulse + implode); gerçekleri: doommark ikon/vfx, doomBreath + hexWhisper + ceramicCrack + doomThud. Sayılar PROVİZYON.",
+    "_not": "Hexer 4. yuva: vurur, +1 Omen (kritikse 2), sonra yığın kaç olursa olsun Doom x1,5 (Ö10; otomatik Doom bastırılır: çift patlama yok). İskada hiçbir şey olmaz. noTransferOnKill (Ömer 2026-10-08): Doom Mark'ın vuruşu ya da patlaması hedefi öldürürse Ill Omen çalışmaz, hedefin Omen'leri silinir (geçmez). İkon/vfx/ses YER TUTUCU (ödünç: ikon voidstrike, vfx voidstrike, ses voidPulse + implode); gerçekleri: doommark ikon/vfx, doomBreath + hexWhisper + ceramicCrack + doomThud. Sayılar PROVİZYON.",
     "id": "doom_mark",
     "name": "Doom Mark",
     "icon": "voidstrike",
@@ -1711,7 +1712,8 @@
       {
         "type": "detonate",
         "status": "omen",
-        "mult": 1.5
+        "mult": 1.5,
+        "noTransferOnKill": true
       }
     ],
     "ai": {
@@ -1721,6 +1723,182 @@
     "sfx": [
       "voidPulse",
       "implode"
+    ]
+  },
+  "anchor_smash": {
+    "id": "anchor_smash",
+    "name": "Anchor Smash",
+    "icon": "anchorsmash",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "motion": "melee",
+    "fx": "#8a4a25",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 1.5
+      }
+    ],
+    "vfx": "anchorsmash",
+    "sfx": [
+      "chainDrag",
+      "anchorImpact"
+    ]
+  },
+  "breaking_span": {
+    "id": "breaking_span",
+    "name": "Breaking Span",
+    "icon": "breakingspan",
+    "target": "area_enemies",
+    "area": {
+      "shape": "row"
+    },
+    "areaByPhase": {
+      "2": {
+        "shape": "rect",
+        "rows": 2,
+        "cols": 3,
+        "anchor": "bottom_left"
+      }
+    },
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "cooldown": 2,
+    "motion": "cast",
+    "fx": "#2f6f73",
+    "telegraph": {
+      "kind": "area"
+    },
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 2.6
+      },
+      {
+        "type": "ground",
+        "ground": "flooded_planks",
+        "turns": 2,
+        "scale": "str",
+        "power": 0.2
+      }
+    ],
+    "vfx": "breakingspan",
+    "sfx": [
+      "chainDrag",
+      "stoneCrack",
+      "timberSplinter",
+      "riverBurst"
+    ]
+  },
+  "chain_hook": {
+    "id": "chain_hook",
+    "name": "Chain Hook",
+    "icon": "chainhook",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "cooldown": 2,
+    "motion": "whip",
+    "fx": "#8a4a25",
+    "requiresAlly": "iron_mooring",
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 1.1
+      },
+      {
+        "type": "pull",
+        "to": "laneFront"
+      }
+    ],
+    "vfx": "chainhook",
+    "sfx": [
+      "chainDrag",
+      "ironCreak"
+    ]
+  },
+  "ash_brand": {
+    "id": "ash_brand",
+    "name": "Ash Brand",
+    "icon": "ashbrand",
+    "target": "single_enemy",
+    "cost": {
+      "resource": "mp",
+      "amount": 12
+    },
+    "cooldown": 3,
+    "minPhase": 2,
+    "motion": "cast",
+    "fx": "#e0702a",
+    "telegraph": {
+      "kind": "brand",
+      "status": "ash_brand",
+      "area": {
+        "shape": "plus"
+      }
+    },
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "magic",
+        "element": "fire",
+        "scale": "str",
+        "power": 1.6
+      }
+    ],
+    "vfx": "ashbrand",
+    "sfx": [
+      "emberHiss"
+    ]
+  },
+  "fall_of_kings_bridge": {
+    "id": "fall_of_kings_bridge",
+    "name": "Fall of King's Bridge",
+    "icon": "fallofthebridge",
+    "target": "all_enemies",
+    "cost": {
+      "resource": "mp",
+      "amount": 0
+    },
+    "cooldown": 4,
+    "minPhase": 3,
+    "motion": "cast",
+    "fx": "#e0702a",
+    "telegraph": {
+      "kind": "area",
+      "wholeBoard": true,
+      "keystones": {
+        "perLane": 1
+      }
+    },
+    "effects": [
+      {
+        "type": "damage",
+        "damageType": "physical",
+        "scale": "str",
+        "power": 2.8
+      }
+    ],
+    "vfx": "fallofthebridge",
+    "sfx": [
+      "bridgeGroan",
+      "wardenGrowl",
+      "stoneCrack",
+      "timberSplinter",
+      "riverBurst"
     ]
   }
 }

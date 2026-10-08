@@ -95,6 +95,8 @@ export function buildDef(data: CombatantData, formulas: Formulas): CombatantDef 
     ...(data.variants ? { variants: { fed: { ...data.variants.fed }, unfed: { ...data.variants.unfed } } } : {}),
     ...(data.overrides ? { overrides: { ...data.overrides } } : {}),
     ...(data.accuracyBase !== undefined ? { accuracyBase: data.accuracyBase } : {}),
+    ...(data.boss ? { boss: data.boss } : {}),
+    ...(data.inert ? { inert: true } : {}),
   };
 }
 

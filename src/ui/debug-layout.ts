@@ -74,6 +74,7 @@ export const SECTION_ICONS: Record<string, string> = {
   Display: 'eye',
   'Battle setup': 'restart',
   'Test battles': 'flask',
+  Multiplayer: 'team',
   'Result screens': 'helm',
   'Animation speed': 'hourglass',
   'Match record': 'clipboard',

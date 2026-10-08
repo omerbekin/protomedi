@@ -310,3 +310,60 @@ describe('tur başına ek eylem (actionsPerTurn)', () => {
     expect(playOut(make(8, 'turns', bossTeams(2)))).toEqual(playOut(make(8, 'turns', bossTeams(2))));
   });
 });
+
+// Sefer tutorial'ı (Ömer şikâyeti 2026-10-08: Mill Road Cutpurse ultisini hemen atıyor): UnitSetup.lockSkills ve initialCooldownBonus.
+describe('lockSkills ve initialCooldownBonus', () => {
+  const ULT = 'backstab'; // Cutthroat 4. yuva (initialCooldown'lu)
+  for (const mode of MODES) {
+    it(`${mode}: kilitli skill canUse 'Locked', YZ hiç seçmez; diğer skill'ler serbest; aynı seed = aynı savaş`, () => {
+      const units = { enemies: { 2: { lockSkills: [ULT] } as UnitSetup } };
+      const b = make(3, mode, { ...TEAMS, units });
+      const ct = b.combatants.find((c) => c.side === 'enemy' && c.defId === 'cutthroat')!;
+      expect(ct.lockedSkills).toEqual([ULT]);
+      expect(ct.skills).toContain(ULT); // listede kalır
+      b.noCooldowns = true;
+      if (mode === 'turns') for (let i = 0; i < 200 && b.currentUid !== ct.uid && !b.winner; i++) b.skipTurn();
+      expect(b.canUse(ct.uid, ULT)).toEqual({ ok: false, reason: 'Locked' });
+      expect(b.canUse(ct.uid, 'venom_edge').ok).toBe(true);
+      const log = playOut(make(3, mode, { ...TEAMS, units }));
+      expect(log.some((e) => e.type === 'skillUsed' && e.actor === ct.uid && e.skill === ULT)).toBe(false);
+      expect(JSON.stringify(playOut(make(3, mode, { ...TEAMS, units })))).toBe(JSON.stringify(log));
+    });
+  }
+
+  it('turns: initialCooldownBonus cooldown\'lu her skill\'in başlangıç cooldown\'una eklenir (maxInitial aşılabilir); cooldown\'suz temel saldırı serbest; çağrılara ve test moduna etki yok', () => {
+    const bonus = f.cooldown.maxInitial; // initialCooldown + bonus > maxInitial
+    const b = make(5, 'turns', { ...TEAMS, units: { enemies: { 0: { initialCooldownBonus: bonus }, 2: { initialCooldownBonus: bonus } } } });
+    const w = b.combatants.find((c) => c.side === 'enemy' && c.defId === 'warrior')!;
+    const ct = b.combatants.find((c) => c.side === 'enemy' && c.defId === 'cutthroat')!;
+    const S = content.skills;
+    expect(ct.cooldowns[ULT]).toBe(Math.min(f.cooldown.maxInitial, S[ULT]!.initialCooldown!) + bonus);
+    expect(ct.cooldowns[ULT]!).toBeGreaterThan(f.cooldown.maxInitial);
+    for (const id of w.skills) {
+      const sk = S[id]!;
+      const expected = (sk.cooldown ?? 0) > 0 || (sk.initialCooldown ?? 0) > 0 ? Math.min(f.cooldown.maxInitial, sk.initialCooldown ?? 0) + bonus : 0;
+      expect(w.cooldowns[id] ?? 0, id).toBe(expected);
+    }
+    expect(w.cooldowns.melee_attack ?? 0).toBe(0);
+    // bonus yokken eskisi gibi
+    const plain = make(5, 'turns');
+    expect(plain.combatants.find((c) => c.side === 'enemy' && c.defId === 'cutthroat')!.cooldowns[ULT]).toBe(Math.min(f.cooldown.maxInitial, S[ULT]!.initialCooldown!));
+    // test modunda cooldown yok
+    const t = make(5, 'test', { ...TEAMS, units: { enemies: { 2: { initialCooldownBonus: bonus } } } });
+    expect(t.combatants.find((c) => c.side === 'enemy' && c.defId === 'cutthroat')!.cooldowns[ULT] ?? 0).toBe(0);
+    // birimin kendi ilk (min + bonus) turunda kullanılamaz, sonra kullanılabilir
+    const n = ct.cooldowns[ULT]!;
+    let own = 0;
+    for (let i = 0; i < 600 && !b.winner && own <= n; i++) {
+      if (b.currentUid === ct.uid) {
+        own++;
+        b.noCooldowns = false;
+        const can = b.canUse(ct.uid, ULT);
+        const reason = can.ok ? undefined : can.reason;
+        if (own <= n) expect(reason, `tur ${own}`).toBe('On cooldown');
+        else expect(reason).not.toBe('On cooldown');
+      }
+      b.skipTurn();
+    }
+  });
+});

@@ -20,6 +20,8 @@ import undead from '../../data/classes/undead.json';
 import warrior from '../../data/classes/warrior.json';
 import skeleton from '../../data/summons/skeleton.json';
 import treant from '../../data/summons/treant.json';
+import bridgeWarden from '../../data/bosses/bridge_warden.json';
+import ironMooring from '../../data/bosses/iron_mooring.json';
 import groundsJson from '../../data/grounds.json';
 import statusesJson from '../../data/statuses.json';
 import type { AiConfig } from './ai';
@@ -73,6 +75,15 @@ export const selectableClasses: string[] = Object.keys(classes).filter((id) => !
 export const summons: Record<string, CombatantDef> = {
   treant: buildDef(treant as unknown as CombatantData, formulas),
   skeleton: buildDef(skeleton as unknown as CombatantData, formulas),
+};
+
+/**
+ * Boss tanımları (data/bosses): gizli; rastgele havuzda, takım seçiminde ve denge sim'inde YOK. Yalnızca sefer karşılaşmaları (encounters.json `class`)
+ * kullanır. The Bridge Warden ve bağlı yardımcısı Iron Mooring (inert). Class'ların "tam 4 skill / stat toplamı 30" kuralları bunlara uygulanmaz.
+ */
+export const bosses: Record<string, CombatantDef> = {
+  bridge_warden: buildDef(bridgeWarden as unknown as CombatantData, formulas),
+  iron_mooring: buildDef(ironMooring as unknown as CombatantData, formulas),
 };
 
 // "_not" gibi açıklama alanlarını ayıkla; geriye yalnızca skill tanımları kalır.
@@ -320,7 +331,7 @@ export function battleSetup(battleId: string, seed: number, mode: BattleMode = '
   const party = build(teams?.party, rolled?.party, 0x1111);
   const enemies = build(teams?.enemies, rolled?.enemies, 0x2222);
   // Sınıf ya da (hazır çağrı olarak) data/summons birimi
-  const unitDef = (id: string): CombatantDef => classes[id] ?? lookup(summons, id, 'Class');
+  const unitDef = (id: string): CombatantDef => classes[id] ?? bosses[id] ?? lookup(summons, id, 'Class');
   // Birim kurulumları: verilen kurulum + çağrı id'leri için summoned bayrağı. Hiçbir birimde kurulum yoksa alan hiç yazılmaz (eski davranış).
   const unitsFor = (b: Built, given: TeamUnits['party']): (UnitSetup | undefined)[] | undefined => {
     const out = b.ids.map((id, i) => {
@@ -347,7 +358,7 @@ export function battleSetup(battleId: string, seed: number, mode: BattleMode = '
     statuses,
     grounds,
     formulas,
-    units: { ...classes, ...summons },
+    units: { ...classes, ...summons, ...bosses },
     maxSlots: def.slots,
   };
 }

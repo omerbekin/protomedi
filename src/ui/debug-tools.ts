@@ -30,6 +30,7 @@ import { DEFAULT_TEST_SIZE, buildTestBattleData, clampTeam, placeClass, removeSl
 import { copyMatchData } from './match-copy';
 import { isFullscreen, toggleFullscreen } from './fullscreen';
 import { registerCampaignDebug } from './debug-campaign';
+import { registerMultiplayerDebug } from './debug-mp';
 import { getRotateMode, setRotateMode } from './viewport';
 import { VERSIONS_TAB, registerVersionsPanel } from './debug-versions';
 
@@ -76,6 +77,8 @@ const row = (...children: HTMLElement[]): HTMLElement => {
 export function registerDebugTools({ game, debug }: Ctx): void {
   // Sefer (campaign-dev): Campaign sekmesi
   registerCampaignDebug(game, debug);
+  // Multiplayer (multiplayer-dev): Setup > Multiplayer bölümü
+  registerMultiplayerDebug(game, debug);
   /** The battle scene, only while a battle is actually running (not on the team selection screen). */
   const battle = (): BattleScene | null => (game.scene.isActive(BattleScene.KEY) ? (game.scene.getScene(BattleScene.KEY) as BattleScene) : null);
   const applyFlags = (): void => {

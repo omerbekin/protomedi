@@ -80,17 +80,27 @@
     "color": "#b04fa8",
     "maxStacks": 3,
     "duration": 3,
+    "refreshOnStack": true,
     "burstOnExpire": true,
     "critDeltaPerStack": -0.03,
-    "doom": { "scale": "luck", "powerPerStack": 1.0, "damageType": "magic", "element": "dark", "expireMult": 1 },
-    "text": "At 3 Omens, Doom strikes. After 3 turns, the Omens burst into Doom. Misfortune: crit chance -3% per Omen"
+    "doom": {
+      "scale": "luck",
+      "powerPerStack": 1,
+      "damageType": "magic",
+      "element": "dark",
+      "expireMult": 1
+    },
+    "text": "At 3 Omens, Doom strikes. Each new Omen resets the 3-turn timer; when it runs out, the Omens burst into Doom. Misfortune: crit chance -3% per Omen"
   },
   "wither": {
     "name": "Withering",
     "type": "debuff",
     "icon": "poison",
     "color": "#9cab3c",
-    "dot": { "damageType": "magic", "element": "dark" },
+    "dot": {
+      "damageType": "magic",
+      "element": "dark"
+    },
     "text": "Takes dark damage at the start of each of its turns"
   },
   "jinxed": {
@@ -111,7 +121,9 @@
     "color": "#c0203a",
     "attackCharges": 3,
     "reachBonus": 1,
-    "attackAttrPct": { "str": 0.5 },
+    "attackAttrPct": {
+      "str": 0.5
+    },
     "text": "Next 3 attacks: melee reach +1 row and +50% STR (damage only)"
   },
   "silence": {
@@ -123,5 +135,44 @@
     "blocksMpSkills": true,
     "tickAtTurnEnd": true,
     "text": "Cannot use skills that cost MP (free skills, Rest, Skip Turn and Move still work)"
+  },
+  "overextended": {
+    "_not": "Bridge Warden: Breaking Span / Fall çözüldükten sonra çapa köprüye saplı kalır (Warden'ın sonraki turunun başına kadar). Sayı PROVİZYON.",
+    "name": "Overextended",
+    "type": "debuff",
+    "icon": "overextended",
+    "color": "#c0392b",
+    "damageTakenMult": 1.25,
+    "dispellable": false,
+    "text": "Takes 25% more damage until its next turn (anchor stuck in the bridge)"
+  },
+  "staggered": {
+    "_not": "Unyielding / Mooring kırılması: sıradaki tek eylemi kaybeder (üst üste binmez). untilResolved: süre turla azalmaz, eylem kaybedilince düşer.",
+    "name": "Staggered",
+    "type": "debuff",
+    "icon": "unyielding",
+    "color": "#ffd166",
+    "dispellable": false,
+    "untilResolved": true,
+    "text": "Loses its next action"
+  },
+  "ash_brand": {
+    "_not": "Ash Brand telgrafının damgası (birime bağlı). Warden'ın sonraki turunda patlar; dispel (Mana Barrier) siler, taşıyan ölürse söner.",
+    "name": "Ash Brand",
+    "type": "debuff",
+    "icon": "ashbrand",
+    "color": "#e0702a",
+    "untilResolved": true,
+    "text": "Bursts at the start of the Warden's next turn: fire damage to this unit and everyone right next to it. Can be dispelled."
+  },
+  "anchored": {
+    "_not": "Bridge Warden: canlı Iron Mooring sayısı (stacks); zırh eki motor kuralıdır (boss.anchor). Bilgi rozeti.",
+    "name": "Anchored",
+    "type": "buff",
+    "icon": "anchored",
+    "color": "#8a4a25",
+    "dispellable": false,
+    "untilResolved": true,
+    "text": "Each standing Iron Mooring gives +5 armor and +5 magic armor"
   }
 }

@@ -91,7 +91,7 @@ Karşılaştırma (aynı tablodan): Mage 6/19/3/2 → can 56, MP 68, ACC %82, CR
 | Tür | debuff (Resilience'a tabi) |
 | Yığın (stack) üst sınırı | **3** |
 | Ekleme | Hexer'in her **isabet eden** laneti hedefe +1 Omen; lanet vuruşu **kritikse +2** |
-| Süre | **En fazla 3 tur** (taşıyanın kendi turları; motorun mevcut süre kuralı: taşıyanın her tur başında 1 azalır). Sayaç **ilk Omen'le başlar**; yeni Omen süreyi **YENİLEMEZ / uzatmaz** (Ö2). Resilience zarı yalnızca ilk Omen konduğunda atılır (3 -> 2) |
+| Süre | **3 tur** (taşıyanın kendi turları; taşıyanın her tur başında 1 azalır). Sayaç ilk Omen'le başlar; **skill ile eklenen her yeni Omen süreyi tam 3 tura YENİLER** (Ö2 güncellendi, Ö13; veri `refreshOnStack: true`). Ill Omen ile geçen Omen yenilemez (Ö11). Resilience zarı yalnızca ilk Omen konduğunda atılır (3 -> 2); yenileme tam süreye, zarsız |
 | Süre dolunca | Omen'ler sessizce düşmez: hedefteki **Omen sayısı kadar Doom patlar** (otomatik Doom formülü, x1; bkz. 3.2 tetik b), yığın ve sayaç sıfırlanır |
 | Tamamlanma | Yığın **3'e ulaştığı AN** Doom tetiklenir (aynı eylemin içinde; Ö1), yığın ve sayaç 0'a iner. Sonraki ilk Omen yeni bir 3 turluk sayaç başlatır |
 | Kaynak | Yığın hedefe aittir: aynı taraftaki iki Hexer aynı yığını doldurur (Ö8). 3'te anında Doom: tamamlayan Hexer'in o anki Luck'ı. Süre bitiminde Doom: **son Omen'i ekleyen** Hexer; her Omen eklenişinde o Hexer'in Luck'ı ve kritik şansı yığına **snapshot** olarak yazılır (Hexer ölmüş olsa da lanet sürer ve bu snapshot kullanılır: Ö3) |
@@ -218,10 +218,11 @@ Parantez içi: Luck 14 ile ham değer.
 - Açıklama: *"Tie a cursed knot around one enemy: 50% Luck dark magic damage, 1 Bad Omen (2 on a critical hit) and Jinxed: -20% accuracy and no critical hits on its next attack (lasts up to 2 turns)."*
 - AI ipucu: `anyOf: [{ kill: true }, { minStatusMitigation: 6 }]` (yeni koşul: Smoke Bomb'un `statusMitigation` değerinin genelleşmesi; Jinxed ile önlenen beklenen hasar en az 6). Hedef: en tehlikeli vurucu (Mage, Archer, Gambler, Warrior).
 - Neden eğlenceli: savunma kararı ama hasar da verir ve Omen ekler (support değil, "saldırgan savunma").
+- **Kritik Doom (Ö15):** Jinx vuruşu kritikse (+2 Omen) ve yığını 3'e tamamlayıp otomatik Doom tetiklerse o Doom **kesin kritik** (kendi kritik zarı atılmaz). Veri: Jinx'in omen etkisinde `critDoomOnCrit: true`; başka skill'lerin kritik Omen'i bu kuraldan etkilenmez. Önizleme `doomOnCrit.sureCrit`, olay `doom.sureCrit`.
 - Risk: All In/Backstab gibi tek büyük vuruşu boşa çıkarması çok güçlü hissettirebilir. Backstab `guaranteedCrit`: **Jinx garantili kritiği BOZMAZ**, yalnızca isabet düşer (Ö5 kararı).
 
 **4) Doom Mark (`doom_mark`)**: 4. yuva, ultimate.
-- Akış: isabet zarı → vuruş (luck x 1,0) → +1 Omen (kritikse +2) → yığın 3'ü bulsa da bulmasa da **Doom x1,5** tetiklenir, yığın 0. (3'e ulaşan otomatik Doom ayrıca patlamaz: çift patlama yok.) İska ederse hiçbir şey olmaz (Omen'ler ve sayaçları yerinde kalır). Patlatma yığını ve sayacı sıfırlar.
+- Akış: isabet zarı → vuruş (luck x 1,0) → +1 Omen (kritikse +2) → yığın 3'ü bulsa da bulmasa da **Doom x1,5** tetiklenir, yığın 0 (Doom Mark'ın kendi Omen'i dahil hepsi harcanır). **Ö14:** vuruş ya da patlama hedefi öldürürse Ill Omen çalışmaz (Omen başka düşmana geçmez). (3'e ulaşan otomatik Doom ayrıca patlamaz: çift patlama yok.) İska ederse hiçbir şey olmaz (Omen'ler ve sayaçları yerinde kalır). Patlatma yığını ve sayacı sıfırlar.
 - Değer tablosu (Luck 14, ham, kritiksiz):
 
   | Hedefteki Omen (önce) | Vuruş | Doom (Omen sonra x 8,4 x 1,5) | Toplam |
@@ -243,7 +244,8 @@ Parantez içi: Luck 14 ile ham değer.
 - **Ad / id:** **Ill Omen** / `ill_omen`; yeni pasif türü **`omenTransfer`**.
 - **Kural:** Omen taşıyan bir düşman ölünce, alametleri **en yakın canlı düşmana** geçer.
   - Doom DIŞI bir nedenle ölürse (lanet vuruşu, Wither tiki, başka bir dostun saldırısı, zemin): **tüm yığın** geçer.
-  - Doom ile ölürse (yığın zaten tüketildi): **1 Omen** geçer ("kıyamet yankılanır").
+  - Doom ile ölürse (yığın zaten tüketildi): **1 Omen** geçer ("kıyamet yankılanır"). Yalnızca otomatik Doom (3. Omen) ve süre bitimi Doom'u için.
+  - **Doom Mark ile ölürse (Ö14):** Doom Mark'ın vuruşu YA DA patlaması hedefi öldürürse Ill Omen **çalışmaz**: hiç Omen geçmez, hedefin yığını silinir (veri: `detonate.noTransferOnKill: true`; olay `statusEnd { cause: 'erased' }` vuruş ölümünde).
   - Varışta yığın en fazla **2** olur (`maxOnArrival: 2`): **geçiş asla Doom tetiklemez** → zincirleme/sonsuz döngü imkânsız.
   - **Süre (Ö2 ile uyum, ÖNERİ):** geçen Omen'ler alıcıda yeni 3 tur başlatmaz, ölenin **kalan süresini** taşır (en az 1). Alıcıda zaten Omen varsa toplanır (yine 2'de kesilir) ve **alıcının kendi sayacı** korunur (uzamaz). Gerekçe: "en fazla 3 tur" kuralı geçişle delinmez, Omen'ler ölüm zincirinde uzayıp gitmez; süre dolunca alıcıda Doom olarak patlar. Snapshot (Luck/kritik) da Omen'le birlikte geçer.
 - **"En yakın" tanımı (deterministik):** ölenin tahtasında, ekran ızgarasında (`formation.screenGrid`) Manhattan uzaklığı en küçük canlı birim; eşitlikte önce aynı sıra, sonra küçük yuva numarası. Çağrılar da alıcı olabilir.
@@ -290,7 +292,7 @@ Parantez içi: Luck 14 ile ham değer.
 
 | # | İş | Ayrıntı | Boyut |
 |---|---|---|---|
-| E1 | `Status.stacks` + yığılan durum | `StatusDef.maxStacks` (omen 3), `refreshOnStack: false` (Ö2: süre ilk Omen'le başlar, yeni yığın süreyi yenilemez); `addStatus` yığını toplar, süreye dokunmaz; Resilience zarı yalnızca ilk eklemede; yığına snapshot (`sourceLuck`, `sourceCrit`, son ekleyen `source`); `status` olayına `stacks` | M |
+| E1 | `Status.stacks` + yığılan durum | `StatusDef.maxStacks` (omen 3), `refreshOnStack` (Ö2'de false idi; Ö13 ile true: yeni yığın süreyi tam süreye yeniler); `addStatus` yığını toplar; Resilience zarı yalnızca ilk eklemede; yığına snapshot (`sourceLuck`, `sourceCrit`, son ekleyen `source`); `status` olayına `stacks` | M |
 | E2 | Skill etkisi `omen` | `{ type: 'omen', stacks: 1, critStacks: 2 }`: isabet eden vuruştan sonra ekler (kritikse critStacks); aşamalı alanda hedef başına | S |
 | E3 | Doom | `StatusDef.doom { scale, powerPerStack, damageType, element, expireMult }`; (a) yığın maxStacks'e ulaşınca anında: kritik zarı (kaynak), isabet YOK, guard/kalkan/Lucky Escape normal; (b) `burstOnExpire: true`: süre dolunca (taşıyanın tur başı, Wither tikinden sonra) yığın sayısı x `expireMult` (1), snapshot Luck/kritik, guard YOK, `origin: 'status'`; olay `doom` (`cause`: complete / expire / detonate) | M |
 | E4 | Skill etkisi `detonate` | `{ type: 'detonate', status: 'omen', mult: 1.5 }` (Doom Mark): yığın ≥1 ise Doom'u çarpanla tetikler; aynı eylemde otomatik Doom'la çift patlama yok (önce omen etkisi ekler, detonate varsa otomatik tetik bastırılır) | S |
@@ -331,7 +333,7 @@ Yeni makale **"Curses: Omen, Doom, Withering"** (taslak bölüm 8.6), "Statuses"
 ### 7.5 Test planı (`tests/hexer.test.ts`)
 
 1. Class şeması: toplam 30, luck primary en yüksek, Lucky Escape aktif, türetilmiş değerler (56/44/8/%94/%12).
-2. Omen: +1, kritikte +2 (debug crit always), iskada 0, üst sınır 3; süre ilk Omen'le başlar ve yeni Omen **yenilemez** (1. tur 1 Omen, 2. tur +1: süre bitimi yine ilk Omen'den 3 tur sonra); Resilience zarı yalnızca ilk eklemede (3→2).
+2. Omen: +1, kritikte +2 (debug crit always), iskada 0, üst sınır 3; süre ilk Omen'le başlar ve yeni Omen süreyi **yeniler** (Ö13: 1. tur 1 Omen, 2. tur +1: süre bitimi son Omen'den 3 tur sonra); Resilience zarı yalnızca ilk eklemede (3→2).
 2b. Süre bitimi (Ö2): 1 ve 2 Omen'le süre dolunca Doom = luck x 0,6 x Omen sayısı (x1), taşıyanın tur başında, zemin ve Wither tikinden sonra, regen'den önce; snapshot Luck (son ekleyen Hexer; Hexer öldükten sonra da), kritik zarı snapshot kritikle; guard yok, kalkan/Lucky Escape var; tikte ölen taşıyanda patlamaz (Ill Omen tüm yığını geçirir); patlamadan sonra yığın/sayaç sıfır; iki Hexer'li yığında son ekleyenin snapshot'ı.
 3. Doom: 3'te anında otomatik (Ö1), hasar = luck x 0,6 x 3, isabet zarı yok (debug dodge always yine vurur), kritik zarı, büyü zırhı/kalkan, guard paylaşımı, Lucky Escape.
 4. Doom Mark: 0/1/2 Omen değer tablosu, x1,5, çift patlama yok, iskada yığın korunur, initialCooldown 2.
@@ -627,7 +629,7 @@ Tek hedef döngüsü (Evil Eye x3, kritiksiz): 3 x 12,6 + 25,2 = 63 / 3 tur ≈ 
 ### 12.3 Kararlar (Ömer, 2026-10-07)
 
 - **Ö1.** 3. Omen gelince Doom **hemen** patlar (öneri onaylandı).
-- **Ö2. YENİ KURAL:** Omen düşman üstünde **en fazla 3 tur** kalır; sayaç ilk Omen'le başlar, yeni Omen süreyi yenilemez/uzatmaz. Süre dolunca Omen'ler sessizce düşmez: hedefteki **Omen sayısı kadar Doom patlar** (luck x 0,6 x Omen sayısı x1; 3'e ulaşmışsa zaten anında patlamıştı). Sonuçları: 3.1, 3.2 (tetik b, zaman, snapshot, guard), 5 (Ill Omen kalan süreyi taşır), 6 (omenValueShare 0,85), 7.1 (E1, E3, E8), 7.5, 8 (tooltip/wiki), 11 (güç artışı + `expireMult` kolu).
+- **Ö2. YENİ KURAL (GÜNCELLENDİ 2026-10-08, bkz. Ö13: yeni Omen artık süreyi YENİLER):** Omen düşman üstünde **en fazla 3 tur** kalır; sayaç ilk Omen'le başlar, yeni Omen süreyi yenilemez/uzatmaz. Süre dolunca Omen'ler sessizce düşmez: hedefteki **Omen sayısı kadar Doom patlar** (luck x 0,6 x Omen sayısı x1; 3'e ulaşmışsa zaten anında patlamıştı). Sonuçları: 3.1, 3.2 (tetik b, zaman, snapshot, guard), 5 (Ill Omen kalan süreyi taşır), 6 (omenValueShare 0,85), 7.1 (E1, E3, E8), 7.5, 8 (tooltip/wiki), 11 (güç artışı + `expireMult` kolu).
 - **Ö3.** Hexer ölünce lanetler (Omen, Wither) **sürer**; süre bitimi Doom'u snapshot Luck kullanır.
 - **Ö4.** Misfortune Omen'in parçası (onaylandı).
 - **Ö5.** Jinx, Backstab'ın garantili kritiğini **bozmaz**.
@@ -638,5 +640,8 @@ Tek hedef döngüsü (Evil Eye x3, kritiksiz): 3 x 12,6 + 25,2 = 63 / 3 tur ≈ 
 - **Ö10.** Taslaktan farklar **onaylandı** (Doom Mark yığın 3 olmasa da patlatır x1,5; DoT Withering Curse'te).
 - **Ö11.** Ill Omen ile geçen Omen'ler ölenin **kalan süresini taşır** (yeni 3 tur başlatmaz; öneri onaylandı).
 - **Ö12.** Süre dolunca patlayan Doom Guard ile koruyucuya **aktarılmaz** (öneri onaylandı). Ömer'in notu: Guard yalnızca skill hasarını aktarır, debuff/lanet aktarmaz.
+- **Ö13 (2026-10-08).** "Omen'in süresi yeni Omen atınca refreshlenecek": skill ile eklenen her yeni Omen yığının süresini tam süreye (3 tur) yeniler (`statuses.json > omen.refreshOnStack: true`). Süre dolunca Omen sayısı kadar Doom kuralı aynen. **Varsayım:** Ill Omen geçişi yenilemez (ölenin kalan süresini taşır, alıcının sayacını uzatmaz); yenileme Resilience zarı atmaz, tam süreye çıkar. (open-questions)
+- **Ö14 (2026-10-08).** Doom Mark patlatınca hedefin TÜM Omen'leri (kendi +Omen'i dahil) harcanır; Doom Mark'ın vuruşu ya da patlaması hedefi öldürürse Ill Omen çalışmaz (0 Omen geçer). Otomatik Doom (3. Omen) ve süre bitimi Doom'uyla ölümde 1 Omen geçer (değişmedi). Veri `detonate.noTransferOnKill`.
+- **Ö15 (2026-10-08).** Kritik Jinx yığını 3'e tamamlarsa patlayan Doom kesin kritik (kendi zarı yok). Veri `omen.critDoomOnCrit` (yalnızca Jinx).
 
 **Ö2'den türetilen ÖNERİLER (Ömer onayı bekler):** (1) Ill Omen ile geçen Omen alıcıda yeni 3 tur başlatmaz, ölenin kalan süresini taşır (alıcıda Omen varsa alıcının sayacı korunur). (2) Süre bitimi Doom'u Guard'a aktarılmaz (tur başı durum hasarı, Wither tiki gibi). (3) Süre bitimi Doom'u taşıyanın tur başında, Wither tikinden sonra patlar.

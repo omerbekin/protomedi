@@ -1,0 +1,16 @@
+{
+  "name": "protomedi-lobby",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Embers of Valdoria multiplayer lobi ve signaling sunucusu (Cloudflare Worker + Durable Object). Oyun verisi buradan geçmez.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787 --ip 127.0.0.1",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "types": "wrangler types"
+  },
+  "devDependencies": {
+    "wrangler": "^4.148.0"
+  }
+}

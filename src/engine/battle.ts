@@ -9,7 +9,7 @@ import { damageSpecFor, type DamageEffect } from './spec';
 import { applySummonVariant, applyUnitModifiers, armorReduction, attributePower, hitOutcome } from './stats';
 import type { Attribute, Corpse, CorpseChoice, CorpseState, DamageOrigin, Element } from './types';
 import { advanceTurn, predictQueue, turnProgress, type TurnSlot } from './turn-order';
-import type { ActionInfo, AreaStage, BattleAction, BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GlobalSkillDef, GroundDef, GroundEffect, ShieldHook, Side, SkillDef, SkillEffect, Status, StatusDef, UnitSetup } from './types';
+import type { ActionInfo, AreaDef, AreaStage, BattleAction, BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GlobalSkillDef, GroundDef, GroundEffect, ShieldHook, Side, SkillDef, SkillEffect, Status, StatusDef, Telegraph, UnitSetup } from './types';
 
 export interface BattleSetup {
   seed: number;
@@ -173,6 +173,8 @@ export class Battle {
   private readonly lastKind = new Map<string, LastActionKind>();
   /** Şu an işlenen skill'in Rage kazancı: hedef uid -> o hedefe yapılan vuruşların kazancı toplamı (yalnızca Rage'li kullanıcıda; yoksa null). */
   private rageTally: Map<string, number> | null = null;
+  /** Bu skill sırasında ölürse yığını Ill Omen ile GEÇMEYECEK hedefler (detonate noTransferOnKill: Doom Mark); skill bitince null. */
+  private noTransferKill: Set<string> | null = null;
   /** Başlangıç cooldown'u olan birimler: ilk turunun başında azalmayacak skill'ler (uid -> skill id'leri). */
   private readonly initialHold = new Map<string, Set<string>>();
   private groundCount = 0;
@@ -180,6 +182,15 @@ export class Battle {
   private readonly actionsLeft = new Map<string, number>();
   /** Yerde duran (süreli) etkiler. */
   readonly ground: GroundEffect[] = [];
+  /** Bekleyen telgraflar (gecikmeli saldırılar: Breaking Span, Ash Brand, Fall of King's Bridge); oluşturulma sırasıyla. */
+  readonly telegraphs: Telegraph[] = [];
+  private telegraphCount = 0;
+  /** Bu turunda yeni telgraf kuran birimler (bir turda en fazla bir yeni telgraf); birimin turu başlayınca silinir. */
+  private readonly telegraphedThisTurn = new Set<string>();
+  /** Faz kilidi: bu eylemde faz eşiği geçmiş boss'lar (tek eylem tek eşik); her eylem / tur başı temizlenir. */
+  private readonly phaseCrossed = new Set<string>();
+  /** Faz girişinde yardımcılar kopuyor: kırılma Stagger / iptal vermez. */
+  private snappingAnchors = false;
 
   constructor(setup: BattleSetup) {
     this.setup = setup;
@@ -193,6 +204,12 @@ export class Battle {
     ];
     // Başlangıç cooldown'u (initialCooldown): yalnızca turns modunda ve class birimlerinde; test modunda cooldown zaten yok
     if (this.mode === 'turns') for (const c of this.combatants) this.applyInitialCooldowns(c);
+    // Boss: faz 1 ve bağlı yardımcı sayısı rozeti (Anchored); boss yoksa hiçbir şey değişmez
+    for (const c of this.combatants) {
+      if (!c.boss) continue;
+      if (c.boss.phases?.length) c.phase = 1;
+      this.refreshAnchored(c);
+    }
     this.record({ type: 'battleStart', seed: this.seed, combatants: this.combatants.map(cloneCombatant) });
     if (this.mode === 'turns') this.advance((e) => this.record(e));
   }
@@ -206,7 +223,10 @@ export class Battle {
     if (c.summoned) return;
     const max = this.setup.formulas.cooldown?.maxInitial ?? 0;
     for (const id of c.skills) {
-      const n = Math.min(max, Math.floor(this.skill(id)?.initialCooldown ?? 0));
+      const sk = this.skill(id);
+      // Kurulum eki (UnitSetup.initialCooldownBonus): cooldown'lu her skill'e (cooldown ya da initialCooldown > 0); maxInitial'ı aşabilir
+      const bonus = (sk?.cooldown ?? 0) > 0 || (sk?.initialCooldown ?? 0) > 0 ? Math.max(0, Math.floor(c.initialCooldownBonus ?? 0)) : 0;
+      const n = Math.min(max, Math.floor(sk?.initialCooldown ?? 0)) + bonus;
       if (n <= 0) continue;
       c.cooldowns[id] = n;
       let held = this.initialHold.get(c.uid);
@@ -354,10 +374,12 @@ export class Battle {
   }
 
   /**
-   * Yığın ekler (Omen): yoksa durumu süresiyle (statuses.json > duration; Resilience zarı yalnızca burada) başlatır, varsa yığını artırır ama süreye
-   * DOKUNMAZ (madde Ö2). Snapshot ve kaynak son ekleyene yazılır. Olaylar: status (stacks) + omen. `autoDoom` ve yığın maxStacks'e ulaştıysa Doom anında.
+   * Yığın ekler (Omen): yoksa durumu süresiyle (statuses.json > duration; Resilience zarı yalnızca burada) başlatır, varsa yığını artırır;
+   * `refreshOnStack` ise süre tam `duration`'a YENİLENİR (Ömer 2026-10-08, Ö2 güncellendi; Resilience zarı yenilemede atılmaz), değilse süreye dokunmaz.
+   * Snapshot ve kaynak son ekleyene yazılır. Olaylar: status (stacks) + omen. `autoDoom` ve yığın maxStacks'e ulaştıysa Doom anında;
+   * `critDoom` (critDoomOnCrit etkisi + kritik vuruş): o Doom KESİN kritik.
    */
-  private addStacks(target: Combatant, kind: Status['kind'], n: number, actor: Combatant, emit: Emit, crit: boolean, autoDoom: boolean): void {
+  private addStacks(target: Combatant, kind: Status['kind'], n: number, actor: Combatant, emit: Emit, crit: boolean, autoDoom: boolean, critDoom = false): void {
     const def = this.statusDef(kind);
     if (!def?.maxStacks || n <= 0 || target.hp <= 0) return;
     const max = def.maxStacks;
@@ -370,20 +392,22 @@ export class Battle {
     } else {
       st.stacks = Math.min(max, before + n);
       st.source = actor.uid;
+      if (def.refreshOnStack) st.turns = Math.max(st.turns, def.duration ?? 3);
       Object.assign(st, snap);
       emit({ type: 'status', target: target.uid, status: kind, turns: st.turns, source: actor.uid, stacks: st.stacks });
     }
     emit({ type: 'omen', source: actor.uid, target: target.uid, delta: (st.stacks ?? 0) - before, stacks: st.stacks ?? 0, max, ...(crit ? { crit: true } : {}), cause: 'skill' });
-    if (autoDoom && (st.stacks ?? 0) >= max && def.doom) this.triggerDoom(target, st, 1, 'complete', actor, emit);
+    if (autoDoom && (st.stacks ?? 0) >= max && def.doom) this.triggerDoom(target, st, 1, 'complete', actor, emit, undefined, critDoom);
   }
 
   /**
    * Doom: yığını tüketip patlatır. complete / detonate: tetikleyen (canlı, eylem yapan) Hexer'in o anki ölçek statı ve kritik şansı; skill vuruşunun
    * parçası (Guard paylaşımı, kalkan, kalkan kancaları, Lucky Escape normal; origin 'skill'). expire: yığındaki snapshot (son ekleyen; ölmüş olabilir),
    * tur başı durum hasarı: Guard'a AKTARILMAZ (madde Ö12), origin 'status'. İsabet zarı yok; sapma ve ayrı kritik zarı var (seed'li RNG).
-   * Ölümde Ill Omen Doom kuralıyla (onDoomKill) çalışır.
+   * Ölümde Ill Omen Doom kuralıyla (onDoomKill) çalışır (Doom Mark noTransferOnKill ise hiç çalışmaz). `forceCrit`: kritik zarı ATILMAZ, Doom kesin
+   * kritik (kritik Jinx'in tamamladığı Doom; debug 'never' yine kapatır).
    */
-  private triggerDoom(target: Combatant, status: Status, mult: number, cause: 'complete' | 'expire' | 'detonate', trigger: Combatant | undefined, emit: Emit, skillId?: string): void {
+  private triggerDoom(target: Combatant, status: Status, mult: number, cause: 'complete' | 'expire' | 'detonate', trigger: Combatant | undefined, emit: Emit, skillId?: string, forceCrit = false): void {
     const doom = this.statusDef(status.kind)?.doom;
     const omens = status.stacks ?? 0;
     target.statuses = target.statuses.filter((s) => s !== status);
@@ -395,11 +419,11 @@ export class Battle {
     const critChance = live ? this.effectiveStats(trigger!).critChance : (status.snapCrit ?? 0);
     const critMult = live ? trigger!.stats.critMult : (status.snapCritMult ?? f.attributes.critMult);
     const src = live ? trigger! : (this.get(status.source) ?? target);
-    emit({ type: 'doom', source: src.uid, target: target.uid, omens, mult, cause, ...(skillId ? { skill: skillId } : {}) });
+    emit({ type: 'doom', source: src.uid, target: target.uid, omens, mult, cause, ...(skillId ? { skill: skillId } : {}), ...(forceCrit ? { sureCrit: true } : {}) });
     const spec = this.doomSpec(target, status.kind, omens * mult)!;
     const base = rollDamage(Battle.scaleOnly(doom.scale, statValue), this.effectiveStats(target), spec, f, this.rng);
-    const rolled = rollCrit({ critChance, critMult }, this.rng);
-    const crit = this.debug.crit === 'auto' ? rolled.crit : this.debug.crit === 'always';
+    const rolled = forceCrit ? { crit: true } : rollCrit({ critChance, critMult }, this.rng);
+    const crit = this.debug.crit === 'auto' ? rolled.crit : forceCrit ? this.debug.crit !== 'never' : this.debug.crit === 'always';
     const total = Math.max(f.damage.minDamage, Math.round(base * (crit ? critMult : 1) * this.debug.damageMult));
     const meta: HitMeta = { origin: cause === 'expire' ? 'status' : 'skill', element: doom.element, damageType: doom.damageType, status: status.kind };
     const guard = cause === 'expire' ? undefined : target.statuses.find((s) => s.kind === 'guard');
@@ -422,6 +446,15 @@ export class Battle {
    */
   private illOmen(dead: Combatant, emit: Emit, doomed?: Status): void {
     const list = doomed ? [doomed] : dead.statuses.filter((s) => (this.statusDef(s.kind)?.maxStacks ?? 0) > 0 && (s.stacks ?? 0) > 0);
+    // Doom Mark (detonate noTransferOnKill) bu birimi öldürdüyse: yığın silinir, hiçbir şey geçmez (Ömer 2026-10-08)
+    if (this.noTransferKill?.has(dead.uid)) {
+      for (const st of list) {
+        if (doomed) continue; // Doom zaten tüketti ve sildi
+        dead.statuses = dead.statuses.filter((s) => s !== st);
+        emit({ type: 'statusEnd', target: dead.uid, status: st.kind, cause: 'erased' });
+      }
+      return;
+    }
     for (const st of list) {
       const owner = this.get(st.source);
       const pe = owner?.passive?.effect;
@@ -551,7 +584,11 @@ export class Battle {
    * Aura: kaynağın KENDİ zırhının pct'si, kendine ve artı şeklindeki komşu dostlara; bir birim en fazla maxStacks kaynaktan (en büyükler) alır.
    */
   effectiveStats(c: Combatant, extraCrit = 0): Combatant['stats'] {
-    const bonus = this.auraArmor(c);
+    // Boss bağı (Anchored): canlı her yardımcı (Iron Mooring) zırh + büyü zırhı ekler
+    const anchor = c.boss?.anchor;
+    const anchors = anchor ? this.anchorsOf(c).length : 0;
+    const bonus = this.auraArmor(c) + anchors * (anchor?.armorAdd ?? 0);
+    const magicBonus = anchors * (anchor?.magicArmorAdd ?? 0);
     let acc = 0;
     let eva = 0;
     // extraCrit: vuruşun kendi kritik eki (skill hasarının critBonus'u, Jinx); durum ekleriyle birlikte toplanıp [0, 1]'e kırpılır
@@ -563,10 +600,11 @@ export class Battle {
       // Kritik eki (Jinxed: kritik yok) ve yığın başına kritik eki (Omen Misfortune); sonuç [0, 1]
       crit += (d?.critDelta ?? 0) + (d?.critDeltaPerStack ?? 0) * (s.stacks ?? 0);
     }
-    if (bonus <= 0 && acc === 0 && eva === 0 && crit === 0) return c.stats;
+    if (bonus <= 0 && magicBonus <= 0 && acc === 0 && eva === 0 && crit === 0) return c.stats;
     return {
       ...c.stats,
       armor: c.stats.armor + bonus,
+      magicArmor: c.stats.magicArmor + magicBonus,
       accuracy: Math.max(0, Math.round((c.stats.accuracy + acc) * 10000) / 10000),
       evasion: Math.max(0, Math.round((c.stats.evasion + eva) * 10000) / 10000),
       critChance: Math.min(1, Math.max(0, Math.round((c.stats.critChance + crit) * 10000) / 10000)),
@@ -588,6 +626,397 @@ export class Battle {
     }
     gains.sort((x, y) => y - x);
     return gains.slice(0, maxStacks).reduce((t, g) => t + g, 0);
+  }
+
+  // --- Boss: fazlar, bağlı yardımcılar, Stagger, telgraflar (The Bridge Warden; docs/design/bosses/bridge-warden.md) ---
+
+  /** Bir tarafın SAVAŞAN canlı birimleri (sıra almayan yardımcı nesneler hariç): savaşın bitişi bunlarla belirlenir. */
+  fighting(side: Side): Combatant[] {
+    return this.living(side).filter((c) => !c.inert);
+  }
+
+  /** Birimin boss fazı (fazsız birimde 1). */
+  phaseOf(c: Combatant | string): number {
+    const u = typeof c === 'string' ? this.get(c) : c;
+    return u?.phase ?? 1;
+  }
+
+  /** Skill'in bu kullanıcı için geçerli alanı: faza göre alan (areaByPhase; fazına eşit/küçük en büyük anahtar), yoksa skill.area. */
+  areaOf(skillId: string, actorUid?: string): AreaDef | undefined {
+    const skill = this.skill(skillId);
+    if (!skill) return undefined;
+    const byPhase = skill.areaByPhase;
+    if (!byPhase || !actorUid) return skill.area;
+    const phase = this.phaseOf(actorUid);
+    let best: AreaDef | undefined;
+    let bestKey = -Infinity;
+    for (const [k, a] of Object.entries(byPhase)) {
+      const n = Number(k);
+      if (n <= phase && n > bestKey) {
+        best = a;
+        bestKey = n;
+      }
+    }
+    return best ?? skill.area;
+  }
+
+  /** Boss'un canlı bağlı yardımcıları (boss.anchor.unit id'li, aynı taraftaki canlı birimler; slot sırasıyla). */
+  anchorsOf(owner: Combatant): Combatant[] {
+    const id = owner.boss?.anchor?.unit;
+    if (!id) return [];
+    return this.combatants.filter((c) => c.uid !== owner.uid && c.side === owner.side && c.defId === id && c.hp > 0).sort((a, b) => a.slot - b.slot);
+  }
+
+  /** Anchored rozeti: yığın = canlı yardımcı sayısı (0'da kalkar). Kural (zırh eki) effectiveStats'ta; bu yalnızca bilgi. */
+  private refreshAnchored(owner: Combatant, emit?: Emit): void {
+    if (!owner.boss?.anchor || !this.statusDef('anchored')) return;
+    const n = owner.hp > 0 ? this.anchorsOf(owner).length : 0;
+    const st = owner.statuses.find((s) => s.kind === 'anchored');
+    if (n <= 0) {
+      if (st) {
+        owner.statuses = owner.statuses.filter((s) => s !== st);
+        emit?.({ type: 'statusEnd', target: owner.uid, status: 'anchored' });
+      }
+      return;
+    }
+    if (st) st.stacks = n;
+    else owner.statuses.push({ kind: 'anchored', turns: 1, source: owner.uid, stacks: n });
+    emit?.({ type: 'status', target: owner.uid, status: 'anchored', turns: 1, source: owner.uid, stacks: n });
+  }
+
+  /** Stagger: birim sıradaki tek eylemini kaybeder (yalnızca turns modunda; üst üste binmez). */
+  private applyStagger(c: Combatant, source: Combatant, emit: Emit): void {
+    if (this.mode !== 'turns' || c.hp <= 0 || c.statuses.some((s) => s.kind === 'staggered')) return;
+    c.statuses.push({ kind: 'staggered', turns: 1, source: source.uid });
+    emit({ type: 'status', target: c.uid, status: 'staggered', turns: 1, source: source.uid });
+  }
+
+  /** Eylem anında (tur başı ya da ek eylem başı) Stagger varsa bu eylem yanar: olay 'staggered', sonra ek eylem varsa sürer, yoksa tur biter. */
+  private tryStagger(actor: Combatant, emit: Emit): boolean {
+    if (this.mode !== 'turns' || this.winner || actor.hp <= 0) return false;
+    const st = actor.statuses.find((s) => s.kind === 'staggered');
+    if (!st) return false;
+    actor.statuses = actor.statuses.filter((s) => s !== st);
+    emit({ type: 'statusEnd', target: actor.uid, status: 'staggered', consumed: true });
+    emit({ type: 'staggered', actor: actor.uid });
+    this.noteAction(actor.uid, 'skill'); // eylem harcandı sayılır: ek eylemi varsa sürer
+    this.finishAction(actor, emit);
+    return true;
+  }
+
+  /** Fazın can eşiği (yuvarlanmış can değeri): faz i+2'ye `hp <= phaseHp(i)` iken girilir. */
+  private phaseHp(c: Combatant, i: number): number {
+    return Math.round(c.maxHp * (c.boss?.phases?.[i]?.at ?? 0));
+  }
+
+  /**
+   * Faz kilidi: bu eylemde boss'un canı en fazla bu değere iner (tek eylem tek eşik; son faza bu eylemde girildiyse ölemez). Fazsız birimde 0.
+   */
+  private phaseFloor(c: Combatant): number {
+    const ph = c.boss?.phases;
+    if (!ph?.length) return 0;
+    const k = (c.phase ?? 1) - 1; // geçilmiş eşik sayısı
+    if (this.phaseCrossed.has(c.uid)) return k < ph.length ? this.phaseHp(c, k) + 1 : 1;
+    return k + 1 < ph.length ? this.phaseHp(c, k + 1) + 1 : k < ph.length ? 1 : 0;
+  }
+
+  /** Hasar sonrası: eşik geçildiyse yeni faza girilir (bu eylemde en fazla bir kez). */
+  private checkPhase(c: Combatant, emit: Emit): void {
+    const ph = c.boss?.phases;
+    if (!ph?.length || c.hp <= 0 || this.phaseCrossed.has(c.uid)) return;
+    const k = (c.phase ?? 1) - 1;
+    if (k < ph.length && c.hp <= this.phaseHp(c, k)) this.enterPhase(c, k + 2, emit);
+  }
+
+  /** Faza giriş: eylem sayısı, güç, zırh; olay 'phase'; yardımcılar kopar; girişte telgraf (Fall). */
+  private enterPhase(c: Combatant, phase: number, emit: Emit): void {
+    const def = c.boss?.phases?.[phase - 2];
+    if (!def) return;
+    c.phase = phase;
+    this.phaseCrossed.add(c.uid);
+    if (def.actionsPerTurn !== undefined) c.actionsPerTurn = Math.max(1, Math.floor(def.actionsPerTurn));
+    if (def.powerMult !== undefined || def.armorMult !== undefined) {
+      c.stats = {
+        ...c.stats,
+        spellPowerMult: (c.stats.spellPowerMult ?? 1) * (def.powerMult ?? 1),
+        armor: Math.round(c.stats.armor * (def.armorMult ?? 1) * 10) / 10,
+        magicArmor: Math.round(c.stats.magicArmor * (def.armorMult ?? 1) * 10) / 10,
+      };
+    }
+    emit({ type: 'phase', actor: c.uid, phase, hp: c.hp, maxHp: c.maxHp, banner: def.banner });
+    if (def.breakAnchors) {
+      this.snappingAnchors = true;
+      try {
+        for (const a of this.anchorsOf(c)) {
+          a.hp = 0;
+          this.announceIfDead(a, emit);
+        }
+      } finally {
+        this.snappingAnchors = false;
+      }
+    }
+    if (def.telegraphOnEnter) {
+      const sk = this.skill(def.telegraphOnEnter);
+      if (sk?.telegraph) {
+        // Aynı anda tek alan telgrafı: bekleyen alan telgrafının yerini girişteki telgraf alır
+        for (const t of this.telegraphs.filter((x) => x.source === c.uid && x.kind === 'area')) this.cancelTelegraph(t, 'phase', emit);
+        const foes = this.livingByDepth(opposite(c.side)).filter((u) => !u.inert && u.board === opposite(c.side));
+        this.createTelegraph(c, sk, foes, undefined, emit, false);
+        if (this.mode === 'turns' && !this.noCooldowns && (sk.cooldown ?? 0) > 0) c.cooldowns[sk.id] = sk.cooldown!;
+      }
+    }
+  }
+
+  /** Bir birim öldü: boss bağları (yardımcı kırıldı / boss öldü) ve telgraf iptalleri. announceIfDead çağırır. */
+  private bossDeathRules(c: Combatant, emit: Emit): void {
+    // Damgalı ya da kaynağı ölen telgraflar iptal
+    for (const t of [...this.telegraphs]) {
+      if (t.source === c.uid) this.cancelTelegraph(t, 'source_dead', emit);
+      else if (t.bound === c.uid) this.cancelTelegraph(t, 'bound_dead', emit);
+    }
+    // Yardımcı kırıldı: boss Stagger + bekleyen telgraf iptali (faz kopuşunda yok)
+    for (const owner of this.combatants) {
+      const anchor = owner.boss?.anchor;
+      if (!anchor || owner.hp <= 0 || owner.side !== c.side || anchor.unit !== c.defId || owner.uid === c.uid) continue;
+      const snap = this.snappingAnchors;
+      emit({ type: 'anchorBroken', anchor: c.uid, owner: owner.uid, stagger: !snap && anchor.stagger, left: this.anchorsOf(owner).length });
+      if (!snap) {
+        if (anchor.stagger) this.applyStagger(owner, c, emit);
+        for (const t of this.telegraphs.filter((x) => x.source === owner.uid && anchor.cancel.includes(x.skill))) this.cancelTelegraph(t, 'anchor', emit);
+      }
+      this.refreshAnchored(owner, emit);
+    }
+    // Boss öldü: yardımcıları da çöker
+    if (c.boss?.anchor) {
+      this.snappingAnchors = true;
+      try {
+        for (const a of this.anchorsOf(c)) {
+          a.hp = 0;
+          this.announceIfDead(a, emit);
+        }
+      } finally {
+        this.snappingAnchors = false;
+      }
+    }
+  }
+
+  /** Tahtanın tüm hücreleri (yuva sırasıyla). */
+  private allCells(): number[] {
+    const { rows, lanes } = this.setup.formulas.formation;
+    return Array.from({ length: rows * lanes }, (_, i) => i);
+  }
+
+  /** Keystone'lar (güvenli hücreler): şerit başına `perLane`, sıraları seed'li; tek hücreliyse hepsi aynı sırada olmaz. */
+  private rollKeystones(perLane: number): number[] {
+    const { rows, lanes } = this.setup.formulas.formation;
+    const out: number[] = [];
+    const firstRows: number[] = [];
+    for (let lane = 0; lane < lanes; lane++) {
+      const pool = Array.from({ length: rows }, (_, r) => r);
+      for (let k = 0; k < Math.min(perLane, rows); k++) {
+        const r = pool.splice(this.rng.int(0, pool.length - 1), 1)[0]!;
+        if (k === 0) firstRows.push(r);
+        out.push(r * lanes + lane);
+      }
+    }
+    // Hepsi aynı sıradaysa (tek Keystone/şerit) son şeridinki başka sıraya kayar
+    if (perLane === 1 && lanes > 1 && rows > 1 && firstRows.every((r) => r === firstRows[0])) {
+      const r = (firstRows[0]! + 1 + this.rng.int(0, rows - 2)) % rows;
+      out[out.length - 1] = r * lanes + (lanes - 1);
+    }
+    return out.sort((a, b) => a - b);
+  }
+
+  /** Damganın (brand) çözülme hücreleri: damgalının O ANKİ hücresi merkezli şekil (kendi tahtasında). */
+  brandCells(skillId: string, bound: Combatant): number[] {
+    const area = this.skill(skillId)?.telegraph?.area ?? { shape: 'plus' as const };
+    return shapeCells(area, bound.slot, bound.board, this.setup.formulas.formation);
+  }
+
+  /** Telgrafın ŞU ANKİ işaretli hücreleri (brand: damgalının anlık hücresi), güvenli hücreler hariç. */
+  telegraphCells(t: Telegraph): number[] {
+    let cells = t.cells;
+    if (t.kind === 'brand') {
+      const b = t.bound ? this.get(t.bound) : undefined;
+      cells = b && b.hp > 0 ? this.brandCells(t.skill, b) : [];
+    }
+    return cells.filter((s) => !t.safeCells?.includes(s));
+  }
+
+  /** Telgrafı kurar (skill'in etkileri UYGULANMAZ): hücreler kaydedilir, olay 'telegraph'. `countTurn`: bir-turda-bir sınırına sayılır mı. */
+  private createTelegraph(actor: Combatant, skill: SkillDef, targets: Combatant[], cells: number[] | undefined, emit: Emit, countTurn = true): Telegraph | null {
+    const tg = skill.telegraph;
+    if (!tg) return null;
+    const board = opposite(actor.side);
+    const t: Telegraph = { id: `t${this.telegraphCount++}`, source: actor.uid, skill: skill.id, kind: tg.kind, board, cells: [], marked: [], waitFor: [], createdAt: this.turnsTaken };
+    if (tg.kind === 'brand') {
+      const bound = targets[0];
+      if (!bound || bound.hp <= 0) return null;
+      t.bound = bound.uid;
+      t.board = bound.board;
+      if (tg.status) this.addStatus(bound, { kind: tg.status, turns: 1, source: actor.uid }, emit);
+      t.cells = this.brandCells(skill.id, bound);
+    } else if (tg.wholeBoard) {
+      t.cells = this.allCells();
+      if (tg.keystones) t.safeCells = this.rollKeystones(tg.keystones.perLane);
+    } else {
+      t.cells = [...(cells ?? [])];
+    }
+    // Adalet kuralı (M3): şu an karşı tarafta canlı, sersem olmayan her savaşan birim en az bir kez oynamadan çözülmez
+    t.waitFor = this.fighting(opposite(actor.side))
+      .filter((c) => !c.statuses.some((s) => this.statusDef(s.kind)?.skipTurn))
+      .map((c) => c.uid);
+    if (t.kind === 'area') t.marked = this.combatants.filter((c) => c.hp > 0 && c.board === t.board && c.side === t.board && t.cells.includes(c.slot) && !t.safeCells?.includes(c.slot)).map((c) => c.uid);
+    this.telegraphs.push(t);
+    if (countTurn) this.telegraphedThisTurn.add(actor.uid);
+    emit({ type: 'telegraph', id: t.id, source: t.source, skill: t.skill, kind: t.kind, board: t.board, cells: [...t.cells], ...(t.safeCells ? { safeCells: [...t.safeCells] } : {}), ...(t.bound ? { bound: t.bound } : {}) });
+    return t;
+  }
+
+  /** Telgrafı iptal eder (olay telegraphCancel); damga durumunu siler. */
+  private cancelTelegraph(t: Telegraph, cause: string, emit: Emit): void {
+    const i = this.telegraphs.indexOf(t);
+    if (i < 0) return;
+    this.telegraphs.splice(i, 1);
+    this.clearBrand(t, emit);
+    emit({ type: 'telegraphCancel', id: t.id, source: t.source, skill: t.skill, cause });
+  }
+
+  private clearBrand(t: Telegraph, emit: Emit): void {
+    const kind = this.skill(t.skill)?.telegraph?.status;
+    const b = t.bound ? this.get(t.bound) : undefined;
+    if (!b || !kind) return;
+    const st = b.statuses.find((s) => s.kind === kind && s.source === t.source);
+    if (!st) return;
+    b.statuses = b.statuses.filter((s) => s !== st);
+    emit({ type: 'statusEnd', target: b.uid, status: kind, consumed: true });
+  }
+
+  /**
+   * Kaynağın telgraflarını çözer: turns modunda kaynağın tur başında (adalet kuralı sağlanmadıysa ertelenir: telegraphDelay), test modunda kaynağın
+   * bir sonraki eyleminden önce (adalet kuralı yok).
+   */
+  private resolveTelegraphsOf(actor: Combatant, emit: Emit): void {
+    for (const t of [...this.telegraphs]) {
+      if (t.source !== actor.uid || actor.hp <= 0 || this.winner) continue;
+      if (this.mode === 'test') {
+        if (t.createdAt >= this.turnsTaken) continue;
+      } else {
+        t.waitFor = t.waitFor.filter((uid) => (this.get(uid)?.hp ?? 0) > 0);
+        if (t.waitFor.length > 0) {
+          emit({ type: 'telegraphDelay', id: t.id, source: t.source, skill: t.skill, waiting: [...t.waitFor] });
+          continue;
+        }
+      }
+      this.resolveTelegraph(t, actor, emit);
+    }
+  }
+
+  /** Telgrafın çözülmesi: işaretli hücrelerdeki (güvenli hariç) karşı taraf birimlerine skill'in etkileri; isabet zarı YOK (kaçmak için uyarıldılar). */
+  private resolveTelegraph(t: Telegraph, src: Combatant, emit: Emit): void {
+    const skill = this.skill(t.skill);
+    const tg = skill?.telegraph;
+    this.telegraphs.splice(this.telegraphs.indexOf(t), 1);
+    if (!skill || !tg) return;
+    if (tg.kind === 'brand') {
+      const b = t.bound ? this.get(t.bound) : undefined;
+      if (!b || b.hp <= 0 || (tg.status && !b.statuses.some((s) => s.kind === tg.status))) {
+        emit({ type: 'telegraphCancel', id: t.id, source: t.source, skill: t.skill, cause: !b || b.hp <= 0 ? 'bound_dead' : 'dispel' });
+        return;
+      }
+    }
+    const cells = this.telegraphCells(t);
+    const marked = t.marked.filter((u) => (this.get(u)?.hp ?? 0) > 0);
+    const victims = this.combatants.filter((c) => c.hp > 0 && c.board === t.board && c.side !== src.side && cells.includes(c.slot)).sort((a, b) => a.slot - b.slot);
+    this.clearBrand(t, emit);
+    emit({ type: 'telegraphResolve', id: t.id, source: src.uid, skill: t.skill, board: t.board, cells: [...cells], hit: victims.map((v) => v.uid), avoided: tg.kind === 'brand' ? [] : marked.filter((u) => !victims.some((v) => v.uid === u)) });
+    for (const effect of skill.effects) {
+      if (effect.type === 'damage') {
+        victims.forEach((v, i) => {
+          if (v.hp > 0) this.strike(src, v, effect, emit, 1, i === 0, true);
+        });
+      } else if (effect.type === 'ground') {
+        this.placeGround(src, effect, t.board, cells, emit);
+      } else if (effect.type === 'status') {
+        for (const v of victims) if (v.hp > 0) this.addStatus(v, { kind: effect.status, turns: effect.turns, source: src.uid }, emit, effect.cause);
+      }
+    }
+    const after = src.boss?.afterResolve;
+    if (after && src.hp > 0 && after.skills.includes(t.skill)) this.addStatus(src, { kind: after.status, turns: after.turns, source: src.uid }, emit);
+  }
+
+  /** Hücrelere yer etkisi bırakır (skill vuruşu ve telgraf çözülmesi ortak). */
+  private placeGround(actor: Combatant, effect: Extract<SkillEffect, { type: 'ground' }>, board: Side, slots: number[], emit: Emit): void {
+    if (slots.length === 0) return;
+    const g: GroundEffect = {
+      id: `g${this.groundCount++}`,
+      ground: effect.ground,
+      board,
+      slots: [...slots],
+      turns: effect.turns,
+      source: actor.uid,
+      sourceSide: actor.side,
+      amount: Math.round(attributePower(actor.stats, effect.scale, this.setup.formulas) * effect.power),
+      scale: effect.scale,
+      sourceStat: actor.stats[effect.scale],
+      power: effect.power,
+    };
+    this.ground.push(g);
+    emit({ type: 'ground', id: g.id, ground: g.ground, board: g.board, slots: g.slots, turns: g.turns });
+  }
+
+  /**
+   * Bekleyen telgrafların birime TEHDİDİ (önizleme, YZ): birim `slot`'ta (varsayılan: şu anki hücresi) dursa hangi telgraflar onu vurur ve beklenen
+   * hasar (ortalama, kalkan dahil değil). Brand: damgalı hep vurulur (hücresi taşınır), komşu ise damgalının hücresine göre. Saf.
+   */
+  telegraphThreat(uid: string, slot?: number): Array<{ telegraph: Telegraph; avg: number; min: number; max: number }> {
+    const c = this.get(uid);
+    if (!c || c.hp <= 0) return [];
+    const at = slot ?? c.slot;
+    const out: Array<{ telegraph: Telegraph; avg: number; min: number; max: number }> = [];
+    for (const t of this.telegraphs) {
+      const src = this.get(t.source);
+      if (!src || src.side === c.side || t.board !== c.board) continue;
+      let hits: boolean;
+      if (t.kind === 'brand') {
+        const b = t.bound ? this.get(t.bound) : undefined;
+        if (!b || b.hp <= 0) continue;
+        const center = b.uid === c.uid ? at : b.slot;
+        const area = this.skill(t.skill)?.telegraph?.area ?? { shape: 'plus' as const };
+        hits = b.uid === c.uid || shapeCells(area, center, b.board, this.setup.formulas.formation).includes(at);
+      } else hits = t.cells.includes(at) && !t.safeCells?.includes(at);
+      if (!hits) continue;
+      out.push({ telegraph: t, ...this.telegraphDamage(t, c) });
+    }
+    return out;
+  }
+
+  /** Telgraf çözülürse birime vereceği hasar aralığı (kritik hariç, kalkan düşülmemiş; isabet zarı yok). Kaynak ölmüşse 0. Saf. */
+  telegraphDamage(t: Telegraph, c: Combatant): { avg: number; min: number; max: number } {
+    const src = this.get(t.source);
+    let avg = 0;
+    let min = 0;
+    let max = 0;
+    if (!src || src.hp <= 0) return { avg, min, max };
+    for (const e of this.skill(t.skill)?.effects ?? []) {
+      if (e.type !== 'damage') continue;
+      const r = damageRange(this.attackStats(src), this.effectiveStats(c), damageSpecFor(src, c, e, this.setup.formulas, 1, true, this.damageTakenMult(c), this.hunterMarkMult(src, c)), this.setup.formulas);
+      avg += r.avg;
+      min += r.min;
+      max += r.max;
+    }
+    return { avg, min, max };
+  }
+
+  /** Çekme (pull laneFront) hedefi bu birimi nereye götürür (kendi şeridinin en öndeki boş hücresi; yoksa null). Saf. */
+  pullDestination(c: Combatant): number | null {
+    if (c.inert || c.board !== c.side || c.boss?.unyielding?.immuneDisplacement) return null;
+    const lanes = this.setup.formulas.formation.lanes;
+    for (let row = 0; row < this.rowOf(c.slot); row++) {
+      const to = row * lanes + this.laneOf(c.slot);
+      if (!this.combatants.some((o) => o.hp > 0 && o.board === c.board && o.slot === to)) return to;
+    }
+    return null;
   }
 
   /** Yuvanın sırası (0 = en önde) ve şeridi. */
@@ -705,17 +1134,18 @@ export class Battle {
    * Alan skill'inin anchor hücreye göre kapsadığı tüm hücreler (boş olanlar dahil; gösterim için), yuva sırasıyla.
    * `board`: hücrelerin ait olduğu tahta (varsayılan 'enemy'; rect'in ekrandaki sol-alt köşesi tahtaya göre ayna).
    */
-  areaCells(skillId: string, centerSlot: number, board: Side = 'enemy'): number[] {
+  areaCells(skillId: string, centerSlot: number, board: Side = 'enemy', actorUid?: string): number[] {
     const skill = this.skill(skillId);
     if (!skill || !this.isShapeSkill(skillId)) return [];
-    return shapeCells(skill.area!, centerSlot, board, this.setup.formulas.formation);
+    // actorUid: faza göre alan (Breaking Span faz 2+: rect 2x3; areaOf)
+    return shapeCells(this.areaOf(skillId, actorUid)!, centerSlot, board, this.setup.formulas.formation);
   }
 
   /** Alan skill'inin hücreleri aşamalara bölünmüş (aşamasız skill: tek aşama). Her aşama yuva sırasıyla; boş hücreler dahil. */
-  areaStageCells(skillId: string, centerSlot: number, board: Side = 'enemy'): number[][] {
+  areaStageCells(skillId: string, centerSlot: number, board: Side = 'enemy', actorUid?: string): number[][] {
     const skill = this.skill(skillId);
     if (!skill || !this.isShapeSkill(skillId)) return [];
-    return shapeStages(skill.area!, centerSlot, board, this.setup.formulas.formation);
+    return shapeStages(this.areaOf(skillId, actorUid)!, centerSlot, board, this.setup.formulas.formation);
   }
 
   /**
@@ -727,7 +1157,7 @@ export class Battle {
     if (!actor) return [];
     const b = this.areaBoard(actor, skillId, board);
     const hits = this.areaWindowAt(actorUid, skillId, anchorSlot, b);
-    return this.areaStageCells(skillId, anchorSlot, b).map((cells) => ({ cells, targets: hits.filter((c) => cells.includes(c.slot)).map((c) => c.uid) }));
+    return this.areaStageCells(skillId, anchorSlot, b, actorUid).map((cells) => ({ cells, targets: hits.filter((c) => cells.includes(c.slot)).map((c) => c.uid) }));
   }
 
   /**
@@ -741,7 +1171,7 @@ export class Battle {
     if (!skill || !this.isShapeSkill(skillId)) return [];
     const actor = this.get(actorUid);
     const b = this.areaBoard(actor, skillId, board);
-    const stages = this.areaStageCells(skillId, centerSlot, b);
+    const stages = this.areaStageCells(skillId, centerSlot, b, actorUid);
     const cells = new Set(stages.flat());
     let hits = this.validTargets(actorUid, skillId).filter((c) => c.board === b && cells.has(c.slot));
     // area_any: hiçbir etkinin uygulanmadığı birimler (ör. yalnızca düşmana giden etki varken dostlar) hedef sayılmaz
@@ -782,7 +1212,7 @@ export class Battle {
     if (!this.isAreaSkill(skillId)) return { cells: [], targets: [], valid: false, reason: 'Not an area skill' };
     if (!Number.isInteger(anchorSlot) || anchorSlot < 0 || anchorSlot >= total) return { cells: [], targets: [], valid: false, reason: 'Invalid cell' };
     const b = this.areaBoard(actor, skillId, board);
-    const cells = this.areaCells(skillId, anchorSlot, b);
+    const cells = this.areaCells(skillId, anchorSlot, b, actorUid);
     const targets = this.areaWindowAt(actorUid, skillId, anchorSlot, b).map((c) => c.uid);
     if (targets.length > 0) return { cells, targets, valid: true };
     if (this.isAnyBoardArea(skillId)) return { cells, targets, valid: false, reason: b === actor.side ? 'No ally in the area' : 'No enemy in the area' };
@@ -968,7 +1398,7 @@ export class Battle {
 
   /** Ceset kaydı: çağrı olmayan birim öldüğünde (revivable). */
   private leaveCorpse(c: Combatant): boolean {
-    if (c.summoned) return false;
+    if (c.summoned || c.inert) return false; // çağrı ve yardımcı nesne ceset bırakmaz
     this.corpseState.set(c.uid, 'revivable');
     this.corpseOrder.set(c.uid, ++this.corpseCounter);
     return true;
@@ -1122,6 +1552,18 @@ export class Battle {
     if (!actor.skills.includes(skillId)) return { ok: false, reason: 'Unit does not have this skill' };
     const skill = this.skill(skillId);
     if (!skill) return { ok: false, reason: 'Unknown skill' };
+    if (actor.lockedSkills?.includes(skillId)) return { ok: false, reason: 'Locked' };
+    // Boss fazı şartı (Ash Brand faz 2, Fall faz 3) ve bağlı yardımcı şartı (Chain Hook: canlı Iron Mooring)
+    if ((skill.minPhase ?? 1) > this.phaseOf(actor)) return { ok: false, reason: 'Not in this phase' };
+    if (skill.requiresAlly && !this.combatants.some((c) => c.hp > 0 && c.side === actor.side && c.defId === skill.requiresAlly)) {
+      return { ok: false, reason: `Needs a standing ${this.setup.units[skill.requiresAlly]?.name ?? skill.requiresAlly}` };
+    }
+    // Telgraf sınırları: aynı anda tek alan telgrafı + tek damga; bir turda en fazla bir yeni telgraf (turns modunda)
+    if (skill.telegraph) {
+      const mine = this.telegraphs.filter((t) => t.source === actorUid);
+      if (mine.some((t) => t.kind === skill.telegraph!.kind)) return { ok: false, reason: skill.telegraph.kind === 'brand' ? 'A brand is already burning' : 'A collapse is already pending' };
+      if (this.mode === 'turns' && this.telegraphedThisTurn.has(actorUid)) return { ok: false, reason: 'One warning per turn' };
+    }
     if (this.mode === 'turns' && !this.noCooldowns && (actor.cooldowns[skillId] ?? 0) > 0) return { ok: false, reason: 'On cooldown' };
     // Yakın dövüş yalnızca kendi takımının ön sırasındaki birimlerden yapılabilir (dash/charge gibi skill'ler ignoreFrontRow ile istisna olur)
     if (skill.motion === 'melee' && skill.target !== 'self' && !skill.ignoreFrontRow && !skill.ignoreReach && actor.board === actor.side && this.rowOf(actor.slot) > this.frontRowOf(actor.side) + this.reachOf(actor, skill)) {
@@ -1282,6 +1724,8 @@ export class Battle {
       events.push(e);
       this.record(e);
     };
+    this.phaseCrossed.clear();
+    if (this.mode === 'test') this.resolveTelegraphsOf(actor, emit);
     this.observer?.before?.({ kind: 'global', actorUid, id, ...(slot !== undefined ? { center: slot } : {}) });
     emit({ type: 'globalUsed', actor: actor.uid, id });
     if (def!.kind === 'rest') {
@@ -1340,6 +1784,7 @@ export class Battle {
   }
 
   private cast(actorUid: string, skillId: string, targetUid: string | undefined, slot: number | undefined, debug: boolean, boardArg?: Side, corpseArg?: string): ActionResult {
+    this.phaseCrossed.clear(); // faz kilidi eylem başına
     if (!debug) {
       const can = this.canUse(actorUid, skillId);
       if (!can.ok) return can;
@@ -1395,11 +1840,11 @@ export class Battle {
       if (!debug && targets.length === 0) return { ok: false, reason: anyBoard && board === actor.side ? 'No ally in the area' : 'No target in the area' };
       centerSlot = center;
       areaBoard = board;
-      centerCells = this.areaCells(skillId, center, board);
+      centerCells = this.areaCells(skillId, center, board, actorUid);
       // Aşamalı vuruş: hedefler aşamalara bölünür (areaWindowAt zaten aşama sırasıyla döner)
       if (this.isStagedSkill(skillId)) {
         const all = targets;
-        const cellsByStage = this.areaStageCells(skillId, center, board);
+        const cellsByStage = this.areaStageCells(skillId, center, board, actorUid);
         stageTargets = cellsByStage.map((cells) => all.filter((c) => cells.includes(c.slot)));
         stageGroups = cellsByStage.map((cells, i) => ({ cells, targets: stageTargets![i]!.map((c) => c.uid) }));
       }
@@ -1442,6 +1887,8 @@ export class Battle {
       this.record(ev);
     };
 
+    // Test modu: kaynağın bekleyen telgrafları bir sonraki eyleminden ÖNCE çözülür (turns modunda tur başında)
+    if (!debug && this.mode === 'test') this.resolveTelegraphsOf(actor, emit);
     if (!debug) this.observer?.before?.({ kind: 'skill', actorUid, id: skillId, targetUids: targets.map((t) => t.uid), ...(centerSlot !== undefined ? { center: centerSlot, cells: centerCells } : {}), ...(areaBoard && skill.target === 'area_any' ? { board: areaBoard } : {}) });
     // Backstab (requiresOpenBehind): görsel ışınlanma hücresi (hedefin arkası) ve dönüş hücresi; gerçek yer değiştirme yok
     const backTarget = skill.requiresOpenBehind ? targets[0] : undefined;
@@ -1476,9 +1923,12 @@ export class Battle {
 
     // Rage'li kullanıcı: bu skill'in isabet eden hasar vuruşları hedef başına toplanır (strike doldurur), skill bitince tek kazanç olarak işlenir
     this.rageTally = !debug && actor.maxRage !== undefined ? new Map() : null;
+    // Doom Mark: vuruşu ya da patlaması hedefi öldürürse hedefin Omen'leri silinir, Ill Omen çalışmaz
+    this.noTransferKill = skill.effects.some((e) => e.type === 'detonate' && e.noTransferOnKill) ? new Set(targets.map((c) => c.uid)) : null;
     // Aşamasız skill tek grup (tüm hedefler). Aşamalı skill: her aşama sırayla tüm etkileri uygular (aşama başına bir kez çalışması sorun olan
     // etkiler (bahis, kalkan tüketme, mana çalma kazancı, kendine etkiler) aşamalı skill'de veri doğrulamasıyla yasak: stagedEffectProblem).
-    const groups: Array<{ targets: Combatant[]; cells?: number[] }> =
+    // Telgraflı skill: etkiler şimdi uygulanmaz (grup yok); aşağıda telgraf kurulur, sahibin sonraki turunda çözülür
+    const groups: Array<{ targets: Combatant[]; cells?: number[] }> = skill.telegraph ? [] :
       stageTargets && stageGroups ? stageTargets.map((ts, i) => ({ targets: ts, cells: stageGroups![i]!.cells })) : [{ targets, ...(centerCells ? { cells: centerCells } : {}) }];
     let repeatAnnounced = false;
     // endsOnOwnAttack (Jinxed): bu hasar skill'inin TÜM vuruşları durumdan etkilenir, skill bitince durum düşer
@@ -1587,7 +2037,7 @@ export class Battle {
           break;
         case 'shield':
           for (const target of effect.self ? [actor] : ts) {
-            if (target.hp <= 0) continue;
+            if (target.hp <= 0 || target.inert) continue; // sıra almayan yardımcı nesne kalkan almaz
             const amount = shieldAmount(actor.stats, effect.scale, effect.power, f) + Math.round((effect.bonusPerMana ?? 0) * actor.mp); // kritik uygulanmaz
             const magic = effect.shieldType === 'magic';
             this.trimShieldHooks(target);
@@ -1675,9 +2125,21 @@ export class Battle {
           }
           break;
         }
+        case 'pull': {
+          // Chain Hook (M6): isabet eden hedef kendi şeridinin en öndeki boş hücresine çekilir (önünde boş hücre yoksa yerinde kalır)
+          const hasDamage = skill.effects.some((e) => e.type === 'damage');
+          for (const r of hasDamage ? ts.filter((c) => hit.has(c.uid)) : ts) {
+            const to = r.hp > 0 ? this.pullDestination(r) : null;
+            if (to === null) continue;
+            const from = r.slot;
+            r.slot = to;
+            emit({ type: 'moved', actor: r.uid, from, to, cause: skill.id, by: actor.uid });
+          }
+          break;
+        }
         case 'ground': {
           if (centerSlot === undefined) break;
-          const slots = group.cells ?? this.areaCells(skillId, centerSlot, opposite(actor.side));
+          const slots = group.cells ?? this.areaCells(skillId, centerSlot, opposite(actor.side), actorUid);
           const g: GroundEffect = {
             id: `g${this.groundCount++}`,
             ground: effect.ground,
@@ -1704,7 +2166,7 @@ export class Battle {
           for (const r of recipients) {
             if (r.hp <= 0) continue;
             const crit = critHit.has(r.uid) && effect.critStacks !== undefined;
-            this.addStacks(r, kind, crit ? effect.critStacks! : effect.stacks, actor, emit, crit, auto);
+            this.addStacks(r, kind, crit ? effect.critStacks! : effect.stacks, actor, emit, crit, auto, crit && effect.critDoomOnCrit === true);
           }
           break;
         }
@@ -1774,6 +2236,7 @@ export class Battle {
     }
     }
     stage = undefined;
+    if (skill.telegraph) this.createTelegraph(actor, skill, targets, centerCells, emit);
 
     for (const s of ownAttackEnds) {
       if (!actor.statuses.includes(s)) continue;
@@ -1803,6 +2266,7 @@ export class Battle {
       }
     }
     this.rageTally = null;
+    this.noTransferKill = null;
 
     // Int-primary Mana Echo: skill sonrası ihtimalle MP bedelinin yarısı (yukarı yuvarla, en az 1) geri gelir; bedelsiz skill'de zar atılmaz
     if (!debug && resource === 'mp' && cost > 0 && !this.freeMp && (actor.stats.manaEcho ?? 0) > 0 && this.rng.next() < actor.stats.manaEcho) {
@@ -1874,6 +2338,8 @@ export class Battle {
    */
   private finishAction(actor: Combatant, emit: Emit, turnCost = 1): void {
     this.turnsTaken++;
+    // Telgraf adalet kuralı: bu birim oynadı (eylem, pas ya da sersemlik)
+    for (const t of this.telegraphs) if (t.waitFor.includes(actor.uid)) t.waitFor = t.waitFor.filter((u) => u !== actor.uid);
     if (this.mode === 'turns' && actor.summoned && actor.lifespan !== undefined && actor.hp > 0) {
       actor.lifespan--;
       if (actor.lifespan <= 0) {
@@ -1883,8 +2349,9 @@ export class Battle {
       }
     }
     if (!this.winner) {
-      if (this.living('enemy').length === 0) this.winner = 'party';
-      else if (this.living('party').length === 0) this.winner = 'enemy';
+      // Sıra almayan yardımcı nesneler (inert) savaşın bitişinde sayılmaz
+      if (this.fighting('enemy').length === 0) this.winner = 'party';
+      else if (this.fighting('party').length === 0) this.winner = 'enemy';
       if (this.winner) emit({ type: 'battleEnd', winner: this.winner });
     }
     this.observer?.after?.(actor.uid);
@@ -1896,6 +2363,7 @@ export class Battle {
     if (this.mode === 'turns' && !this.winner && left > 0 && actor.hp > 0 && this.currentUid === actor.uid && (kind === 'skill' || kind === 'rest' || kind === 'move') && !actor.statuses.some((s) => this.statusDef(s.kind)?.skipTurn)) {
       this.actionsLeft.set(actor.uid, left - 1);
       emit({ type: 'turnStart', actor: actor.uid, queue: this.turnQueue(), extra: true });
+      this.tryStagger(actor, emit); // Stagger: bu ek eylem yanar
       return;
     }
     // Tur sonu süreleri (tickAtTurnEnd: Silence): taşıyanın turu bitince 1 azalır; biten durum kalkar
@@ -1929,6 +2397,8 @@ export class Battle {
     const actor = next ? this.get(next.uid) : undefined;
     if (!next || !actor) return;
     this.speedBoost.delete(actor.uid); // Skip Turn desteği, birimin sıradaki turu başlayınca biter
+    this.phaseCrossed.clear();
+    this.telegraphedThisTurn.delete(actor.uid);
     if ((actor.actionsPerTurn ?? 1) > 1) this.actionsLeft.set(actor.uid, actor.actionsPerTurn! - 1);
     // Kendi turunun başında: bekleme süreleri 1 azalır
     const held = this.initialHold.get(actor.uid);
@@ -1983,6 +2453,7 @@ export class Battle {
       if (!actor.statuses.includes(status)) continue;
       if (this.statusDef(status.kind)?.maxStacks) continue; // yığılan durumun süresi yukarıda işlendi
       if (this.statusDef(status.kind)?.attackCharges) continue; // yüklü durum (Abyssal Fury): turla değil saldırıyla azalır
+      if (this.statusDef(status.kind)?.untilResolved) continue; // kuralla süren durum (Ash Brand, Staggered, Anchored)
       if (this.statusDef(status.kind)?.tickAtTurnEnd) continue; // Silence: süre turun SONUNDA azalır (finishAction > tickTurnEnd)
       // Dark Bond: süre yalnızca bağı KURANIN turlarında azalır; bağlı dosttaki kopya kendi turunda azalmaz (sahibininkiyle eşitlenir)
       if (status.kind === 'dark_bond' && status.source !== actor.uid) continue;
@@ -2020,17 +2491,27 @@ export class Battle {
         this.applyHeal(actor, hurt, Math.round(attributePower(actor.stats, dl.scale, this.setup.formulas) * dl.power), false, emit);
       }
     }
+    // Telgraflar (Breaking Span, Ash Brand, Fall): sahibinin tur başında, eylemlerinden ÖNCE çözülür (adalet kuralı sağlanmadıysa ertelenir)
+    if (actor.hp > 0 && this.telegraphs.length > 0) {
+      this.resolveTelegraphsOf(actor, emit);
+      if (!this.winner) {
+        if (this.fighting('enemy').length === 0) this.winner = 'party';
+        else if (this.fighting('party').length === 0) this.winner = 'enemy';
+        if (this.winner) emit({ type: 'battleEnd', winner: this.winner });
+      }
+      if (this.winner) return;
+    }
     emit({ type: 'turnStart', actor: next.uid, queue: this.turnQueue() });
     if (skipThisTurn) {
       emit({ type: 'turnSkipped', actor: actor.uid, stunned: actor.hp > 0 });
       this.actionsLeft.delete(actor.uid); // sersemlik tüm turu (ek eylemler dahil) yer
       this.finishAction(actor, emit);
-    }
+    } else this.tryStagger(actor, emit); // Stagger: turun ilk eylemi yanar
   }
 
   private turnSlots(): TurnSlot[] {
     return this.combatants
-      .filter((c) => c.hp > 0)
+      .filter((c) => c.hp > 0 && !c.inert) // sıra almayan yardımcı nesne (Iron Mooring) sırada yok
       .map((c) => ({
         uid: c.uid,
         side: c.side,
@@ -2043,6 +2524,17 @@ export class Battle {
 
   /** `cause`: görsel neden (skill etkisinin `cause` alanı, ör. 'vines'); `status` olayına aynen yazılır. */
   private addStatus(target: Combatant, status: Status, emit: Emit, cause?: string): void {
+    // Boss kontrol direnci (Unyielding): Stun yerine Stagger (bir eylem kaybı); diğer debuff'lar 1 tur kısa (en az 1; yığılan ve kuralla süren durumlar hariç)
+    const uy = target.boss?.unyielding;
+    if (uy) {
+      const d = this.statusDef(status.kind);
+      if (uy.stunToStagger && d?.skipTurn) {
+        emit({ type: 'passive', actor: target.uid, passive: 'unyielding', name: 'Unyielding' });
+        this.applyStagger(target, this.get(status.source) ?? target, emit);
+        return;
+      }
+      if (d?.type === 'debuff' && !d.maxStacks && !d.untilResolved && status.turns > 1 && uy.debuffDurationDelta) status = { ...status, turns: Math.max(1, status.turns + uy.debuffDurationDelta) };
+    }
     // Str-primary Resilience: karaktere uygulanan her debuff, uygulanırken ihtimalle 1 tur kısalır (en az 1 kalır; 1 turluk debuff'ta zar atılmaz).
     // Yer etkilerinin kendi süresi (ground turns) buradan geçmez; yalnızca karakter üstünde tutulan durumlar etkilenir.
     const resilience = target.stats.resilience ?? 0;
@@ -2085,6 +2577,8 @@ export class Battle {
     for (const s of picks) {
       target.statuses = target.statuses.filter((x) => x !== s);
       emit({ type: 'statusEnd', target: target.uid, status: s.kind, dispelled: true, source: source.uid, cause });
+      // Damga (Ash Brand) silindi: bağlı telgraf iptal
+      for (const t of this.telegraphs.filter((x) => x.bound === target.uid && this.skill(x.skill)?.telegraph?.status === s.kind)) this.cancelTelegraph(t, 'dispel', emit);
     }
     return picks;
   }
@@ -2359,6 +2853,8 @@ export class Battle {
     absorbed += b;
     this.drainHooks(target, false, b, hooked);
     if (hooked.length > 0) this.trimShieldHooks(target);
+    // Boss faz kilidi (Ember Heart): tek eylem en fazla bir eşik geçer; fazla hasar eşiğin 1 altında durur
+    if (target.boss?.phases && rest > 0) rest = Math.max(0, Math.min(rest, target.hp - this.phaseFloor(target)));
     target.hp = Math.max(0, target.hp - rest);
     const taunt = target.statuses.find((s) => s.kind === 'taunt' && s.breakAt !== undefined);
     if (taunt && rest > 0) {
@@ -2386,6 +2882,7 @@ export class Battle {
       ...(meta.status ? { status: meta.status } : {}),
     });
     if (pendingBreak) emit({ type: 'statusEnd', target: target.uid, status: 'taunt', broken: true });
+    if (target.boss?.phases && target.hp > 0) this.checkPhase(target, emit);
     // Kalkan kancaları yalnızca DOĞRUDAN bir saldırganın skill vuruşunda (yer etkisi tiki / kendine hasar tetiklemez)
     if (meta.origin === 'skill' && actor.side !== target.side) for (const { hook, part } of hooked) this.absorbTrigger(hook, target, actor, part, emit);
     return rest;
@@ -2402,6 +2899,8 @@ export class Battle {
     this.breakAllBonds(c, emit);
     // Ill Omen (Hexer pasifi): ölenin Omen'leri en yakın canlı dostuna geçer
     this.illOmen(c, emit, doomed);
+    // Boss: yardımcı kırıldı (Stagger, telgraf iptali) / boss öldü (yardımcıları çöker); ölen birime bağlı telgraflar iptal
+    if (this.telegraphs.length > 0 || c.boss || this.combatants.some((o) => o.boss?.anchor?.unit === c.defId)) this.bossDeathRules(c, emit);
     // Çağıran ölünce çağırdıkları da ölür
     for (const s of this.combatants) {
       if (s.owner === c.uid && s.hp > 0) {
@@ -2413,6 +2912,7 @@ export class Battle {
 
   /** Şifa uygular; GERÇEKTEN iyileşen miktarı döndürür (can maks'ı ve alınan şifa çarpanları sonrası). */
   private applyHeal(source: Combatant, target: Combatant, wantedRaw: number, crit: boolean, emit: Emit, cause?: string): number {
+    if (target.inert) return 0; // sıra almayan yardımcı nesne şifa almaz
     const wanted = Math.round(wantedRaw * this.statusMult(target, 'healTakenMult')); // Wound gibi durumlar alınan şifayı azaltır
     const amount = Math.max(0, Math.min(wanted, target.maxHp - target.hp));
     if (amount === 0 && (source === target || wanted === 0)) return 0; // boş şifa olayı üretme
@@ -2433,8 +2933,8 @@ export class Battle {
 
   private checkWinner(): void {
     if (this.winner) return;
-    if (this.living('enemy').length === 0) this.winner = 'party';
-    else if (this.living('party').length === 0) this.winner = 'enemy';
+    if (this.fighting('enemy').length === 0) this.winner = 'party';
+    else if (this.fighting('party').length === 0) this.winner = 'enemy';
     if (this.winner) this.record({ type: 'battleEnd', winner: this.winner });
   }
 
@@ -2565,6 +3065,7 @@ export class Battle {
       this.ground.splice(this.ground.indexOf(g), 1);
       this.record({ type: 'groundEnd', id: g.id });
     }
+    for (const t of [...this.telegraphs]) this.cancelTelegraph(t, 'debug', this.debugEmit);
     this.debugReviveAll();
     for (const c of this.combatants) if (c.hp > 0) this.debugClearStatuses(c.uid);
     this.debugFill();
@@ -2606,6 +3107,8 @@ function createCombatant(def: CombatantDef, side: Side, slot: number, uid: strin
     turnCounter: 0,
     cooldowns: {},
     ...(def.maxRage !== undefined ? { rage: 0, maxRage: def.maxRage } : {}),
+    ...(def.boss ? { boss: def.boss } : {}),
+    ...(def.inert ? { inert: true } : {}),
   };
 }
 
@@ -2630,6 +3133,8 @@ function createSetupCombatant(baseDef: CombatantDef, side: Side, slot: number, u
   if (mp !== undefined) c.mp = Math.max(0, Math.min(c.maxMp, Math.round(mp)));
   // Hazır çağrı (ör. düşman Skeleton): çağrı kuralları, sahipsiz ve süresiz
   if (unit.summoned) c.summoned = true;
+  if (unit.lockSkills && unit.lockSkills.length > 0) c.lockedSkills = [...unit.lockSkills];
+  if (finite(unit.initialCooldownBonus) && unit.initialCooldownBonus > 0) c.initialCooldownBonus = Math.floor(unit.initialCooldownBonus);
   return c;
 }
 
@@ -2639,6 +3144,7 @@ function cloneCombatant(c: Combatant): Combatant {
     stats: { ...c.stats },
     tags: [...c.tags],
     skills: [...c.skills],
+    ...(c.lockedSkills ? { lockedSkills: [...c.lockedSkills] } : {}),
     cooldowns: { ...c.cooldowns },
     statuses: c.statuses.map((s) => ({ ...s })),
     ...(c.shieldHooks ? { shieldHooks: c.shieldHooks.map((h) => ({ ...h, onAbsorb: { ...h.onAbsorb } })) } : {}),
