@@ -112,6 +112,7 @@ describe('durum rozeti sürüm kararı', () => {
 
   it('v1: Shared + statuses.json ikonu; Hexer v2: badge_<id> çizimi; Shared v2 ortak durumu kendi dosyasından çözer', () => {
     const omenIcon = content.statuses.omen!.icon;
+    setAllVersions('v1'); // varsayılan v2; v1 davranışını açıkça seç
     expect(statusBadge('omen', omenIcon)).toEqual({ name: omenIcon, owner: SHARED_KEY });
     setVersion('hexer', 'v2');
     for (const id of ['omen', 'wither', 'jinxed']) {
@@ -163,6 +164,7 @@ describe('olay efekti kancaları (event-fx)', () => {
     const old = file['summon_skeleton'];
     file['summon_skeleton'] = fake;
     try {
+      setVersion('undead', 'v1'); // varsayılan v2; v1 davranışını açıkça seç
       expect(selectEventFx('undead', EVENT_FX.summon('skeleton'))).toBeUndefined();
       setVersion('undead', 'v2');
       expect(selectEventFx('undead', EVENT_FX.summon('skeleton'))).toBe(fake);

@@ -43,7 +43,7 @@ export function mountEmbed(params: URLSearchParams): void {
   const verParam = params.get('ver');
   if (verParam === 'v1' || verParam === 'v2') setAllVersions(verParam, false);
   const verSel = h('select', { class: 'skill-select', attrs: { 'aria-label': 'Art version' }, title: 'Art and sound version of the class of this skill (only on this stage; debug > Versions saves it for the game)' });
-  for (const v of ['v1', 'v2'] as const) verSel.append(h('option', { text: v === 'v1' ? 'v1 (current)' : 'v2 (redesign)', attrs: { value: v } }));
+  for (const v of ['v1', 'v2'] as const) verSel.append(h('option', { text: v === 'v1' ? 'v1 (old)' : 'v2 (redesign)', attrs: { value: v } }));
   const syncVer = (): void => {
     verSel.value = getVersion(ownerOfSkill(select.value));
   };

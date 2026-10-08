@@ -2,7 +2,7 @@
  * Görsel-işitsel SÜRÜM seçimi (Ömer isteği: tüm karakterlerin ses, ikon ve skill animasyonları yeniden tasarlanıyor; eskiler korunur,
  * debug > Versions sekmesinden KARAKTER BAZINDA v1 / v2 seçilip karşılaştırılır).
  *
- *  - `v1` = mevcut içerik (pixel-icons.ts, pixel-fx.ts, vfx.ts, data/audio.json). DOKUNULMAZ ve varsayılandır.
+ *  - `v1` = mevcut içerik (pixel-icons.ts, pixel-fx.ts, vfx.ts, data/audio.json). DOKUNULMAZ (eski sürüm; varsayılan artık v2).
  *  - `v2` = yeni tasarım: src/game/art-v2/<classId>/icons.ts, src/game/art-v2/<classId>/vfx.ts, data/audio-v2/<classId>.json.
  *
  * Seçim class başınadır (anahtar = class id; ortak öğeler için `shared`): o class'ın skill ikonları, pasif/logo ikonu, skill
@@ -14,7 +14,8 @@ import { content } from '../engine';
 
 export type AssetVersion = 'v1' | 'v2';
 export const ASSET_VERSIONS: readonly AssetVersion[] = ['v1', 'v2'];
-export const DEFAULT_VERSION: AssetVersion = 'v1';
+/** Varsayılan sürüm: v2 (Ömer'in kararı). Kapsam dışı anahtarlar (Cutthroat) her zaman v1 (`getVersion`). */
+export const DEFAULT_VERSION: AssetVersion = 'v2';
 
 /** Ortak/global öğelerin sürüm anahtarı (Rest/Skip/Move ikon+sesleri, durum rozetleri). */
 export const SHARED_KEY = 'shared';
@@ -187,7 +188,7 @@ function load(): Record<string, AssetVersion> {
     const parsed: unknown = raw ? JSON.parse(raw) : {};
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) for (const [k, v] of Object.entries(parsed)) if (isVersion(v)) out[k] = v;
   } catch {
-    /* bozuk JSON / depolama yok: hepsi v1 */
+    /* bozuk JSON / depolama yok: hepsi varsayılan (v2) */
   }
   state = out;
   return out;
@@ -213,7 +214,7 @@ const notify = (): void => {
 
 /** Anahtarın seçili sürümü (kapsam dışı / bilinmeyen anahtarda v1). */
 export function getVersion(key: string | null | undefined): AssetVersion {
-  if (!key || VERSION_EXCLUDED.includes(key)) return DEFAULT_VERSION;
+  if (!key || VERSION_EXCLUDED.includes(key)) return 'v1';
   return load()[key] ?? DEFAULT_VERSION;
 }
 

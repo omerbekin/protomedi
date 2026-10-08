@@ -154,7 +154,7 @@ function overview(sections: AssetSection[]): AssetSection {
     icons: 'All pixel icons, zoomable, with where each one is used.',
     art: 'Full-body sprite, head avatar and logo of every class and summon (hidden developer classes too).',
     palette: 'Interface, element, stat and class colors, plus the fonts.',
-    versions: 'Art and sound versions per class: v1 (current) and v2 (redesign) side by side; pick which one the game uses.',
+    versions: 'Art and sound versions per class: v1 (old) and v2 (redesign, default) side by side; pick which one the game uses.',
     legacy: 'Old, spare and unused things: old sprites, concept art, spare icons, effects and sounds, each with why it is legacy.',
   };
   const root = h('section', { class: 'wk-section wk-assets', attrs: { id: 'wiki-assets', hidden: '' } },

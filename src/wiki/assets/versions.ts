@@ -22,7 +22,7 @@ function iconImg(name: string, accent: string, label: string): HTMLElement {
 
 function rowCard(r: VersionRow, refreshAll: () => void): HTMLElement {
   const sel = h('select', { class: 'ver-select', attrs: { 'aria-label': `${r.name} version` }, title: 'Version used in the game (same as debug > Versions)' });
-  for (const v of ['v1', 'v2'] as const) sel.append(h('option', { text: v === 'v1' ? 'v1 (current)' : `v2 · ${r.progress.ready}/${r.progress.total}`, attrs: { value: v } }));
+  for (const v of ['v1', 'v2'] as const) sel.append(h('option', { text: v === 'v1' ? 'v1 (old)' : `v2 · ${r.progress.ready}/${r.progress.total}`, attrs: { value: v } }));
   sel.value = r.selected;
   sel.addEventListener('change', () => {
     setVersion(r.key, sel.value as AssetVersion);

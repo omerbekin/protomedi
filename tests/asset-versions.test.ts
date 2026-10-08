@@ -173,9 +173,10 @@ describe('sürüm çözümleme', () => {
   const ds = content.skills.melee_attack!; // Warrior'ın ilk skill'i
   const whirl = content.skills.whirlwind!;
 
-  it('varsayılan v1; v2 seçilince sahibin ikonu v2 (yüksek çözünürlük), çıplak ad daima v1', () => {
+  it('varsayılan v2; v1 seçilince v1, v2 seçilince sahibin ikonu v2 (yüksek çözünürlük), çıplak ad daima v1', () => {
     withV2('warrior', { icons: { [ds.icon]: DRAW } }, () => {
-      expect(getVersion('warrior')).toBe('v1');
+      expect(getVersion('warrior')).toBe('v2');
+      setVersion('warrior', 'v1');
       expect(resolveSprite(ds.icon, 'warrior')).toMatchObject({ version: 'v1', key: ds.icon, size: GRID });
       setVersion('warrior', 'v2');
       expect(wantsV2('warrior', 'icon')).toBe(true);
@@ -223,6 +224,7 @@ describe('sürüm çözümleme', () => {
 
   it('v2 efektinin yeni ses adı yalnızca sahibi v2 iken çalınabilir', () => {
     withV2('warrior', { sfx: { testOnlyNewSound: NOISE } }, () => {
+      setVersion('warrior', 'v1');
       expect(skillSfxAllowed(ds, ds.sfx![0]!)).toBe(true);
       expect(skillSfxAllowed(ds, 'testOnlyNewSound')).toBe(false);
       setVersion('warrior', 'v2');
@@ -241,6 +243,7 @@ describe('sürüm çözümleme', () => {
     const sk = content.skills[content.summons.skeleton!.skills[0]!]!;
     const id = sk.sfx![0]!;
     withV2('undead', { sfx: { [id]: NOISE }, icons: { [sk.icon]: DRAW } }, () => {
+      setVersion('undead', 'v1');
       expect(resolveSfx(id, ownerOfUnit('skeleton'))).toBe(SFX[id]);
       setVersion('undead', 'v2');
       expect(resolveSfx(id, ownerOfUnit('skeleton'))).toBe(NOISE);
@@ -259,6 +262,7 @@ describe('sürüm çözümleme', () => {
   });
 
   it('toplu seçim ve karışık durum', () => {
+    setAllVersions('v1');
     expect(allVersionsState()).toBe('v1');
     setVersion('mage', 'v2');
     expect(allVersionsState()).toBe('mixed');
@@ -272,29 +276,29 @@ describe('seçim kalıcılığı (localStorage)', () => {
   it('seçim depoya yazılır ve yeniden okununca geri gelir', () => {
     const s = fakeStorage();
     useStorage(s);
-    setVersion('archer', 'v2');
-    expect(JSON.parse(s.data[VERSIONS_STORAGE_KEY]!)).toEqual({ archer: 'v2' });
-    reloadVersions();
-    expect(getVersion('archer')).toBe('v2');
     setVersion('archer', 'v1');
+    expect(JSON.parse(s.data[VERSIONS_STORAGE_KEY]!)).toEqual({ archer: 'v1' });
+    reloadVersions();
+    expect(getVersion('archer')).toBe('v1');
+    setVersion('archer', 'v2');
     expect(JSON.parse(s.data[VERSIONS_STORAGE_KEY]!)).toEqual({});
   });
 
-  it('bozuk JSON, geçersiz değerler, okuma/yazma hatası ve depolama yokluğu çökertmez (hepsi v1)', () => {
+  it('bozuk JSON, geçersiz değerler, okuma/yazma hatası ve depolama yokluğu çökertmez (hepsi varsayılan v2)', () => {
     useStorage(fakeStorage({ [VERSIONS_STORAGE_KEY]: '{bozuk json' }));
-    expect(getVersion('warrior')).toBe('v1');
-    useStorage(fakeStorage({ [VERSIONS_STORAGE_KEY]: JSON.stringify({ warrior: 'v9', mage: 42, archer: 'v2' }) }));
-    expect(getVersion('warrior')).toBe('v1');
-    expect(getVersion('mage')).toBe('v1');
-    expect(getVersion('archer')).toBe('v2');
+    expect(getVersion('warrior')).toBe('v2');
+    useStorage(fakeStorage({ [VERSIONS_STORAGE_KEY]: JSON.stringify({ warrior: 'v9', mage: 42, archer: 'v1' }) }));
+    expect(getVersion('warrior')).toBe('v2');
+    expect(getVersion('mage')).toBe('v2');
+    expect(getVersion('archer')).toBe('v1');
     useStorage(fakeStorage({ [VERSIONS_STORAGE_KEY]: '[1,2]' }));
-    expect(getVersion('warrior')).toBe('v1');
+    expect(getVersion('warrior')).toBe('v2');
     useStorage(fakeStorage({}, { throwGet: true, throwSet: true }));
-    expect(getVersion('warrior')).toBe('v1');
-    expect(() => setVersion('warrior', 'v2')).not.toThrow();
-    expect(getVersion('warrior')).toBe('v2'); // yalnızca bu oturum
+    expect(getVersion('warrior')).toBe('v2');
+    expect(() => setVersion('warrior', 'v1')).not.toThrow();
+    expect(getVersion('warrior')).toBe('v1'); // yalnızca bu oturum
     useStorage(undefined);
-    expect(getVersion('warrior')).toBe('v1');
+    expect(getVersion('warrior')).toBe('v2');
     expect(() => setVersion('warrior', 'v2')).not.toThrow();
   });
 

@@ -118,7 +118,7 @@ export function registerVersionsPanel(debug: Pick<DebugMenu, 'registerPanel'>, h
         const p = v2Progress(key);
         const cur = getVersion(key);
         const sel = select(
-          ASSET_VERSIONS.map((v) => ({ value: v, label: v === 'v1' ? 'v1 (current)' : v2Label(key) })),
+          ASSET_VERSIONS.map((v) => ({ value: v, label: v === 'v1' ? 'v1 (old)' : v2Label(key) })),
           cur,
           (v) => {
             setVersion(key, v as AssetVersion);
