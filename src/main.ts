@@ -23,6 +23,10 @@ import { debugState } from './game/debug-state';
 import { menuStyle } from './ui/menu-style';
 import { whenMenuFontsReady } from './ui/menu-fonts';
 import './style.css';
+import { markBootReady, setBootProgress } from './ui/boot-loader';
+
+// Modüller yüklendi: açılış ekranı ilerler (sonraki adımlar: ana menünün dosyaları, fontlar; src/ui/boot-loader.ts)
+setBootProgress(0.12);
 
 // Ana menü stili (?menu=new önizleme; varsayılan src/ui/menu-style.ts): zarif stilde fontlar hemen yüklenmeye başlar, oyun içi Settings sütunu CSS sınıfıyla
 if (menuStyle === 'elegant') {
@@ -61,13 +65,23 @@ const game = new Phaser.Game({
   // Oran korunarak (FIT); tuval boyutu ekran oranı ve gerçek piksel çözünürlüğüyle src/ui/viewport.ts > stageMetrics'ten gelir (geniş ekran:
   // mantıksal genişlik 1920-2580, yükseklik 1080; kamera yakınlaştırması src/game/stage.ts). Yerleşim/döndürme src/ui/viewport.ts
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  // Bir sahnenin preload'u 32'den fazla dosya kuyruğa alınca ilk 32'den sonra yükleme takılabiliyordu (açılışta ~45 sn siyah ekran);
+  // tek partide hepsi istenir. Ana menü artık yalnızca kendi ihtiyacını yükler (src/game/assets.ts > preloadAssets).
+  loader: { maxParallelDownloads: 64 },
   scene: [firstScene, ...otherScenes.filter((sc) => sc !== firstScene)],
 });
 
 mp.attachGame(game);
 
-// Dev only: lets the browser console inspect the running game (window.__game)
-if (import.meta.env.DEV) (window as unknown as { __game: Phaser.Game }).__game = game;
+// Açılış yükleme ekranı: ana menü kendisi kapatır (fontlar hazır, menü çizildi); doğrudan başka sahneyle açılışta (?seed=, ?campaign=1,
+// ?endless=1, lobi linki) o sahne kurulunca kapanır. Güvenlik ağı: bir şey takılırsa 25 sn sonra yine kalkar.
+game.events.once(Phaser.Core.Events.READY, () => {
+  for (const sc of game.scene.scenes) if (sc.scene.key !== MainMenuScene.KEY) sc.events.once(Phaser.Scenes.Events.CREATE, () => markBootReady());
+});
+window.setTimeout(markBootReady, 25000);
+
+// Dev / local test only: lets the browser console inspect the running game (window.__game; also in a local production build on localhost)
+if (import.meta.env.DEV || ['localhost', '127.0.0.1'].includes(window.location.hostname)) (window as unknown as { __game: Phaser.Game }).__game = game;
 // Dev / local test only: multiplayer client (window.__mp) for console checks (also in a local production build on localhost)
 if (import.meta.env.DEV || ['localhost', '127.0.0.1'].includes(window.location.hostname)) (window as unknown as { __mp: typeof mp }).__mp = mp;
 

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import layout from '../../data/battle-layout.json';
 import { getSpriteVariant } from './sprite-variants';
+import { trackSceneLoad } from '../ui/boot-loader';
 
 /**
  * Asset bulucu. Build sırasında assets/ klasörü taranır:
@@ -49,20 +50,56 @@ function fileStem(path: string): string[] {
   return [parts.pop() ?? '', file.replace(/\.[^.]+$/, '')];
 }
 
-/** preload() içinde çağrılır: var olan tüm sprite ve arka planları yükler. */
-export function preloadAssets(scene: Phaser.Scene): void {
+export interface PreloadOptions {
+  /** Karakter sprite'ları (varsayılan: hepsi). false = hiçbiri; liste = yalnızca bu sprite kimlikleri. */
+  sprites?: boolean | string[];
+  /** Kafa avatarları (küçük; varsayılan: hepsi). */
+  avatars?: boolean;
+  /** Arka planlar (varsayılan: hepsi). false = hiçbiri; liste = yalnızca bu kimlikler. */
+  backgrounds?: boolean | string[];
+  /** Kuyruğa dosya girdiyse yükleme ekranı (src/ui/boot-loader.ts) bu yükleyiciyi izlesin mi (varsayılan: evet). */
+  track?: boolean;
+}
+
+const pick = (want: boolean | string[] | undefined, id: string): boolean => (want === undefined || want === true ? true : want === false ? false : want.includes(id));
+
+/**
+ * preload() içinde çağrılır: sprite, avatar ve arka planları yükler. Dokusu ZATEN olan dosya yeniden indirilmez (eskiden her sahne
+ * açılışında ve ana menünün font beklemesinde her şey baştan iniyordu). Ana menü yalnızca kendi ihtiyacını ister; kalanı menü görününce
+ * arka planda gelir (`loadRestInBackground`), bir sahne hazır olmayan dosyaya girerse preload'u eksikleri yükler (kısa yükleyici).
+ */
+export function preloadAssets(scene: Phaser.Scene, o: PreloadOptions = {}): void {
+  queueAssets(scene, o);
+  if (o.track !== false) trackSceneLoad(scene.load);
+}
+
+function queueAssets(scene: Phaser.Scene, o: PreloadOptions): number {
+  let n = 0;
+  const add = (key: string, url: string) => {
+    if (scene.textures.exists(key)) return;
+    scene.load.image(key, url);
+    n++;
+  };
+  // sıra: avatarlar (küçük, menü pencereleri) -> sprite'lar -> arka planlar
+  if (o.avatars !== false)
+    for (const [path, url] of Object.entries(avatarFiles)) {
+      const [, id] = fileStem(path);
+      add(avatarKey(id!), url);
+    }
   for (const [path, url] of Object.entries(spriteFiles)) {
     const [id, anim] = fileStem(path);
-    scene.load.image(spriteKey(id!, anim!), url);
-  }
-  for (const [path, url] of Object.entries(avatarFiles)) {
-    const [, id] = fileStem(path);
-    scene.load.image(avatarKey(id!), url);
+    if (pick(o.sprites, id!)) add(spriteKey(id!, anim!), url);
   }
   for (const [path, url] of Object.entries(backgroundFiles)) {
     const [, id] = fileStem(path);
-    scene.load.image(backgroundKey(id!), url);
+    if (pick(o.backgrounds, id!)) add(backgroundKey(id!), url);
   }
+  return n;
+}
+
+/** Menü görününce: kalan sprite ve arka planları sessizce arka planda yükler (çalışan sahnenin yükleyicisiyle; yükleme ekranı yok). */
+export function loadRestInBackground(scene: Phaser.Scene): void {
+  if (queueAssets(scene, {}) > 0) scene.load.start();
 }
 
 /** Kafa avatarının doku anahtarı; avatar dosyası yoksa null (çağıran eski kırpmaya/silüete döner). Kare, sağa bakar. */

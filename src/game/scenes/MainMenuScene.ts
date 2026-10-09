@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { content } from '../../engine';
 import { CONFIG, deleteSave, deleteSlot, getMap, latestSave, listSaves, migrateSaves, readSaves, slotSummaries, type CampaignMode, type Difficulty, type SaveEntry, type SlotSummary } from '../../campaign';
-import { backgroundKey, hasBackground, preloadAssets } from '../assets';
+import { backgroundKey, hasBackground, loadRestInBackground, preloadAssets } from '../assets';
 import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
 import { blurredTexture, edgeFillers, mapArt } from '../map-art';
 import { coverShift, focusCrop, placeArt } from '../wide-map';
@@ -23,6 +23,7 @@ import { sanitizeName } from '../../net/protocol';
 import { openWiki } from '../../wiki/view';
 import { BODY_FONT, DISPLAY_FONT, menuStyle } from '../../ui/menu-style';
 import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
+import { markBootReady, setBootProgress } from '../../ui/boot-loader';
 import { EL, elButton, elDiamond, elGlow, elLink, elText, elBody } from '../elegant-ui';
 import { ENDLESS_SCENE } from '../endless-session';
 import { MAIN_ITEMS, backTarget, backdropFor, campaignButtons, initialView, moveSelection, type MenuItemKey, type MenuView } from '../main-menu-flow';
@@ -71,6 +72,8 @@ const ITEM_Y0 = LOOK.itemY0;
 /** Zarif stilde satır yazısının iç boşluğu (parıltı gölgesi kesilmesin); yazı x'i bu kadar sola alınır. */
 const TPAD = ELEGANT ? 18 : 0;
 const SHADOW_DARK = 'rgba(12,8,5,0.95)';
+/** Ana menünün açılışta istediği arka planlar (Play kartları; yedekleriyle). */
+const MENU_BACKGROUNDS = ['proving-grounds-sunny-afternoon', 'castle-hall', 'duelling-ring-moon', 'kings-bridge'];
 /** Quick Battle kartındaki Endless mode anahtarı (localStorage). */
 const ENDLESS_TOGGLE_KEY = 'proto.qbEndless';
 const SHADOW_GLOW = 'rgba(240,140,40,0.85)';
@@ -179,7 +182,9 @@ export class MainMenuScene extends Phaser.Scene {
   }
 
   preload(): void {
-    preloadAssets(this);
+    // Açılış hızı: yalnızca menünün ihtiyacı (kart görselleri, harita, logo); avatarlar, sprite'lar ve diğer arka planlar menü
+    // görününce arka planda gelir (loadRestInBackground). İlerleme açılış yükleme ekranına bağlıdır (src/ui/boot-loader.ts).
+    preloadAssets(this, { sprites: false, avatars: false, backgrounds: MENU_BACKGROUNDS });
     preloadCampaignArt(this);
     preloadLogo(this);
   }
@@ -188,6 +193,7 @@ export class MainMenuScene extends Phaser.Scene {
     // Zarif stil: Phaser yazıları çizildiği andaki fontla kalır; fontlar hazır değilse bekle ve sahneyi yeniden kur (yedek fontla çizilmesin)
     if (ELEGANT && !menuFontsReady()) {
       this.cameras.main.setBackgroundColor('#0d0a07');
+      setBootProgress(0.92);
       void whenMenuFontsReady().then(() => {
         if (this.sys.isActive()) this.scene.restart(this.initData);
       });
@@ -217,6 +223,9 @@ export class MainMenuScene extends Phaser.Scene {
     if (this.startView !== 'menu') this.setView(this.startView, true);
     if (this.openOnStart === 'load' && slotSummaries(storage()).some((x) => x && x.saveCount > 0)) this.loadSlots();
     if (this.openOnStart === 'new') this.chooseSlot();
+    markBootReady(); // açılış yükleme ekranı kapanır (ilk menü hazır; ölçüm: performance 'menu-ready')
+    // menü görününce kalan avatar / sprite / arka planlar (sahne saati font beklemesinden sonraki yeniden kuruluşta hemen işlemeyebiliyor: tarayıcı zamanlayıcısı)
+    window.setTimeout(() => this.sys.isActive() && loadRestInBackground(this), 400);
   }
 
   // ------------------------------------------------------------ arka plan
