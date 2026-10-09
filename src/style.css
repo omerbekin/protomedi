@@ -152,6 +152,15 @@ body {
   z-index: 30;
 }
 
+.debug-toggle[hidden] {
+  display: none;
+}
+
+/* Görünür DEBUG düğmesi yoksa (varsayılan; ?debug=1 ile görünür) panel sağ alt köşeye kadar uzar */
+.debug-toggle[hidden] ~ .debug-panel {
+  bottom: calc(8px + var(--eb));
+}
+
 .debug-toggle:hover {
   color: #f3d999;
   border-color: #f3d999;
@@ -180,14 +189,20 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font: bold 16px monospace;
+  font: 600 15px Cinzel, Georgia, 'Palatino Linotype', serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #f3d999;
 }
 
 .debug-panel h3 {
-  margin: 14px 0 6px;
-  font: bold 12px monospace;
+  margin: 16px 0 8px;
+  padding-bottom: 5px;
+  font: 600 11px Cinzel, Georgia, 'Palatino Linotype', serif;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #a8977a;
+  color: rgba(217, 178, 106, 0.85);
+  border-bottom: 1px solid rgba(217, 178, 106, 0.16);
 }
 
 /* Her kategori bir ızgara: satır başına 2-3 düğme */
@@ -203,12 +218,14 @@ body {
   width: 100%;
   min-height: 44px;
   padding: 6px 8px;
-  font: 13px system-ui, sans-serif;
+  font: 15px 'EB Garamond', Georgia, 'Palatino Linotype', serif;
   text-align: center;
-  color: #edf2f4;
-  background: #2b2d42;
-  border: 1px solid #4a4e69;
-  border-radius: 6px;
+  color: #d9c8a2;
+  background: rgba(8, 6, 4, 0.45);
+  border: 1px solid rgba(217, 178, 106, 0.3);
+  border-radius: 0;
+  cursor: pointer;
+  transition: border-color 0.18s, color 0.18s, background 0.18s;
 }
 
 .debug-close {
@@ -216,9 +233,15 @@ body {
   margin: 0;
 }
 
+.debug-action:hover,
+.debug-close:hover {
+  border-color: rgba(243, 217, 153, 0.9);
+  color: #f3d999;
+}
+
 .debug-action:active,
 .debug-close:active {
-  background: #4a4e69;
+  background: rgba(224, 112, 42, 0.18);
 }
 
 .debug-info {
@@ -226,11 +249,16 @@ body {
   grid-template-columns: auto 1fr;
   gap: 4px 10px;
   margin: 0;
-  font: 12px monospace;
+  font: 14px 'EB Garamond', Georgia, 'Palatino Linotype', serif;
+  color: #d9c8a2;
 }
 
 .debug-info dt {
+  font: 600 11px Cinzel, Georgia, 'Palatino Linotype', serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: #a8977a;
+  align-self: center;
 }
 
 .debug-info dd {
@@ -242,8 +270,11 @@ body {
   left: calc(8px + var(--el));
   top: calc(8px + var(--et));
   padding: 4px 8px;
-  font: bold 12px monospace;
-  background: rgba(0, 0, 0, 0.6);
+  font: 600 12px Cinzel, Georgia, 'Palatino Linotype', serif;
+  letter-spacing: 0.06em;
+  color: #d9c8a2;
+  background: rgba(8, 6, 4, 0.7);
+  border: 1px solid rgba(217, 178, 106, 0.3);
   z-index: 25;
 }
 
@@ -275,14 +306,14 @@ body {
   min-height: 48px;
   padding: 4px 8px 4px 6px;
   text-align: left;
-  border-width: 2px;
   border-radius: 0;
 }
 
 .debug-action.debug-ibtn.on {
-  background: #25402e;
-  border-color: #7dff9b;
-  box-shadow: 0 0 8px rgba(125, 255, 155, 0.35);
+  color: #f3d999;
+  background: rgba(224, 112, 42, 0.16);
+  border-color: #f3d999;
+  box-shadow: 0 0 10px rgba(240, 140, 40, 0.3);
 }
 
 .debug-ibtn-iconbox {
@@ -315,17 +346,19 @@ body {
 }
 
 .debug-ibtn-label {
-  font: bold 13px system-ui, sans-serif;
+  font: 600 11.5px Cinzel, Georgia, 'Palatino Linotype', serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   overflow-wrap: anywhere;
 }
 
 .debug-ibtn-badge {
   margin-top: 2px;
-  font: bold 13px monospace;
+  font: italic 14px 'EB Garamond', Georgia, 'Palatino Linotype', serif;
 }
 
 .debug-ibtn-badge.on {
-  color: #7dff9b;
+  color: #ffb35a;
 }
 
 .debug-ibtn-badge.off {
@@ -333,7 +366,7 @@ body {
 }
 
 .debug-ibtn-badge.val {
-  color: #ffd23f;
+  color: #f3d999;
 }
 
 .debug-tab {
@@ -371,16 +404,16 @@ body {
 }
 
 .debug-action.debug-ibtn.slot.sel {
-  border-color: #ffd23f;
-  box-shadow: 0 0 8px rgba(255, 210, 63, 0.45);
+  border-color: #f3d999;
+  box-shadow: 0 0 10px rgba(240, 140, 40, 0.35);
 }
 
 .debug-action.debug-ibtn.sidebtn.party.on {
-  border-color: #6ec1ff;
+  border-color: #9cbde6;
 }
 
 .debug-action.debug-ibtn.sidebtn.enemies.on {
-  border-color: #ff6b6b;
+  border-color: #e39a88;
 }
 
 /* --- Sağ üst simge sırası (sağdan sola): wiki, tam ekran, Menu. Dişli düğmesi yok (Ömer 2026-10-08): ayarlar menüden açılan ayrı ekran --- */
@@ -698,6 +731,25 @@ body {
   display: none;
 }
 
+/* Settings en altı: gizli debug girişinin yedeği (src/ui/debug-gesture.ts); küçük, soluk, kutusuz */
+.st-dev {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: calc(30 * var(--u));
+  font: italic max(11px, calc(19 * var(--u))) 'EB Garamond', Georgia, serif;
+  color: rgba(168, 151, 122, 0.55);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.18s;
+}
+
+.st-dev:hover,
+.st-dev:focus-visible {
+  color: #cdb88d;
+}
+
 /* Ayarlar açıkken alttaki oyun menüsü gizlenir (sütun onun yerine geçer; Back ile menü geri gelir) */
 html.settings-open .gm-overlay {
   visibility: hidden;
@@ -792,13 +844,19 @@ html.short .gm-list {
   align-items: center;
   gap: 8px;
   max-width: calc(var(--stage-w, 100vw) - 32px);
-  padding: 4px 4px 4px 14px;
-  font: 14px system-ui, sans-serif;
-  color: #edf2f4;
-  background: linear-gradient(180deg, rgba(30, 22, 14, 0.97), rgba(12, 9, 6, 0.97)); /* tasarım kiti */
-  border: 1px solid #ffd23f;
-  border-radius: 10px;
+  padding: 2px 2px 2px 18px;
+  font: italic 17px 'EB Garamond', Georgia, 'Palatino Linotype', serif;
+  color: #cdb88d;
+  text-shadow: 0 2px 4px rgba(12, 8, 5, 0.95);
+  background: linear-gradient(180deg, rgba(30, 22, 14, 0.96), rgba(12, 9, 6, 0.96)); /* tasarım kiti */
+  border: 1px solid rgba(217, 178, 106, 0.42);
+  border-radius: 0;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
   z-index: 35;
+}
+
+.fs-hint-close:hover {
+  color: #f3d999;
 }
 
 .fs-hint[hidden] {
@@ -809,10 +867,12 @@ html.short .gm-list {
   flex: none;
   width: 44px;
   height: 44px;
-  font: bold 22px system-ui, sans-serif;
-  color: #edf2f4;
+  font: 600 18px Cinzel, Georgia, 'Palatino Linotype', serif;
+  color: #a8977a;
   background: transparent;
   border: 0;
+  cursor: pointer;
+  transition: color 0.18s;
 }
 
 /* --- Debug menüsü: sekmeler, paneller, galeri (üstteki kurallara ek) --- */
@@ -857,17 +917,20 @@ html.short .gm-list {
   min-width: 0;
   min-height: 48px;
   padding: 5px 2px 4px;
-  font: bold 11px system-ui, sans-serif;
+  font: 600 10px Cinzel, Georgia, 'Palatino Linotype', serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: #a8977a;
-  background: #1c1d2e;
-  border: 1px solid #4a4e69;
-  border-radius: 6px;
+  background: rgba(8, 6, 4, 0.45);
+  border: 1px solid rgba(217, 178, 106, 0.3);
+  border-radius: 0;
+  cursor: pointer;
 }
 
 .debug-tab.on {
-  color: #edf2f4;
-  background: #3a3d5c;
-  border-color: #ffd23f;
+  color: #f3d999;
+  background: rgba(224, 112, 42, 0.14);
+  border-color: #f3d999;
 }
 
 .debug-body {
@@ -880,7 +943,7 @@ html.short .gm-list {
 
 .debug-block + .debug-block {
   margin-top: 6px;
-  border-top: 1px solid #2b2d42;
+  border-top: 1px solid rgba(217, 178, 106, 0.16);
 }
 
 .debug-action {
@@ -892,17 +955,17 @@ html.short .gm-list {
 }
 
 .debug-action.on {
-  color: #ffffff;
-  background: #25402e;
-  border-color: #7dff9b;
+  color: #f3d999;
+  background: rgba(224, 112, 42, 0.16);
+  border-color: #f3d999;
 }
 
 .debug-action.bad {
-  border-color: #8a3a4a;
+  border-color: rgba(232, 128, 106, 0.6);
 }
 
 .debug-action.good {
-  border-color: #3a8a5a;
+  border-color: rgba(127, 184, 90, 0.6);
 }
 
 .debug-action.chip {
@@ -911,11 +974,11 @@ html.short .gm-list {
 }
 
 .debug-action.chip.party {
-  border-left: 5px solid #6ec1ff;
+  border-left: 4px solid #9cbde6;
 }
 
 .debug-action.chip.enemy {
-  border-left: 5px solid #ff6b6b;
+  border-left: 4px solid #e39a88;
 }
 
 .debug-action.chip.dead {
@@ -947,14 +1010,14 @@ html.short .gm-list {
 }
 
 .debug-cells .debug-action.empty {
-  color: #a8977a;
-  background: #1c1d2e;
+  color: #7d705a;
+  background: rgba(8, 6, 4, 0.3);
 }
 
 .debug-note {
   margin: 6px 0;
-  font: 12px system-ui, sans-serif;
-  color: #ffd23f;
+  font: italic 15px 'EB Garamond', Georgia, 'Palatino Linotype', serif;
+  color: #cdb88d;
 }
 
 .debug-note.dim {
@@ -975,26 +1038,28 @@ html.short .gm-list {
   gap: 8px;
   min-height: 44px;
   padding: 2px 6px;
-  background: #1c1d2e;
-  border-radius: 4px;
+  background: rgba(8, 6, 4, 0.45);
+  border-bottom: 1px solid rgba(217, 178, 106, 0.16);
 }
 
 .debug-version-row.all {
   grid-template-columns: 1fr minmax(118px, auto);
-  background: #26283d;
+  background: rgba(224, 112, 42, 0.08);
 }
 
 .debug-version-avatar {
   width: 40px;
   height: 40px;
   object-fit: cover;
-  border-radius: 3px;
-  background: #0e0f18;
+  border: 1px solid rgba(217, 178, 106, 0.3);
+  background: #0c0806;
 }
 
 .debug-version-name {
-  font: bold 14px Georgia, serif;
-  color: #edf2f4;
+  font: 600 13px Cinzel, Georgia, 'Palatino Linotype', serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #d9c8a2;
 }
 
 /* Satırdaki class logosu: seçili sürümle çizilir (v1 64 / v2 128 piksel) */
@@ -1008,16 +1073,16 @@ html.short .gm-list {
 .debug-select {
   min-height: 44px;
   padding: 4px 6px;
-  font: 13px system-ui, sans-serif;
-  color: #edf2f4;
-  background: #14151f;
-  border: 1px solid #3d405b;
-  border-radius: 4px;
+  font: 15px 'EB Garamond', Georgia, 'Palatino Linotype', serif;
+  color: #d9c8a2;
+  background: #0c0806;
+  border: 1px solid rgba(217, 178, 106, 0.3);
+  border-radius: 0;
 }
 
 .debug-select.on {
-  border-color: #ffd23f;
-  color: #ffd23f;
+  border-color: #f3d999;
+  color: #f3d999;
 }
 
 .debug-inline {
@@ -1036,11 +1101,11 @@ html.short .gm-list {
   min-width: 0;
   min-height: 44px;
   padding: 6px 8px;
-  font: 14px monospace;
-  color: #edf2f4;
-  background: #14151f;
-  border: 1px solid #4a4e69;
-  border-radius: 6px;
+  font: 16px 'EB Garamond', Georgia, 'Palatino Linotype', serif;
+  color: #f3d999;
+  background: #0c0806;
+  border: 1px solid rgba(217, 178, 106, 0.3);
+  border-radius: 0;
 }
 
 /* Kısa sahnede (<= 720px; JS: html.compact, döndürülmüş sahnede de doğru) sekme çubuğu sıkışık */

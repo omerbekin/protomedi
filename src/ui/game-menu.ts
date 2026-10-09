@@ -6,8 +6,8 @@ import './elegant.css';
 /**
  * Oyun içi Menu (Ömer 2026-10-08): sağ üstte "Menu" düğmesi (tam ekran ve wiki simgelerinin solunda, aynı sıra) + Esc.
  * Savaş (hızlı / sefer / multiplayer), takım seçimi ve multiplayer ekranlarında görünür; ana menüde yok, sefer haritası kendi menüsünü
- * kullanır (aynı düğme: `mountMenuToggle`). İçerik `menuItems(ctx)` (saf, `src/game/session-flow.ts`): Resume / Settings / New Game /
- * Team Select / Back to Main Menu; devam eden savaştan çıkış onay ister. Menü açıkken savaş durur (wiki gibi).
+ * kullanır (aynı düğme: `mountMenuToggle`). İçerik `menuItems(ctx)` (saf, `src/game/session-flow.ts`): Resume / Codex / Settings / Leave / Main Menu
+ * (bağlama göre); devam eden savaştan çıkış onay ister. Menü açıkken savaş durur (wiki gibi).
  */
 
 /** Sağ üst simge sırasındaki "Menu" düğmesi (wiki ve tam ekranın solunda). */
@@ -167,7 +167,7 @@ export class GameMenu {
   private build(spec: NonNullable<ReturnType<typeof menuItems>>): void {
     this.list.replaceChildren();
     for (const id of spec.items) {
-      const b = this.button((id === 'retreat' ? this.hooks.retreatLabel?.() : undefined) ?? MENU_LABELS[id], id === 'resume');
+      const b = this.button((id === 'retreat' ? this.hooks.retreatLabel?.() : undefined) ?? spec.labels?.[id] ?? MENU_LABELS[id], id === 'resume');
       b.dataset.item = id;
       b.addEventListener('click', () => this.pick(id, spec.confirm[id]));
       this.list.append(b);

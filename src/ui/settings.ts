@@ -1,4 +1,5 @@
 import { lockInput, unlockInput } from './input-lock';
+import { openDebugMenu } from './debug-menu';
 import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from './fullscreen';
 
 /**
@@ -111,6 +112,15 @@ export class SettingsScreen {
       }, [state]);
       col.append(note);
     }
+
+    // Gizli debug girişinin yedeği (src/ui/debug-gesture.ts): en altta küçük, soluk "Developer tools" satırı
+    const dev = el('button', 'st-dev', 'Developer tools');
+    dev.type = 'button';
+    dev.addEventListener('click', () => {
+      this.setOpen(false);
+      openDebugMenu();
+    });
+    col.append(dev);
 
     // Geri standardı (CLAUDE.md > Geri / Menu kuralı): her yerde aynı sol üst "◂ Back  Esc" (src/ui/elegant.css > .el-back)
     const back = el('button', 'el-back st-back');

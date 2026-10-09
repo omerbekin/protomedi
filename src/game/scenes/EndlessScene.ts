@@ -294,8 +294,7 @@ export class EndlessScene extends Phaser.Scene {
       y += 140;
     }
     this.button(bx, y, 460, saved ? T.newRun : T.startRun, () => (saved ? this.actNewRun() : this.actStartPick()), { primary: !saved });
-    y += 110;
-    this.button(bx, y, 460, T.mainMenu, () => this.actMainMenu());
+    // "Main Menu" düğmesi kaldırıldı (Ömer 2026-10-09): sol üstteki ◂ Back aynı işi yapar
     this.panel(CX - 60, 300, 720, 600, 0.8);
     this.scoreList(CX - 20, 330, 640, scores());
     this.add2(this.note(CX + 300, 960, T.rules, 22, C.dim, true).setOrigin(0.5));

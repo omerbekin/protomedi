@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
-import { content } from '../../engine';
-import { CONFIG, deleteSave, deleteSlot, getMap, latestSave, listSaves, migrateSaves, readSaves, slotSummaries, type CampaignMode, type Difficulty, type SaveEntry, type SlotSummary } from '../../campaign';
+import { getMap, latestSave, migrateSaves, readSaves, slotSummaries, type SaveEntry } from '../../campaign';
 import { backgroundKey, hasBackground, loadRestInBackground, preloadAssets } from '../assets';
 import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
 import { blurredTexture, edgeFillers, mapArt } from '../map-art';
@@ -8,13 +7,14 @@ import { coverShift, focusCrop, placeArt } from '../wide-map';
 import layout from '../../../data/battle-layout.json';
 import { onStageResize, stageView, worldXY } from '../stage';
 import { FULL_W, FULL_X0, MENU_COL_X, menuColumnShift } from '../../ui/viewport';
-import { H, W, crown, hpBar, openModal, type Modal } from '../campaign-ui';
+import { H, W, type Modal } from '../campaign-ui';
 import { MAP_SCENE, loadEntry, startNewCampaign, storage } from '../campaign-session';
-import { classAvatar, classLogoBadge, ensureGlow, fitText, goldText, serif } from '../menu-ui';
+import { ensureGlow, fitText, goldText, serif } from '../menu-ui';
 import { GOLD } from '../ui-frame';
 import { mp, MP_SCENE } from '../mp-client';
 import { addLogo, hasLogo, preloadLogo } from '../branding';
 import { loadVolume, setSettingsVolume } from '../../ui/settings';
+import { openDebugMenu } from '../../ui/debug-menu';
 import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from '../../ui/fullscreen';
 import { isInputLocked, lockInput, unlockInput } from '../../ui/input-lock';
 import { promptCode, promptName } from '../../ui/mp-overlay';
@@ -25,6 +25,7 @@ import { BODY_FONT, DISPLAY_FONT, menuStyle } from '../../ui/menu-style';
 import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
 import { markBootReady, setBootProgress } from '../../ui/boot-loader';
 import { EL, elButton, elDiamond, elGlow, elLink, elText, elBody } from '../elegant-ui';
+import { openSlotBrowser } from '../campaign-slots-ui';
 import { ENDLESS_SCENE } from '../endless-session';
 import { MAIN_ITEMS, backTarget, backdropFor, campaignButtons, initialView, moveSelection, type MenuItemKey, type MenuView } from '../main-menu-flow';
 
@@ -34,12 +35,6 @@ export interface MainMenuData {
   /** Doğrudan bir görünümle aç (debug menüsü). */
   view?: MenuView;
 }
-
-const DIFFS: Difficulty[] = ['easy', 'medium', 'hard'];
-const dateText = (iso: string): string => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-};
 
 // --- Yerleşim (1920x1080) ---
 const COL_X = MENU_COL_X; // sol sütunun yazı başlangıcı (ayarlar ekranı DOM sütunu da aynı: src/ui/viewport.ts)
@@ -808,6 +803,14 @@ export class MainMenuScene extends Phaser.Scene {
         else void toggleFullscreen();
       }, { right: [state] });
     }
+
+    // Gizli debug girişinin yedeği (src/ui/debug-gesture.ts): en altta küçük, soluk "Developer tools"
+    const dev = elBody(this, COL_X, LOOK.panelY0 + this.panelRows.length * ROW_H + 10, 'Developer tools', 21, 'rgba(168,151,122,0.55)').setOrigin(0, 0.5);
+    dev.setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Rectangle(-10, -14, dev.width + 20, dev.height + 28), hitAreaCallback: Phaser.Geom.Rectangle.Contains });
+    dev.on('pointerover', () => dev.setColor(EL.NOTE));
+    dev.on('pointerout', () => dev.setColor('rgba(168,151,122,0.55)'));
+    dev.on('pointerup', () => openDebugMenu());
+    p.add(dev);
   }
 
   /** Multiplayer: mevcut lobi akışının ilk adımı (ad, Host, kodla Join). Lobi kurulmaya başlayınca MultiplayerScene devralır. */
@@ -888,254 +891,34 @@ export class MainMenuScene extends Phaser.Scene {
     this.modalBack = null;
   }
 
-  private openWindow(o: Parameters<typeof openModal>[2], back: () => void): Modal {
-    this.modal = openModal(this, this.modalLayer, o);
-    this.modalBack = back;
-    return this.modal;
-  }
-
   private loadSave(entry: SaveEntry): void {
     loadEntry(entry);
     this.scene.start(MAP_SCENE);
   }
 
-  /** Yuva kartı (kit): mod, zorluk, durak, takım avatarları + can, tarih, kayıt sayısı. Boşsa "Empty slot". Sağda kit düğmeleri. */
-  private slotCard(root: Phaser.GameObjects.Container, x: number, y: number, w: number, h: number, i: number, sum: SlotSummary | null, buttons: Array<{ label: string; run: () => void; primary?: boolean }>): void {
-    const bg = this.add.graphics();
-    bg.fillStyle(EL.INK, 0.5).fillRect(x, y, w, h);
-    bg.lineStyle(1, EL.GOLD, sum ? EL.LINE.a2 : EL.LINE.a1).strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    root.add(bg);
-    root.add(elText(this, x + 24, y + 30, `Slot ${i + 1}`, 15, 'rgba(217,178,106,0.85)', { em: 0.24 }).setOrigin(0, 0.5));
-    if (!sum) {
-      root.add(elBody(this, x + 24, y + 72, 'Empty slot', 24, EL.DIM).setOrigin(0, 0.5));
-    } else {
-      const diff = CONFIG.difficulties[sum.difficulty]?.name ?? sum.difficulty;
-      root.add(elText(this, x + 150, y + 30, `${sum.mode === 'ironman' ? 'Ironman' : 'Normal'} · ${diff}`, 15, sum.mode === 'ironman' ? EL.BAD : EL.MUTED, { em: 0.14 }).setOrigin(0, 0.5));
-      const l = sum.latest;
-      root.add(elText(this, x + 24, y + 68, l ? `${l.summary.map} · Stop ${l.summary.stop}/${l.summary.stops} · ${l.summary.node}` : 'Journey started, not saved yet', 21, EL.ON, { em: 0.04, upper: false }).setOrigin(0, 0.5));
-      root.add(elBody(this, x + 24, y + 102, `${l ? `${l.summary.victories} victories  ·  ` : ''}${sum.saveCount} save${sum.saveCount === 1 ? '' : 's'}  ·  last played ${dateText(sum.lastPlayed)}`, 18, EL.MUTED).setOrigin(0, 0.5));
-      l?.summary.classes.forEach((cls, k) => {
-        const def = content.classes[cls];
-        if (!def) return;
-        const ax = x + 720 + k * 74;
-        root.add(classAvatar(this, def, ax, y + 52, 56));
-        root.add(classLogoBadge(this, def, ax - 22, y + 72, 11));
-        root.add(hpBar(this, ax - 28, y + 88, 56, 5, l.summary.hp[k] ?? 1));
-        if (l.state.roster.find((hh) => hh.class === cls)?.leader) root.add(crown(this, ax + 22, y + 26, 0.7));
-      });
-    }
-    buttons.forEach((b, k) => {
-      const bw = 160;
-      const btn = elButton(this, b.label, b.run, { kind: b.primary ? 'primary' : 'secondary', w: bw, h: b.primary ? 62 : 54, size: b.primary ? 19 : 17, ready: true });
-      btn.root.setPosition(x + w - 30 - bw / 2 - (buttons.length - 1 - k) * (bw + 30), y + h / 2);
-      root.add(btn.root);
+  /** Sefer yuvaları "Column" ekranı (src/game/campaign-slots-ui.ts): New = yuva -> mod + zorluk, Load = yuva -> kayıtlar. */
+  private openSlots(flow: 'new' | 'load'): void {
+    this.closeModal();
+    const b = openSlotBrowser(this, this.modalLayer, {
+      flow,
+      onClose: () => this.closeModal(),
+      onStart: (mode, diff, slot) => {
+        startNewCampaign(mode, diff, slot);
+        this.scene.start(MAP_SCENE);
+      },
+      onLoad: (e) => this.loadSave(e),
+      onChanged: () => this.refreshCards(),
     });
+    this.modal = { root: b.root, close: () => b.close(), area: { x: 0, y: 0, w: 0, h: 0 } };
+    this.modalBack = () => b.back();
   }
-
-  // ------------------------------------------------------------ New Campaign: yuva -> mod + zorluk
 
   private chooseSlot(): void {
-    this.closeModal();
-    const sums = slotSummaries(storage());
-    const rowH = 150;
-    const back = () => this.closeModal();
-    const { root, area } = this.openWindow({ title: 'New Campaign', subtitle: 'Choose a slot for your journey', width: 1400, height: 250 + sums.length * rowH, buttons: [{ label: 'Back', run: back }] }, back);
-    sums.forEach((sum, i) => {
-      const pick = () => (sum ? this.confirmOverwrite(i, sum) : this.chooseOptions(i));
-      this.slotCard(root, W / 2 - 660, area.y + i * rowH, 1320, rowH - 14, i, sum, [{ label: sum ? 'Overwrite' : 'Choose', primary: !sum, run: pick }]);
-    });
+    this.openSlots('new');
   }
-
-  private confirmOverwrite(slot: number, sum: SlotSummary): void {
-    this.closeModal();
-    const back = () => this.chooseSlot();
-    this.openWindow({
-      title: `Overwrite slot ${slot + 1}?`,
-      text: `The journey in this slot (${sum.mode === 'ironman' ? 'Ironman' : 'Normal'}, ${sum.latest ? `stop ${sum.latest.summary.stop}, ${sum.latest.summary.node}` : 'not saved yet'}) and all of its ${sum.saveCount} saves will be deleted. This cannot be undone.`,
-      fit: true,
-      buttons: [
-        { label: 'Accept', primary: true, run: () => this.chooseOptions(slot) },
-        { label: 'Cancel', run: back },
-      ],
-    }, back);
-  }
-
-  /** Seçilebilir seçenek kartı (kit): seçili = açık altın çerçeve + kor elmas; başlık Cinzel, açıklama satırları EB Garamond. */
-  private optionCard(layer: Phaser.GameObjects.Container, cx: number, y: number, w: number, h: number, name: string, lines: string[], on: boolean, pick: () => void): void {
-    const c = this.add.container(cx, y);
-    const g = this.add.graphics();
-    let hover = false;
-    const draw = () => {
-      g.clear();
-      g.fillStyle(EL.INK, on ? 0.7 : 0.45).fillRect(-w / 2, 0, w, h);
-      if (on) g.lineStyle(2, EL.ON_N, 1).strokeRect(-w / 2 + 1, 1, w - 2, h - 2);
-      else g.lineStyle(1, EL.GOLD, hover ? 0.9 : EL.LINE.a2).strokeRect(-w / 2 + 0.5, 0.5, w - 1, h - 1);
-    };
-    draw();
-    c.add(g);
-    const dia = elDiamond(this, 6, !on).setPosition(-w / 2 + 26, 34);
-    const t = elText(this, -w / 2 + 44, 34, name, 22, on ? EL.ON : EL.TXT, { em: 0.08 }).setOrigin(0, 0.5);
-    if (on) elGlow(t, true);
-    c.add([dia, t]);
-    lines.forEach((l, k) => c.add(elBody(this, -w / 2 + 44, 70 + k * 27, l, 19, on ? EL.NOTE : EL.MUTED, true, w - 64).setOrigin(0, 0.5)));
-    const z = this.add.zone(0, h / 2, w, h).setInteractive({ useHandCursor: true });
-    z.on('pointerover', () => {
-      hover = true;
-      draw();
-    });
-    z.on('pointerout', () => {
-      hover = false;
-      draw();
-    });
-    z.on('pointerup', pick);
-    c.add(z);
-    layer.add(c);
-  }
-
-  private chooseOptions(slot: number): void {
-    this.closeModal();
-    let mode: CampaignMode = 'normal';
-    let diff: Difficulty = CONFIG.defaultDifficulty;
-    const back = () => this.chooseSlot();
-    const { root, area } = this.openWindow({
-      title: 'New Campaign',
-      subtitle: `Slot ${slot + 1} · Mode and difficulty cannot be changed later`,
-      width: 1300,
-      height: 690,
-      buttons: [
-        {
-          label: 'Start',
-          primary: true,
-          run: () => {
-            startNewCampaign(mode, diff, slot);
-            this.scene.start(MAP_SCENE);
-          },
-        },
-        { label: 'Back', run: back },
-      ],
-    }, back);
-    const layer = this.add.container(0, 0);
-    root.add(layer);
-    const draw = () => {
-      layer.removeAll(true);
-      const pickRow = <T extends string>(y: number, title: string, opts: Array<{ id: T; name: string; lines: string[] }>, cur: T, set: (v: T) => void, h: number) => {
-        layer.add(elText(this, W / 2, y, title, 14, 'rgba(217,178,106,0.85)', { em: 0.24 }).setOrigin(0.5, 0));
-        const bw = Math.min(400, 1180 / opts.length - 24);
-        opts.forEach((o, i) => {
-          const x = W / 2 + (i - (opts.length - 1) / 2) * (bw + 24);
-          this.optionCard(layer, x, y + 34, bw, h, o.name, o.lines, o.id === cur, () => {
-            set(o.id);
-            draw();
-          });
-        });
-      };
-      pickRow(area.y, 'Mode', [
-        { id: 'normal' as CampaignMode, name: 'Normal', lines: ['Autosave after every victory', 'Save on the map at any time', 'Up to 5 saves in this slot'] },
-        { id: 'ironman' as CampaignMode, name: 'Ironman', lines: ['Saved only after a victory', 'No manual saves', 'One save, always overwritten'] },
-      ], mode, (v) => (mode = v), 160);
-      pickRow(area.y + 230, 'Difficulty', DIFFS.map((d) => ({ id: d, name: CONFIG.difficulties[d].name, lines: [CONFIG.difficulties[d].text] })), diff, (v) => (diff = v), 110);
-    };
-    draw();
-  }
-
-  // ------------------------------------------------------------ Load Game: yuva -> kayıtlar
 
   private loadSlots(): void {
-    this.closeModal();
-    const sums = slotSummaries(storage());
-    const rowH = 150;
-    const back = () => this.closeModal();
-    const { root, area } = this.openWindow({ title: 'Load Game', subtitle: 'Choose a slot', width: 1400, height: 250 + sums.length * rowH, buttons: [{ label: 'Back', run: back }] }, back);
-    sums.forEach((sum, i) => {
-      const buttons = sum
-        ? [
-            { label: 'Delete', run: () => this.confirmDeleteSlot(i, sum) },
-            { label: 'Open', primary: true, run: () => (sum.saveCount ? this.loadGame(i) : undefined) },
-          ]
-        : [];
-      this.slotCard(root, W / 2 - 660, area.y + i * rowH, 1320, rowH - 14, i, sum, buttons);
-    });
-  }
-
-  private confirmDeleteSlot(slot: number, sum: SlotSummary): void {
-    this.closeModal();
-    const back = () => this.loadSlots();
-    this.openWindow({
-      title: `Delete slot ${slot + 1}?`,
-      text: `The whole journey (${sum.mode === 'ironman' ? 'Ironman' : 'Normal'}) and all of its ${sum.saveCount} saves will be lost. This cannot be undone.`,
-      fit: true,
-      buttons: [
-        {
-          label: 'Delete',
-          primary: true,
-          run: () => {
-            deleteSlot(storage(), slot);
-            this.refreshCards();
-            this.loadSlots();
-          },
-        },
-        { label: 'Cancel', run: back },
-      ],
-    }, back);
-  }
-
-  private loadGame(slot: number): void {
-    this.closeModal();
-    const saves = listSaves(storage(), slot);
-    const rows = Math.max(1, saves.length);
-    const rowH = 118;
-    const back = () => this.loadSlots();
-    const { root, area } = this.openWindow({
-      title: `Load Game · Slot ${slot + 1}`,
-      width: 1400,
-      height: Math.min(1000, 210 + rows * rowH + 40),
-      buttons: [{ label: 'Back', run: back }],
-    }, back);
-    if (!saves.length) root.add(elBody(this, W / 2, area.y + 40, 'No saved games in this slot.', 24, EL.MUTED).setOrigin(0.5, 0));
-    saves.forEach((e, i) => {
-      const y = area.y + i * rowH;
-      const x = W / 2 - 660;
-      const bg = this.add.graphics();
-      bg.fillStyle(EL.INK, 0.5).fillRect(x, y, 1320, rowH - 12);
-      bg.lineStyle(1, EL.GOLD, EL.LINE.a2).strokeRect(x + 0.5, y + 0.5, 1319, rowH - 13);
-      root.add(bg);
-      root.add(elText(this, x + 24, y + 22, `${e.kind === 'manual' ? 'Manual' : e.kind === 'start' ? 'Start' : 'Auto'}${i === 0 ? ' · Newest' : ''}`, 14, 'rgba(217,178,106,0.85)', { em: 0.2 }).setOrigin(0, 0.5));
-      root.add(elText(this, x + 24, y + 52, `${e.summary.map} · Stop ${e.summary.stop}/${e.summary.stops} · ${e.summary.node}`, 21, EL.ON, { em: 0.04, upper: false }).setOrigin(0, 0.5));
-      root.add(elBody(this, x + 24, y + 82, `${e.summary.region}  ·  ${e.summary.victories} victories  ·  ${dateText(e.savedAt)}`, 18, EL.MUTED).setOrigin(0, 0.5));
-      e.summary.classes.forEach((cls, k) => {
-        const def = content.classes[cls];
-        if (!def) return;
-        const ax = x + 720 + k * 74;
-        root.add(classAvatar(this, def, ax, y + 40, 56));
-        root.add(classLogoBadge(this, def, ax - 22, y + 60, 11));
-        root.add(hpBar(this, ax - 28, y + 76, 56, 5, e.summary.hp[k] ?? 1));
-      });
-      const load = elButton(this, 'Load', () => this.loadSave(e), { kind: 'primary', w: 150, h: 60, size: 19, ready: true });
-      load.root.setPosition(x + 1100, y + (rowH - 12) / 2);
-      const del = elButton(this, 'Delete', () => {
-        this.closeModal();
-        const backDel = () => this.loadGame(slot);
-        this.openWindow({
-          title: 'Delete save?',
-          text: `${e.summary.node}, stop ${e.summary.stop}. This cannot be undone.`,
-          fit: true,
-          buttons: [
-            {
-              label: 'Delete',
-              primary: true,
-              run: () => {
-                deleteSave(storage(), slot, e.id);
-                this.refreshCards();
-                this.loadGame(slot);
-              },
-            },
-            { label: 'Cancel', run: backDel },
-          ],
-        }, backDel);
-      }, { kind: 'secondary', w: 120, h: 52, size: 16 });
-      del.root.setPosition(x + 1250, y + (rowH - 12) / 2);
-      root.add([load.root, del.root]);
-    });
+    this.openSlots('load');
   }
 
   /** Kayıt silinince Campaign kartındaki Continue / Load durumu yenilensin. */

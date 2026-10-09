@@ -5,6 +5,7 @@
  * (registerPanel: birim araçları, skill cast, seed, test takımı...) bulunur. Her yeni ekran/özellik buraya bir giriş koyar ki arayüzden test edilebilsin.
  */
 import { DEFAULT_ACTION_ICON, DOCK_GROUPS, DOCK_HINT, DOCK_KEYS, QUICK_TAB, SECTION_ICONS, TAB_ICONS, dockBadge, dockTooltip, labelBadge, labelBase, type DockBadge, type DockGroup } from './debug-layout';
+import { listenDebugTap, wantsDebugButton } from './debug-gesture';
 import { bindIcon } from './dom-icons';
 
 /** Sekme çubuğundaki kısa etiketler (dar ızgara hücresine sığsın; tam ad düğmenin ipucunda). */
@@ -160,6 +161,9 @@ export class DebugMenu {
     toggle.textContent = 'DEBUG';
     toggle.setAttribute('aria-label', 'Toggle debug menu');
     toggle.addEventListener('click', () => this.setOpen(!this.open));
+    // Görünür düğme yalnızca `?debug=1` ile; normalde gizli giriş: ` / F2, üç parmakla dokunma, Settings > Developer tools (src/ui/debug-gesture.ts)
+    toggle.hidden = !wantsDebugButton(window.location.search);
+    listenDebugTap(() => this.setOpen(!this.open));
 
     this.panel = document.createElement('div');
     this.panel.className = 'debug-panel';
@@ -172,6 +176,7 @@ export class DebugMenu {
 
     root.append(toggle, this.panel);
 
+    registerDebugMenu(this);
     window.addEventListener('keydown', (e) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
@@ -394,4 +399,13 @@ export class DebugMenu {
     }
     this.infoEl.replaceChildren(...rows);
   }
+}
+
+let instance: DebugMenu | null = null;
+function registerDebugMenu(menu: DebugMenu): void {
+  instance = menu;
+}
+/** Settings > Developer tools: debug menüsünü açar. */
+export function openDebugMenu(): void {
+  instance?.setOpen(true);
 }

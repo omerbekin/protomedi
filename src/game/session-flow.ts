@@ -43,17 +43,21 @@ export interface MenuSpec {
   items: MenuItemId[];
   /** Onay isteyen girişler: giriş -> soru metni (Yes / No). */
   confirm: Partial<Record<MenuItemId, string>>;
+  /** Bu bağlamda farklı yazılan girişler (multiplayer: mainMenu = 'Leave'). */
+  labels?: Partial<Record<MenuItemId, string>>;
 }
 
 export const RETREAT_CONFIRM = 'Retreat? This battle will not count.';
 
 /**
- * Pure decision (Ömer 2026-10-08, Geri / Menu kuralı 2026-10-09): the in-game Menu (top right "Menu" button / Esc) exists only on battle
- * screens; setup screens (team select, multiplayer lobby + multiplayer team select = 'mp-setup') use the top-left "◂ Back" instead (no menu).
- * Quick battle: Resume / Settings / New Game / Team Select / Back to Main Menu;
- * campaign battle (undecided): Resume / Settings / Retreat to Map / Back to Main Menu (retreat: the battle does not count, same node and
- * seed next time; `retreatToMap` in campaign-session); multiplayer: Resume / Settings / Back to Main Menu (= leave the match).
- * Leaving an undecided battle asks first. No menu (null) on the main menu and the campaign map (it has its own Menu).
+ * Pure decision (Ömer 2026-10-08, Geri / Menu kuralı 2026-10-09, menü listeleri 2026-10-09): the in-game Menu (top right "Menu" button / Esc)
+ * exists only on battle screens; setup screens (team select, multiplayer lobby + multiplayer team select = 'mp-setup') use the top-left
+ * "◂ Back" instead (no menu). Her bağlamda Codex, Settings'in hemen üstündedir:
+ * Quick battle: Resume / Codex / Settings / Leave (= takım seçimine dön) / Main Menu;
+ * campaign + endless battle (undecided): Resume / Codex / Settings / Retreat (to Map | to Camp) / Main Menu (retreat: the battle does not
+ * count; `retreatToMap` in campaign-session); multiplayer: Resume / Codex / Settings / Leave (= maçı terk, ana menü).
+ * Leaving an undecided battle asks first. No menu (null) on the main menu and the campaign map (it has its own Menu:
+ * Resume / Save / Load / Codex / Settings / Main Menu, `CampaignMapScene.openMenu`).
  */
 export function menuItems(ctx: FlowContext): MenuSpec | null {
   const f = flowButtons(ctx);
@@ -65,17 +69,16 @@ export function menuItems(ctx: FlowContext): MenuSpec | null {
     case 'campaign-battle-over':
     case 'mp-live':
     case 'mp': {
-      // Codex (sağ üst kitap düğmesi kaldırıldı, 2026-10-09); biten savaşta New Game / Team Select sonuç ekranında zaten var: menüde tekrar yok
-      const items: MenuItemId[] = ['resume', 'settings', 'codex'];
-      const over = ctx === 'battle-over';
-      if (f.newGame && !over) items.push('newGame');
-      if (f.teamSelect && !over) items.push('teamSelect');
+      const items: MenuItemId[] = ['resume', 'codex', 'settings'];
+      if (f.teamSelect) items.push('teamSelect');
       if (ctx === 'campaign-battle-live') items.push('retreat');
       items.push('mainMenu');
       const confirm: MenuSpec['confirm'] = {};
-      if (f.confirm) for (const id of ['newGame', 'teamSelect', 'mainMenu'] as const) if (items.includes(id)) confirm[id] = leave;
+      if (f.confirm) for (const id of ['teamSelect', 'mainMenu'] as const) if (items.includes(id)) confirm[id] = leave;
       if (items.includes('retreat')) confirm.retreat = RETREAT_CONFIRM;
-      return { items, confirm };
+      const spec: MenuSpec = { items, confirm };
+      if (ctx === 'mp-live' || ctx === 'mp') spec.labels = { mainMenu: 'Leave' };
+      return spec;
     }
     default:
       return null;
@@ -87,9 +90,9 @@ export const MENU_LABELS: Record<MenuItemId, string> = {
   settings: 'Settings',
   codex: 'Codex',
   newGame: 'New Game',
-  teamSelect: 'Team Select',
+  teamSelect: 'Leave',
   retreat: 'Retreat to Map',
-  mainMenu: 'Back to Main Menu',
+  mainMenu: 'Main Menu',
 };
 
 export function flowContext(game: Phaser.Game): FlowContext {

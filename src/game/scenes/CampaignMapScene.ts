@@ -46,7 +46,7 @@ import { placeArt } from '../wide-map';
 import { onStageResize, stageView } from '../stage';
 import { FULL_W, FULL_X0 } from '../../ui/viewport';
 import { H, W, classCard, crown, hpBar, openModal, type Modal } from '../campaign-ui';
-import { MENU_SCENE, current, markJourneyStart, save, session, setState, startCampaignBattle, storage } from '../campaign-session';
+import { MAP_SCENE, MENU_SCENE, current, loadEntry, markJourneyStart, save, session, setState, startCampaignBattle, storage } from '../campaign-session';
 import { classAvatar, classLogoBadge, ensureGlow } from '../menu-ui';
 import { sortByPrimary } from '../class-order';
 import { debugState } from '../debug-state';
@@ -57,6 +57,7 @@ import { openWiki } from '../../wiki/view';
 import { EL, diamondPts, elBadge, elBody, elButton, elIconButton, elLink, elPanel, elText, elToast, fadeLine, fitW, hGradient, vGradient } from '../elegant-ui';
 import { MAP_ZOOM, canPan, clampMid, clampZoom, wheelAction, type Bounds } from '../map-view';
 import { drawNodeGlyph, openFormation, openHeroPanel } from '../campaign-panels';
+import { openSlotBrowser, type SlotBrowser } from '../campaign-slots-ui';
 
 /**
  * Sefer haritası, "War table" (Ömer 2026-10-09, taslak 2; tasarım kiti):
@@ -106,6 +107,8 @@ export class CampaignMapScene extends Phaser.Scene {
   private walking: { finish: () => void } | null = null;
   private modal: Modal | null = null;
   private pauseMenu: Modal | null = null;
+  /** Menu > Load: bu yuvanın kayıt listesi (src/game/campaign-slots-ui.ts "Column"). */
+  private slotBrowser: SlotBrowser | null = null;
   private tip: Phaser.GameObjects.Container | null = null;
   private dashT = 0;
   private drag = { down: false, moved: false, x: 0, y: 0 };
@@ -131,6 +134,7 @@ export class CampaignMapScene extends Phaser.Scene {
     this.walking = null;
     this.modal = null;
     this.pauseMenu = null;
+    this.slotBrowser = null;
     this.tip = null;
     this.mapZoom = 1;
     this.frame = { left: 0, right: W, top: 0, bottom: H };
@@ -210,9 +214,9 @@ export class CampaignMapScene extends Phaser.Scene {
     this.pauseMenu = null;
   }
 
-  /** Resume / Save (Normal) / Settings / Codex / Back to Main Menu (tasarım kiti: openModal + kit düğmeleri). */
+  /** Resume / Save / Load (Normal) / Codex / Settings / Main Menu (Ömer 2026-10-09; tasarım kiti: openModal + kit düğmeleri). */
   private openMenu(): void {
-    if (this.pauseMenu || this.walking) return;
+    if (this.pauseMenu || this.walking || this.slotBrowser) return;
     const s = this.s;
     const items: Array<{ label: string; run: () => void; primary?: boolean }> = [{ label: 'Resume', primary: true, run: () => this.closeMenu() }];
     if (canSaveManually(s) && !this.modal)
@@ -224,6 +228,9 @@ export class CampaignMapScene extends Phaser.Scene {
           this.renderHud(); // "Game saved" bildirimi
         },
       });
+    if (s.mode === 'normal') items.push({ label: 'Load', run: () => (this.closeMenu(), this.openLoad()) });
+    // Codex (sağ üst kitap düğmesi kaldırıldı): menüden açılır; her bağlamda Settings'in hemen üstünde
+    items.push({ label: 'Codex', run: () => (this.closeMenu(), openWiki()) });
     // Ayarlar sütunu açıkken menü penceresi gizlenir (ana menü sütun görünümü); Back / Esc ile geri gelir
     items.push({
       label: 'Settings',
@@ -232,9 +239,7 @@ export class CampaignMapScene extends Phaser.Scene {
         setSettingsOpen(true, () => m.root.active && m.root.setVisible(true));
       },
     });
-    // Codex (sağ üst kitap düğmesi kaldırıldı): menüden açılır
-    items.push({ label: 'Codex', run: () => (this.closeMenu(), openWiki()) });
-    items.push({ label: 'Back to Main Menu', run: () => this.scene.start(MENU_SCENE) });
+    items.push({ label: 'Main Menu', run: () => this.scene.start(MENU_SCENE) });
     const m = openModal(this, this.ui, { title: 'Menu', width: 620, height: 170 + items.length * 88 });
     items.forEach((it, i) => {
       const b = elButton(this, it.label, it.run, { kind: it.primary ? 'primary' : 'secondary', w: 440, h: it.primary ? 70 : 60, size: it.primary ? 24 : 19, ready: true });
@@ -244,10 +249,28 @@ export class CampaignMapScene extends Phaser.Scene {
     this.pauseMenu = m;
   }
 
+  /** Menu > Load: bu yuvanın kayıtları; Back menüye döner, bir kayıt yüklenince harita o kayıtla yeniden kurulur. */
+  private openLoad(): void {
+    this.slotBrowser = openSlotBrowser(this, this.ui, {
+      flow: 'load',
+      slot: this.s.slot,
+      onlySlot: true,
+      onClose: () => {
+        this.slotBrowser = null;
+        this.openMenu();
+      },
+      onLoad: (e) => {
+        loadEntry(e);
+        this.scene.start(MAP_SCENE);
+      },
+    });
+  }
+
   /** Esc: önce açık ayarlar paneli / menü / kart / ipucu kapanır; hiçbiri yoksa menü açılır. */
   private onEscape(): void {
     if (debugState.uiPaused) return; // wiki açık: Esc wiki'nindir
     if (isSettingsOpen()) return setSettingsOpen(false);
+    if (this.slotBrowser) return this.slotBrowser.back();
     if (this.pauseMenu) return this.closeMenu();
     if (this.walking) return this.walking.finish();
     const step = nextStep(this.s).kind;

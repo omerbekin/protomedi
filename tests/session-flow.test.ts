@@ -18,29 +18,32 @@ describe('ayarlar menüsü: New Game / Team Select düğmeleri', () => {
   });
 });
 
-describe('oyun içi Menu (sağ üst Menu düğmesi / Esc): içerik bağlama göre', () => {
-  it('hızlı savaş: Resume / Settings / New Game / Team Select / Back to Main Menu; canlıyken çıkışlar onaylı', () => {
+describe('oyun içi Menu (sağ üst Menu düğmesi / Esc): içerik bağlama göre; Codex her yerde Settings in hemen üstünde', () => {
+  it('hızlı savaş: Resume / Codex / Settings / Leave / Main Menu (New Game yok); canlıyken çıkışlar onaylı', () => {
     const m = menuItems('battle-live')!;
-    expect(m.items).toEqual(['resume', 'settings', 'codex', 'newGame', 'teamSelect', 'mainMenu']);
-    expect(Object.keys(m.confirm).sort()).toEqual(['mainMenu', 'newGame', 'teamSelect']);
+    expect(m.items).toEqual(['resume', 'codex', 'settings', 'teamSelect', 'mainMenu']);
+    expect(m.items.map((id) => m.labels?.[id] ?? MENU_LABELS[id])).toEqual(['Resume', 'Codex', 'Settings', 'Leave', 'Main Menu']);
+    expect(Object.keys(m.confirm).sort()).toEqual(['mainMenu', 'teamSelect']);
     expect(menuItems('battle-over')!.confirm).toEqual({});
-    // biten savaşta New Game / Team Select sonuç ekranında: menüde tekrar yok
-    expect(menuItems('battle-over')!.items).toEqual(['resume', 'settings', 'codex', 'mainMenu']);
+    expect(menuItems('battle-over')!.items).toEqual(['resume', 'codex', 'settings', 'teamSelect', 'mainMenu']);
   });
   it('kurulum ekranlarında (takım seçimi, multiplayer lobisi / takım seçimi) Menu yok: sol üstte ◂ Back (Geri / Menu kuralı)', () => {
     expect(menuItems('team-select')).toBeNull();
     expect(menuItems('mp-setup')).toBeNull();
   });
-  it('sefer savaşı: Resume / Settings / Retreat to Map / Back to Main Menu; ikisi de onaylı; bitmiş savaşta Retreat yok', () => {
+  it('sefer / endless savaşı: Resume / Codex / Settings / Retreat / Main Menu; ikisi de onaylı; bitmiş savaşta Retreat yok', () => {
     const m = menuItems('campaign-battle-live')!;
-    expect(m.items).toEqual(['resume', 'settings', 'codex', 'retreat', 'mainMenu']);
+    expect(m.items).toEqual(['resume', 'codex', 'settings', 'retreat', 'mainMenu']);
     expect(m.confirm.retreat).toBe(RETREAT_CONFIRM);
     expect(m.confirm.mainMenu).toMatch(/main menu/i);
-    expect(menuItems('campaign-battle-over')!.items).toEqual(['resume', 'settings', 'codex', 'mainMenu']);
+    expect(menuItems('campaign-battle-over')!.items).toEqual(['resume', 'codex', 'settings', 'mainMenu']);
     expect(MENU_LABELS.retreat).toBe('Retreat to Map');
   });
-  it('multiplayer: Back to Main Menu = maçı terk (canlıyken onaylı)', () => {
-    expect(menuItems('mp-live')).toEqual({ items: ['resume', 'settings', 'codex', 'mainMenu'], confirm: { mainMenu: 'Leave the match? Leaving counts as a loss.' } });
+  it('multiplayer: Resume / Codex / Settings / Leave (= maçı terk, canlıyken onaylı)', () => {
+    const m = menuItems('mp-live')!;
+    expect(m.items).toEqual(['resume', 'codex', 'settings', 'mainMenu']);
+    expect(m.labels).toEqual({ mainMenu: 'Leave' });
+    expect(m.confirm).toEqual({ mainMenu: 'Leave the match? Leaving counts as a loss.' });
     expect(menuItems('mp')!.confirm).toEqual({});
   });
   it('ana menüde ve sefer haritasında bu menü yok (ana menüde Settings satırı, haritada kendi Menu penceresi)', () => {

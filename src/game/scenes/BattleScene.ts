@@ -10,8 +10,8 @@ import { CombatantView, color, slow, textStyle } from '../combatant-view';
 import { ensureIcon, ensureSkillIcon } from '../icons';
 import { initialSeed, initialSizes, newSeed } from '../seed';
 import { clampSize } from '../team-select-model';
-import { GOLD, SERIF, cornerOrnaments, ensureGrain, frameRect, glowRect, gradientRect, makeBadge } from '../ui-frame';
-import { elPanel } from '../elegant-ui';
+import { EL, elDiamond, elPanel, elText, fadeLine, diamondPts } from '../elegant-ui';
+import { HUD_NUM_FONT, hudNum, kitBadge, kitBand, kitCellFill, kitCellFrame, kitDivider, kitPlate, kitTag, kitTextBand } from '../hud-kit';
 import { playSfx } from '../audio';
 import { BattleStats, showResultScreen } from '../result-screen';
 import type { ResultAction, ResultScreen } from '../result-screen';
@@ -1347,17 +1347,17 @@ export class BattleScene extends Phaser.Scene {
     this.flowStrip?.destroy(true);
     const hint = given ?? raiseFlowHint(flow, unitName);
     const items: Phaser.GameObjects.GameObject[] = [];
-    const style = { fontFamily: SERIF, fontSize: '26px', fontStyle: 'bold', stroke: '#0c0805', strokeThickness: 3 };
-    const stepTxt = hint.step ? this.add.text(0, 0, hint.step, { ...style, color: '#f2b84a' }).setOrigin(0, 0.5) : undefined;
-    const msg = this.add.text(0, 0, hint.text, { ...style, color: '#f1e6cf' }).setOrigin(0, 0.5);
-    const back = flow.twoStep && flow.step === 'slot' ? this.add.text(0, 0, 'Back (Esc)', { ...style, fontSize: '22px', color: '#c4fbe8' }).setOrigin(0, 0.5) : undefined;
+    // Tasarım kiti: Cinzel yazı, koyu zemin + ince altın çerçeve
+    const stepTxt = hint.step ? elText(this, 0, 0, hint.step, 22, '#ffb35a', { em: 0.1 }).setOrigin(0, 0.5) : undefined;
+    const msg = elText(this, 0, 0, hint.text, 24, EL.ON, { em: 0.03, upper: false }).setOrigin(0, 0.5);
+    const back = flow.twoStep && flow.step === 'slot' ? elText(this, 0, 0, '◂ Back (Esc)', 19, EL.TXT, { em: 0.08 }).setOrigin(0, 0.5) : undefined;
     const gap = 18;
     const parts = [stepTxt, msg, back].filter((t): t is Phaser.GameObjects.Text => !!t);
     const total = parts.reduce((w, t) => w + t.width, 0) + gap * (parts.length - 1) + 40;
     const h = 48;
     const bg = this.add.graphics();
-    bg.fillStyle(0x0c0805, 0.92).fillRoundedRect(-total / 2, -h / 2, total, h, 10);
-    bg.lineStyle(2, 0xf2b84a, 0.9).strokeRoundedRect(-total / 2, -h / 2, total, h, 10);
+    bg.fillGradientStyle(0x1e160e, 0x1e160e, 0x0c0906, 0x0c0906, 0.95).fillRect(-total / 2, -h / 2, total, h);
+    bg.lineStyle(1, EL.GOLD, EL.LINE.a3).strokeRect(-total / 2 + 0.5, -h / 2 + 0.5, total - 1, h - 1);
     items.push(bg);
     let x = -total / 2 + 20;
     for (const t of parts) {
@@ -1723,12 +1723,7 @@ export class BattleScene extends Phaser.Scene {
       const frame = this.add.graphics();
       const paint = (pressed: boolean): void => {
         frame.clear();
-        const hot = pressed || active;
-        const [top, bottom] = hot ? [0x6e4f33, 0x2f2012] : [0x3b2b1d, 0x1a110b];
-        const a = enabled ? 1 : 0.45;
-        if (active) glowRect(frame, x, y, w, h, GOLD.bright, 0.9, 7);
-        gradientRect(frame, x, y, w, h, top, bottom, a);
-        frameRect(frame, x, y, w, h, { edge: active ? GOLD.bright : GOLD.edge, light: active ? 0xfff0c0 : GOLD.light, alpha: a, bevel: 3 });
+        kitPlate(frame, x, y, w, h, { state: active ? 'chosen' : pressed ? 'hot' : 'idle', alpha: enabled ? 1 : 0.5 });
       };
       paint(false);
       const accent = GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e';
@@ -1882,22 +1877,22 @@ export class BattleScene extends Phaser.Scene {
     let left = 0;
     if (iconKey) {
       const g = this.add.graphics();
-      gradientRect(g, 0, 0, iconSize, iconSize, 0x33261a, 0x120c08);
-      frameRect(g, 0, 0, iconSize, iconSize, { bevel: 3, shadow: 0.2 });
+      kitCellFill(g, 0, 0, iconSize, iconSize);
+      kitCellFrame(g, 0, 0, iconSize);
       items.push(g, this.add.image(iconSize / 2, iconSize / 2, iconKey).setDisplaySize(iconSize - 8, iconSize - 8));
       left = iconSize + 12;
     }
-    const badgeObjs = badge ? makeBadge(this, width, 0, badge, 14) : [];
-    const badgeW = badgeObjs.length ? (badgeObjs[1] as Phaser.GameObjects.Text).width + 20 : 0;
+    const badgeObjs = badge ? kitBadge(this, width, 0, badge) : [];
+    const badgeW = badgeObjs.length ? (badgeObjs[1] as Phaser.GameObjects.Text).width + 24 : 0;
     // AOE shape diagram (mini grid: covered cells painted, anchor marked) left of the badge
     const shapeSize = shape ? miniShapeSize(shape) : { w: 0, h: 0 };
     const shapeW = shape ? shapeSize.w + 10 : 0;
     if (shape) items.push(drawMiniShape(this, width - badgeW - shapeW, 0, shape));
     // meta chips (cost, cooldown) right after the title
     const isz = 18;
-    const metaTexts = meta.map((m) => this.add.text(0, 0, m.text, { fontFamily: layout.fontFamily, fontSize: '17px', fontStyle: 'bold', color: m.hex, stroke: '#0c0805', strokeThickness: 3 }).setOrigin(0, 0.5));
+    const metaTexts = meta.map((m) => hudNum(this, 0, 0, m.text, 17, m.hex).setOrigin(0, 0.5));
     const metaW = meta.reduce((w, m, i) => w + (m.icon ? isz + 4 : 0) + metaTexts[i]!.width + 18, 0);
-    const titleText = this.add.text(left, iconSize / 2, title, { fontFamily: SERIF, fontSize: '25px', fontStyle: 'bold', color: titleColor, stroke: '#0c0805', strokeThickness: 4 }).setOrigin(0, 0.5);
+    const titleText = elText(this, left, iconSize / 2, title, 23, titleColor, { em: 0.03, upper: false }).setOrigin(0, 0.5);
     const room = width - left - badgeW - shapeW - metaW - 20;
     if (titleText.width > room) titleText.setScale(Math.max(0.6, room / titleText.width));
     items.push(titleText);
@@ -1914,8 +1909,9 @@ export class BattleScene extends Phaser.Scene {
     items.push(...badgeObjs);
     // Fine gold rule under the first row
     const rule = this.add.graphics();
-    rule.lineStyle(1, GOLD.edge, 0.7).lineBetween(0, iconSize + 5, width, iconSize + 5);
-    rule.fillStyle(GOLD.light, 0.9).fillPoints([{ x: width / 2, y: iconSize + 2 }, { x: width / 2 + 4, y: iconSize + 5 }, { x: width / 2, y: iconSize + 8 }, { x: width / 2 - 4, y: iconSize + 5 }], true);
+    fadeLine(rule, 0, width, iconSize + 5, EL.GOLD, EL.LINE.a3, 'both');
+    rule.fillStyle(0x140e09, 1).fillPoints(diamondPts(width / 2, iconSize + 5, 4), true);
+    rule.lineStyle(1, EL.GOLD, 0.8).strokePoints(diamondPts(width / 2, iconSize + 5, 4), true);
     items.push(rule);
 
     // --- Description rows: shrink the font until it fits ---
@@ -1928,7 +1924,7 @@ export class BattleScene extends Phaser.Scene {
       let y = 0;
       let fits = true;
       for (const [text, hex] of rows) {
-        const row = this.add.text(0, 0, text, { fontFamily: layout.fontFamily, fontSize: `${size}px`, color: hex ?? colors.text, stroke: '#0c0805', strokeThickness: 2, wordWrap: { width: colW }, lineSpacing: 1 }).setOrigin(0, 0);
+        const row = this.add.text(0, 0, text, { fontFamily: HUD_NUM_FONT, fontSize: `${size}px`, color: hex ?? colors.text, wordWrap: { width: colW }, lineSpacing: 1 }).setOrigin(0, 0).setResolution(2).setShadow(0, 1, EL.SH_DARK, 2, true, true);
         if (y + row.height > avail && col === 0 && cols === 2) {
           col = 1;
           y = 0;
@@ -2630,7 +2626,7 @@ export class BattleScene extends Phaser.Scene {
         g.fillGradientStyle(0xffa23a, 0xffa23a, 0xd8341c, 0xd8341c, 1).fillRect(x, y, Math.max(2, w * frac), h);
         g.fillStyle(0xffffff, 0.2).fillRect(x, y, Math.max(2, w * frac), 3);
       }
-      frameRect(g, x - 1, y - 1, w + 2, h + 2, { bevel: 1, edge: GOLD.dark, light: GOLD.edge, shadow: 0.2 });
+      g.lineStyle(1, EL.GOLD, EL.LINE.a3).strokeRect(x - 1.5, y - 1.5, w + 3, h + 3);
       label.setText(`${Math.round(v)}/${max}`);
     };
     redraw();
@@ -3174,7 +3170,7 @@ export class BattleScene extends Phaser.Scene {
         const unit = uid ? this.battle.get(uid) : undefined;
         const border = isNow ? colors.targetHighlight : unit?.side === 'party' ? colors.partySlot : colors.enemySlot;
         const cell = this.add.graphics();
-        gradientRect(cell, cx, y, cellSize, cellSize, 0x2c2218, 0x0c0806);
+        kitCellFill(cell, cx, y, cellSize, cellSize); // tasarım kiti hücresi
         items.push(cell);
         const view = unit ? this.views.get(unit.uid) : undefined;
         if (view && unit) {
@@ -3195,19 +3191,16 @@ export class BattleScene extends Phaser.Scene {
         // Elite / boss (sefer): the inner line is the rank color (gold / crimson) with a small rank tag on the top edge.
         const tier = tierStyle(unit?.tier);
         const fr = this.add.graphics();
-        if (isNow) glowRect(fr, cx, y, cellSize, cellSize, GOLD.bright, 0.8, 7);
-        frameRect(fr, cx, y, cellSize, cellSize, { edge: isNow ? GOLD.bright : GOLD.dark, light: color(tier ? tier.hex : border), bevel: 3, shadow: 0.3, alpha: isPast ? 0.5 : 1 });
-        if (tier && !isPast) fr.lineStyle(3, color(tier.hex), 0.95).strokeRect(cx + 5, y + 5, cellSize - 10, cellSize - 10);
+        kitCellFrame(fr, cx, y, cellSize, { inner: color(tier ? tier.hex : border), now: isNow, faded: isPast });
+        if (tier && !isPast) fr.lineStyle(2, color(tier.hex), 0.95).strokeRect(cx + 5, y + 5, cellSize - 10, cellSize - 10);
         items.push(fr);
         if (unit && tier) items.push(...this.miniTag(cx + cellSize / 2, y + 2, tier.label, tier.hex, isPast));
         // Tur başına birden çok eylem (actionsPerTurn): sol altta "x2"; şu an ek eylemindeyse ortadaki hücrede "2nd"
         const actions = unit?.actionsPerTurn ?? 1;
         if (unit && actions > 1) items.push(...this.miniTag(cx + 18, y + cellSize - 14, isNow && this.extraAction ? '2nd' : `x${actions}`, '#ffe29a', isPast));
         if (isNow && unit) {
-          // Small gold arrow under the current unit, pointing up at it
-          const ax = cx + cellSize / 2;
-          const ay = y + cellSize + 8;
-          items.push(this.add.triangle(0, 0, ax - 14, ay + 18, ax + 14, ay + 18, ax, ay, GOLD.bright).setOrigin(0, 0).setStrokeStyle(2, 0x0c0805));
+          // Şu anki birimin altında kor elmas (kit; eski altın ok)
+          items.push(elDiamond(this, 8).setPosition(cx + cellSize / 2, y + cellSize + 20));
         }
       }
     }
@@ -3216,17 +3209,14 @@ export class BattleScene extends Phaser.Scene {
 
   /** Small pill label on the turn bar (rank tag, extra actions). */
   private miniTag(cx: number, cy: number, text: string, hex: string, faded = false): Phaser.GameObjects.GameObject[] {
-    const label = this.add.text(cx, cy, text, { fontFamily: layout.fontFamily, fontSize: '13px', fontStyle: 'bold', color: '#1a0f08' }).setOrigin(0.5);
-    const bg = this.add.rectangle(cx, cy, label.width + 10, label.height + 2, color(hex)).setStrokeStyle(2, 0x1a0f08);
-    if (faded) for (const o of [label, bg]) o.setAlpha(0.5);
-    return [bg, label];
+    return kitTag(this, cx, cy, text, hex, { size: 12, faded });
   }
 
   /** A short banner under the turn bar: who used what. */
   private announce(text: string): void {
     this.announceLayer?.destroy();
-    const label = this.add.text(W / 2, 168, text, textStyle(40)).setOrigin(0.5);
-    const bg = this.add.rectangle(W / 2, 168, label.width + 70, 66, 0x000000, 0.6).setStrokeStyle(3, color(colors.turnCell));
+    const label = elText(this, W / 2, 168, text, 32, EL.ON, { em: 0.06, upper: false }).setOrigin(0.5);
+    const bg = kitTextBand(this, W / 2, 168, label.width + 260, 66);
     const layer = this.add.container(0, 0, [bg, label]).setDepth(4100);
     this.announceLayer = layer;
     this.tweens.add({
@@ -3271,25 +3261,14 @@ export class BattleScene extends Phaser.Scene {
 
   private drawCommandPanel(): void {
     const p = layout.commandPanel;
-    // Dark leather/stone slab with a carved gold edge on top
+    // Tasarım kiti şeridi (Ömer 2026-10-09): koyu degrade, üstte ince altın çizgi + ortada elmas
     const bg = this.add.graphics().setDepth(4500);
-    // Geniş ekran: şerit görünen alanın tamamına uzar (FULL_X0..), içerik 1920 merkez bölgede kalır; 16:9'da görüntü aynı (doku deseni dünya 0'a hizalı)
+    // Geniş ekran: şerit görünen alanın tamamına uzar (FULL_X0..), içerik 1920 merkez bölgede kalır
     const X0 = FULL_X0;
     const FW = FULL_W;
-    gradientRect(bg, X0, p.y, FW, H - p.y, 0x2a1f16, 0x0d0906, 0.96);
-    const grain = this.add.tileSprite(X0, p.y, FW, H - p.y, ensureGrain(this)).setOrigin(0, 0).setAlpha(0.8).setDepth(4500);
-    grain.tilePositionX = X0;
-    const edge = this.add.graphics().setDepth(4500);
-    edge.fillStyle(0x050302, 1).fillRect(X0, p.y - 2, FW, 2);
-    edge.fillStyle(GOLD.edge, 1).fillRect(X0, p.y, FW, 3);
-    edge.fillStyle(GOLD.light, 0.85).fillRect(X0, p.y + 3, FW, 1);
-    edge.fillStyle(0x000000, 0.45).fillRect(X0, p.y + 4, FW, 5);
-    edge.fillStyle(0x000000, 0.2).fillRect(X0, p.y + 9, FW, 6);
-    edge.fillStyle(GOLD.dark, 0.9).fillRect(X0, H - 3, FW, 3);
-    // Vertical gold dividers between the stats block, the skills and the info plaque
-    for (const dx of [this.skillsLeft() - 104, this.globalX() - 7, this.infoTipX() - 7]) {
-      edge.fillGradientStyle(GOLD.edge, GOLD.edge, GOLD.dark, GOLD.dark, 0.9).fillRect(dx, p.y + 12, 2, H - p.y - 24);
-    }
+    kitBand(bg, X0, p.y, FW, H - p.y, W / 2);
+    // Stat bloğu, skill'ler ve bilgi kutusu arasında uçlara doğru sönen ince ayraçlar
+    for (const dx of [this.skillsLeft() - 104, this.globalX() - 7, this.infoTipX() - 7]) kitDivider(bg, dx, p.y + 14, H - 14);
     this.refreshCommands();
   }
 
@@ -3309,12 +3288,11 @@ export class BattleScene extends Phaser.Scene {
     const items: Phaser.GameObjects.GameObject[] = [];
     if (actor) {
       items.push(...this.drawStatsBlock(actor));
-      const label = this.add.text(W / 2, p.y - 8, this.turnLabel(actor), { fontFamily: SERIF, fontSize: '24px', fontStyle: 'bold', color: colors.turnCell, stroke: '#0c0805', strokeThickness: 4 }).setOrigin(0.5, 1);
-      const plaque = this.add.graphics();
-      const pw = label.width + 70;
-      gradientRect(plaque, W / 2 - pw / 2, p.y - 42, pw, 40, 0x2a1f16, 0x120c08, 0.96);
-      frameRect(plaque, W / 2 - pw / 2, p.y - 42, pw, 40, { bevel: 3, shadow: 0.25 });
-      items.push(plaque, label);
+      const label = elText(this, W / 2, p.y - 22, this.turnLabel(actor), 19, EL.ON, { em: 0.16 }).setOrigin(0.5);
+      const plaque = kitTextBand(this, W / 2, p.y - 22, label.width + 200, 40);
+      const dl = elDiamond(this, 4).setPosition(W / 2 - label.width / 2 - 20, p.y - 22);
+      const dr = elDiamond(this, 4).setPosition(W / 2 + label.width / 2 + 20, p.y - 22);
+      items.push(plaque, dl, dr, label);
       let x = this.skillsLeft();
       const hasRage = actor.maxRage !== undefined;
       const btnY = p.y + (H - p.y - p.buttonHeight) / 2;
@@ -3339,13 +3317,14 @@ export class BattleScene extends Phaser.Scene {
   private passiveBadge(x: number, cy: number, actor: Combatant): Phaser.GameObjects.GameObject[] {
     const passive = actor.passive!;
     const r = 36;
-    const bg = this.add.circle(x + r, cy - 8, r, color(colors.button)).setStrokeStyle(4, color(colors.tooltipBorder));
+    const bg = this.add.circle(x + r, cy - 8, r, 0x140e09, 0.96).setStrokeStyle(1.5, EL.GOLD, 0.55);
+    const ring = this.add.circle(x + r, cy - 8, r - 5).setStrokeStyle(1, EL.GOLD, EL.LINE.a2);
     const icon = this.add.image(x + r, cy - 8, ensureIcon(this, passive.icon, actor.color, false, ownerOfUnit(actor.defId))).setDisplaySize(44, 44);
-    const caption = this.add.text(x + r, cy + r - 2, 'PASSIVE', textStyle(14, colors.muted)).setOrigin(0.5, 0);
+    const caption = elText(this, x + r, cy + r + 4, 'Passive', 12, 'rgba(217,178,106,0.85)', { em: 0.2 }).setOrigin(0.5, 0);
     bg.setInteractive();
     bg.on('pointerover', () => this.showPassiveTip(actor));
     bg.on('pointerout', () => this.hideInfoTip());
-    return [bg, icon, caption];
+    return [bg, ring, icon, caption];
   }
 
   private showPassiveTip(actor: Combatant): void {
@@ -3372,7 +3351,7 @@ export class BattleScene extends Phaser.Scene {
     const avX = x0;
     const avY = top + (H - top - av) / 2;
     const frame = this.add.graphics();
-    gradientRect(frame, avX, avY, av, av, 0x33261a, 0x120c08);
+    kitCellFill(frame, avX, avY, av, av);
     items.push(frame);
     const face = this.avatarImage(actor, avX + av / 2, avY + av / 2, av);
     items.push(face);
@@ -3384,12 +3363,12 @@ export class BattleScene extends Phaser.Scene {
       shade.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.5, 0.5).fillRect(avX, avY + av - 26, av, 26);
       items.push(shade);
       const frameEdge = this.add.graphics();
-      frameRect(frameEdge, avX, avY, av, av, { bevel: 3, shadow: 0.2 });
+      kitCellFrame(frameEdge, avX, avY, av);
       items.push(frameEdge);
 
       const nameY = avY + 11;
       const logo = this.add.image(avX + 11, nameY, ensureIcon(this, actor.logo, actor.color, false, ownerOfUnit(actor.defId))).setDisplaySize(15, 15);
-      const nameText = this.add.text(avX + 22, nameY, unitName(actor), { fontFamily: SERIF, fontSize: '15px', fontStyle: 'bold', color: tierStyle(actor.tier)?.hex ?? (enemy ? colors.hpFillEnemy : '#f6e7c4'), stroke: '#0c0805', strokeThickness: 3 }).setOrigin(0, 0.5);
+      const nameText = elText(this, avX + 22, nameY, unitName(actor), 14, tierStyle(actor.tier)?.hex ?? (enemy ? colors.hpFillEnemy : EL.ON), { em: 0.04, upper: false }).setOrigin(0, 0.5);
       if (nameText.width > av - 28) nameText.setScale((av - 28) / nameText.width);
       items.push(logo, nameText);
 
@@ -3401,7 +3380,7 @@ export class BattleScene extends Phaser.Scene {
         const g = this.add.graphics();
         g.fillStyle(0x000000, 0.75).fillRect(x, yBar, half - 2, 4);
         if (max > 0) g.fillStyle(color(fill), 1).fillRect(x, yBar, (half - 2) * Math.max(0, Math.min(1, value / max)), 4);
-        const label = this.add.text(right ? x + half - 4 : x + 14, yText, `${value}/${max}`, textStyle(13)).setOrigin(right ? 1 : 0, 0.5);
+        const label = hudNum(this, right ? x + half - 4 : x + 14, yText, `${value}/${max}`, 13, '#f4ede1').setOrigin(right ? 1 : 0, 0.5);
         const iconX = right ? x + half - 4 - label.width - 8 : x + 6;
         items.push(g, this.add.image(iconX, yText, ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false)).setDisplaySize(11, 11), label, this.statHit(x - 2, yText - 9, half, 20, kind, actor));
       };
@@ -3413,12 +3392,12 @@ export class BattleScene extends Phaser.Scene {
       shade.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.6, 0.6).fillRect(avX, avY + av - 62, av, 62);
       items.push(shade);
       const frameEdge = this.add.graphics();
-      frameRect(frameEdge, avX, avY, av, av, { bevel: 3, shadow: 0.2 });
+      kitCellFrame(frameEdge, avX, avY, av);
       items.push(frameEdge);
 
       const nameY = avY + 17;
       const logo = this.add.image(avX + 18, nameY, ensureIcon(this, actor.logo, actor.color, false, ownerOfUnit(actor.defId))).setDisplaySize(24, 24);
-      const nameText = this.add.text(avX + 34, nameY, unitName(actor), { fontFamily: SERIF, fontSize: '22px', fontStyle: 'bold', color: tierStyle(actor.tier)?.hex ?? (enemy ? colors.hpFillEnemy : '#f6e7c4'), stroke: '#0c0805', strokeThickness: 4 }).setOrigin(0, 0.5);
+      const nameText = elText(this, avX + 34, nameY, unitName(actor), 20, tierStyle(actor.tier)?.hex ?? (enemy ? colors.hpFillEnemy : EL.ON), { em: 0.04, upper: false }).setOrigin(0, 0.5);
       if (nameText.width > av - 40) nameText.setScale((av - 40) / nameText.width);
       items.push(logo, nameText);
 
@@ -3429,7 +3408,7 @@ export class BattleScene extends Phaser.Scene {
         g.fillStyle(0x000000, 0.7).fillRect(avX + 6, yBar - 1, av - 12, h + 2);
         g.fillStyle(color(colors.hpBack), 0.9).fillRect(avX + 7, yBar, av - 14, h);
         if (max > 0) g.fillStyle(color(fill), 1).fillRect(avX + 7, yBar, (av - 14) * Math.max(0, Math.min(1, value / max)), h);
-        const label = this.add.text(avX + 26, yText, `${value}/${max}`, textStyle(17)).setOrigin(0, 0.5);
+        const label = hudNum(this, avX + 26, yText, `${value}/${max}`, 17, '#f4ede1').setOrigin(0, 0.5);
         items.push(
           g,
           this.add.image(avX + 15, yText, ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false)).setDisplaySize(16, 16),
@@ -3448,13 +3427,13 @@ export class BattleScene extends Phaser.Scene {
         const cy = y0 + i * step;
         if (i < kinds.length - 1) {
           const hl = this.add.graphics();
-          hl.fillStyle(GOLD.edge, 0.22).fillRect(x, cy + step / 2, w - 8, 1);
+          fadeLine(hl, x, x + w - 8, cy + step / 2, EL.GOLD, EL.LINE.a2, 'out');
           items.push(hl);
         }
         // ACC / EVA with a status on them (Blinded, Shrouded): reddish when lowered, greenish when raised, with a small arrow
         const dir = isDeltaStat(k) ? statDir(actor.stats[k], s[k]) : null;
         const tint = dir === 'down' ? '#ff9a8a' : dir === 'up' ? '#9ee6a8' : undefined;
-        const label = this.add.text(x + icon + 6, cy, this.statText(k, s), textStyle(font, tint ?? (s.primary === k ? PRIMARY_GOLD : undefined))).setOrigin(0, 0.5);
+        const label = hudNum(this, x + icon + 6, cy, this.statText(k, s), font, tint ?? (s.primary === k ? PRIMARY_GOLD : EL.TXT)).setOrigin(0, 0.5);
         items.push(this.add.image(x + icon / 2, cy, ensureIcon(this, STAT_ICON[k], STAT_COLOR[k], false)).setDisplaySize(icon, icon), label);
         if (dir) {
           const ax = label.x + label.width + 9;
@@ -3509,7 +3488,7 @@ export class BattleScene extends Phaser.Scene {
       if (turns && (skill.cooldown ?? 0) > 0) parts.push({ icon: hourglass, text: String(skill.cooldown), hex: colors.muted });
     }
     const isz = 18;
-    const texts = parts.map((pt) => this.add.text(0, cy, pt.text, textStyle(pt.px ?? 17, pt.hex)).setOrigin(0, 0.5));
+    const texts = parts.map((pt) => hudNum(this, 0, cy, pt.text, pt.px ?? 17, pt.hex).setOrigin(0, 0.5));
     const gapBetween = parts.some((pt) => pt.px) ? 6 : 10; // Rage cost text is long: tighter spacing so it fits the button
     const total = parts.reduce((w, _pt, i) => w + isz + 3 + texts[i]!.width, 0) + Math.max(0, parts.length - 1) * gapBetween;
     let x = cx - total / 2;
@@ -3536,31 +3515,25 @@ export class BattleScene extends Phaser.Scene {
     const bh = height ?? bhFull;
     const chosen = this.selected?.actor === actor.uid && this.selected.skill === skill.id && this.playerCanAct;
     const dim = enabled ? 1 : 0.45;
-    // Carved frame: dark leather gradient, bronze/gold edge; the strong 4th skill is richer, the chosen one glows
+    // Tasarım kiti plakası: ince altın çizgi; 4. (güçlü) skill köşe elmaslı + üstte kor çizgi; seçili = açık altın 2 px + kor ışıması
     const frame = this.add.graphics();
     const paint = (pressed: boolean): void => {
       frame.clear();
-      const hot = pressed || chosen;
-      const [top, bottom] = hot ? [0x6e4f33, 0x2f2012] : ultimate ? [0x7a5a1c, 0x2e1d06] : [0x3b2b1d, 0x1a110b];
-      const a = enabled ? 1 : 0.5;
-      if (chosen) glowRect(frame, x, y, bw, bh, GOLD.bright, 0.9, 9);
-      gradientRect(frame, x, y, bw, bh, top, bottom, a);
-      if (ultimate) {
-        frame.fillStyle(0xffe9a0, enabled ? 0.14 : 0.05).fillRect(x + 6, y + 6, bw - 12, bh * 0.34);
-        frame.fillStyle(0x000000, 0.18).fillRect(x + 6, y + bh * 0.66, bw - 12, bh * 0.34 - 6);
-      }
-      frameRect(frame, x, y, bw, bh, { edge: chosen ? GOLD.bright : ultimate ? 0xc79a3e : GOLD.edge, light: chosen ? 0xfff0c0 : GOLD.light, alpha: a, bevel: 4 });
-      cornerOrnaments(frame, x, y, bw, bh, ultimate || chosen ? 5 : 4, enabled ? 1 : 0.5);
+      kitPlate(frame, x, y, bw, bh, { state: chosen ? 'chosen' : pressed ? 'hot' : 'idle', strong: ultimate, alpha: enabled ? 1 : 0.55 });
     };
     paint(false);
     const bg = this.add.rectangle(x, y, bw, bh, 0x000000, 0.001).setOrigin(0, 0);
     const shine: Phaser.GameObjects.GameObject[] = [];
     const icon = this.add.image(x + bw / 2, y + 8 + iconSize / 2, ensureSkillIcon(this, skill)).setDisplaySize(iconSize, iconSize).setAlpha(dim);
-    const name = this.add.text(x + bw / 2, y + 8 + iconSize + 16, skill.name, { fontFamily: SERIF, fontSize: '20px', fontStyle: 'bold', color: colors.text, stroke: '#0c0805', strokeThickness: 4 }).setOrigin(0.5).setAlpha(enabled ? 1 : 0.6);
+    const name = elText(this, x + bw / 2, y + 8 + iconSize + 16, skill.name, 19, chosen ? EL.ON : '#ece0c4', { em: 0.02, upper: false }).setOrigin(0.5).setAlpha(enabled ? 1 : 0.6);
+    if (chosen) name.setShadow(0, 0, EL.SH_GLOW, 12, false, true);
     if (name.width > bw - 10) name.setScale((bw - 10) / name.width); // long names must fit the button
     const sub = this.skillSubItems(actor, skill, x + bw / 2, y + bh - 16, enabled ? 1 : 0.6);
     bg.setInteractive({ useHandCursor: enabled });
-    bg.on('pointerover', () => this.showSkillTip(actor, skill));
+    bg.on('pointerover', () => {
+      this.showSkillTip(actor, skill);
+      if (enabled && !chosen) paint(true);
+    });
     bg.on('pointerout', () => {
       this.hideInfoTip();
       paint(false);
@@ -3573,7 +3546,7 @@ export class BattleScene extends Phaser.Scene {
       });
     }
     // Hotkey hint in the top-left corner (keys 1-4)
-    const key = hotkey > 0 ? this.add.text(x + 10, y + 6, String(hotkey), textStyle(18, colors.muted)).setOrigin(0, 0).setAlpha(enabled ? 0.9 : 0.5) : undefined;
+    const key = hotkey > 0 ? hudNum(this, x + 10, y + 6, String(hotkey), 16, EL.MUTED).setOrigin(0, 0).setAlpha(enabled ? 0.9 : 0.5) : undefined;
     return [frame, bg, ...shine, icon, name, ...sub, ...(key ? [key] : [])];
   }
 
