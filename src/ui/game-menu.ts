@@ -167,7 +167,10 @@ export class GameMenu {
   private build(spec: NonNullable<ReturnType<typeof menuItems>>): void {
     this.list.replaceChildren();
     for (const id of spec.items) {
-      const b = this.button((id === 'retreat' ? this.hooks.retreatLabel?.() : undefined) ?? spec.labels?.[id] ?? MENU_LABELS[id], id === 'resume');
+      // Kutusuz satır (ana menü sütunu dili); Yes / No onay düğmeleri kit düğmesi kalır
+      const b = el('button', `gm-row${id === 'resume' ? ' primary' : ''}`);
+      b.type = 'button';
+      b.append(el('span', '', (id === 'retreat' ? this.hooks.retreatLabel?.() : undefined) ?? spec.labels?.[id] ?? MENU_LABELS[id]));
       b.dataset.item = id;
       b.addEventListener('click', () => this.pick(id, spec.confirm[id]));
       this.list.append(b);

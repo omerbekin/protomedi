@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Battle HUD Mockups</title>
+<!--
+  Savaş HUD'ı taslakları (Ömer 2026-10-09). Oyun kodu DEĞİL; seçim için karşılaştırma sayfası. Açılış: mockups/battle-hud.html?v=1..5
+  Gerçek oyun görselleri (arka plan, sprite, avatar, oyunun kendi ikonları) battle-hud/ altında; HUD HTML ile yeniden çizildi.
+  Sahne oyundaki gibi 1080 yüksekliğinde, genişliği ekran oranına göre 1920-2580 (telefon 2000x900 ~ 2400 genişlik).
+  Sağ kenardaki küçük düğmeler: taslak seçimi (1-5) ve gizle. Dokunmatik: skill seç, stat / çekmece / portre aç.
+-->
+<link rel="stylesheet" href="battle-hud/kit.css" />
+<style>
+@font-face { font-family: 'Cinzel'; font-weight: 400 900; font-display: swap; src: url('battle-hud/fonts/Cinzel-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-weight: 400 800; font-display: swap; src: url('battle-hud/fonts/EBGaramond-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400 800; font-display: swap; src: url('battle-hud/fonts/EBGaramond-italic-latin.woff2') format('woff2'); }
+:root {
+  --gold: 217, 178, 106; --on: #f3d999; --txt: #d9c8a2; --muted: #a8977a; --dim: #7d705a; --note: #cdb88d; --ember: #e0702a; --ember2: #ffb35a;
+  --ink: 8, 6, 4; --hp: #5cc46b; --hpE: #e0574a; --mp: #4f8cff; --rage: #e8622a;
+  --cin: Cinzel, Georgia, 'Palatino Linotype', serif; --gar: 'EB Garamond', Georgia, 'Palatino Linotype', serif; --num: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #050403; overflow: hidden; color: var(--txt); -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; }
+#stage { position: absolute; left: 0; top: 0; height: 1080px; transform-origin: 0 0; overflow: hidden; background: #0d0a07; user-select: none; font-family: var(--gar); }
+.abs { position: absolute; }
+/* --- taslak seçici (sahnenin dışında, sol kenarda) --- */
+#pick { position: fixed; right: calc(4px + env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); z-index: 50; display: flex; flex-direction: column; gap: 4px; }
+#pick button { all: unset; cursor: pointer; width: 30px; height: 30px; display: grid; place-items: center; font: 600 13px var(--cin); color: var(--muted); background: rgba(8,6,4,.78); border: 1px solid rgba(var(--gold), .3); }
+#pick button.on { color: #1a0f06; background: var(--ember); border-color: var(--ember2); }
+#pick.min button:not(.tog) { display: none; }
+#cap { position: fixed; right: calc(42px + env(safe-area-inset-right)); top: 22%; text-align: right; z-index: 50; font: italic 13px var(--gar); color: var(--note); background: rgba(8,6,4,.78); border: 1px solid rgba(var(--gold), .25); padding: 4px 10px; max-width: 30vw; line-height: 1.2; }
+#pick.min ~ #cap { display: none; }
+/* --- sahne: arka plan + birimler --- */
+.bg { position: absolute; inset: 0; background: url('battle-hud/img/bg.webp') center 30% / cover; }
+.unit { position: absolute; transform: translate(-50%, -100%); height: 224px; }
+.unit img { height: 100%; display: block; }
+.unit.enemy img { transform: scaleX(-1); }
+.unit.active::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 120px; height: 22px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(rgba(240,140,40,.55), rgba(240,140,40,0) 70%); z-index: -1; }
+.target-ring { position: absolute; transform: translate(-50%, -50%); width: 150px; height: 34px; border: 2px solid rgba(232,128,106,.8); border-radius: 50%; box-shadow: 0 0 14px rgba(232,128,106,.5); }
+/* --- ortak kit parçaları --- */
+.k { font: 600 15px var(--cin); letter-spacing: .22em; text-transform: uppercase; color: rgba(var(--gold), .85); }
+.n { font: 600 26px var(--cin); letter-spacing: .04em; color: var(--on); }
+.m { font: italic 22px var(--gar); color: var(--muted); }
+.panel { background: linear-gradient(180deg, rgba(30,22,14,.94), rgba(12,9,6,.95)); border: 1px solid rgba(var(--gold), .42); box-shadow: 0 12px 30px rgba(0,0,0,.45); }
+.dia { display: inline-block; width: 10px; height: 10px; transform: rotate(45deg); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2), 0 0 10px rgba(240,140,40,.6); }
+.dia.h { background: rgba(var(--ink), .6); box-shadow: 0 0 0 1px rgba(var(--gold), .55); }
+.fade { height: 1px; background: linear-gradient(90deg, rgba(var(--gold),0), rgba(var(--gold),.55) 25%, rgba(var(--gold),.55) 75%, rgba(var(--gold),0)); }
+.bar { position: relative; height: 10px; background: rgba(0,0,0,.65); box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; }
+.bar.hp i { background: linear-gradient(180deg, #7ad987, #3e9a4c); }
+.bar.hpE i { background: linear-gradient(180deg, #f07a6c, #b83a30); }
+.bar.mp i { background: linear-gradient(180deg, #78a8ff, #3566cc); }
+.bar.rage i { background: linear-gradient(90deg, #ffa23a, #d8341c); }
+.ico { image-rendering: pixelated; display: block; }
+/* sağ üst kontroller (yeni dil, tüm taslaklarda aynı) */
+.tr { position: absolute; top: 18px; display: flex; align-items: center; gap: 14px; }
+.menu-link { display: flex; align-items: center; gap: 14px; height: 72px; padding: 0 18px; font: 600 28px var(--cin); letter-spacing: .16em; color: var(--txt); text-shadow: 0 2px 6px rgba(0,0,0,.9); position: relative; }
+.menu-link::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 12px; height: 1px; background: linear-gradient(90deg, rgba(var(--gold),0), rgba(var(--gold),.6) 30%, rgba(var(--gold),.6) 70%, rgba(var(--gold),0)); }
+.fs-ico { width: 72px; height: 72px; display: grid; place-items: center; position: relative; color: var(--txt); }
+.fs-ico::before { content: ''; position: absolute; inset: 12px; border: 1px solid rgba(var(--gold), .42); background: rgba(var(--ink), .45); }
+.fs-ico svg { position: relative; width: 26px; height: 26px; }
+/* sıra çubuğu (ortak hücre) */
+.cell { position: relative; width: 84px; height: 84px; background: linear-gradient(180deg, #22180f, #0a0705); box-shadow: inset 0 0 0 1px rgba(var(--gold), .45); overflow: hidden; }
+.cell img { width: 100%; height: 100%; object-fit: cover; }
+.cell.enemy img { transform: scaleX(-1); }
+.cell::after { content: ''; position: absolute; inset: 4px; box-shadow: inset 0 0 0 1px var(--side, #4fa3ff); opacity: .7; }
+.cell.enemy { --side: #ff5a5a; }
+.cell.past { opacity: .38; filter: grayscale(.7); }
+.cell.now { box-shadow: inset 0 0 0 2px var(--on), 0 0 0 2px rgba(240,140,40,.35), 0 0 22px rgba(240,140,40,.45); }
+/* ad plakası (birim üstü) */
+.plate { position: absolute; transform: translate(-50%, -100%); width: 150px; text-align: center; }
+.plate .nm { font: 600 22px var(--cin); color: #f4ede1; letter-spacing: .03em; text-shadow: 0 2px 4px rgba(0,0,0,.95), 0 0 2px #000; white-space: nowrap; }
+.plate .bar { height: 9px; margin-top: 4px; }
+.plate .bar.mp { height: 6px; margin-top: 2px; }
+/* skill kartı (ortak) */
+.sk { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(180deg, rgba(34,24,15,.96), rgba(11,8,5,.96)); border: 1px solid rgba(var(--gold), .36); cursor: pointer; transition: border-color .18s, transform .18s; }
+.sk .nm { font: 600 24px var(--cin); color: #ece0c4; letter-spacing: .02em; white-space: nowrap; }
+.sk .cost { display: flex; gap: 14px; align-items: center; font: 700 24px var(--num); color: #f4ede1; }
+.sk .cost span { display: flex; align-items: center; gap: 5px; }
+.sk .cost .ico { width: 24px; height: 24px; }
+.sk .key { position: absolute; left: 10px; top: 6px; font: 700 18px var(--num); color: var(--muted); }
+.sk.ult { border-color: rgba(var(--gold), .6); }
+.sk.ult::before { content: ''; position: absolute; left: 8px; right: 8px; top: 1px; height: 2px; background: linear-gradient(90deg, rgba(255,179,90,0), rgba(255,179,90,.9), rgba(255,179,90,0)); }
+.sk.sel { border: 2px solid var(--on); box-shadow: 0 0 0 1px rgba(240,140,40,.35), 0 0 26px rgba(240,140,40,.4); }
+.sk.sel .nm { color: var(--on); text-shadow: 0 0 14px rgba(240,140,40,.8); }
+.sk.off { opacity: .5; }
+.glob { display: grid; place-items: center; background: rgba(var(--ink), .55); border: 1px solid rgba(var(--gold), .3); cursor: pointer; }
+.stat { display: flex; align-items: center; gap: 8px; font: 700 26px var(--num); color: var(--txt); white-space: nowrap; text-shadow: 0 2px 3px rgba(0,0,0,.9); }
+.stat .ico { width: 26px; height: 26px; }
+.stat b { font-weight: 700; color: #f4ede1; }
+.stat.pri b, .stat.pri { color: #ffd76a; }
+.chip { display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; font: 600 18px var(--cin); letter-spacing: .14em; color: var(--txt); border: 1px solid rgba(var(--gold), .3); background: rgba(var(--ink), .5); cursor: pointer; }
+.chip.on { color: var(--on); border-color: var(--on); }
+.banner { position: absolute; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; padding: 8px 90px; font: 600 26px var(--cin); letter-spacing: .2em; color: var(--on); background: linear-gradient(90deg, rgba(10,7,5,0), rgba(10,7,5,.94) 22%, rgba(10,7,5,.94) 78%, rgba(10,7,5,0)); white-space: nowrap; }
+.banner::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, rgba(var(--gold),0), rgba(var(--gold),.5), rgba(var(--gold),0)); }
+.tipbox { position: absolute; padding: 18px 22px; width: 560px; }
+.tipbox .t { display: flex; align-items: center; gap: 14px; }
+.tipbox .t .ico { width: 48px; height: 48px; }
+.tipbox p { margin: 10px 0 0; font: 22px var(--gar); color: var(--note); line-height: 1.25; }
+.tipbox .tag { margin-left: auto; font: 600 14px var(--cin); letter-spacing: .14em; color: var(--on); border: 1px solid rgba(var(--gold), .7); padding: 3px 8px; }
+.popover { position: absolute; padding: 20px 24px; }
+.grid2 { display: grid; grid-template-columns: auto auto; gap: 10px 36px; }
+.hidden { display: none !important; }
+#stage > .abs, #stage > .banner, #stage > .tr { z-index: 3000; }
+#stage > .popover, #stage > .tipbox { z-index: 3100; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="pick"></div>
+<div id="cap"></div>
+<script>
+// ---------------------------------------------------------------- veri (Ömer'in ekran görüntüsündeki savaş)
+const I = (n) => `battle-hud/icons/${n}.png`;
+const UNITS = [
+  { id: 'warrior', name: 'Warrior', side: 'party', slot: [784, 785], hp: [96, 110], mp: [20, 36], rage: [18, 50] },
+  { id: 'gambler', name: 'Gambler', side: 'party', slot: [725, 842], hp: [78, 78], mp: [36, 36], active: true },
+  { id: 'hexer', name: 'Hexer', side: 'party', slot: [599, 785], hp: [64, 70], mp: [40, 48] },
+  { id: 'undead', name: 'Undead', side: 'party', slot: [540, 842], hp: [70, 88], mp: [30, 40] },
+  { id: 'warrior', name: 'Warrior', side: 'enemy', slot: [1136, 785], hp: [104, 110], mp: [30, 36], rage: [24, 50] },
+  { id: 'defender', name: 'Defender', side: 'enemy', slot: [1195, 842], hp: [120, 140], mp: [28, 36], shield: 8 },
+  { id: 'cutthroat', name: 'Cutthroat', side: 'enemy', slot: [1321, 785], hp: [66, 72], mp: [30, 40], shield: 8 },
+  { id: 'undead', name: 'Undead', side: 'enemy', slot: [1380, 842], hp: [88, 88], mp: [40, 40] },
+];
+const ACTIVE = UNITS[1];
+const QUEUE = { past: [['cutthroat', 'enemy'], ['hexer', 'party'], ['defender', 'enemy']], now: ['gambler', 'party'], next: [['warrior', 'enemy'], ['warrior', 'party'], ['defender', 'enemy'], ['undead', 'enemy'], ['undead', 'party']] };
+const STATS = {
+  main: [['str', 'STR', 8], ['dex', 'DEX', 7], ['int', 'INT', 3], ['luck', 'LCK', 12, true]],
+  atk: [['critChance', 'CRIT', '11%'], ['critMult', 'CDMG', 'x1.5'], ['accuracy', 'ACC', '92%'], ['spd', 'SPD', 10]],
+  def: [['armor', 'ARM', 12], ['magicArmor', 'M.ARM', 0], ['evasion', 'EVA', '2%'], ['hpRegen', 'HP+', '2/t'], ['mpRegen', 'MP+', '1/t']],
+};
+const SKILLS = [
+  { id: 'loaded_dice', name: 'Loaded Dice', cost: [], text: 'Roll the bones: 90-160% LCK damage to one enemy. A double six always crits.', tag: 'Enemy' },
+  { id: 'high_stakes', name: 'High Stakes', cost: [['stat_mp', 4], ['hourglass', 2]], text: 'Bet on a hit: 140% LCK damage; on a miss you lose 10% HP.', tag: 'Enemy' },
+  { id: 'card_trick', name: 'Card Trick', cost: [['stat_mp', 9], ['hourglass', 2]], text: 'Three cards fly at random enemies, 60% LCK each.', tag: 'Random' },
+  { id: 'all_in', name: 'All In', cost: [['hourglass', 2]], text: 'Spend all MP: damage grows with every point spent.', tag: 'Enemy', ult: true },
+];
+const PASSIVE = { name: 'Double or Nothing', text: 'Critical hits have a 25% chance to strike twice.' };
+const GLOBALS = [['g_rest', 'Rest'], ['g_skip', 'Skip turn'], ['g_move', 'Move']];
+const S = { v: 1, sel: 'high_stakes', pop: '', drawer: true, W: 1920 };
+const q = new URLSearchParams(location.search);
+S.v = Math.min(5, Math.max(1, Number(q.get('v')) || 1));
+
+// ---------------------------------------------------------------- yardımcılar
+const X = (x) => x + (S.W - 1920) / 2; // 1920 çerçevesinden geniş sahneye
+const stageL = 0, stageR = () => S.W;
+const pct = (a) => `${Math.round((a[0] / a[1]) * 100)}%`;
+const bar = (kind, a, w) => `<div class="bar ${kind}" style="${w ? `width:${w}px` : ''}"><i style="width:${pct(a)}"></i></div>`;
+const statRow = ([k, label, v, pri]) => `<div class="stat${pri ? ' pri' : ''}"><img class="ico" src="${I('stat_' + k)}" alt=""><span>${label} <b>${v}</b></span></div>`;
+const FS = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"><path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/></svg>`;
+const topRight = () => `<div class="tr" style="right:${24}px"><div class="menu-link"><i class="dia h"></i>MENU</div><div class="fs-ico">${FS}</div></div>`;
+const cell = ([id, side], cls = '') => `<div class="cell ${side === 'enemy' ? 'enemy' : ''} ${cls}"><img src="battle-hud/img/av-${id}.webp" alt=""></div>`;
+function turnBar(o = {}) {
+  const size = o.size ?? 84, gap = o.gap ?? 12;
+  const cells = [...QUEUE.past.map((c) => cell(c, 'past')), cell(QUEUE.now, 'now'), ...QUEUE.next.map((c) => cell(c))];
+  const n = cells.length, w = n * size + (n - 1) * gap;
+  return `<div class="abs" style="left:${S.W / 2 - w / 2}px;top:${o.y ?? 20}px;display:flex;gap:${gap}px;--s:${size}px">${cells.join('').replaceAll('class="cell', `style="width:${size}px;height:${size}px" class="cell`)}</div>
+    <div class="abs" style="left:${S.W / 2 - w / 2 + 3 * (size + gap) + size / 2 - 7}px;top:${(o.y ?? 20) + size + 12}px"><i class="dia"></i></div>`;
+}
+function scene(o = {}) {
+  let html = '<div class="bg"></div>';
+  const sorted = [...UNITS].sort((a, b) => a.slot[1] - b.slot[1]);
+  for (const u of sorted) {
+    html += `<div class="unit ${u.side} ${u.active ? 'active' : ''}" style="left:${X(u.slot[0])}px;top:${u.slot[1]}px;z-index:${u.slot[1]}"><img src="battle-hud/img/${u.id}.webp" alt=""></div>`;
+  }
+  if (o.target) html += `<div class="target-ring" style="left:${X(1136)}px;top:${785}px;z-index:784"></div>`;
+  if (o.plates !== false) for (const u of UNITS) html += plate(u, o.plate);
+  return html;
+}
+function plate(u, kind = 'basic') {
+  const x = X(u.slot[0]), y = u.slot[1] - 232;
+  const hpK = u.side === 'enemy' ? 'hpE' : 'hp';
+  if (kind === 'basic')
+    return `<div class="plate" style="left:${x}px;top:${y}px;z-index:2000"><div class="nm">${u.name}</div>${bar(hpK, u.hp)}${bar('mp', u.mp)}</div>`;
+  if (kind === 'thin')
+    return `<div class="plate" style="left:${x}px;top:${y + 10}px;z-index:2000;width:120px">${bar(hpK, u.hp)}${bar('mp', u.mp)}</div>`;
+  // 'card': yüzen birim kartı (taslak 5)
+  const act = u.active;
+  return `<div class="plate" style="left:${x}px;top:${y - (act ? 6 : 0)}px;z-index:${act ? 2100 : 2000};width:${act ? 230 : 170}px">
+    <div class="panel" style="padding:8px 10px 9px;${act ? 'border-color:var(--on);box-shadow:0 0 0 1px rgba(240,140,40,.35),0 0 20px rgba(240,140,40,.35)' : 'background:rgba(10,7,5,.72)'}">
+      <div style="display:flex;align-items:center;gap:8px;justify-content:center"><img class="ico" src="${I('logo_' + u.id)}" style="width:22px;height:22px"><span class="nm" style="font-size:${act ? 22 : 19}px">${u.name}</span>${u.shield ? `<span style="font:700 18px var(--num);color:#8fe3ff">◈${u.shield}</span>` : ''}</div>
+      ${bar(hpK, u.hp)}<div style="display:flex;justify-content:space-between;font:700 17px var(--num);color:#f4ede1;margin-top:2px"><span>${u.hp[0]}/${u.hp[1]}</span><span style="color:#9cc4ff">${u.mp[0]}</span></div>
+      ${act ? `<div style="display:flex;justify-content:center;gap:12px;margin-top:6px">${STATS.main.map(([k, l, v, p]) => `<span class="stat${p ? ' pri' : ''}" style="font-size:19px;gap:4px"><img class="ico" src="${I('stat_' + k)}" style="width:18px;height:18px">${v}</span>`).join('')}</div>` : ''}
+    </div></div>`;
+}
+const skillCard = (s, i, w, h, o = {}) => `<div class="sk ${s.ult ? 'ult' : ''} ${S.sel === s.id ? 'sel' : ''}" data-skill="${s.id}" style="width:${w}px;height:${h}px">
+  <span class="key">${i + 1}</span><img class="ico" src="${I('skill_' + s.id)}" style="width:${o.icon ?? 60}px;height:${o.icon ?? 60}px">
+  <span class="nm" style="font-size:${o.font ?? 24}px">${s.name}</span>
+  ${o.desc ? `<span style="font:italic ${o.descSize ?? 20}px var(--gar);color:var(--muted);text-align:center;padding:0 14px;line-height:1.15;white-space:normal">${s.text}</span>` : ''}
+  <span class="cost">${s.cost.map(([ic, v]) => `<span><img class="ico" src="${I(ic)}">${v}</span>`).join('') || '<span style="font:italic 20px var(--gar);color:var(--dim)">Free</span>'}</span></div>`;
+const globals = (size, dir = 'column', gap = 10) => `<div style="display:flex;flex-direction:${dir};gap:${gap}px">${GLOBALS.map(([ic, l]) => `<div class="glob" title="${l}" style="width:${size}px;height:${size}px"><img class="ico" src="${I(ic)}" style="width:${size * 0.6}px;height:${size * 0.6}px"></div>`).join('')}</div>`;
+const selSkill = () => SKILLS.find((s) => s.id === S.sel);
+const tipBox = (x, y, w = 560) => {
+  const s = selSkill(); if (!s) return '';
+  return `<div class="tipbox panel" style="left:${x}px;top:${y}px;width:${w}px"><div class="t"><img class="ico" src="${I('skill_' + s.id)}"><span class="n" style="font-size:26px">${s.name}</span><span class="tag">${s.tag}</span></div><div class="fade" style="margin-top:10px"></div><p>${s.text}</p></div>`;
+};
+const passiveBadge = (size) => `<div title="${PASSIVE.name}" style="width:${size}px;height:${size}px;border-radius:50%;display:grid;place-items:center;background:#140e09;box-shadow:inset 0 0 0 1.5px rgba(var(--gold),.6),0 0 0 4px rgba(10,7,5,.6)"><img class="ico" src="${I('passive_gambler')}" style="width:${size * 0.62}px;height:${size * 0.62}px"></div>`;
+const portrait = (size, o = {}) => `<div style="position:relative;width:${size}px;height:${size}px;background:linear-gradient(180deg,#22180f,#0a0705);box-shadow:inset 0 0 0 ${o.on ? 2 : 1}px ${o.on ? 'var(--on)' : 'rgba(var(--gold),.55)'};${o.round ? 'border-radius:50%;overflow:hidden;' : ''}"><img src="battle-hud/img/av-gambler.webp" style="width:100%;height:100%;object-fit:cover;${o.round ? '' : 'padding:2px'}"></div>`;
+const hpmp = (w, big) => `<div style="width:${w}px"><div style="display:flex;justify-content:space-between;font:700 ${big ? 24 : 21}px var(--num);color:#f4ede1"><span style="display:flex;gap:6px;align-items:center"><img class="ico" src="${I('stat_hp')}" style="width:20px;height:20px">${ACTIVE.hp[0]}/${ACTIVE.hp[1]}</span><span style="display:flex;gap:6px;align-items:center;color:#9cc4ff"><img class="ico" src="${I('stat_mp')}" style="width:20px;height:20px">${ACTIVE.mp[0]}/${ACTIVE.mp[1]}</span></div>${bar('hp', ACTIVE.hp)}<div style="height:4px"></div>${bar('mp', ACTIVE.mp)}</div>`;
+const fullStats = () => `<div class="k" style="margin-bottom:12px">Gambler · Luck</div><div style="display:flex;gap:40px">
+  <div style="display:flex;flex-direction:column;gap:10px">${STATS.main.map(statRow).join('')}</div>
+  <div style="display:flex;flex-direction:column;gap:10px">${STATS.atk.map(statRow).join('')}</div>
+  <div style="display:flex;flex-direction:column;gap:10px">${STATS.def.map(statRow).join('')}</div></div>
+  <div class="fade" style="margin:16px 0 12px"></div><div style="display:flex;gap:14px;align-items:center">${passiveBadge(56)}<div><div class="n" style="font-size:22px">${PASSIVE.name}</div><div class="m" style="font-size:20px">${PASSIVE.text}</div></div></div>`;
+const bandBg = (y, h) => `<div class="abs" style="left:0;right:0;top:${y}px;height:${h}px;background:linear-gradient(180deg,rgba(26,19,12,.97),rgba(7,5,4,.98));"></div><div class="abs fade" style="left:0;right:0;top:${y}px;opacity:.9"></div><div class="abs" style="left:0;right:0;top:${y - 18}px;height:18px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.35))"></div>`;
+
+// ---------------------------------------------------------------- 5 taslak
+const V = {};
+V[1] = { name: 'Ledger strip', cap: 'Ledger strip: one tidy bottom strip. Primary stats always visible, big numbers; ATK / DEF details open on tap. Wider skill cards, globals as a slim column, info above the chosen skill.', html() {
+  const y = 846, h = 234, W = S.W;
+  const sw = 230, sh = 180, gap = 14;
+  const sx = Math.max(704, W / 2 - (4 * sw + 3 * gap) / 2 + 80);
+  let s = scene({ target: S.sel !== '' }) + turnBar() + topRight() + bandBg(y, h);
+  s += `<div class="banner" style="left:${W / 2 + 60}px;top:${y - 52}px"><i class="dia h"></i>YOUR TURN<i class="dia h"></i></div>`;
+  // sol: portre + can/MP + ana statlar + ATK/DEF çipleri
+  s += `<div class="abs" style="left:${40}px;top:${y + 20}px;display:flex;gap:22px;align-items:flex-start">
+    <div style="position:relative">${portrait(190, { on: true })}<div class="abs" style="right:-16px;bottom:-10px">${passiveBadge(60)}</div></div>
+    <div style="display:flex;flex-direction:column;gap:12px;width:430px">
+      <div class="k" style="color:var(--on);font-size:17px">Gambler · Luck</div>
+      ${hpmp(420)}
+      <div style="display:flex;gap:14px;font-size:0">${STATS.main.map(statRow).join('').replaceAll('class="stat', 'style="font-size:24px;gap:6px" class="stat')}</div>
+      <div style="display:flex;gap:10px"><span class="chip ${S.pop === 'atk' ? 'on' : ''}" data-pop="atk">ATK ▸</span><span class="chip ${S.pop === 'def' ? 'on' : ''}" data-pop="def">DEF ▸</span></div>
+    </div></div>`;
+  if (S.pop) s += `<div class="popover panel" style="left:240px;top:${y - 250}px"><div class="k" style="margin-bottom:12px">${S.pop === 'atk' ? 'Attack' : 'Defense'}</div><div class="grid2">${STATS[S.pop].map(statRow).join('')}</div></div>`;
+  s += `<div class="abs" style="left:${sx}px;top:${y + 20}px;display:flex;gap:${gap}px">${SKILLS.map((k, i) => skillCard(k, i, sw, sh)).join('')}</div>`;
+  s += `<div class="abs" style="left:${sx + 4 * sw + 3 * gap + 20}px;top:${y + 20}px">${globals(52)}</div>`;
+  const si = SKILLS.findIndex((k) => k.id === S.sel);
+  if (si >= 0) s += tipBox(W / 2 - 280, 150);
+  return s;
+} };
+V[2] = { name: 'Side drawer', cap: 'Side drawer: all stats and the passive live in a drawer on the left (STATS tab, open here). The bottom bar keeps only portrait, HP/MP and the skills, so nothing is cramped.', html() {
+  const y = 880, h = 200, W = S.W;
+  const sw = 250, sh = 160, gap = 16;
+  const sx = Math.max(560, W / 2 - (4 * sw + 3 * gap) / 2);
+  let s = scene({ target: true }) + turnBar() + topRight() + bandBg(y, h);
+  s += `<div class="banner" style="left:${W / 2}px;top:${y - 52}px"><i class="dia h"></i>YOUR TURN<i class="dia h"></i></div>`;
+  s += `<div class="abs" style="left:${40}px;top:${y + 18}px;display:flex;gap:18px;align-items:center">${portrait(160, { on: true })}<div style="display:flex;flex-direction:column;gap:12px"><span class="n" style="font-size:28px">Gambler</span>${hpmp(300)}<span class="chip ${S.drawer ? 'on' : ''}" data-drawer="1" style="width:max-content">STATS ${S.drawer ? '◂' : '▸'}</span></div></div>`;
+  s += `<div class="abs" style="left:${sx}px;top:${y + 20}px;display:flex;gap:${gap}px">${SKILLS.map((k, i) => skillCard(k, i, sw, sh)).join('')}</div>`;
+  s += `<div class="abs" style="left:${sx + 4 * sw + 3 * gap + 24}px;top:${y + 26}px">${globals(70, 'row', 12)}</div>`;
+  s += `<div class="abs" style="right:40px;top:${y + 110}px;width:${W - (sx + 4 * sw + 3 * gap + 24) - 40}px"><div class="m" style="font-size:20px;text-align:center">Rest · Skip · Move</div></div>`;
+  if (S.drawer) s += `<div class="abs panel" style="left:0;top:140px;bottom:${1080 - y + 24}px;width:620px;padding:26px 30px;border-left:0">${fullStats()}</div>`;
+  else s += `<div class="abs panel" data-drawer="1" style="left:0;top:380px;padding:18px 10px;border-left:0;writing-mode:vertical-rl;font:600 20px var(--cin);letter-spacing:.2em;color:var(--txt);cursor:pointer">STATS ▸</div>`;
+  if (selSkill()) s += tipBox(W / 2 - 280, 150);
+  return s;
+} };
+V[3] = { name: 'Big cards', cap: 'Big cards: minimal bottom, four large skill cards with their description on the card. Portrait top-left of the cards; tap it for the full stat sheet. Globals as small round buttons.', html() {
+  const W = S.W, sw = 300, sh = 214, gap = 18;
+  const y = 1080 - sh - 14;
+  const sx = W / 2 - (4 * sw + 3 * gap) / 2;
+  let s = scene({ target: true }) + turnBar({ size: 76, gap: 10 }) + topRight();
+  s += `<div class="abs" style="left:0;right:0;top:${y - 70}px;bottom:0;background:linear-gradient(180deg,rgba(7,5,4,0),rgba(7,5,4,.82) 40%,rgba(7,5,4,.95))"></div>`;
+  s += `<div class="abs" style="left:${sx}px;top:${y}px;display:flex;gap:${gap}px">${SKILLS.map((k, i) => skillCard(k, i, sw, sh, { icon: 56, font: 25, desc: true, descSize: 19 })).join('')}</div>`;
+  s += `<div class="abs" style="left:${sx - 250}px;top:${y - 6}px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer" data-pop="sheet">${portrait(120, { on: true })}<span class="n" style="font-size:22px">Gambler</span>${hpmp(210)}<span class="m" style="font-size:17px">Tap for stats</span></div>`;
+  s += `<div class="abs" style="left:${sx + 4 * sw + 3 * gap + 30}px;top:${y + 6}px;display:flex;flex-direction:column;gap:8px">${GLOBALS.map(([ic, l]) => `<div style="display:flex;align-items:center;gap:12px"><div class="glob" style="width:60px;height:60px;border-radius:50%"><img class="ico" src="${I(ic)}" style="width:36px;height:36px"></div><span class="k" style="font-size:16px;color:var(--txt)">${l}</span></div>`).join('')}</div>`;
+  s += `<div class="banner" style="left:${W / 2}px;top:${y - 64}px"><i class="dia h"></i>YOUR TURN · GAMBLER<i class="dia h"></i></div>`;
+  if (S.pop === 'sheet') s += `<div class="popover panel" style="left:${sx - 250}px;top:${y - 470}px">${fullStats()}</div>`;
+  return s;
+} };
+V[4] = { name: 'Portrait centre', cap: 'Portrait centre: the acting hero sits in a medallion in the middle, skills two on each side. A ribbon of primary stats above; ATK / DEF on tap. Globals on the far right, passive on the medallion.', html() {
+  const W = S.W, y = 860, h = 220, sw = 236, sh = 168, gap = 14, med = 196;
+  const cx = W / 2;
+  let s = scene({ target: true }) + turnBar() + topRight() + bandBg(y, h);
+  s += `<div class="abs" style="left:${cx - med / 2}px;top:${y - 86}px;display:flex;flex-direction:column;align-items:center;gap:8px">
+    <div style="position:relative">${portrait(med, { on: true, round: true })}<div class="abs" style="right:-10px;bottom:4px">${passiveBadge(58)}</div></div></div>`;
+  s += `<div class="abs" style="left:${cx - 200}px;top:${y + 132}px;width:400px">${hpmp(400)}</div>`;
+  s += `<div class="abs" style="left:${cx - sw * 2 - gap - med / 2 - 30}px;top:${y + 24}px;display:flex;gap:${gap}px">${SKILLS.slice(0, 2).map((k, i) => skillCard(k, i, sw, sh)).join('')}</div>`;
+  s += `<div class="abs" style="left:${cx + med / 2 + 30}px;top:${y + 24}px;display:flex;gap:${gap}px">${SKILLS.slice(2).map((k, i) => skillCard(k, i + 2, sw, sh)).join('')}</div>`;
+  s += `<div class="abs" style="right:36px;top:${y + 24}px">${globals(52)}</div>`;
+  s += `<div class="abs" style="left:40px;top:${y + 26}px;display:flex;flex-direction:column;gap:12px"><span class="n" style="font-size:28px">Gambler</span><div style="display:grid;grid-template-columns:auto auto;gap:8px 26px">${STATS.main.map(statRow).join('')}</div><div style="display:flex;gap:10px"><span class="chip ${S.pop === 'atk' ? 'on' : ''}" data-pop="atk">ATK</span><span class="chip ${S.pop === 'def' ? 'on' : ''}" data-pop="def">DEF</span></div></div>`;
+  if (S.pop === 'atk' || S.pop === 'def') s += `<div class="popover panel" style="left:40px;top:${y - 260}px"><div class="k" style="margin-bottom:12px">${S.pop === 'atk' ? 'Attack' : 'Defense'}</div><div class="grid2">${STATS[S.pop].map(statRow).join('')}</div></div>`;
+  s += `<div class="banner" style="left:${cx}px;top:${y - 140}px"><i class="dia h"></i>YOUR TURN<i class="dia h"></i></div>`;
+  if (selSkill()) s += tipBox(cx - 280, 150);
+  return s;
+} };
+V[5] = { name: 'Floating cards', cap: 'Floating cards: every unit carries its own small card (name, HP, MP, shield); the acting hero\'s card grows and shows its primary stats. The bottom keeps only skills and globals. The turn order becomes a slim column on the left.', html() {
+  const W = S.W, y = 900, h = 180, sw = 270, sh = 150, gap = 16;
+  const sx = W / 2 - (4 * sw + 3 * gap) / 2;
+  let s = scene({ target: true, plate: 'card' }) + topRight() + bandBg(y, h);
+  // dikey sıra
+  const all = [...QUEUE.past.map((c) => cell(c, 'past')), cell(QUEUE.now, 'now'), ...QUEUE.next.map((c) => cell(c))];
+  s += `<div class="abs" style="left:28px;top:24px;display:flex;flex-direction:column;gap:8px">${all.join('').replaceAll('class="cell', 'style="width:72px;height:72px" class="cell')}</div>`;
+  s += `<div class="abs" style="left:112px;top:${24 + 3 * 80 + 30}px"><i class="dia"></i></div>`;
+  s += `<div class="abs" style="left:${sx}px;top:${y + 15}px;display:flex;gap:${gap}px">${SKILLS.map((k, i) => skillCard(k, i, sw, sh)).join('')}</div>`;
+  s += `<div class="abs" style="left:${sx + 4 * sw + 3 * gap + 24}px;top:${y + 24}px">${globals(62, 'row', 12)}</div>`;
+  s += `<div class="abs" style="left:${sx - 150}px;top:${y + 30}px" data-pop="sheet">${passiveBadge(96)}<div class="m" style="font-size:17px;text-align:center;margin-top:4px">Passive</div></div>`;
+  s += `<div class="banner" style="left:${W / 2}px;top:${y - 52}px"><i class="dia h"></i>YOUR TURN<i class="dia h"></i></div>`;
+  if (S.pop === 'sheet') s += `<div class="popover panel" style="left:${sx - 150}px;top:${y - 420}px">${fullStats()}</div>`;
+  else if (selSkill()) s += tipBox(W / 2 - 280, 150);
+  return s;
+} };
+
+// ---------------------------------------------------------------- çizim, olaylar, ölçek
+const stage = document.getElementById('stage');
+function render() {
+  document.getElementById('pick').innerHTML = [1, 2, 3, 4, 5].map((i) => `<button class="${S.v === i ? 'on' : ''}" data-v="${i}" title="${V[i].name}">${i}</button>`).join('') + '<button class="tog" data-tog="1" title="Hide / show">◐</button>';
+  document.getElementById('cap').textContent = `${S.v} · ${V[S.v].name}: ${V[S.v].cap.split(': ').slice(1).join(': ')}`;
+  stage.innerHTML = V[S.v].html();
+}
+document.getElementById('pick').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.tog) { document.getElementById('pick').classList.toggle('min'); return; }
+  S.v = Number(b.dataset.v); S.pop = '';
+  history.replaceState(null, '', `?v=${S.v}`);
+  render();
+});
+stage.addEventListener('click', (e) => {
+  const sk = e.target.closest('[data-skill]'), pop = e.target.closest('[data-pop]'), dr = e.target.closest('[data-drawer]');
+  if (sk) S.sel = S.sel === sk.dataset.skill ? '' : sk.dataset.skill;
+  else if (pop) S.pop = S.pop === pop.dataset.pop ? '' : pop.dataset.pop;
+  else if (dr) S.drawer = !S.drawer;
+  else if (S.pop) S.pop = '';
+  else return;
+  render();
+});
+function fit() {
+  const vw = innerWidth, vh = innerHeight;
+  const W = Math.round(Math.min(2580, Math.max(1920, (vw / vh) * 1080)));
+  const sc = Math.min(vw / W, vh / 1080);
+  stage.style.width = W + 'px';
+  stage.style.transform = `translate(${(vw - W * sc) / 2}px, ${(vh - 1080 * sc) / 2}px) scale(${sc})`;
+  if (W !== S.W) { S.W = W; render(); }
+}
+addEventListener('resize', fit);
+fit();
+render();
+document.fonts.load('600 32px Cinzel').finally(render);
+</script>
+</body>
+</html>

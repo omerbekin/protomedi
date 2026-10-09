@@ -416,27 +416,31 @@ body {
   border-color: #e39a88;
 }
 
-/* --- Sağ üst simge sırası (sağdan sola): wiki, tam ekran, Menu. Dişli düğmesi yok (Ömer 2026-10-08): ayarlar menüden açılan ayrı ekran --- */
+/* --- Sağ üst kontroller (Ömer 2026-10-09, tasarım kiti): kutusuz. Menu = "◂ Back" gibi hafif Cinzel yazı + kor elmas + ince altın alt çizgi;
+   tam ekran (yalnızca dokunmatik) = küçük ince çerçeveli köşe simgesi. Dokunma alanı en az 44 px. --- */
 .settings-toggle {
   position: fixed;
-  top: calc(8px + var(--et));
-  right: calc(8px + var(--er));
-  width: 48px;
-  height: 48px;
+  top: calc(6px + var(--et));
+  right: calc(6px + var(--er));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
   padding: 0;
-  /* tasarım kiti: koyu zemin, ince altın çizgi, köşesiz */
-  background: linear-gradient(180deg, rgba(30, 22, 14, 0.86), rgba(12, 9, 6, 0.9));
-  border: 1px solid rgba(217, 178, 106, 0.42);
+  color: #d9c8a2;
+  background: transparent;
+  border: 0;
   border-radius: 0;
-  box-shadow: 0 0 0 3px rgba(12, 8, 5, 0.6);
   cursor: pointer;
-  transition: border-color 0.18s, transform 0.18s cubic-bezier(0.33, 1, 0.68, 1);
+  transition: color 0.18s, text-shadow 0.18s, transform 0.18s cubic-bezier(0.33, 1, 0.68, 1);
   z-index: 30;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.settings-toggle:hover {
-  border-color: #f3d999;
-  transform: translateY(-2px);
+.settings-toggle:hover,
+.settings-toggle:focus-visible {
+  color: #f3d999;
 }
 
 .settings-toggle[hidden] {
@@ -444,41 +448,82 @@ body {
 }
 
 .settings-toggle img {
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   image-rendering: pixelated;
 }
 
+/* Tam ekran: 30 px'lik ince altın çerçeve içinde çizgi simge (düğmenin dokunma alanı 44 px) */
 .settings-toggle.fullscreen-toggle {
-  right: calc(8px + var(--er));
+  right: calc(6px + var(--er));
+  filter: drop-shadow(0 1px 3px rgba(12, 8, 5, 0.9));
 }
 
-/* Menu düğmesi (savaş, sefer haritası): sağ üstte; dokunmatikte tam ekran düğmesinin solunda (codex kitap düğmesi kaldırıldı) */
-.settings-toggle.menu-toggle {
-  right: calc(64px + var(--er));
-  width: auto;
-  min-width: 96px;
-  padding: 0 18px;
-  font: 600 17px Cinzel, Georgia, 'Palatino Linotype', serif;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #d9c8a2;
-  text-shadow: 0 2px 4px rgba(12, 8, 5, 0.95);
-  background: linear-gradient(180deg, rgba(30, 22, 14, 0.86), rgba(12, 9, 6, 0.9));
+.settings-toggle.fullscreen-toggle::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
   border: 1px solid rgba(217, 178, 106, 0.42);
-  border-radius: 0;
-  box-shadow: 0 0 0 3px rgba(12, 8, 5, 0.6);
-  transition: color 0.18s, border-color 0.18s, text-shadow 0.18s;
+  background: rgba(12, 9, 6, 0.45);
+  transition: border-color 0.18s;
+}
+
+.settings-toggle.fullscreen-toggle:hover::before {
+  border-color: #f3d999;
+}
+
+.settings-toggle.fullscreen-toggle svg {
+  position: relative;
+  width: 16px;
+  height: 16px;
+}
+
+/* Menu: kutusuz Cinzel yazı, önünde içi boş elmas (üstüne gelince kor), altında iki yana sönen ince altın çizgi */
+.settings-toggle.menu-toggle {
+  right: calc(54px + var(--er));
+  width: auto;
+  min-width: 44px;
+  gap: 10px;
+  padding: 0 12px 0 10px;
+  font: 600 15px Cinzel, Georgia, 'Palatino Linotype', serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 4px rgba(12, 8, 5, 0.95), 0 0 10px rgba(12, 8, 5, 0.7);
+}
+
+.settings-toggle.menu-toggle::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 1px rgba(217, 178, 106, 0.6);
+  background: rgba(12, 9, 6, 0.6);
+  transition: background 0.18s, box-shadow 0.18s;
+}
+
+.settings-toggle.menu-toggle::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 8px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(217, 178, 106, 0), rgba(217, 178, 106, 0.55) 30%, rgba(217, 178, 106, 0.55) 70%, rgba(217, 178, 106, 0));
 }
 
 .settings-toggle.menu-toggle.no-fs {
-  right: calc(8px + var(--er));
+  right: calc(6px + var(--er));
 }
 
-.settings-toggle.menu-toggle:hover {
-  color: #f3d999;
-  border-color: #f3d999;
-  text-shadow: 0 0 14px rgba(240, 140, 40, 0.85);
+.settings-toggle.menu-toggle:hover,
+.settings-toggle.menu-toggle:focus-visible {
+  text-shadow: 0 0 14px rgba(240, 140, 40, 0.85), 0 2px 4px rgba(12, 8, 5, 0.95);
+}
+
+.settings-toggle.menu-toggle:hover::before,
+.settings-toggle.menu-toggle:focus-visible::before {
+  background: #e0702a;
+  box-shadow: 0 0 0 1px #ffb35a, 0 0 8px rgba(240, 140, 40, 0.7);
 }
 
 /* --- Menü ve ayarlar ekranı: ana menü / sefer menüsüyle aynı görsel dil (koyu deri panel, altın çerçeve, serif, bronz düğmeler).
@@ -512,27 +557,88 @@ body {
 .gm-box {
   display: flex;
   flex-direction: column;
-  width: min(440px, 100%);
+  width: min(380px, 100%);
   max-height: 100%;
-  padding: 24px 34px 30px;
+  padding: 22px 30px 20px;
   overflow: hidden auto;
 }
 
 .gm-title {
-  font-size: 34px;
+  font-size: 30px;
 }
 
+/* Menü maddeleri (Ömer 2026-10-09): ana menünün sol sütun dili. Kutusuz satır: içi boş elmas + Cinzel yazı + ince ayırıcı;
+   üstüne gelince / seçiliyken kor elmas, açık altın yazı, parıltı ve 6 px sağa. Resume ilk satır, kor elmaslı. */
 .gm-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-top: 22px;
-  padding: 0 10px; /* düğmelerin yan elmasları kesilmesin */
+  margin-top: 12px;
+}
+
+.gm-row {
+  all: unset;
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 0 10px;
+  font: 600 18px Cinzel, Georgia, 'Palatino Linotype', serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #d9c8a2;
+  text-shadow: 0 2px 4px rgba(12, 8, 5, 0.95);
+  border-bottom: 1px solid rgba(217, 178, 106, 0.16);
+  cursor: pointer;
+  transition: color 0.18s, text-shadow 0.18s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gm-row:last-child {
+  border-bottom: 0;
+}
+
+.gm-row::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 1px rgba(217, 178, 106, 0.45);
+  transition: background 0.18s, box-shadow 0.18s;
+}
+
+.gm-row span {
+  transition: transform 0.18s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.gm-row:hover,
+.gm-row:focus-visible,
+.gm-row.primary {
+  color: #f3d999;
+}
+
+.gm-row:hover,
+.gm-row:focus-visible {
+  text-shadow: 0 0 14px rgba(240, 140, 40, 0.75), 0 2px 4px rgba(12, 8, 5, 0.95);
+}
+
+.gm-row:hover span,
+.gm-row:focus-visible span {
+  transform: translateX(6px);
+}
+
+.gm-row:hover::before,
+.gm-row:focus-visible::before,
+.gm-row.primary::before {
+  background: #e0702a;
+  box-shadow: 0 0 0 1px #ffb35a, 0 0 8px rgba(240, 140, 40, 0.6);
 }
 
 .gm-btn {
   width: 100%;
-  min-height: 56px;
+  min-height: 52px;
 }
 
 .gm-confirm {
@@ -820,18 +926,46 @@ html.menu-elegant .st-note {
 }
 
 
-/* Kısa sahne (yatay telefon): daha sıkı */
-html.short .gm-title {
-  font-size: 24px;
+/* Kısa sahne (yatay telefon): daha sıkı; 5 madde + başlık her zaman sığar (satır 44 px = dokunma alanı) */
+html.short .gm-overlay {
+  padding-top: calc(50px + var(--et));
+  padding-bottom: calc(8px + var(--eb));
 }
 
-html.short .gm-btn {
-  min-height: 46px;
-  font-size: 17px;
+html.short .gm-box {
+  width: min(340px, 100%);
+  padding: 12px 24px 10px;
+}
+
+html.short .gm-title {
+  font-size: 21px;
 }
 
 html.short .gm-list {
-  gap: 8px;
+  margin-top: 6px;
+}
+
+html.short .gm-row {
+  min-height: 44px;
+  font-size: 15px;
+}
+
+html.short .gm-btn {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+html.short .gm-confirm-text {
+  font-size: 17px;
+}
+
+html.short .gm-confirm-row {
+  margin-top: 12px;
+}
+
+html.compact:not(.short) .gm-row {
+  min-height: 48px;
+  font-size: 17px;
 }
 
 /* Tam ekran ipucu (ilk açılışta tek seferlik, kapatılabilir) */

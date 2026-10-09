@@ -3,7 +3,6 @@
  * Fullscreen API (webkit önekli sürüm dahil) varsa kullanılır ve mümkünse yatay yön kilitlenir. iPhone Safari'de sayfa elementleri için
  * Fullscreen API yoktur: düğme yerine kısa bir ipucu ("Add to Home Screen for full screen") gösterilir. Desteklenmeyen yerde sessizce geçilir.
  */
-import { iconUrl } from './dom-icons';
 
 export type FullscreenSupport = 'native' | 'ios' | 'none';
 
@@ -147,6 +146,11 @@ export function wantsFullscreenButton(env: { coarse: boolean; maxTouchPoints: nu
   return env.coarse || env.maxTouchPoints > 0;
 }
 
+const svg = (d: string): string =>
+  `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">${d}</svg>`;
+const FS_ENTER_SVG = svg('<path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/>');
+const FS_EXIT_SVG = svg('<path d="M9 3v6H3M21 9h-6V3M15 21v-6h6M3 15h6v6"/>');
+
 export function createFullscreenButton(root: HTMLElement): { setHint: (text: string) => void; support: FullscreenSupport } {
   const support = currentSupport();
   const noop = { setHint: () => {}, support };
@@ -159,10 +163,11 @@ export function createFullscreenButton(root: HTMLElement): { setHint: (text: str
   const label = support === 'ios' ? IOS_HINT : 'Fullscreen';
   btn.title = label;
   btn.setAttribute('aria-label', 'Fullscreen');
-  const img = document.createElement('img');
-  img.alt = '';
-  img.src = iconUrl('fullscreen');
-  btn.append(img);
+  // Tasarım kiti (Ömer 2026-10-09): ince çizgili köşe simgesi (eski piksel ikonu yerine); girince içe dönük köşeler
+  const paintIcon = (on: boolean): void => {
+    btn.innerHTML = on ? FS_EXIT_SVG : FS_ENTER_SVG;
+  };
+  paintIcon(false);
 
   const toast = document.createElement('div');
   toast.className = 'fs-hint';
@@ -194,7 +199,7 @@ export function createFullscreenButton(root: HTMLElement): { setHint: (text: str
     void toggleFullscreen();
   });
   onFullscreenChange((on) => {
-    img.src = iconUrl(on ? 'exitfullscreen' : 'fullscreen');
+    paintIcon(on);
     btn.title = on ? 'Exit fullscreen' : 'Fullscreen';
     btn.setAttribute('aria-label', btn.title);
   });
