@@ -899,3 +899,352 @@
 .wk-assets .ver-label {
   min-width: 160px;
 }
+
+/* ================================================================================================================
+   TASARIM KİTİ KATMANI (Ömer 2026-10-09): Assets / Legacy sayfaları ve gömülü animasyon sahnesi ana menü dilinde.
+   Eski bronz çip / düğme / kart / select / onay kutusu görünümünün üstüne yazar (yukarıdaki kurallar yerleşimi verir).
+   Cinzel büyük harf etiketler, EB Garamond metin, ince altın çizgiler (alfa .16 / .3 / .55), köşesiz kutular, kor elmas vurgusu.
+   ================================================================================================================ */
+.wk-assets {
+  --k-line1: rgba(217, 178, 106, 0.16);
+  --k-line2: rgba(217, 178, 106, 0.3);
+  --k-line3: rgba(217, 178, 106, 0.55);
+  --k-txt: #d9c8a2;
+  --k-on: #f3d999;
+  --k-muted: #a8977a;
+  --k-dim: #7d705a;
+  --k-ember: #e0702a;
+  --k-ember2: #ffb35a;
+  --k-cin: Cinzel, Georgia, 'Palatino Linotype', serif;
+  --k-gar: 'EB Garamond', Georgia, 'Palatino Linotype', serif;
+  color: var(--k-txt);
+  font-family: var(--k-gar);
+}
+
+.wk-assets h3 {
+  font: 600 18px var(--k-cin);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--k-on);
+}
+
+.wk-assets h3.sub,
+.wk-assets .group-head {
+  border-color: var(--k-line1);
+}
+
+.wk-assets .count,
+.wk-assets .badge,
+.wk-assets .tag,
+.wk-assets .why {
+  padding: 1px 8px;
+  font: 600 11px var(--k-cin);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--k-muted);
+  background: rgba(8, 6, 4, 0.5);
+  border: 1px solid var(--k-line2);
+  border-radius: 0;
+}
+
+.wk-assets .count {
+  color: var(--k-on);
+}
+
+.wk-assets .badge.ok {
+  color: #9ee6a8;
+  border-color: rgba(127, 184, 90, 0.5);
+}
+
+.wk-assets .badge.bad,
+.wk-assets .why {
+  color: #e8806a;
+  border-color: rgba(232, 128, 106, 0.45);
+}
+
+.wk-assets .note,
+.wk-assets .small,
+.wk-assets .muted {
+  font-family: var(--k-gar);
+  font-style: italic;
+  color: var(--k-muted);
+}
+
+.wk-assets .note,
+.wk-assets .small {
+  font-size: 15px;
+}
+
+/* Çipler / küçük düğmeler: köşesiz Cinzel; seçili = kor elmas + açık altın */
+.wk-assets .chip,
+.wk-assets .btn,
+.wk-assets .tag.sfx {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 3px 12px 3px calc(12px + 0.08em);
+  font: 600 12px var(--k-cin);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--k-txt);
+  background: rgba(8, 6, 4, 0.45);
+  border: 1px solid var(--k-line2);
+  border-radius: 0;
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+
+.wk-assets .tag.sfx {
+  font: italic 14px var(--k-gar);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.wk-assets .chip:hover,
+.wk-assets .btn:hover:not(:disabled),
+.wk-assets .tag.sfx:hover {
+  color: var(--k-on);
+  border-color: rgba(243, 217, 153, 0.9);
+  background: rgba(224, 112, 42, 0.08);
+}
+
+.wk-assets .chip.on {
+  color: var(--k-on);
+  background: rgba(224, 112, 42, 0.16);
+  border-color: var(--k-on);
+  box-shadow: 0 0 10px rgba(240, 140, 40, 0.25);
+}
+
+.wk-assets .chip.on::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+  background: var(--k-ember);
+  box-shadow: 0 0 0 1px var(--k-ember2), 0 0 6px rgba(240, 140, 40, 0.6);
+}
+
+.wk-assets .btn {
+  min-height: 40px;
+  padding: 4px 18px 4px calc(18px + 0.1em);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+}
+
+/* Kartlar: kit paneli (ince altın çizgi, köşesiz) */
+.wk-assets .card,
+.wk-assets .swatch-card,
+.wk-assets .font-card,
+.wk-assets .passive,
+.wk-assets .skillchip {
+  background: linear-gradient(180deg, rgba(30, 22, 14, 0.9), rgba(12, 9, 6, 0.92));
+  border: 1px solid var(--k-line2);
+  border-radius: 0;
+}
+
+.wk-assets .card:hover {
+  border-color: var(--k-line3);
+}
+
+.wk-assets .card.playing {
+  border-color: var(--k-on);
+  box-shadow: 0 0 0 1px rgba(240, 140, 40, 0.35), 0 0 16px rgba(240, 140, 40, 0.3);
+}
+
+.wk-assets .card-title {
+  font: 600 15px var(--k-cin);
+  letter-spacing: 0.04em;
+  color: var(--k-on);
+}
+
+.wk-assets .card-title.mono,
+.wk-assets .mono {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 13px;
+  font-style: normal;
+  letter-spacing: 0;
+  color: var(--k-muted);
+}
+
+.wk-assets .char-name {
+  font: 600 22px var(--k-cin);
+  letter-spacing: 0.06em;
+}
+
+/* Oynat düğmesi: ince altın halka */
+.wk-assets .play {
+  width: 44px;
+  height: 44px;
+  color: var(--k-on);
+  font-size: 14px;
+  background: rgba(8, 6, 4, 0.55);
+  border: 1px solid var(--k-line3);
+  border-radius: 50%;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+
+.wk-assets .play:hover {
+  background: rgba(224, 112, 42, 0.12);
+  border-color: var(--k-on);
+  box-shadow: 0 0 10px rgba(240, 140, 40, 0.35);
+}
+
+/* Görseller, sahne kutusu */
+.wk-assets .sprite,
+.wk-assets .avatar,
+.wk-assets .bigicon,
+.wk-assets .legacy-img,
+.wk-assets .stage-iframe,
+.wk-assets .stage-frame {
+  border: 1px solid var(--k-line2);
+  border-radius: 0;
+}
+
+.wk-assets .stage-col {
+  background: linear-gradient(180deg, rgba(30, 22, 14, 0.94), rgba(12, 9, 6, 0.95));
+  border: 1px solid var(--k-line3);
+  border-radius: 0;
+}
+
+/* Form öğeleri: select, onay kutusu (elmas), kaydırıcı */
+.wk-assets select {
+  min-height: 40px;
+  padding: 4px 30px 4px 10px;
+  font: 15px var(--k-gar);
+  color: var(--k-txt);
+  background: #0c0806 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6' fill='none' stroke='%23d9b26a' stroke-width='1.2'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border: 1px solid var(--k-line2);
+  border-radius: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.wk-assets select:hover,
+.wk-assets select:focus-visible {
+  border-color: var(--k-on);
+  outline: none;
+}
+
+.wk-assets select option {
+  background: #0c0806;
+  color: var(--k-txt);
+}
+
+.wk-assets input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0 2px;
+  transform: rotate(45deg);
+  background: rgba(8, 6, 4, 0.6);
+  border: 1px solid var(--k-line3);
+  cursor: pointer;
+}
+
+.wk-assets input[type='checkbox']:checked {
+  background: var(--k-ember);
+  border-color: var(--k-ember2);
+  box-shadow: 0 0 6px rgba(240, 140, 40, 0.6);
+}
+
+.wk-assets label.inline {
+  gap: 10px;
+  font: italic 15px var(--k-gar);
+  color: var(--k-txt);
+  cursor: pointer;
+}
+
+.wk-assets .range,
+.wk-assets input[type='range'] {
+  accent-color: var(--k-ember);
+}
+
+/* Hedef hücre ızgarası (animasyon sahnesi) */
+.wk-assets .cell {
+  font: 600 11px var(--k-cin);
+  letter-spacing: 0.04em;
+  color: var(--k-dim);
+  background: rgba(8, 6, 4, 0.45);
+  border: 1px dashed var(--k-line2);
+  border-radius: 0;
+}
+
+.wk-assets .cell.occupied {
+  color: var(--k-txt);
+  border: 1px solid var(--k-line2);
+}
+
+.wk-assets .cell.on {
+  color: var(--k-on);
+  background: rgba(224, 112, 42, 0.16);
+  border-color: var(--k-on);
+}
+
+.wk-assets .cell.covered {
+  color: #fff4dc;
+  background: rgba(224, 112, 42, 0.28);
+  border: 1px solid var(--k-ember2);
+}
+
+.wk-assets .attr .bar,
+.wk-assets .swatch,
+.wk-assets .swatch.big {
+  border-radius: 0;
+  border-color: var(--k-line2);
+}
+
+.wk-assets .ver-name {
+  font: 600 18px var(--k-cin);
+  letter-spacing: 0.06em;
+  color: var(--k-on);
+}
+
+.wk-assets .ver-card h4 {
+  font: 600 12px var(--k-cin);
+  letter-spacing: 0.16em;
+  color: rgba(217, 178, 106, 0.85);
+  opacity: 1;
+}
+
+.wk-assets details summary {
+  font: 600 12px var(--k-cin);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(217, 178, 106, 0.85);
+}
+
+/* Wiki maddelerindeki Play / çip / katlanır başlık (Art & sounds) */
+.wk-overlay .wk-playbtn,
+.wk-overlay button.wk-chip {
+  min-height: 36px;
+  padding: 4px 16px 4px calc(16px + 0.1em);
+  font: 600 12px Cinzel, Georgia, serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #d9c8a2;
+  background: rgba(8, 6, 4, 0.45);
+  border: 1px solid rgba(217, 178, 106, 0.3);
+  border-radius: 0;
+}
+
+.wk-overlay .wk-playbtn:hover,
+.wk-overlay button.wk-chip:hover {
+  color: #f3d999;
+  border-color: rgba(243, 217, 153, 0.9);
+}
+
+.wk-overlay .wk-fold > summary {
+  font: 600 13px Cinzel, Georgia, serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(217, 178, 106, 0.85);
+}
+
+.wk-overlay .wk-hubcard {
+  font: 16px 'EB Garamond', Georgia, serif;
+  border-radius: 0;
+}

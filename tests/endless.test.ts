@@ -21,7 +21,6 @@ import {
   combineMods,
   enemyCount,
   encounter,
-  gearScore,
   heroOf,
   leaveShop,
   loadRun,
@@ -29,7 +28,6 @@ import {
   newRun,
   outcomeFromSummary,
   parseRun,
-  replacedItem,
   rewardOffer,
   saveRun,
   saveScores,
@@ -45,7 +43,7 @@ import {
   type ScoreEntry,
   type WaveOutcome,
 } from '../src/endless';
-import { ITEMS, canEquip, itemIP, itemValue, loadoutSetup, type ItemDef } from '../src/progression';
+import { ITEMS, canEquip, itemIP, itemValue, loadoutSetup, sellValue, type ItemDef } from '../src/progression';
 
 // Endless Lite (roadmap.md bölüm 3, open-questions madde 281): saf mantık testleri. Item kataloğu Item MVP ile değiştiği için testler
 // sabit item id'lerine değil, verilen küçük bir test kataloğuna dayanır.
@@ -91,14 +89,14 @@ describe('endless: dalga kuralları', () => {
     expect(waveKind(20)).toBe('boss');
   });
 
-  it('düşman sayısı: 1-2. dalga 3, sonra 4', () => {
-    expect([1, 2, 3, 4, 9].map((w) => enemyCount(w))).toEqual([3, 3, 4, 4, 4]);
+  it('düşman sayısı: 30. dalgaya kadar 2, sonra 3 (balance-tester 2026-10-09, data/endless.json > enemyCount)', () => {
+    expect([1, 2, 3, 4, 9, 30, 31, 40].map((w) => enemyCount(w))).toEqual([2, 2, 2, 2, 2, 2, 3, 3]);
   });
 
-  it('dalga güçlenmesi: 1. dalga yok, sonra dalga başına can/stat +%5, güç +%3', () => {
+  it('dalga güçlenmesi: 1. dalga yok, sonra dalga başına can/stat +%1,7, güç +%1,6 (balance-tester 2026-10-09)', () => {
     expect(waveMods(1)).toBeUndefined();
-    expect(waveMods(2)).toEqual({ hpMult: 1.05, statMult: 1.05, powerMult: 1.03 });
-    expect(waveMods(11)).toEqual({ hpMult: 1.5, statMult: 1.5, powerMult: 1.3 });
+    expect(waveMods(2)).toEqual({ hpMult: 1.017, statMult: 1.017, powerMult: 1.016 });
+    expect(waveMods(11)).toEqual({ hpMult: 1.17, statMult: 1.17, powerMult: 1.16 });
     expect(combineMods({ hpMult: 2, spriteScale: 1.4 }, { hpMult: 1.5, powerMult: 1.1 })).toEqual({ hpMult: 3, spriteScale: 1.4, powerMult: 1.1 });
   });
 
@@ -114,20 +112,20 @@ describe('endless: dalga kuralları', () => {
 });
 
 describe('endless: dalga planı -> savaş', () => {
-  it('1. dalga: item\'siz takım hiçbir kurulum almaz (bugünkü birimle aynı), 3 farklı rastgele havuz düşmanı', () => {
+  it('1. dalga: item\'siz takım hiçbir kurulum almaz (bugünkü birimle aynı), enemyCount(1) farklı rastgele havuz düşmanı', () => {
     const plan = wavePlan(fresh());
     expect(plan.kind).toBe('normal');
     expect(plan.units.party).toEqual({});
     expect(plan.units.enemies).toEqual({});
     const foes = plan.enemies.filter(Boolean);
-    expect(foes).toHaveLength(3);
-    expect(new Set(foes).size).toBe(3);
+    expect(foes).toHaveLength(enemyCount(1));
+    expect(new Set(foes).size).toBe(enemyCount(1));
     for (const c of foes) expect(content.randomPool).toContain(c);
     expect(plan.party.filter(Boolean).sort()).toEqual([...PARTY].sort());
     expect(plan.heroOrder).toHaveLength(4);
     const battle = battleFor(plan);
     expect(battle.combatants.filter((c) => c.side === 'party')).toHaveLength(4);
-    expect(battle.combatants.filter((c) => c.side === 'enemy')).toHaveLength(3);
+    expect(battle.combatants.filter((c) => c.side === 'enemy')).toHaveLength(enemyCount(1));
     // motor sırası: party-i = heroOrder[i]
     plan.heroOrder.forEach((id, i) => expect(battle.combatants.find((c) => c.uid === `party-${i}`)!.defId).toBe(heroOf(fresh(), id)!.class));
   });
@@ -142,7 +140,7 @@ describe('endless: dalga planı -> savaş', () => {
     const run = { ...fresh(), wave: 4 };
     run.heroes = run.heroes.map((h, i) => (i === 0 ? { ...h, hpRatio: 0.6, equipment: { weapon: { uid: 'e1', id: ITEMS.items.find((d) => canEquip('warrior', d))?.id ?? 'x' } } } : h));
     const plan = wavePlan(run);
-    expect(plan.enemies.filter(Boolean)).toHaveLength(4);
+    expect(plan.enemies.filter(Boolean)).toHaveLength(enemyCount(4));
     for (const u of Object.values(plan.units.enemies)) expect(u.modifiers).toEqual(waveMods(4));
     const slot = plan.party.indexOf('warrior');
     const setup = plan.units.party[slot]!;
@@ -257,21 +255,18 @@ describe('endless: ödül kartları ve dükkân', () => {
     expect(chooseReward(run, 5)).toBe(run); // geçersiz kart
   });
 
-  it('item kartı takılır; yuvadaki eski item otomatik satılır', () => {
+  it("item kartı item'i TORBAYA koyar (takmaz); torba doluysa altına çevrilir", () => {
     const run = afterWave(1);
-    const realBoots = ITEMS.items.find((d) => d.slot === 'boots');
-    const old = realBoots ?? ITEMS.items[0]!;
-    const target = run.heroes[0]!;
-    target.equipment = { [old.slot]: { uid: 'e0', id: old.id } };
-    const newId = ITEMS.items.find((d) => d.slot === old.slot && d.id !== old.id && canEquip(target.class, d))?.id;
-    if (!newId) return; // katalog bu testi kurmaya yetmiyor (Item MVP verisi gelince çalışır)
-    run.offer = [{ kind: 'item', itemId: newId, heroId: target.id }];
-    expect(replacedItem(run, target.id, newId)?.id).toBe(old.id);
+    const d = ITEMS.items[0]!;
+    run.offer = [{ kind: 'item', itemId: d.id, heroId: run.heroes[0]!.id }];
     const next = chooseReward(run, 0);
-    expect(heroOf(next, target.id)!.equipment[old.slot]?.id).toBe(newId);
-    expect(next.gold).toBe(Math.round(itemValue(old) * ITEMS.budget.sellRatio));
+    expect(next.bag).toEqual([{ uid: `e${run.nextItem}`, id: d.id }]);
+    expect(next.heroes).toEqual(run.heroes); // kimseye takılmadı
     expect(next.nextItem).toBe(run.nextItem + 1);
-    expect(gearScore(next)).toBeGreaterThan(0);
+    const full = { ...run, bag: Array.from({ length: ENDLESS.bagSize! }, (_, i) => ({ uid: `x${i}`, id: d.id })) };
+    const sold = chooseReward(full, 0);
+    expect(sold.bag).toHaveLength(ENDLESS.bagSize!);
+    expect(sold.gold).toBe(run.gold + sellValue(d));
   });
 
   it('her 5 dalgada ödülden sonra dükkân; satın alma altın düşer, yetmezse olmaz', () => {
@@ -289,7 +284,7 @@ describe('endless: ödül kartları ve dükkân', () => {
     const bought = buyItem(rich, 0, CAT);
     expect(bought.gold).toBe(1000 - rich.shop![0]!.price);
     expect(bought.shop![0]!.sold).toBe(true);
-    expect(heroOf(bought, rich.shop![0]!.heroId)!.equipment[CAT.find((d) => d.id === rich.shop![0]!.itemId)!.slot]?.id).toBe(rich.shop![0]!.itemId);
+    expect(bought.bag?.map((i) => i.id)).toEqual([rich.shop![0]!.itemId]); // torbaya girdi
     expect(buyItem(bought, 0, CAT)).toBe(bought); // iki kez satılmaz
     expect(leaveShop(next).phase).toBe('ready');
     // dükkân dalgası değilse doğrudan kamp

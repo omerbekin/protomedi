@@ -1,6 +1,6 @@
 {
   "_not": "Item sistemi verisi (docs/design/progression/items.md; Ömer kararları 2026-10-09, items.md bölüm 7). AŞAMA 0: yalnızca şema + test için 3 örnek item (gerçek item listesi Aşama 1'de, content-designer). Sayılar PROVİZYON (balance-tester). Doğrulama: src/progression/items.ts > validateItems, tests/items-data.test.ts.",
-  "_stats": "Item statları. ip = 1 birimin Item Points değeri (1 IP ~ +%1 savaş gücü). Motor eşlemesi (src/progression/loadout.ts): str/dex/int/luck -> attrAdd, armor -> armorAdd, magicArmor -> magicArmorAdd, might % -> powerMult (toplanarak), hp -> hpAdd, mp -> mpAdd, spd -> spdAdd, crit/accuracy/evasion % -> critAdd/accuracyAdd/evasionAdd (/100), critDmg % -> critMultAdd (/100), hpRegen/mpRegen -> hpRegenAdd/mpRegenAdd (madde 280). engine:false bir stat item verisinde kullanılamaz (doğrulama hatası).",
+  "_stats": "Item statları. ip = 1 birimin Item Points değeri (1 IP ~ +%1 savaş gücü). Motor eşlemesi (src/progression/loadout.ts): str/dex/int/luck -> attrAdd, armor -> armorAdd, magicArmor -> magicArmorAdd, might % -> powerMult (toplanarak), hp -> hpAdd, mp -> mpAdd, spd -> spdAdd, crit/accuracy/evasion % -> critAdd/accuracyAdd/evasionAdd (/100), critDmg % -> critMultAdd (/100), hpRegen/mpRegen -> hpRegenAdd/mpRegenAdd (madde 280). engine:false bir stat item verisinde kullanılamaz (doğrulama hatası). slots: stat yalnızca bu yuvalarda olabilir (Ömer 2026-10-09: Might yalnızca silahta; validateItems denetler).",
   "slots": [
     {
       "id": "weapon",
@@ -78,7 +78,7 @@
     "tolerance": 0.1,
     "goldPerIP": 10,
     "minValue": 5,
-    "sellRatio": 0.25
+    "sellRatio": 0.5
   },
   "stats": {
     "str": {
@@ -119,7 +119,10 @@
       "name": "Might",
       "ip": 0.5,
       "engine": true,
-      "percent": true
+      "percent": true,
+      "slots": [
+        "weapon"
+      ]
     },
     "hp": {
       "name": "Max HP",
@@ -258,6 +261,7 @@
     {
       "id": "arming_sword",
       "name": "Arming Sword",
+      "icon": "sword",
       "slot": "weapon",
       "family": "axes",
       "rarity": "rare",
@@ -295,6 +299,7 @@
     {
       "id": "oak_shield",
       "name": "Oak Tower Shield",
+      "icon": "shield",
       "slot": "weapon",
       "family": "maces",
       "rarity": "uncommon",
@@ -658,7 +663,7 @@
       "rarity": "uncommon",
       "ilvl": 8,
       "stats": {
-        "might": 1,
+        "crit": 2,
         "armor": 2
       }
     },
@@ -669,8 +674,7 @@
       "rarity": "rare",
       "ilvl": 9,
       "stats": {
-        "might": 3,
-        "crit": 2,
+        "crit": 8,
         "armor": 1
       }
     },
@@ -754,6 +758,7 @@
     {
       "id": "copper_ring",
       "name": "Copper Ring",
+      "icon": "ring",
       "slot": "trinket",
       "rarity": "common",
       "ilvl": 4,

@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Reward Usability Mockups</title>
+<!--
+  Endless ödül kartı "kim kullanabilir" taslakları (Ömer 2026-10-09). Oyun kodu DEĞİL; seçim için karşılaştırma sayfası. Açılış: mockups/reward-usable.html?v=1..3
+  Kural kaynağı: data/items.json > weaponFamilies + src/progression/items.ts > canEquip (silah değilse herkes takar; silahsa ailesi class'a izinli olmalı).
+  Örnek takım: Anti-Mage, Warrior, Archer, Gambler. Kartlar: Arming Sword (Axes & Swords: Warrior + Anti-Mage = 2/4), Rune Staff (Staves: kimse),
+  Great Helm (silah değil: herkes). Altta Gear ekranı torbasında aynı fikrin karşılığı. İkonlar src/game/item-icons.ts'ten PNG'ye çizildi (reward-usable/).
+  "+N power" = item'in Item Power'ı (items.json > stats.ip) eksi kahramanın o yuvadaki item'i; taslak için örnek değerler.
+-->
+<style>
+@font-face { font-family: 'Cinzel'; font-weight: 400 900; font-display: swap; src: url('battle-hud/fonts/Cinzel-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-weight: 400 800; font-display: swap; src: url('battle-hud/fonts/EBGaramond-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400 800; font-display: swap; src: url('battle-hud/fonts/EBGaramond-italic-latin.woff2') format('woff2'); }
+:root {
+  --gold: 217, 178, 106; --on: #f3d999; --txt: #d9c8a2; --muted: #a8977a; --dim: #7d705a; --note: #cdb88d; --stat: #ece2c8; --ember: #e0702a; --ember2: #ffb35a;
+  --ok: #9fd18a; --bad: #e8806a;
+  --cin: Cinzel, Georgia, 'Palatino Linotype', serif; --gar: 'EB Garamond', Georgia, 'Palatino Linotype', serif;
+  --ease: cubic-bezier(0.33, 1, 0.68, 1);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #050403; overflow: hidden; color: var(--txt); -webkit-tap-highlight-color: transparent; }
+#stage { position: absolute; left: 0; top: 0; height: 1080px; transform-origin: 0 0; overflow: hidden; user-select: none; font-family: var(--gar);
+  background: linear-gradient(180deg, rgba(10,7,4,.72), rgba(10,7,4,.82)), url('battle-hud/img/bg.webp') center 30% / cover; }
+.abs { position: absolute; }
+img.px { image-rendering: pixelated; display: block; }
+#pick { position: fixed; right: calc(4px + env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); z-index: 50; display: flex; flex-direction: column; gap: 4px; }
+#pick button { all: unset; cursor: pointer; width: 30px; height: 30px; display: grid; place-items: center; font: 600 13px var(--cin); color: var(--muted); background: rgba(8,6,4,.78); border: 1px solid rgba(var(--gold), .3); }
+#pick button.on { color: #1a0f06; background: var(--ember); border-color: var(--ember2); }
+#pick.min button:not(.tog) { display: none; }
+#cap { position: fixed; left: calc(10px + env(safe-area-inset-left)); top: 10px; z-index: 50; font: italic 13px/1.25 var(--gar); color: var(--note); background: rgba(8,6,4,.86); border: 1px solid rgba(var(--gold), .25); padding: 6px 10px; max-width: 30vw; }
+#cap b { display: block; font: 600 11px var(--cin); letter-spacing: .16em; text-transform: uppercase; color: var(--on); margin-bottom: 2px; font-style: normal; }
+#pick.min ~ #cap { display: none; }
+@media (max-height: 500px) { #cap { font-size: 10px; } #pick button { width: 24px; height: 24px; font-size: 11px; } }
+
+.wave { position: absolute; top: 22px; right: 64px; font: italic 30px var(--gar); color: var(--note); text-shadow: 0 2px 6px #000; }
+.hint-b { position: absolute; bottom: 26px; right: 64px; font: italic 20px var(--gar); color: var(--muted); text-shadow: 0 2px 4px #000; }
+
+/* --- kart (oyundaki Elite spoils kartıyla aynı dil) --- */
+.card { position: absolute; top: 76px; width: 468px; height: 764px; background: linear-gradient(180deg, rgba(26,20,13,.96), rgba(13,10,7,.97)); border: 1px solid rgba(var(--gold), .45); box-shadow: 0 0 0 3px rgba(8,6,4,.7), 0 22px 50px rgba(0,0,0,.6); display: flex; flex-direction: column; align-items: center; transition: transform .25s var(--ease), border-color .2s; }
+.card:hover { transform: translateY(-4px); border-color: rgba(243,217,153,.75); }
+.card .cn { position: absolute; width: 9px; height: 9px; transform: rotate(45deg); background: #140e09; box-shadow: 0 0 0 1px rgba(var(--gold), .7); }
+.cn.tl { left: -5px; top: -5px; } .cn.tr { right: -5px; top: -5px; } .cn.bl { left: -5px; bottom: -5px; } .cn.br { right: -5px; bottom: -5px; }
+.card .head { margin-top: 24px; display: flex; align-items: center; gap: 18px; font: 600 18px var(--cin); letter-spacing: .3em; color: #d9a35a; }
+.card .head::before, .card .head::after { content: ''; width: 80px; height: 1px; background: linear-gradient(90deg, rgba(var(--gold),0), rgba(var(--gold),.5)); }
+.card .head::after { background: linear-gradient(270deg, rgba(var(--gold),0), rgba(var(--gold),.5)); }
+.medal { position: relative; margin-top: 30px; width: 152px; height: 152px; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle, #15110c 55%, #0b0907); box-shadow: inset 0 0 0 2px var(--rc), 0 0 0 9px rgba(0,0,0,0), 0 0 0 10px rgba(var(--gold), .14), 0 0 40px rgba(0,0,0,.6); }
+.medal::before { content: ''; position: absolute; inset: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(var(--gold), .12); }
+.medal i { position: absolute; width: 10px; height: 10px; transform: rotate(45deg); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2), 0 0 8px rgba(240,140,40,.6); }
+.medal i.n { top: -17px; left: 71px; } .medal i.s { bottom: -17px; left: 71px; } .medal i.w { left: -17px; top: 71px; } .medal i.e { right: -17px; top: 71px; }
+.medal img { width: 100px; height: 100px; }
+.name { margin-top: 24px; font: 600 35px var(--cin); letter-spacing: .04em; color: var(--rn); text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+.sub { margin-top: 4px; font: italic 21px var(--gar); color: #b9a27a; }
+.stats { margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; font: 24px var(--gar); color: var(--stat); }
+.use { margin-top: auto; padding-top: 18px; width: 100%; display: flex; flex-direction: column; align-items: center; padding: 0 30px; }
+.bag { margin-top: 10px; font: italic 19px var(--gar); color: #9c8a6a; }
+.foot { margin-top: 16px; width: calc(100% - 60px); border-top: 1px solid rgba(var(--gold), .2); padding: 22px 0 26px; text-align: center; font: 600 26px var(--cin); letter-spacing: .14em; color: var(--stat); cursor: pointer; transition: color .18s, text-shadow .18s; }
+.foot:hover { color: var(--on); text-shadow: 0 0 14px rgba(240,140,40,.85); }
+
+/* --- avatarlar --- */
+.av { position: relative; width: 52px; height: 52px; flex: none; background: linear-gradient(180deg, #22180f, #0a0705); box-shadow: inset 0 0 0 1px rgba(var(--gold), .35), 0 0 0 3px rgba(8,6,4,.75); transition: transform .2s var(--ease), filter .2s, opacity .2s; }
+.av img { width: 100%; height: 100%; object-fit: cover; padding: 2px; }
+.av.ok { box-shadow: inset 0 0 0 1.5px var(--on), 0 0 0 3px rgba(8,6,4,.75), 0 0 12px rgba(240,180,90,.25); }
+.av.no { filter: grayscale(1) brightness(.55); opacity: .55; }
+.av.no::after { content: ''; position: absolute; left: -4px; right: -4px; top: 50%; height: 1.5px; background: rgba(232,128,106,.9); transform: rotate(-38deg); box-shadow: 0 0 4px rgba(0,0,0,.9); }
+.av:hover { transform: translateY(-2px); }
+.row { display: flex; gap: 16px; justify-content: center; }
+.avn { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.avn .l { font: 600 11px var(--cin); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.avn.no .l { color: #6a5d4a; text-decoration: line-through; text-decoration-color: rgba(232,128,106,.7); }
+.cap1 { margin-top: 12px; font: italic 19px var(--gar); color: var(--note); text-align: center; }
+.cap1.bad { color: var(--bad); font-style: normal; font: 600 15px var(--cin); letter-spacing: .1em; text-transform: uppercase; }
+.cap1 small { display: block; margin-top: 3px; font: italic 17px var(--gar); letter-spacing: 0; text-transform: none; color: var(--dim); }
+.k { font: 600 12px var(--cin); letter-spacing: .26em; text-transform: uppercase; color: rgba(var(--gold), .8); display: flex; align-items: center; gap: 10px; }
+.k::before, .k::after { content: ''; width: 36px; height: 1px; background: rgba(var(--gold), .3); }
+/* v2: kimin kullanamadığı üstüne gelince */
+.cannot { position: relative; margin-top: 10px; font: italic 18px var(--gar); color: var(--dim); cursor: help; border-bottom: 1px dotted rgba(var(--gold), .35); }
+.cannot .pop { position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translate(-50%, 6px); width: 300px; padding: 12px 14px; background: linear-gradient(180deg, rgb(31,23,15), rgb(12,9,6)); border: 1px solid rgba(var(--gold), .42); box-shadow: 0 0 0 3px rgba(8,6,4,.7), 0 14px 30px rgba(0,0,0,.6); opacity: 0; visibility: hidden; transition: opacity .16s, transform .2s var(--ease), visibility 0s .2s; z-index: 5; font-style: normal; color: var(--note); }
+.cannot:hover .pop, .cannot.open .pop { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity .16s, transform .2s var(--ease); }
+.pop .pr { display: flex; align-items: center; gap: 10px; margin-top: 6px; font: 600 13px var(--cin); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.pop .pr .av { width: 30px; height: 30px; }
+.pop .pt { font: italic 16px var(--gar); color: var(--dim); }
+.noone { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.noone .x { white-space: nowrap; font: 600 14px var(--cin); letter-spacing: .07em; text-transform: uppercase; color: var(--bad); display: flex; align-items: center; gap: 10px; }
+.noone .x::before, .noone .x::after { content: ''; width: 9px; height: 9px; transform: rotate(45deg); box-shadow: 0 0 0 1px rgba(232,128,106,.8); }
+.noone .w { font: italic 17px var(--gar); color: var(--dim); }
+/* v3: köşe rozetleri + en uygun kahraman */
+.bdg { position: absolute; right: -8px; bottom: -8px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font: 700 13px/1 var(--gar); box-shadow: 0 0 0 2px #0e0a07; }
+.bdg.y { background: #3f6b33; color: #e6f7d8; border: 1px solid var(--ok); }
+.bdg.n { background: #6b2e24; color: #ffe0d8; border: 1px solid var(--bad); }
+.av.v3no { filter: grayscale(.85) brightness(.6); }
+.av.best { box-shadow: inset 0 0 0 2px var(--ember2), 0 0 0 3px rgba(8,6,4,.75), 0 0 18px rgba(240,140,40,.55); }
+.av.best::before { content: ''; position: absolute; left: 50%; top: -15px; width: 8px; height: 8px; margin-left: -4px; transform: rotate(45deg); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2), 0 0 8px rgba(240,140,40,.8); }
+.bestl { margin-top: 14px; display: flex; align-items: baseline; gap: 8px; font: italic 19px var(--gar); color: var(--note); }
+.bestl b { font: 600 15px var(--cin); letter-spacing: .08em; color: var(--on); font-style: normal; text-transform: uppercase; }
+.bestl em { font: 700 18px 'Palatino Linotype', Georgia, serif; font-style: normal; color: var(--ok); }
+
+/* --- Gear torbası şeridi --- */
+.gear { position: absolute; top: 864px; height: 182px; padding: 14px 26px; background: linear-gradient(180deg, rgba(22,16,11,.93), rgba(9,7,5,.95)); border: 1px solid rgba(var(--gold), .3); box-shadow: 0 0 0 3px rgba(8,6,4,.6); display: flex; gap: 28px; align-items: center; }
+.gear .gl { width: 300px; display: flex; flex-direction: column; gap: 10px; }
+.gear .gl .t { font: 600 14px var(--cin); letter-spacing: .24em; color: rgba(var(--gold), .85); text-transform: uppercase; }
+.gear .gl .who { display: flex; align-items: center; gap: 10px; font: 600 15px var(--cin); letter-spacing: .08em; color: var(--on); text-transform: uppercase; }
+.gear .gl .who .av { width: 40px; height: 40px; }
+.gear .gl .d { font: italic 16px/1.25 var(--gar); color: var(--note); }
+.slots { display: flex; gap: 14px; }
+.slot { position: relative; width: 88px; height: 88px; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #241a10, #0b0806 75%); box-shadow: inset 0 0 0 1px var(--rc, rgba(var(--gold), .4)), 0 0 0 3px rgba(8,6,4,.75); cursor: pointer; transition: transform .2s var(--ease), box-shadow .2s; }
+.slot:hover { transform: translateY(-3px); box-shadow: inset 0 0 0 1px var(--on), 0 0 0 3px rgba(8,6,4,.75), 0 0 14px rgba(240,140,40,.3); }
+.slot img { width: 66px; height: 66px; }
+.slot.no img { filter: grayscale(1) brightness(.5); opacity: .55; }
+.slot.no::after { content: ''; position: absolute; left: 6px; right: 6px; top: 50%; height: 1.5px; background: rgba(232,128,106,.85); transform: rotate(-38deg); }
+.slot .faces { position: absolute; left: 4px; bottom: 4px; display: flex; gap: 2px; }
+.slot .faces span { width: 20px; height: 20px; box-shadow: 0 0 0 1px rgba(var(--gold), .6); background: #0b0806; }
+.slot .faces span img { width: 100%; height: 100%; object-fit: cover; }
+.slot .faces .all { width: auto; padding: 0 4px; font: 600 10px/20px var(--cin); letter-spacing: .1em; color: var(--muted); box-shadow: none; background: rgba(8,6,4,.8); }
+.slot .bdg { right: -6px; bottom: -6px; }
+.slot .up { position: absolute; right: 5px; top: 5px; width: 9px; height: 9px; transform: rotate(45deg); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2), 0 0 8px rgba(240,140,40,.8); }
+.slot .stip { position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%); width: 270px; padding: 10px 14px; background: linear-gradient(180deg, rgb(31,23,15), rgb(12,9,6)); border: 1px solid rgba(var(--gold), .42); box-shadow: 0 0 0 3px rgba(8,6,4,.7); font: italic 16px/1.25 var(--gar); color: var(--note); opacity: 0; visibility: hidden; transition: opacity .15s, visibility 0s .15s; z-index: 6; pointer-events: none; text-align: left; }
+.slot .stip b { display: block; font: 600 14px var(--cin); letter-spacing: .04em; color: var(--rn, var(--on)); font-style: normal; margin-bottom: 3px; }
+.slot:hover .stip { opacity: 1; visibility: visible; transition: opacity .15s; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="pick"></div>
+<div id="cap"></div>
+<script>
+// ---------------------------------------------------------------- veri (data/items.json)
+const PARTY = [
+  { id: 'warrior', name: 'Warrior' },
+  { id: 'antimage', name: 'Anti-Mage' },
+  { id: 'archer', name: 'Archer' },
+  { id: 'gambler', name: 'Gambler' },
+];
+const FAMILIES = { axes: ['Axes & Swords', ['warrior', 'antimage']], maces: ['Maces & Shields', ['defender', 'paladin', 'warrior']], bows: ['Bows', ['archer']], daggers: ['Daggers', ['cutthroat', 'antimage']], staves: ['Staves', ['mage', 'druid', 'undead']], charms: ['Charms', ['gambler', 'hexer']] };
+const CLASSNAME = { warrior: 'Warrior', antimage: 'Anti-Mage', archer: 'Archer', gambler: 'Gambler', defender: 'Defender', paladin: 'Paladin', cutthroat: 'Cutthroat', mage: 'Mage', druid: 'Druid', undead: 'Undead', hexer: 'Hexer' };
+const RAR = { common: ['#8a8a84', '#a9a9a2'], uncommon: ['#5f8f3e', '#86b866'], rare: ['#3f6fa8', '#5b8fd0'], epic: ['#7a3f9a', '#a96ccc'] };
+const CARDS = [
+  { name: 'Arming Sword', icon: 'sword', rarity: 'rare', slot: 'Weapon', family: 'axes', ilvl: 9, stats: ['+1 STR', '+1% Might'], best: ['warrior', '+5.5'] },
+  { name: 'Rune Staff', icon: 'staff', rarity: 'epic', slot: 'Weapon', family: 'staves', ilvl: 10, stats: ['+1 INT', '+1% Might', '+1 MP Regen'], sell: 38 },
+  { name: 'Great Helm', icon: 'helm', rarity: 'epic', slot: 'Helm', ilvl: 10, stats: ['+2 Armor', '+3 Max HP', '+1 Magic Armor', '+1% Accuracy'], best: ['archer', '+4.3'] },
+];
+const BAG = [
+  { name: 'Twin Stilettos', icon: 'dagger', rarity: 'rare', family: 'daggers' },
+  { name: 'Arming Sword', icon: 'sword', rarity: 'rare', family: 'axes', up: true },
+  { name: 'Hunting Bow', icon: 'bow', rarity: 'uncommon', family: 'bows' },
+  { name: 'Rune Staff', icon: 'staff', rarity: 'epic', family: 'staves' },
+  { name: 'Great Helm', icon: 'helm', rarity: 'epic', up: true },
+  { name: 'Riveted Mail', icon: 'mail', rarity: 'uncommon' },
+  { name: 'Lucky Charm', icon: 'charms', rarity: 'rare', family: 'charms' },
+];
+const GEAR_HERO = PARTY[0];
+const can = (heroId, it) => !it.family || FAMILIES[it.family][1].includes(heroId);
+const usableBy = (it) => PARTY.filter((h) => can(h.id, it));
+const S = { v: Math.min(3, Math.max(1, Number(new URLSearchParams(location.search).get('v')) || 1)), W: 1920 };
+
+const IC = (n) => `reward-usable/ic-${n}.png`;
+const AV = (id) => `reward-usable/av-${id}.png`;
+const av = (h, cls = '', extra = '') => `<div class="av ${cls}" title="${h.name}"><img src="${AV(h.id)}" alt="">${extra}</div>`;
+const famName = (it) => (it.family ? FAMILIES[it.family][0] : null);
+const whoCould = (it) => FAMILIES[it.family][1].map((c) => CLASSNAME[c]).join(', ');
+const join = (a) => (a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`);
+
+// ---------------------------------------------------------------- 3 seçenek: kartın "kim kullanır" bloğu + torba
+const V = {};
+V[1] = {
+  name: 'Party row',
+  cap: 'All four party avatars under the stats. Those who can use it: full colour with a thin gold ring; the others faded, desaturated, with a fine red diagonal strike. One short line says it in words. Helm: the whole row is lit and the line says anyone can wear it.',
+  use(it) {
+    const ok = usableBy(it);
+    const row = `<div class="row">${PARTY.map((h) => `<div class="avn ${can(h.id, it) ? '' : 'no'}">${av(h, can(h.id, it) ? 'ok' : 'no')}<span class="l">${h.name}</span></div>`).join('')}</div>`;
+    if (!it.family) return `${row}<div class="cap1">Any hero can wear it</div>`;
+    if (!ok.length) return `${row}<div class="cap1 bad">No one in your party can wield this<small>${famName(it)}: ${whoCould(it)} only · sells for ${it.sell} gold</small></div>`;
+    return `${row}<div class="cap1">${join(ok.map((h) => h.name))} can wield it</div>`;
+  },
+  gear: 'Pick a hero on the Gear screen: bag items they cannot wield fade out with the same diagonal strike, so the usable ones stand out.',
+  slot(it) { return { cls: can(GEAR_HERO.id, it) ? '' : 'no', extra: '' }; },
+};
+V[2] = {
+  name: 'Usable by',
+  cap: 'Only the heroes who can use it, with names, under a small "Usable by" heading. A dim "2 cannot" note reveals who and why on hover (tap on phone). When no one can, the card says so in red and names the classes that could. Helm: no avatars at all, just "Any hero can wear it".',
+  use(it) {
+    const ok = usableBy(it), no = PARTY.filter((h) => !can(h.id, it));
+    if (!it.family) return `<div class="k">Usable by</div><div class="cap1" style="margin-top:10px">Any hero · helms have no class limit</div>`;
+    if (!ok.length) return `<div class="noone"><span class="x">No one in your party can wield this</span><span class="w">${famName(it)} are for ${whoCould(it)}</span><span class="w">Sells for ${it.sell} gold</span></div>`;
+    return `<div class="k">Usable by</div><div class="row" style="margin-top:12px">${ok.map((h) => `<div class="avn">${av(h, 'ok')}<span class="l">${h.name}</span></div>`).join('')}</div>
+      <span class="cannot" data-pop="1">× ${no.length} cannot<span class="pop"><span class="pt">${famName(it)} are not for:</span>${no.map((h) => `<span class="pr">${av(h, 'no')}${h.name}</span>`).join('')}</span></span>`;
+  },
+  gear: 'In the bag each item shows tiny faces of who can use it (or "ALL" for armour). Nothing is greyed out: the bag stays readable for the whole party.',
+  slot(it) {
+    const ok = usableBy(it);
+    const faces = !it.family ? '<span class="all">ALL</span>' : ok.length ? ok.map((h) => `<span><img src="${AV(h.id)}"></span>`).join('') : '<span class="all" style="color:#e8806a">NONE</span>';
+    return { cls: '', extra: `<div class="faces">${faces}</div>` };
+  },
+};
+V[3] = {
+  name: 'Badges + best fit',
+  cap: 'All four avatars with a tiny ✓ or × badge. The hero who gains the most is ringed in ember with a diamond above and named: "Best for Warrior · +5.5 power" (Item Power gain over what they wear now). No one: all crosses and a red line. Helm: all ticks, best fit still named.',
+  use(it) {
+    const ok = usableBy(it);
+    const best = it.best && ok.some((h) => h.id === it.best[0]) ? it.best[0] : null;
+    const row = `<div class="row" style="gap:20px">${PARTY.map((h) => { const y = can(h.id, it); return av(h, y ? (h.id === best ? 'best' : 'ok') : 'v3no', `<span class="bdg ${y ? 'y' : 'n'}">${y ? '✓' : '×'}</span>`); }).join('')}</div>`;
+    if (!ok.length) return `${row}<div class="cap1 bad" style="margin-top:16px">No one in your party can wield this<small>${famName(it)}: ${whoCould(it)} only</small></div>`;
+    const bh = PARTY.find((h) => h.id === best);
+    return `${row}<div class="bestl"><i style="width:8px;height:8px;transform:rotate(45deg);background:var(--ember);display:inline-block;align-self:center"></i>Best for <b>${bh.name}</b><em>${it.best[1]}</em> power</div>
+      <div class="cap1" style="margin-top:4px;font-size:17px;color:var(--dim)">${it.family ? `${ok.length} of ${PARTY.length} can wield it` : 'Anyone can wear it'}</div>`;
+  },
+  gear: 'For the selected hero each bag item gets the same ✓ / × badge; an ember diamond in the corner marks an upgrade over what they wear.',
+  slot(it) { const y = can(GEAR_HERO.id, it); return { cls: y ? '' : '', extra: `<span class="bdg ${y ? 'y' : 'n'}">${y ? '✓' : '×'}</span>${y && it.up ? '<i class="up"></i>' : ''}` }; },
+};
+
+function card(it, x) {
+  const [rc, rn] = RAR[it.rarity];
+  const rname = it.rarity[0].toUpperCase() + it.rarity.slice(1);
+  return `<div class="card" style="left:${x}px;--rc:${rc};--rn:${rn}"><i class="cn tl"></i><i class="cn tr"></i><i class="cn bl"></i><i class="cn br"></i>
+    <div class="head">ELITE SPOILS</div>
+    <div class="medal"><i class="n"></i><i class="s"></i><i class="w"></i><i class="e"></i><img class="px" src="${IC(it.icon)}" alt=""></div>
+    <div class="name">${it.name}</div><div class="sub">${rname} ${famName(it) ?? it.slot} · Item level ${it.ilvl}</div>
+    <div class="stats">${it.stats.map((s) => `<span>${s}</span>`).join('')}</div>
+    <div class="use">${V[S.v].use(it)}<div class="bag">Goes to the bag (1 / 30)</div></div>
+    <div class="foot">TAKE</div></div>`;
+}
+function gear(x, w) {
+  const o = V[S.v];
+  const slots = BAG.map((it) => {
+    const [rc, rn] = RAR[it.rarity];
+    const s = o.slot(it);
+    const ok = usableBy(it);
+    const tipTxt = !it.family ? 'Any hero can wear it' : ok.length ? `${join(ok.map((h) => h.name))} can wield it` : 'No one in your party can wield this';
+    return `<div class="slot ${s.cls}" style="--rc:${rc};--rn:${rn}"><img class="px" src="${IC(it.icon)}" alt="">${s.extra}<div class="stip"><b>${it.name}</b>${tipTxt}${S.v !== 2 ? `<br>${can(GEAR_HERO.id, it) ? `${GEAR_HERO.name} can equip it${it.up ? ' · upgrade' : ''}` : `${GEAR_HERO.name} cannot equip it`}` : ''}</div></div>`;
+  }).join('');
+  return `<div class="gear" style="left:${x}px;width:${w}px"><div class="gl"><span class="t">Gear · Bag</span>${S.v !== 2 ? `<span class="who">${av(GEAR_HERO, 'ok')}${GEAR_HERO.name}</span>` : ''}<span class="d">${o.gear}</span></div><div class="slots">${slots}</div></div>`;
+}
+
+const stage = document.getElementById('stage');
+function render() {
+  document.getElementById('pick').innerHTML = [1, 2, 3].map((i) => `<button class="${S.v === i ? 'on' : ''}" data-v="${i}" title="${V[i].name}">${i}</button>`).join('') + '<button class="tog" data-tog="1" title="Hide / show">◐</button>';
+  document.getElementById('cap').innerHTML = `<b>${S.v} · ${V[S.v].name}</b>${V[S.v].cap}`;
+  const cw = 468, gap = 44, total = 3 * cw + 2 * gap, x0 = S.W / 2 - total / 2;
+  stage.innerHTML = `<div class="wave">Wave 5 cleared: the elite has fallen</div>${CARDS.map((it, i) => card(it, x0 + i * (cw + gap))).join('')}${gear(x0, total)}`;
+}
+document.getElementById('pick').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.tog) { document.getElementById('pick').classList.toggle('min'); return; }
+  S.v = Number(b.dataset.v); history.replaceState(null, '', `?v=${S.v}`); render();
+});
+// dokunmatik: "× 2 cannot" notuna dokununca açılır
+stage.addEventListener('click', (e) => {
+  const c = e.target.closest('[data-pop]');
+  stage.querySelectorAll('[data-pop].open').forEach((x) => { if (x !== c) x.classList.remove('open'); });
+  if (c) c.classList.toggle('open');
+});
+function fit() {
+  const vw = innerWidth, vh = innerHeight;
+  const W = Math.round(Math.min(2580, Math.max(1920, (vw / vh) * 1080)));
+  const sc = Math.min(vw / W, vh / 1080);
+  stage.style.width = W + 'px';
+  stage.style.transform = `translate(${(vw - W * sc) / 2}px, ${(vh - 1080 * sc) / 2}px) scale(${sc})`;
+  if (W !== S.W) { S.W = W; render(); }
+}
+addEventListener('resize', fit);
+if (innerHeight <= 500) document.getElementById('pick').classList.add('min');
+fit();
+render();
+// önizleme: &pop=1 "× N cannot" açıklamasını açık gösterir
+document.fonts.load('600 32px Cinzel').finally(() => { render(); if (new URLSearchParams(location.search).get('pop')) setTimeout(() => stage.querySelector('[data-pop]')?.classList.add('open'), 300); });
+</script>
+</body>
+</html>

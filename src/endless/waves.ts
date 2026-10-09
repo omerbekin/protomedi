@@ -1,10 +1,11 @@
 // Endless dalga üretici (saf, seed'li; Math.random yok). Dalga -> motorun mevcut savaş girişi (hücre listeleri + yuva başına UnitSetup + seed).
-import { CELL_COUNT, bosses, classes, defaultSlots, randomCells, randomPool } from '../engine/content';
+import { CELL_COUNT, bosses, classes, randomCells, randomPool } from '../engine/content';
 import { Rng } from '../engine/rng';
 import type { UnitModifiers, UnitSetup } from '../engine/types';
 import { loadoutSetup } from '../progression/loadout';
 import { ENDLESS, encounter, type EndlessConfig, type EndlessRun, type WaveKind } from './data';
 import { withRelics } from './relics';
+import { heroSlots } from './formation';
 
 /** FNV-1a + karıştırma: parçalardan seed (sefer seed.ts ile aynı yöntem; endless kendi kopyasını taşır, sefer modülüne bağlanmaz). */
 export function hashSeed(...parts: Array<string | number>): number {
@@ -98,11 +99,11 @@ export function wavePlan(run: EndlessRun, cfg: EndlessConfig = ENDLESS): WavePla
   const wave = run.wave;
   const kind = waveKind(wave, cfg);
   const seed = waveSeed(run.seed, wave);
-  // Oyuncu: otomatik dizilim (yakın dövüşçüler önde); motor hücreleri yuva sırasıyla okur
+  // Oyuncu: koşunun dizilimi (koşu başında seçilen, sonra her zaferde savaş sonundaki hücreler; eski kayıt = otomatik); motor hücreleri yuva sırasıyla okur
   const party = Array.from({ length: CELL_COUNT }, () => '');
   const partyUnits: Record<number, UnitSetup> = {};
   const live = run.heroes.filter((h) => classes[h.class]);
-  const slots = defaultSlots(live.map((h) => h.class));
+  const slots = heroSlots(live);
   const placed: Array<{ id: string; slot: number }> = [];
   live.forEach((h, i) => {
     const slot = slots[i]!;

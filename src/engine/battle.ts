@@ -1,6 +1,6 @@
 import { isAccuracyCritDebuff } from './cc-immunity';
 import { skillCostAmount } from './cost';
-import { damageRange, rollCrit, rollDamage, rollHeal, shieldAmount, type DamageSpec, type Range } from './formulas';
+import { damageRange, missingHpHealMult, rollCrit, rollDamage, rollHeal, shieldAmount, type DamageSpec, type Range } from './formulas';
 import { isShapeArea, shapeCells, shapeStages } from './area-shape';
 import { pickSideNeighbors } from './formation';
 import { betMultipliers, betStake } from './gamble';
@@ -556,7 +556,8 @@ export class Battle {
   reachOf(actor: Combatant | string, skill: SkillDef): number {
     const c = typeof actor === 'string' ? this.get(actor) : actor;
     let bonus = 0;
-    for (const s of c?.statuses ?? []) bonus += this.statusDef(s.kind)?.reachBonus ?? 0;
+    // ignoreReachBonus (Whirlwind, madde 284): durum menzil eki bu skill'e işlemez (yük ve STR eki işler)
+    if (!skill.ignoreReachBonus) for (const s of c?.statuses ?? []) bonus += this.statusDef(s.kind)?.reachBonus ?? 0;
     return (skill.reach ?? 0) + bonus;
   }
 
@@ -1513,8 +1514,8 @@ export class Battle {
         if (skill.motion === 'melee' && !skill.ignoreReach && !this.debugCasting) {
           // Ön sıra, düşmanın kendi tahtasındaki birimlere göre belirlenir (çağrılar da kendi tahtalarında durur; eski "düşman tahtasına sızan çağrı" kuralı madde 222 ile kalktı)
           const home = list.filter((c) => c.board === c.side);
-          const rows = [...new Set(home.map((c) => this.rowOf(c.slot)))].slice(0, this.setup.formulas.formation.meleeRows + this.reachOf(actor, skill));
-          list = list.filter((c) => c.board !== c.side || rows.includes(this.rowOf(c.slot)));
+          const limit = this.meleeRowLimit(home.map((c) => this.rowOf(c.slot)), this.reachOf(actor, skill));
+          list = list.filter((c) => c.board !== c.side || this.rowOf(c.slot) <= limit);
         }
         // Backstab: yalnızca arkası boş hedefler (menzil gibi bir erişim kuralı; taunt bundan SONRA uygulanır: arkası dolu taunter seçilemez)
         if (skill.requiresOpenBehind && !this.debugCasting) list = list.filter((c) => this.openBehindProblem(c) === null);
@@ -1720,6 +1721,35 @@ export class Battle {
     const rows = new Set(this.combatants.filter((o) => o.uid !== uid && o.hp > 0 && o.board === c.board && o.side === c.side).map((o) => this.rowOf(o.slot)));
     rows.add(this.rowOf(at));
     return [...rows].sort((a, b) => a - b).indexOf(this.rowOf(at));
+  }
+
+  /**
+   * Yakın dövüşün bir tahtada ulaşabildiği en derin sıra (mutlak sıra numarası; bu ve önündeki dolu sıralar vurulabilir).
+   * Taban kural: en öndeki `formation.meleeRows` DOLU sıra (aradaki boş sıralar sayılmaz). Menzil eki (`reach`: skill reach + Abyssal Fury
+   * reachBonus) bunun üstüne MUTLAK sıra ekler: o sıranın `reach` sıra gerisine kadar. Boş sıralar menzili "atlatmaz": ön sırada Skeleton
+   * (sıra 0), en arkada Undead (sıra 3) varken +1 menzil yalnızca sıra 1'e uzanır, Undead'e ulaşmaz (madde 284; eskiden "bir sonraki DOLU sıra"
+   * sayıldığı için +1 menzil boş sıraları atlayıp en arkadaki Undead'i vurabiliyordu). reach 0'da davranış eskisiyle birebir aynı.
+   * `rows`: tahtadaki canlı birimlerin sıraları (sırasız, tekrarlı olabilir). Boşsa -1 (hiçbir sıra yok).
+   */
+  meleeRowLimit(rows: number[], reach: number): number {
+    const occupied = [...new Set(rows)].sort((a, b) => a - b);
+    if (occupied.length === 0) return -1;
+    const base = occupied[Math.min(occupied.length, Math.max(1, this.setup.formulas.formation.meleeRows)) - 1]!;
+    return base + Math.max(0, reach);
+  }
+
+  /**
+   * Birim `slot` yuvasındayken (varsayılan: şu anki) karşı tarafın `reach` menzilli yakın dövüşü ona ulaşır mı? validTargets ile aynı kural
+   * (meleeRowLimit); YZ'nin varsayımsal yuva hesabı (meleeIncoming) için. Kendi tahtasında olmayan (sızmış) birim her zaman ulaşılabilir.
+   */
+  inMeleeReach(uid: string, reach: number, slot?: number): boolean {
+    const c = this.get(uid);
+    if (!c) return false;
+    if (c.board !== c.side) return true;
+    const at = slot ?? c.slot;
+    const rows = this.combatants.filter((o) => o.uid !== uid && o.hp > 0 && o.board === c.board && o.side === c.side).map((o) => this.rowOf(o.slot));
+    rows.push(this.rowOf(at));
+    return this.rowOf(at) <= this.meleeRowLimit(rows, reach);
   }
 
   /** Birim `slot` yuvasındayken yakın dövüş skill'i (reach ile) kullanabilir mi? (canUse'taki 'Melee: front row only' kuralı, varsayımsal yuva için). */
@@ -2039,7 +2069,9 @@ export class Battle {
             if (target.hp <= 0) continue;
             const base = rollHeal(actor.stats, effect.scale, effect.power, f, this.rng);
             const { crit, mult } = rollCrit(this.effectiveStats(actor), this.rng); // kritik: şifanın SON çarpanı (geçerli kritik şansı: Misfortune/Jinxed dahil)
-            this.applyHeal(actor, target, Math.round(base * mult), crit, emit);
+            // missingHpBonus (Radiance): hedef başına eksik can oranıyla artar; alan yoksa ifade birebir eskisi (QB/MP determinizmi)
+            const low = effect.missingHpBonus ? missingHpHealMult(effect.missingHpBonus, target.hp, target.maxHp) : 1;
+            this.applyHeal(actor, target, Math.round(low === 1 ? base * mult : base * mult * low), crit, emit);
           }
           break;
         case 'revive':

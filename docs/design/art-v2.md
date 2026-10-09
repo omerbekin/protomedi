@@ -36,6 +36,15 @@ v1 / v2 seçip karşılaştırır. Kapsam dışı: **Cutthroat** tamamen; **Defe
   ana hatları en az 2 ince piksel çiz. Büyük görünüm: tooltip, wiki büyüteci.
 - Çizim hata verirse uyarı basılır ve v1/yer tutucuya düşülür (çökme yok).
 
+### 2.1 Item ve ödül ikonları (2026-10-09)
+
+Item / ödül ikonları class sürümünden bağımsız, TEK ortak kaynak: `src/game/item-icons.ts` (`ITEM_ICONS`, 128x128, aynı motor).
+Kullananlar: Endless ödül / dükkân kartları (madalyon: `src/game/endless-emblems.ts`), sefer Spoils kartı ve Gear ekranı (`src/ui/gear-screen.ts`),
+Codex "Items and gear" (`src/wiki/slot-glyphs.ts`), Codex > Assets > Icons > Items and rewards (kendiliğinden listelenir).
+Ad seçimi: `data/items.json` item'inde isteğe bağlı `icon` > silah ailesi (`FAMILY_ICON`) > yuva (`SLOT_ICON`). Ödüller: altın = `gold`
+(kese + sikke yığını, para simgesi yok), Rest/şifa = `draught` (kırmızı iksir), Hero's Feast = `feast`. **Nadirlik nesneyi boyamaz:** yalnızca
+`'a'` jetonlu ayrıntılar (taş, kenar şeridi, bilezik) nadirlik renginde; çerçeve/parıltı rengini ekran verir.
+
 ## 3. Animasyon (vfx) nasıl yazılır
 
 ```ts
@@ -79,7 +88,7 @@ oynatma `BattleScene.runEventFx`.
 | `omentransfer` | `hexer/vfx.ts` (hazır) | Ill Omen geçişi | `actor` = ölen, `targets` = alıcı |
 | `withertick` | `hexer/vfx.ts` (hazır) | Wither tiki | `targets` = taşıyan |
 
-**Undead ve Druid dosyalarında bu adlar henüz YOK** (Skeleton/Treant v2'de v1 doğuşla gelir): ilgili class'ın tasarımcısı ekler.
+**Undead'de `corpsedrain` + `summon_skeleton`, Druid'de `summon_treant` var** (2026-10-09, gerçekçi doğuş: toprak yarılır, çağrı maskeyle topraktan yükselir; ölüm/kaybolma adları henüz yok, v1'e düşer). Galeri önizlemesi (`debugCastSkill`) tahtada yer yoksa çağıranın en öndeki dostunu, Raise Dead'de ceset yoksa en arkadaki düşmanı düşürür ki doğuş ve ceset emme görünsün.
 Sahne ayrıca şunları kendisi gösterir (efekte gerek yok): yüzen yazılar `+1 Omen` / `+2 Omen!` / `DOOM` / küçük Wither rakamı,
 Omen mühür yuvaları, `Dispelled: Haste`, `-8 MP`, `+3 MP`, kalkan kancası parlaması + (v2 seçiliyse) `wardLock` / `domeLock` sesi.
 

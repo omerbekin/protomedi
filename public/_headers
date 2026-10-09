@@ -1,0 +1,4 @@
+# Cloudflare (eov.backinn.com.tr) önbellek kuralları. GitHub Pages bu dosyayı yok sayar.
+# /assets/* adları içerik özetli (ör. archer-XddHWet9.png): dosya değişince adı da değişir, sonsuza kadar önbelleklenebilir.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

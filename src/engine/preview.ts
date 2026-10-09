@@ -1,5 +1,5 @@
 import type { Battle } from './battle';
-import { damageRange, healRange } from './formulas';
+import { damageRange, healRange, missingHpHealMult } from './formulas';
 import { betMultipliers, betStake } from './gamble';
 import { burnAmountFor, emptyProcApplies } from './mana-burn';
 import { damageSpecFor, type DamageEffect } from './spec';
@@ -224,12 +224,15 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
       } else if (effect.type === 'heal') {
         const r = healRange(actor.stats, effect.scale, effect.power, f);
         const missing = target.maxHp - target.hp;
+        // missingHpBonus (Radiance): motorla aynı çarpan (hedefin şu anki eksik can oranı)
+        const low = missingHpHealMult(effect.missingHpBonus, target.hp, target.maxHp);
+        const k = (v: number) => (low === 1 ? v : Math.round(v * low));
         entry(target.uid).heal = {
-          min: Math.min(r.min, missing),
-          max: Math.min(r.max, missing),
-          avg: Math.min(r.avg, missing),
+          min: Math.min(k(r.min), missing),
+          max: Math.min(k(r.max), missing),
+          avg: Math.min(k(r.avg), missing),
           critChance: actor.stats.critChance,
-          critMax: Math.min(Math.round(r.max * actor.stats.critMult), missing),
+          critMax: Math.min(Math.round(low === 1 ? r.max * actor.stats.critMult : r.max * actor.stats.critMult * low), missing),
         };
       } else if (effect.type === 'revive') {
         const e = entry(target.uid);

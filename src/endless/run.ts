@@ -1,25 +1,34 @@
 // Endless koşu durumu ve kuralları (saf; her fonksiyon yeni durum döner, girdiyi değiştirmez). Sayılar data/endless.json'dan.
 import { classes } from '../engine/content';
-import { ITEMS, RARITY_IDS, canEquip, itemDef, itemIP, itemValue, type ItemDef, type RarityId } from '../progression/items';
+import { BAG_SIZE, ITEMS, RARITY_IDS, canEquip, itemDef, itemIP, itemValue, sellValue, type ItemDef, type ItemInstance, type RarityId, type SlotId } from '../progression/items';
+import { bestMoves } from '../progression/equip';
+import { emptyEquipment } from '../progression/items';
 import { ENDLESS, type EndlessConfig, type EndlessHero, type EndlessRun, type RewardCard, type ScoreEntry, type ShopEntry, type WaveKind } from './data';
 import { rngFor, waveKind, waveSeed, type WavePlan } from './waves';
 import type { SuspendedBattle } from './replay';
 import { relicOffer, victoryHealOf } from './relics';
+import { autoSlots, carrySlots, validSlots } from './formation';
 import type { Rng } from '../engine/rng';
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
-/** Yeni koşu: seçilen class'lar (level 1, item yok, tam can). */
-export function newRun(seed: number, classIds: string[], startedAt = new Date().toISOString(), cfg: EndlessConfig = ENDLESS): EndlessRun {
-  const picked = classIds.filter((c) => classes[c]).slice(0, cfg.partySize);
+/**
+ * Yeni koşu: seçilen class'lar (level 1, item yok, tam can). `slots` = koşu başı dizilimi (class'larla aynı sırada hücre; geçersizse /
+ * verilmezse otomatik dizilim).
+ */
+export function newRun(seed: number, classIds: string[], startedAt = new Date().toISOString(), cfg: EndlessConfig = ENDLESS, slots?: number[]): EndlessRun {
+  const keep = classIds.map((c, i) => ({ c, i })).filter((x) => classes[x.c]).slice(0, cfg.partySize);
+  const picked = keep.map((x) => x.c);
   if (!picked.length) throw new Error('Endless: no valid class picked');
+  const want = slots ? keep.map((x) => slots[x.i]) : [];
+  const cells = validSlots(want, picked.length) ? want : autoSlots(picked);
   return {
     version: 1,
     seed,
     wave: 1,
     phase: 'ready',
-    heroes: picked.map((c, i) => ({ id: `h${i + 1}`, class: c, hpRatio: 1, equipment: {} })),
+    heroes: picked.map((c, i) => ({ id: `h${i + 1}`, class: c, hpRatio: 1, equipment: {}, slot: cells[i]! })),
     gold: 0,
     stats: { cleared: 0, turns: 0, kills: 0 },
     nextItem: 1,
@@ -44,8 +53,8 @@ export function gearScore(run: Pick<EndlessRun, 'heroes'>): number {
 
 export interface WaveOutcome {
   victory: boolean;
-  /** Kahraman başına son durum (motor özeti üzerinden). */
-  units: Array<{ heroId: string; hpRatio: number; alive: boolean }>;
+  /** Kahraman başına son durum (motor özeti üzerinden); `slot` = savaş sonundaki hücre (dizilim taşınır). */
+  units: Array<{ heroId: string; hpRatio: number; alive: boolean; slot?: number }>;
   kills: number;
   turns: number;
 }
@@ -57,13 +66,14 @@ export interface SummaryUnitLike {
   summoned: boolean;
   hp: number;
   maxHp: number;
+  slot?: number;
 }
 
 /** Savaş özeti -> dalga sonucu: 'party-i' birimi heroOrder[i] kahramanıdır; çağrılar sayılmaz. */
 export function outcomeFromSummary(plan: Pick<WavePlan, 'heroOrder'>, victory: boolean, units: SummaryUnitLike[], turns: number): WaveOutcome {
   const heroes = units
     .filter((c) => c.side === 'party' && !c.summoned && /^party-\d+$/.test(c.uid))
-    .map((c) => ({ heroId: plan.heroOrder[Number(c.uid.slice('party-'.length))] ?? '', hpRatio: clamp01(c.hp / Math.max(1, c.maxHp)), alive: c.hp > 0 }))
+    .map((c) => ({ heroId: plan.heroOrder[Number(c.uid.slice('party-'.length))] ?? '', hpRatio: clamp01(c.hp / Math.max(1, c.maxHp)), alive: c.hp > 0, ...(c.slot !== undefined ? { slot: c.slot } : {}) }))
     .filter((u) => u.heroId);
   const kills = units.filter((c) => c.side === 'enemy' && !c.summoned && c.hp <= 0).length;
   return { victory, units: heroes, kills, turns };
@@ -89,6 +99,12 @@ export function applyOutcome(run: EndlessRun, plan: Pick<WavePlan, 'wave'>, out:
     return s;
   }
   const boss = waveKind(run.wave, cfg) === 'boss';
+  // Dizilim taşınır: savaş sonundaki hücreler (düşen son hücresine, doluysa en yakın boşa)
+  const cells = carrySlots(run.heroes, out.units);
+  for (const h of s.heroes) {
+    const c = cells.get(h.id);
+    if (c !== undefined) h.slot = c;
+  }
   for (const u of out.units) {
     const h = heroOf(s, u.heroId);
     if (!h) continue;
@@ -140,6 +156,8 @@ export function grantRelic(run: EndlessRun, id?: string, cfg: EndlessConfig = EN
 export function abandonRun(run: EndlessRun): EndlessRun {
   if (run.phase === 'over') return run;
   const s: EndlessRun = { ...clone(run), phase: 'over', end: 'abandoned', offer: undefined, shop: undefined, relicOffer: undefined };
+  delete s.shopRerolls;
+  delete s.buyback;
   delete s.suspended;
   return s;
 }
@@ -195,7 +213,7 @@ export function upgradePairs(run: EndlessRun, cleared: number, exclude: string[]
   const cap = ilvlCap(cleared, cfg) + (o.ilvlBonus ?? 0);
   let pairs: Array<{ def: ItemDef; heroId: string }> = [];
   for (const d of catalog) {
-    if (d.ilvl > cap || exclude.includes(d.id)) continue;
+    if (d.ilvl > cap || exclude.includes(d.id) || bagOf(run).some((i) => i.id === d.id)) continue;
     for (const h of run.heroes) if (canEquip(h.class, d) && itemIP(d) > slotIP(h, d, catalog)) pairs.push({ def: d, heroId: h.id });
   }
   if (!pairs.length) return pairs;
@@ -240,14 +258,18 @@ export function rewardOffer(run: EndlessRun, cfg: EndlessConfig = ENDLESS, catal
   return cards;
 }
 
-/** Dükkân stoğu: farklı item'ler, her biri takımda bir yükseltme; fiyat = item değeri. */
-export function shopStock(run: EndlessRun, cfg: EndlessConfig = ENDLESS, catalog: ItemDef[] = ITEMS.items): ShopEntry[] {
+/**
+ * Dükkân stoğu: farklı item'ler, her biri takımda bir yükseltme; fiyat = item değeri. `reroll` (0 = ilk stok) yenilemenin seed'idir;
+ * `avoid` id'leri (yenilemede eski mallar) önce dışarıda tutulur, yetmezse yine gelebilir (tezgâh boş kalmasın).
+ */
+export function shopStock(run: EndlessRun, cfg: EndlessConfig = ENDLESS, catalog: ItemDef[] = ITEMS.items, reroll = 0, avoid: string[] = []): ShopEntry[] {
   const cleared = run.stats.cleared;
-  const rng = rngFor(run.seed, cleared, 'shop');
+  const rng = reroll > 0 ? rngFor(run.seed, cleared, 'shop', reroll) : rngFor(run.seed, cleared, 'shop');
   const out: ShopEntry[] = [];
   const taken: string[] = [];
   for (let i = 0; i < cfg.shop.size; i++) {
-    const pair = pickOne(upgradePairs(run, cleared, taken, cfg, catalog), rng);
+    const fresh = avoid.length ? pickOne(upgradePairs(run, cleared, [...taken, ...avoid], cfg, catalog), rng) : undefined;
+    const pair = fresh ?? pickOne(upgradePairs(run, cleared, taken, cfg, catalog), rng);
     if (!pair) break;
     taken.push(pair.def.id);
     out.push({ itemId: pair.def.id, heroId: pair.heroId, price: itemValue(pair.def) });
@@ -270,22 +292,114 @@ function afterReward(s: EndlessRun, cfg: EndlessConfig, catalog: ItemDef[]): End
   return s;
 }
 
+// ------------------------------------------------------------ torba ve kuşanma (Gear ekranı; seferle aynı kurallar)
+
+/** Torba kapasitesi (data/endless.json > bagSize; yoksa seferin 30'u). */
+export const endlessBagSize = (cfg: EndlessConfig = ENDLESS): number => cfg.bagSize ?? BAG_SIZE;
+
+export const bagOf = (run: EndlessRun): ItemInstance[] => run.bag ?? [];
+
 /**
- * Item'i kahramana takar (yeni örnek uid'i). Yuvadaki eski item otomatik satılır (items.json > budget.sellRatio x değer).
- * Kahraman takamıyorsa ya da item bilinmiyorsa durum değişmez. Dönen: satıştan gelen altın.
+ * Item'i torbaya koyar (yeni örnek uid'i). Torba doluysa satış değerine (`sellValue`) çevrilir (kaybolmaz). Bilinmeyen item: ok false.
  */
-function equipInto(s: EndlessRun, heroId: string, itemId: string, catalog: ItemDef[]): { ok: boolean; sold: number } {
-  const h = heroOf(s, heroId);
+function addToBag(s: EndlessRun, itemId: string, catalog: ItemDef[], cfg: EndlessConfig): { ok: boolean; sold: number } {
   const d = defIn(catalog, itemId);
-  if (!h || !d || !canEquip(h.class, d)) return { ok: false, sold: 0 };
-  const old = h.equipment[d.slot];
-  const od = old ? defIn(catalog, old.id) : undefined;
-  const sold = od ? Math.round(itemValue(od) * ITEMS.budget.sellRatio) : 0;
-  h.equipment = { ...h.equipment, [d.slot]: { uid: `e${s.nextItem}`, id: d.id } };
+  if (!d) return { ok: false, sold: 0 };
+  const bag = (s.bag ??= []);
+  if (bag.length >= endlessBagSize(cfg)) {
+    const sold = sellValue(d);
+    s.gold += sold;
+    return { ok: true, sold };
+  }
+  bag.push({ uid: `e${s.nextItem}`, id: d.id });
   s.nextItem += 1;
-  s.gold += sold;
-  return { ok: true, sold };
+  return { ok: true, sold: 0 };
 }
+
+/** Debug "Give item": torbaya bir item (verilmezse koşu seed'iyle değil, katalogdaki sıradaki rastgele olmayan seçim: torbada olmayan ilki). */
+export function giveItem(run: EndlessRun, itemId?: string, cfg: EndlessConfig = ENDLESS, catalog: ItemDef[] = ITEMS.items): EndlessRun {
+  const id = itemId ?? catalog.find((d) => !bagOf(run).some((i) => i.id === d.id))?.id;
+  if (!id) return run;
+  const s = clone(run);
+  return addToBag(s, id, catalog, cfg).ok ? s : run;
+}
+
+/** Kuşanma yapılabilir mi? Yalnızca kamp / ödül / dükkân aşamasında ve yarım kalan savaş yokken (devam eden savaşın kurulumu değişmesin). */
+export function gearLockReason(run: EndlessRun): string | null {
+  if (run.phase === 'over') return 'The run is over.';
+  if (run.phase === 'relic') return 'Choose a relic first.';
+  if (suspendedOf(run)) return 'Finish the suspended battle first.';
+  return null;
+}
+
+const lockCheck = (run: EndlessRun): void => {
+  const why = gearLockReason(run);
+  if (why) throw new Error(why);
+};
+
+/** Torbadaki item'i kahramana takar; yuvadaki item torbaya döner (sefer `equipItem` ile aynı kural). Hata: Error (Gear ekranı mesajı). */
+export function equipFromBag(run: EndlessRun, heroId: string, uid: string): EndlessRun {
+  lockCheck(run);
+  const hero = heroOf(run, heroId);
+  if (!hero) throw new Error(`Unknown hero: ${heroId}`);
+  const bag = bagOf(run);
+  const idx = bag.findIndex((i) => i.uid === uid);
+  if (idx < 0) throw new Error(`Item not in the bag: ${uid}`);
+  const d = itemDef(bag[idx]!.id);
+  if (!d) throw new Error(`Unknown item: ${bag[idx]!.id}`);
+  if (!canEquip(hero.class, d)) throw new Error(`${hero.class} cannot use ${d.family ?? d.slot}`);
+  const s = clone(run);
+  const h = heroOf(s, heroId)!;
+  const nb = [...bagOf(s)];
+  const item = nb[idx]!;
+  const old = h.equipment[d.slot];
+  nb.splice(idx, 1);
+  if (old) nb.splice(idx, 0, old);
+  h.equipment = { ...h.equipment, [d.slot]: { ...item } };
+  s.bag = nb;
+  return s;
+}
+
+/** Yuvadaki item'i torbaya koyar (torba doluysa hata). */
+export function unequipToBag(run: EndlessRun, heroId: string, slot: SlotId, cfg: EndlessConfig = ENDLESS): EndlessRun {
+  lockCheck(run);
+  const hero = heroOf(run, heroId);
+  if (!hero) throw new Error(`Unknown hero: ${heroId}`);
+  if (!hero.equipment[slot]) return run;
+  if (bagOf(run).length >= endlessBagSize(cfg)) throw new Error('Bag is full');
+  const s = clone(run);
+  const h = heroOf(s, heroId)!;
+  s.bag = [...bagOf(s), h.equipment[slot]!];
+  const eq = { ...h.equipment };
+  delete eq[slot];
+  h.equipment = eq;
+  return s;
+}
+
+/** Torbadaki item'i atar (kalıcı). */
+export function discardFromBag(run: EndlessRun, uid: string): EndlessRun {
+  lockCheck(run);
+  if (!bagOf(run).some((i) => i.uid === uid)) throw new Error(`Item not in the bag: ${uid}`);
+  const s = clone(run);
+  s.bag = bagOf(s).filter((i) => i.uid !== uid);
+  return s;
+}
+
+/** "Equip best" (seferle aynı seçici `bestMoves`; primary bonusunu kapatan item seçilmez). Varsayılan: tüm takım, sırayla. */
+export function equipBestRun(run: EndlessRun, heroIds?: string[]): EndlessRun {
+  lockCheck(run);
+  let s = run;
+  for (const id of heroIds ?? run.heroes.map((h) => h.id)) {
+    const h = heroOf(s, id);
+    if (!h) continue;
+    for (const m of bestMoves({ class: h.class, equipment: { ...emptyEquipment(), ...h.equipment } }, bagOf(s))) s = equipFromBag(s, id, m.uid);
+  }
+  return s;
+}
+
+/** Kahramanın 6 yuvalı tam ekipmanı (Gear ekranı / stat paneli; boş yuva null). */
+export const fullEquipment = (h: EndlessHero) => ({ ...emptyEquipment(), ...h.equipment });
+
 
 /** Kartı seç (yalnızca 'reward' aşamasında). */
 export function chooseReward(run: EndlessRun, index: number, cfg: EndlessConfig = ENDLESS, catalog: ItemDef[] = ITEMS.items): EndlessRun {
@@ -298,24 +412,29 @@ export function chooseReward(run: EndlessRun, index: number, cfg: EndlessConfig 
     for (const h of s.heroes) h.hpRatio = 1;
     s.blessing = { hpMult: card.hpMult, waves: card.waves };
   }
-  else if (!equipInto(s, card.heroId, card.itemId, catalog).ok) return run;
+  else if (!addToBag(s, card.itemId, catalog, cfg).ok) return run; // item torbaya (Gear ekranında takılır)
   return afterReward(s, cfg, catalog);
 }
 
-/** Dükkândan satın al: yeterli altın varsa takılır, satır 'sold' olur. */
-export function buyItem(run: EndlessRun, index: number, catalog: ItemDef[] = ITEMS.items): EndlessRun {
+/** Dükkândan satın al: yeterli altın ve torbada yer varsa item torbaya girer, satır 'sold' olur. */
+export function buyItem(run: EndlessRun, index: number, catalog: ItemDef[] = ITEMS.items, cfg: EndlessConfig = ENDLESS): EndlessRun {
   const e = run.phase === 'shop' ? run.shop?.[index] : undefined;
-  if (!e || e.sold || run.gold < e.price) return run;
+  if (!e || e.sold || run.gold < e.price || bagOf(run).length >= endlessBagSize(cfg)) return run;
   const s = clone(run);
-  if (!equipInto(s, e.heroId, e.itemId, catalog).ok) return run;
+  if (!addToBag(s, e.itemId, catalog, cfg).ok) return run;
   s.gold -= e.price;
   s.shop![index]!.sold = true;
   return s;
 }
 
+/** Tüccardan ayrıl: stok, yenileme sayacı ve bu ziyaretin geri alım listesi silinir. */
 export function leaveShop(run: EndlessRun): EndlessRun {
   if (run.phase !== 'shop') return run;
-  return { ...clone(run), phase: 'ready', shop: undefined };
+  const s: EndlessRun = { ...clone(run), phase: 'ready' };
+  delete s.shop;
+  delete s.shopRerolls;
+  delete s.buyback;
+  return s;
 }
 
 /** Kartın / dükkân satırının yerine geçeceği item (arayüz: "replaces Turnshoes"). */

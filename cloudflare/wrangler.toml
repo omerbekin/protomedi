@@ -1,11 +1,31 @@
-# Embers of Valdoria lobi / signaling sunucusu (Cloudflare Worker + Durable Object). Kurulum: README.md
-name = "protomedi-lobby"
+# Embers of Valdoria: tek Cloudflare Worker, tek adres https://eov.backinn.com.tr (ücretsiz plan). Kurulum: README.md
+# - Oyun:  /           -> ../dist (npm run build çıktısı), Workers Static Assets. Statik dosya istekleri Worker'ı çalıştırmaz, ücretsiz ve sınırsızdır.
+# - Lobi:  /lobby/...   -> src/index.ts (WebSocket signaling) + Durable Object. Oyundaki adres: wss://eov.backinn.com.tr/lobby
+name = "embers-of-valdoria"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 # Kullanım verisi gönderilmez
 send_metrics = false
+# Custom Domain: eov.backinn.com.tr için DNS kaydı ve SSL sertifikasını Cloudflare deploy sırasında kendisi kurar (panelde elle ekleme yok).
+# Tek seviye alt alan adı: ücretsiz Universal SSL yalnızca *.backinn.com.tr'yi kapsar.
+routes = [
+  { pattern = "eov.backinn.com.tr", custom_domain = true, zone_name = "backinn.com.tr" }
+]
+# workers.dev / önizleme adresleri kapalı: tek adres yukarıdaki (ilk deploy'da "workers.dev alt alan adı seç" sorusu da çıkmaz)
+workers_dev = false
+preview_urls = false
 
-# Kod başına bir Durable Object (ücretsiz planda SQLite tabanlı DO kullanılır)
+[assets]
+# Yalnızca derleme çıktısı yüklenir (assets/source, voice-candidates gibi kaynak klasörler dist'e girmez)
+directory = "../dist"
+binding = "ASSETS"
+# Yalnızca /lobby yolları Worker koduna gider; geri kalan her şey doğrudan statik dosyadır (Worker isteği sayılmaz)
+run_worker_first = ["/lobby", "/lobby/*"]
+# "/" -> index.html; gallery.html?embed=1 (wiki iframe'i) da çalışır
+html_handling = "auto-trailing-slash"
+not_found_handling = "none"
+
+# Kod başına bir Durable Object. ÜCRETSİZ PLAN ŞARTI: SQLite tabanlı olmalı (new_sqlite_classes; "new_classes" ücretli plan ister)
 [[durable_objects.bindings]]
 name = "LOBBY"
 class_name = "Lobby"
@@ -16,4 +36,4 @@ new_sqlite_classes = ["Lobby"]
 
 [vars]
 # Yalnızca bu adreslerden açılan oyun bağlanabilir (virgülle ayrılır; ":*" herhangi bir port)
-ALLOWED_ORIGINS = "https://omerbekin.github.io,http://localhost:*,http://127.0.0.1:*"
+ALLOWED_ORIGINS = "https://eov.backinn.com.tr,https://omerbekin.github.io,http://localhost:*,http://127.0.0.1:*"

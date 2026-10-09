@@ -9,3 +9,5 @@ export * from './flow';
 export * from './replay';
 export * from './ui-text';
 export * from './relics';
+export * from './merchant';
+export * from './formation';

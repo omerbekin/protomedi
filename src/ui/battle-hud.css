@@ -1,0 +1,1681 @@
+/* Savaş HUD'ı (src/ui/battle-hud.ts): taslak battle-hud.html?v=2 "Slim bar, sheet rises". Ölçüler OYUN BİRİMİNDE (1080 yükseklik);
+   kök `transform: scale()` ile görünür sahneye ölçeklenir. Tasarım kiti: Cinzel başlık, EB Garamond metin, düz rakamlı serif sayılar,
+   ince altın çizgiler, kor elmaslar. Kök tıklamaları geçirir (pointer-events: none); yalnızca HUD öğeleri tıklanır. */
+.bh-root {
+  --gold: 217, 178, 106;
+  --on: #f3d999;
+  --txt: #d9c8a2;
+  --muted: #a8977a;
+  --dim: #7d705a;
+  --note: #cdb88d;
+  --pri: #ffd76a;
+  --ember: #e0702a;
+  --ember2: #ffb35a;
+  --party: #4fa3ff;
+  --enemy: #ff5a5a;
+  --cin: Cinzel, Georgia, 'Palatino Linotype', serif;
+  --gar: 'EB Garamond', Georgia, 'Palatino Linotype', serif;
+  --num: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+  --ease: cubic-bezier(0.33, 1, 0.68, 1);
+  --panel: linear-gradient(180deg, rgb(31, 23, 15), rgb(12, 9, 6));
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: 0 0;
+  pointer-events: none;
+  z-index: 15;
+  color: var(--txt);
+  font-family: var(--gar);
+  user-select: none;
+  -webkit-user-select: none;
+  transition: opacity 0.26s;
+}
+
+.bh-root.hidden {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.26s, visibility 0s 0.26s;
+}
+
+.bh-root * {
+  box-sizing: border-box;
+}
+
+.bh-ico {
+  display: block;
+  flex: none;
+  image-rendering: pixelated;
+}
+
+.bh-portrait {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* --- kit parçaları --- */
+.bh-dia {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  background: var(--ember);
+  box-shadow: 0 0 0 1px var(--ember2), 0 0 10px rgba(240, 140, 40, 0.6);
+}
+
+.bh-dia.h {
+  background: rgba(8, 6, 4, 0.6);
+  box-shadow: 0 0 0 1px rgba(var(--gold), 0.55);
+}
+
+.bh-dia.s {
+  width: 7px;
+  height: 7px;
+}
+
+.bh-fade {
+  height: 1px;
+  margin: 10px 0 8px;
+  background: linear-gradient(90deg, rgba(var(--gold), 0), rgba(var(--gold), 0.55) 25%, rgba(var(--gold), 0.55) 75%, rgba(var(--gold), 0));
+}
+
+.bh-vfade {
+  width: 1px;
+  flex: none;
+  align-self: stretch;
+  background: linear-gradient(180deg, rgba(var(--gold), 0), rgba(var(--gold), 0.34) 25%, rgba(var(--gold), 0.34) 75%, rgba(var(--gold), 0));
+}
+
+.bh-hd {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  font: 600 12px var(--cin);
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: rgba(var(--gold), 0.82);
+  border-bottom: 1px solid rgba(var(--gold), 0.16);
+}
+
+.bh-panel {
+  position: absolute;
+  background: var(--panel);
+  border: 1px solid rgba(var(--gold), 0.42);
+  box-shadow: 0 0 0 3px rgba(8, 6, 4, 0.7), 0 18px 40px rgba(0, 0, 0, 0.6);
+}
+
+.bh-corners::before,
+.bh-corners::after {
+  content: '';
+  position: absolute;
+  top: -5px;
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  background: #140e09;
+  box-shadow: 0 0 0 1px rgba(var(--gold), 0.7);
+}
+
+.bh-corners::before {
+  left: -5px;
+}
+
+.bh-corners::after {
+  right: -5px;
+}
+
+.bh-n {
+  font: 600 22px var(--cin);
+  letter-spacing: 0.06em;
+  color: var(--on);
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+}
+
+.bh-m {
+  font: italic 17px var(--gar);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.bh-k {
+  font: 600 11px var(--cin);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.bh-bar {
+  position: relative;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.65);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(var(--gold), 0.12);
+}
+
+.bh-bar i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  transition: width 0.3s var(--ease);
+}
+
+.bh-bar.hp i {
+  background: linear-gradient(180deg, #7ad987, #3e9a4c);
+}
+
+.bh-bar.hp.en i {
+  background: linear-gradient(180deg, #f07a6c, #b83a30);
+}
+
+.bh-bar.mp i {
+  background: linear-gradient(180deg, #78a8ff, #3566cc);
+}
+
+.bh-bar.rage i {
+  background: linear-gradient(90deg, #ffa23a, #d8341c);
+}
+
+.bh-num {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+  font: 700 17px var(--num);
+  color: #f4ede1;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+}
+
+.bh-num .bh-ico {
+  width: 16px;
+  height: 16px;
+}
+
+.bh-num .of,
+.lab .of {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.bh-hpmp.mp .bh-num {
+  color: #9cc4ff;
+}
+
+[data-tip] {
+  cursor: help;
+}
+
+/* --- alt bant --- */
+.bh-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 170px;
+  pointer-events: auto;
+  background: linear-gradient(180deg, rgba(22, 16, 11, 0.95), rgba(7, 5, 4, 0.985) 70%);
+}
+
+.bh-band::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(var(--gold), 0.12), rgba(var(--gold), 0.6) 50%, rgba(var(--gold), 0.12));
+}
+
+.bh-band::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -26px;
+  height: 26px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.4));
+}
+
+.bh-band-dia {
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  margin-left: -5px;
+}
+
+/* --- sıra çubuğu --- */
+.bh-turn {
+  position: absolute;
+  top: 18px;
+  height: 92px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.bh-turn::before {
+  content: '';
+  position: absolute;
+  left: -60px;
+  right: -60px;
+  top: 50%;
+  height: 1px;
+  z-index: -1;
+  background: linear-gradient(90deg, rgba(var(--gold), 0), rgba(var(--gold), 0.45) 15%, rgba(var(--gold), 0.45) 85%, rgba(var(--gold), 0));
+}
+
+.bh-turn.test {
+  transform: translateX(-50%);
+}
+
+.bh-test {
+  padding: 10px 40px;
+  font: 600 20px var(--cin);
+  letter-spacing: 0.16em;
+  color: var(--on);
+  background: var(--panel);
+  border: 1px solid rgba(var(--gold), 0.42);
+  white-space: nowrap;
+}
+
+.bh-cell {
+  position: relative;
+  width: 70px;
+  height: 70px;
+  flex: none;
+  background: linear-gradient(180deg, #22180f, #0a0705);
+  box-shadow: inset 0 0 0 1px rgba(var(--gold), 0.45), 0 0 0 3px rgba(8, 6, 4, 0.7);
+  transition: transform 0.18s var(--ease);
+}
+
+.bh-cell .bh-portrait {
+  padding: 1px;
+}
+
+.bh-turn .bh-cell:hover {
+  transform: translateY(-2px);
+}
+
+.bh-cell::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  box-shadow: inset 0 0 0 1px var(--side, var(--party));
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.bh-cell.enemy {
+  --side: var(--enemy);
+}
+
+.bh-cell.past {
+  opacity: 0.42;
+  filter: grayscale(0.75);
+}
+
+.bh-cell.now {
+  width: 92px;
+  height: 92px;
+  box-shadow: inset 0 0 0 2px var(--on), 0 0 0 3px rgba(8, 6, 4, 0.8), 0 0 24px rgba(240, 140, 40, 0.5);
+}
+
+.bh-ctag {
+  position: absolute;
+  left: 50%;
+  top: -9px;
+  transform: translateX(-50%);
+  padding: 0 5px;
+  font: 600 10px var(--cin);
+  letter-spacing: 0.12em;
+  background: #0c0806;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.bh-turn-lbl {
+  position: absolute;
+  top: 120px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font: 600 15px var(--cin);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--on);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.95), 0 0 14px rgba(240, 140, 40, 0.5);
+  white-space: nowrap;
+}
+
+/* --- portre + ince çubuk + yükselen karakter sayfası --- */
+.bh-actor {
+  position: absolute;
+  left: 28px;
+  bottom: 24px;
+}
+
+.bh-opener {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.bh-pframe {
+  position: relative;
+  width: 126px;
+  height: 126px;
+  flex: none;
+  background: linear-gradient(180deg, #22180f, #0a0705);
+  box-shadow: inset 0 0 0 2px var(--on), 0 0 0 3px rgba(8, 6, 4, 0.8), 0 0 20px rgba(240, 140, 40, 0.22);
+  transition: box-shadow 0.2s;
+}
+
+.bh-pframe.en {
+  box-shadow: inset 0 0 0 2px #f0a090, 0 0 0 3px rgba(8, 6, 4, 0.8), 0 0 20px rgba(255, 90, 90, 0.22);
+}
+
+.bh-pframe .bh-portrait {
+  padding: 3px;
+}
+
+.bh-opener:hover .bh-pframe,
+.bh-actor.open .bh-pframe {
+  box-shadow: inset 0 0 0 2px var(--on), 0 0 0 3px rgba(8, 6, 4, 0.8), 0 0 28px rgba(240, 140, 40, 0.45);
+}
+
+.bh-actor-info {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding-top: 2px;
+}
+
+.bh-name {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.bh-name .bh-n {
+  font-size: 21px;
+}
+
+.bh-hpmp-row {
+  display: grid;
+  grid-template-columns: 152px 152px;
+  gap: 4px 16px;
+}
+
+.bh-rage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 320px;
+}
+
+.bh-rage .bh-ico {
+  width: 18px;
+  height: 18px;
+}
+
+.bh-rage .bh-bar {
+  flex: 1;
+  height: 14px;
+}
+
+.bh-rage .bh-bar span {
+  position: relative;
+  display: block;
+  text-align: center;
+  font: 700 12px/14px var(--num);
+  color: #fff3dc;
+  text-shadow: 0 1px 2px #000;
+}
+
+.bh-main {
+  display: flex;
+  gap: 18px;
+}
+
+.bh-st {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 700 18px var(--num);
+  color: #f4ede1;
+  white-space: nowrap;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.9);
+  transition: color 0.15s;
+}
+
+.bh-st .bh-ico {
+  width: 19px;
+  height: 19px;
+}
+
+.bh-st .l {
+  font: 600 12px var(--cin);
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.bh-st.pri {
+  color: var(--pri);
+}
+
+.bh-st.pri .l {
+  color: #e8c47e;
+}
+
+.bh-st:hover,
+.bh-st:hover .l {
+  color: var(--on);
+}
+
+.bh-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font: 600 12px var(--cin);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dim);
+  transition: color 0.18s;
+}
+
+.bh-more::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 1px rgba(var(--gold), 0.55);
+  transition: background 0.18s, box-shadow 0.18s;
+}
+
+.bh-opener:hover .bh-more,
+.bh-actor.open .bh-more {
+  color: var(--on);
+}
+
+.bh-opener:hover .bh-more::before,
+.bh-actor.open .bh-more::before {
+  background: var(--ember);
+  box-shadow: 0 0 0 1px var(--ember2);
+}
+
+.bh-sheet {
+  left: -6px;
+  bottom: calc(100% + 26px);
+  padding: 18px 24px 16px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform-origin: 0 100%;
+  transform: translateY(14px) scale(0.97);
+  transition: opacity 0.22s, transform 0.3s var(--ease), visibility 0s 0.3s;
+  z-index: 4;
+}
+
+.bh-actor.open .bh-sheet {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition: opacity 0.22s, transform 0.3s var(--ease);
+}
+
+.bh-sheet-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.bh-sheet-head .bh-n {
+  font-size: 20px;
+}
+
+.bh-sheet-head .bh-k {
+  margin-left: auto;
+}
+
+.bh-cols {
+  display: flex;
+  gap: 26px;
+}
+
+.bh-col {
+  width: 196px;
+}
+
+.bh-srow {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  height: 31px;
+  border-bottom: 1px solid rgba(var(--gold), 0.1);
+}
+
+.bh-srow:last-child {
+  border-bottom: 0;
+}
+
+.bh-srow .bh-ico {
+  width: 20px;
+  height: 20px;
+}
+
+.bh-srow .l {
+  font: 17px var(--gar);
+  color: var(--txt);
+  white-space: nowrap;
+}
+
+.bh-srow .v {
+  font: 700 18px var(--num);
+  color: #f4ede1;
+  white-space: nowrap;
+}
+
+.bh-srow.pri .l {
+  color: #e8c47e;
+}
+
+.bh-srow.pri .v {
+  color: var(--pri);
+}
+
+.bh-srow:hover .l,
+.bh-srow:hover .v {
+  color: var(--on);
+}
+
+.bh-pd {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  transform: rotate(45deg) translateY(-2px);
+  background: var(--ember);
+  box-shadow: 0 0 6px rgba(240, 140, 40, 0.8);
+}
+
+.bh-sheet-sec {
+  margin-top: 12px;
+}
+
+.bh-pas {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  max-width: 660px;
+}
+
+.bh-medal {
+  width: 30px;
+  height: 30px;
+  padding: 8px;
+  box-sizing: content-box;
+  border-radius: 50%;
+  background: radial-gradient(#2a1d12, #0c0906);
+  box-shadow: inset 0 0 0 1.5px rgba(var(--gold), 0.65), 0 0 0 3px rgba(10, 7, 5, 0.75);
+}
+
+.bh-pas .t {
+  font: 600 16px var(--cin);
+  letter-spacing: 0.06em;
+  color: var(--on);
+  text-transform: uppercase;
+}
+
+.bh-pas .d {
+  font: italic 16px/1.2 var(--gar);
+  color: var(--note);
+}
+
+.bh-sheet-notes {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(var(--gold), 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bh-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: italic 16px/1.2 var(--gar);
+  color: var(--note);
+  max-width: 660px;
+}
+
+/* --- skill'ler: tam ortada; açıklama hemen üstünde --- */
+.bh-skills {
+  position: absolute;
+  top: 928px;
+  display: flex;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.bh-sk {
+  position: relative;
+  width: 146px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding-top: 8px;
+  cursor: pointer;
+}
+
+.bh-sk .fr {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 40%, rgba(46, 33, 20, 0.95), rgba(10, 7, 5, 0.97) 75%);
+  box-shadow: inset 0 0 0 1px rgba(var(--gold), 0.45), 0 0 0 3px rgba(8, 6, 4, 0.75);
+  transition: box-shadow 0.2s, transform 0.25s var(--ease);
+}
+
+.bh-sk .fr::before,
+.bh-sk .fr::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  transform: rotate(45deg);
+  background: #1a130c;
+  box-shadow: 0 0 0 1px rgba(var(--gold), 0.45);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.bh-sk .fr::before {
+  left: -5px;
+}
+
+.bh-sk .fr::after {
+  right: -5px;
+}
+
+.bh-sk .fr .bh-ico {
+  width: 62px;
+  height: 62px;
+}
+
+.bh-sk .key {
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  font: 700 13px var(--num);
+  color: var(--dim);
+  text-shadow: 0 1px 2px #000;
+}
+
+.bh-sk .nm {
+  max-width: 146px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 600 15px var(--cin);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--txt);
+  white-space: nowrap;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+  transition: color 0.18s, text-shadow 0.18s;
+}
+
+.bh-sk .cost {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  height: 18px;
+  font: 700 16px var(--num);
+  color: #f4ede1;
+}
+
+.bh-sk .cost span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bh-sk .cost .bh-ico {
+  width: 17px;
+  height: 17px;
+}
+
+.bh-sk .cost .free {
+  font: italic 16px var(--gar);
+  color: var(--dim);
+}
+
+.bh-sk:hover .fr {
+  transform: translateY(-3px);
+  box-shadow: inset 0 0 0 1px rgba(243, 217, 153, 0.9), 0 0 0 3px rgba(8, 6, 4, 0.75), 0 0 16px rgba(240, 140, 40, 0.25);
+}
+
+.bh-sk:hover .fr::before,
+.bh-sk:hover .fr::after {
+  background: var(--ember);
+  box-shadow: 0 0 0 1px var(--ember2);
+}
+
+.bh-sk:hover .nm {
+  color: var(--on);
+}
+
+.bh-sk.sel .fr {
+  box-shadow: inset 0 0 0 2px var(--on), 0 0 0 3px rgba(8, 6, 4, 0.75), 0 0 26px rgba(240, 140, 40, 0.5);
+}
+
+.bh-sk.sel .fr::before,
+.bh-sk.sel .fr::after {
+  background: var(--ember);
+  box-shadow: 0 0 0 1px var(--ember2), 0 0 8px rgba(240, 140, 40, 0.8);
+}
+
+.bh-sk.sel .nm {
+  color: var(--on);
+  text-shadow: 0 0 12px rgba(240, 140, 40, 0.8), 0 2px 4px #000;
+}
+
+.bh-sk::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  width: 30px;
+  height: 1px;
+  transform: translateX(-50%) scaleX(0);
+  background: var(--ember2);
+  box-shadow: 0 0 8px rgba(240, 140, 40, 0.9);
+  transition: transform 0.25s var(--ease);
+}
+
+.bh-sk.sel::after {
+  transform: translateX(-50%) scaleX(1);
+}
+
+.bh-sk.ult .fr {
+  box-shadow: inset 0 0 0 1px rgba(255, 190, 110, 0.75), 0 0 0 3px rgba(8, 6, 4, 0.75);
+}
+
+.bh-sk.off .fr .bh-ico {
+  opacity: 0.45;
+}
+
+.bh-sk.off .nm {
+  color: var(--dim);
+}
+
+.bh-sk.cdn .fr .bh-ico {
+  opacity: 1;
+  filter: grayscale(0.85) brightness(0.45);
+}
+
+.bh-sk .cdv {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 600 30px var(--cin);
+  color: var(--on);
+  text-shadow: 0 2px 6px #000, 0 0 12px rgba(240, 140, 40, 0.6);
+}
+
+.bh-sktip {
+  bottom: calc(100% + 18px);
+  left: 50%;
+  width: 440px;
+  padding: 14px 18px;
+  text-align: left;
+  cursor: default;
+  z-index: 5;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 6px);
+  transition: opacity 0.18s, transform 0.22s var(--ease), visibility 0s 0.2s;
+  pointer-events: none;
+}
+
+.bh-sktip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 14px;
+  height: 14px;
+  transform: translateX(-50%) rotate(45deg);
+  background: #0f0b07;
+  border-right: 1px solid rgba(var(--gold), 0.42);
+  border-bottom: 1px solid rgba(var(--gold), 0.42);
+}
+
+/* Açıklama YALNIZCA üstüne gelinen skill'de (dokunmatikte uzun basınca: .tip); seçili skill yalnızca seçim görünümünü taşır (Ömer 2026-10-09) */
+@media (hover: hover) {
+  .bh-sk:hover .bh-sktip {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, 0);
+    transition: opacity 0.18s, transform 0.22s var(--ease);
+  }
+}
+
+.bh-sk.tip .bh-sktip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition: opacity 0.18s, transform 0.22s var(--ease);
+}
+
+/* kenarlardaki skill'in açıklaması ekrandan taşmasın */
+.bh-sk:first-child .bh-sktip {
+  left: 0;
+  transform: translate(-20%, 6px);
+}
+
+.bh-sk:first-child:hover .bh-sktip,
+.bh-sk.tip:first-child .bh-sktip {
+  transform: translate(-20%, 0);
+}
+
+/* --- tooltip içeriği (skill, stat, global, sıra, bağlam) --- */
+.bh-tt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bh-tt-ico {
+  width: 36px;
+  height: 36px;
+}
+
+.bh-tt-name {
+  font: 600 19px var(--cin);
+  letter-spacing: 0.06em;
+  color: var(--on);
+  text-transform: uppercase;
+}
+
+.bh-tt-v {
+  margin-left: auto;
+  padding-left: 14px;
+  font: 700 19px var(--num);
+  color: #f4ede1;
+}
+
+.bh-tag {
+  margin-left: auto;
+  flex: none;
+  font: 600 11px var(--cin);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--on);
+  border: 1px solid rgba(var(--gold), 0.55);
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.bh-tt-v + .bh-tag,
+.bh-mini + .bh-tag,
+.bh-mini-note + .bh-tag {
+  margin-left: 10px;
+}
+
+.bh-mini {
+  margin-left: auto;
+  display: inline-grid;
+  gap: 2px;
+  padding: 3px;
+  background: #0b0806;
+  box-shadow: inset 0 0 0 1px rgba(var(--gold), 0.45);
+}
+
+.bh-mini i {
+  display: block;
+  background: #2a2016;
+  font: 700 9px/11px var(--num);
+  text-align: center;
+  color: #2a1405;
+  font-style: normal;
+}
+
+.bh-mini i.on {
+  background: #e2b766;
+}
+
+.bh-mini i.an {
+  box-shadow: inset 0 0 0 1.5px #fff4dc;
+}
+
+.bh-mini-note {
+  font: 600 10px var(--cin);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--txt);
+}
+
+.bh-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 9px;
+  font: 700 16px var(--num);
+  color: #f4ede1;
+}
+
+.bh-meta span {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.bh-meta .bh-ico {
+  width: 17px;
+  height: 17px;
+}
+
+.bh-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bh-rows li {
+  position: relative;
+  padding-left: 16px;
+  margin-top: 3px;
+  font: 17px/1.25 var(--gar);
+  color: var(--note);
+}
+
+.bh-rows li::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  transform: rotate(45deg);
+  background: rgba(var(--gold), 0.6);
+}
+
+.bh-ftip {
+  z-index: 10;
+  max-width: 420px;
+  padding: 12px 16px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s, transform 0.2s var(--ease);
+}
+
+.bh-ftip.on {
+  opacity: 1;
+  transform: none;
+}
+
+.bh-ftip .bh-tt-name {
+  font-size: 17px;
+}
+
+/* bağlam ipucu (hücre, ceset, yürüme, diriltme): alt çubuğun hemen üstünde, ortada */
+.bh-ctip {
+  left: 50%;
+  bottom: 200px;
+  width: 460px;
+  padding: 14px 18px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 6px);
+  transition: opacity 0.16s, transform 0.2s var(--ease), visibility 0s 0.18s;
+}
+
+.bh-ctip.on {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition: opacity 0.16s, transform 0.2s var(--ease);
+}
+
+/* --- global eylemler: skill'lerin hemen sağında dikey sütun --- */
+.bh-globs {
+  position: absolute;
+  top: 932px;
+  height: 122px;
+  display: flex;
+  gap: 16px;
+  pointer-events: auto;
+}
+
+.bh-gcol {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.bh-gl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 12px 0 2px;
+  cursor: pointer;
+  font: 600 15px var(--cin);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--txt);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+  transition: color 0.18s, text-shadow 0.18s;
+}
+
+.bh-gl::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  flex: none;
+  transform: rotate(45deg) scale(0.4);
+  background: var(--ember);
+  box-shadow: 0 0 0 1px var(--ember2);
+  opacity: 0;
+  transition: opacity 0.18s, transform 0.18s var(--ease);
+}
+
+.bh-gl .bh-ico {
+  width: 26px;
+  height: 26px;
+  transition: transform 0.18s var(--ease);
+}
+
+.bh-gl > span {
+  transition: transform 0.18s var(--ease);
+}
+
+.bh-gl:hover,
+.bh-gl.on {
+  color: var(--on);
+  text-shadow: 0 0 14px rgba(240, 140, 40, 0.85);
+}
+
+.bh-gl:hover::before,
+.bh-gl.on::before {
+  opacity: 1;
+  transform: rotate(45deg) scale(1);
+}
+
+.bh-gl:hover > span,
+.bh-gl:hover .bh-ico {
+  transform: translateX(3px);
+}
+
+.bh-gl.off {
+  color: var(--dim);
+}
+
+.bh-gl.off .bh-ico {
+  opacity: 0.4;
+}
+
+/* sağ alt kanca alanı (şimdilik boş) */
+.bh-right {
+  position: absolute;
+  top: 932px;
+  height: 122px;
+  pointer-events: auto;
+}
+
+/* --- birim kartı: düşman sağda, dost solda; her tarafta biri sabitlenebilir --- */
+.bh-card {
+  top: 172px;
+  left: 28px;
+  width: 384px;
+  padding: 16px 18px 14px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity 0.18s, transform 0.22s var(--ease), visibility 0s 0.2s;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.bh-card.on {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 0.18s, transform 0.22s var(--ease);
+}
+
+.bh-card.pin {
+  border-color: rgba(243, 217, 153, 0.8);
+}
+
+.bh-hdr {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.bh-hdr .bh-cell {
+  width: 66px;
+  height: 66px;
+}
+
+.bh-hdr-t {
+  min-width: 0;
+}
+
+.bh-hdr .bh-n {
+  font-size: 21px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bh-hdr .bh-m {
+  font-size: 16px;
+}
+
+.bh-side-tag {
+  margin-left: auto;
+  align-self: flex-start;
+  flex: none;
+  font: 600 11px var(--cin);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border: 1px solid;
+}
+
+.bh-card.enemy .bh-side-tag {
+  color: #ffb0a0;
+  border-color: rgba(255, 90, 90, 0.55);
+}
+
+.bh-card.party .bh-side-tag {
+  color: #b8d8ff;
+  border-color: rgba(79, 163, 255, 0.55);
+}
+
+.bh-bars {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+  margin-top: 12px;
+}
+
+.bh-bars.one {
+  grid-template-columns: 1fr;
+  margin-top: 6px;
+}
+
+.bh-bars .lab {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font: 700 16px var(--num);
+  color: #f4ede1;
+  margin-bottom: 3px;
+}
+
+.bh-attrs {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.bh-attrs .bh-st {
+  font-size: 17px;
+}
+
+.bh-attrs .bh-st .bh-ico {
+  width: 17px;
+  height: 17px;
+}
+
+.bh-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 16px;
+}
+
+.bh-row {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+}
+
+.bh-row .bh-ico {
+  width: 18px;
+  height: 18px;
+}
+
+.bh-row .l {
+  font: 600 11px var(--cin);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.bh-row .v {
+  font: 700 16px var(--num);
+  color: #f4ede1;
+  text-align: right;
+  text-shadow: 0 2px 3px #000;
+  white-space: nowrap;
+}
+
+.bh-row .v small {
+  margin-left: 3px;
+  font: italic 13px var(--gar);
+  color: var(--dim);
+}
+
+.bh-sec {
+  margin-top: 12px;
+}
+
+.bh-eff {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bh-e {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 1px 9px;
+  align-items: baseline;
+}
+
+.bh-e i {
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg) translateY(-1px);
+  background: var(--c);
+  box-shadow: 0 0 6px var(--c);
+}
+
+.bh-e b {
+  font: 600 14px var(--cin);
+  letter-spacing: 0.06em;
+  color: #f4ede1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.bh-e b em {
+  margin-left: 6px;
+  font: 700 14px var(--num);
+  color: var(--muted);
+  font-style: normal;
+  text-transform: none;
+}
+
+.bh-e span {
+  grid-column: 2;
+  font: italic 15px/1.15 var(--gar);
+  color: var(--note);
+}
+
+.bh-pas-t {
+  font: 600 14px var(--cin);
+  letter-spacing: 0.06em;
+  color: var(--on);
+  text-transform: uppercase;
+}
+
+.bh-pas-d {
+  font: italic 16px/1.2 var(--gar);
+  color: var(--note);
+}
+
+.bh-pv {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(var(--gold), 0.16);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font: 700 16px var(--num);
+  color: #f4ede1;
+}
+
+.bh-pv .bh-ico {
+  width: 26px;
+  height: 26px;
+}
+
+.bh-pv b {
+  font: 600 13px var(--cin);
+  letter-spacing: 0.1em;
+  color: var(--on);
+  text-transform: uppercase;
+}
+
+.bh-pv .r {
+  margin-left: auto;
+}
+
+.bh-pv em {
+  font: italic 16px var(--gar);
+  color: var(--muted);
+}
+
+.bh-pv em.n {
+  flex-basis: 100%;
+  font-size: 15px;
+}
+
+.bh-hint {
+  margin-top: 8px;
+  font: italic 14px var(--gar);
+  color: var(--dim);
+  text-align: right;
+}
+
+/* --- pasif madalyonu: 4 skill'in hemen solunda (Luck primary'de yanında Lucky Escape elması) --- */
+.bh-pasv {
+  position: absolute;
+  top: 944px;
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.bh-medal.lg {
+  width: 34px;
+  height: 34px;
+  padding: 10px;
+  cursor: help;
+  transition: box-shadow 0.18s, transform 0.2s var(--ease);
+}
+
+.bh-medal.lg .bh-ico {
+  width: 34px;
+  height: 34px;
+}
+
+.bh-medal.lg:hover {
+  transform: scale(1.06);
+  box-shadow: inset 0 0 0 1.5px var(--on), 0 0 0 3px rgba(10, 7, 5, 0.8), 0 0 14px rgba(240, 140, 40, 0.55);
+}
+
+.bh-pasv-n {
+  font: 600 11px var(--cin);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.bh-lucky {
+  position: absolute;
+  right: 2px;
+  top: 40px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  cursor: help;
+}
+
+.bh-lucky i {
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  background: var(--pri);
+  box-shadow: 0 0 0 1px #fff3c4, 0 0 0 3px rgba(10, 7, 5, 0.8), 0 0 10px rgba(255, 215, 106, 0.7);
+  transition: transform 0.2s var(--ease);
+}
+
+.bh-lucky:hover i {
+  transform: rotate(45deg) scale(1.25);
+}
+
+.bh-lucky.used i {
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(var(--gold), 0.5), 0 0 0 3px rgba(10, 7, 5, 0.8);
+}
+
+/* --- sağ alt: koşu boyu etkilerin ikonları (kalıntılar, zorluk / bölüm ölçeği) + tek düğme Combat log --- */
+.bh-binfo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.bh-links {
+  display: flex;
+  gap: 26px;
+}
+
+.bh-plink {
+  cursor: pointer;
+}
+
+.bh-plink:hover,
+.bh-plink.open {
+  color: var(--on);
+}
+
+.bh-plink:hover::before,
+.bh-plink.open::before {
+  background: var(--ember);
+  box-shadow: 0 0 0 1px var(--ember2);
+}
+
+/* yukarı açılan Combat log paneli: sağ alt alanın sağ kenarına hizalı */
+.bh-logp {
+  right: 0;
+  bottom: calc(100% + 18px);
+  width: 460px;
+  padding: 16px 20px 14px;
+  z-index: 8;
+  opacity: 0;
+  visibility: hidden;
+  transform-origin: 100% 100%;
+  transform: translateY(14px) scale(0.97);
+  transition: opacity 0.22s, transform 0.3s var(--ease), visibility 0s 0.3s;
+  cursor: default;
+}
+
+.bh-logp.open {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 0.22s, transform 0.3s var(--ease);
+}
+
+.bh-hd-r {
+  margin-left: auto;
+  font: italic 14px var(--gar);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dim);
+}
+
+.bh-lns {
+  max-height: 520px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--gold), 0.35) transparent;
+}
+
+.bh-ln {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(var(--gold), 0.1);
+  font: 16px/1.25 var(--gar);
+  color: var(--note);
+}
+
+.bh-ln:last-child {
+  border-bottom: 0;
+}
+
+.bh-ln .r {
+  font: 700 13px var(--num);
+  color: var(--dim);
+  padding-top: 2px;
+}
+
+.bh-ln b {
+  font-weight: 400;
+}
+
+.bh-ln b.p,
+.bh-ln b.e {
+  font: 600 13px var(--cin);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bh-ln b.p {
+  color: #b8d8ff;
+}
+
+.bh-ln b.e {
+  color: #ffb0a0;
+}
+
+.bh-ln b.sk {
+  font-style: italic;
+  color: var(--on);
+}
+
+.bh-ln b.dm {
+  font: 700 15px var(--num);
+  color: #f4ede1;
+}
+
+.bh-ln b.cr {
+  font: 700 15px var(--num);
+  color: var(--pri);
+}
+
+.bh-ln b.hl {
+  font: 700 15px var(--num);
+  color: #8fe39a;
+}
+
+.bh-ln b.ko {
+  font: 600 12px var(--cin);
+  letter-spacing: 0.14em;
+  color: #ff8a7a;
+}
+
+.bh-ln b.n {
+  font-style: italic;
+  color: var(--muted);
+}
+
+.bh-none {
+  padding: 6px 0;
+  font: italic 16px var(--gar);
+  color: var(--dim);
+}
+
+/* karakter sayfası açıkken sol taraftaki (dost) kart çekilir: ikisi aynı kenarı paylaşır */
+.bh-root.sheet-open .bh-card.party {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s, visibility 0s 0.18s;
+}
+
+.bh-binfo {
+  height: 100%;
+  justify-content: center;
+  gap: 14px;
+}
+
+.bh-buffs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  max-height: 54px;
+  overflow: hidden;
+}
+
+.bh-buff {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  cursor: help;
+  border-radius: 50%;
+  background: radial-gradient(#2a1d12, #0c0906);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--c, rgb(var(--gold))) 70%, transparent), 0 0 0 3px rgba(10, 7, 5, 0.75);
+  transition: transform 0.2s var(--ease), box-shadow 0.18s;
+}
+
+.bh-buff .bh-ico {
+  width: 30px;
+  height: 30px;
+}
+
+.bh-buff:hover {
+  transform: scale(1.08);
+  box-shadow: inset 0 0 0 1.5px var(--on), 0 0 0 3px rgba(10, 7, 5, 0.8), 0 0 14px rgba(240, 140, 40, 0.5);
+}
+
+/* skill etiket satırı: hedef türü · element (kendi renginde, ikonlu) · Melee / Ranged */
+.bh-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 9px;
+  margin: 6px 0 2px;
+  font: 600 12px var(--cin);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.bh-tags span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bh-tags .bh-ico {
+  width: 16px;
+  height: 16px;
+}
+
+.bh-tdot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(var(--gold), 0.5);
+}

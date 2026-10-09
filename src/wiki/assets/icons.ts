@@ -1,4 +1,6 @@
 import { iconUrl } from '../../ui/dom-icons';
+import { itemIconUrl } from '../../ui/item-icon-dom';
+import itemsJson from '../../../data/items.json';
 import type { Catalog, IconEntry } from '../../gallery/catalog';
 import { applyFilter, chipBar, h, isolateKeys, openLightbox, searchable, type SectionApi } from '../../gallery/dom';
 
@@ -68,9 +70,42 @@ export function mountIcons(cat: Catalog): SectionApi {
     fx.append(searchable(h('article', { class: 'card icon-card' }, h('img', { class: 'bigicon pixelated', attrs: { src: url, alt: name }, title: 'Click to enlarge', on: { click: () => openLightbox(url, name, true) } }), h('div', { class: 'card-title mono', text: name }), h('div', { class: 'small muted', text: 'effect sprite (src/game/pixel-fx.ts)' })), `fx effect sprite ${name}`));
   }
 
+  // Item ve ödül ikonları (src/game/item-icons.ts; Gear, Spoils, Endless kartları ve Codex aynı çizimi kullanır)
+  const rare = itemsJson.rarities.find((r) => r.id === 'rare')?.color ?? '#3f6fa8';
+  const items = h('div', { class: 'cards icons' });
+  for (const i of cat.itemIcons) {
+    const url = itemIconUrl(i.name, i.group === 'item' ? rare : undefined);
+    const shown = i.uses.slice(0, 4);
+    const rest = i.uses.length - shown.length;
+    items.append(
+      searchable(
+        h(
+          'article',
+          { class: 'card icon-card' },
+          h('img', { class: 'bigicon pixelated', attrs: { src: url, alt: i.name }, title: 'Click to enlarge', on: { click: () => openLightbox(url, i.name, true) } }),
+          h('div', { class: 'card-title mono', text: i.name }),
+          h('div', { class: 'tags' }, h('span', { class: 'badge ok', text: i.group === 'reward' ? 'Reward' : 'Item' })),
+          h('div', { class: 'small muted', text: i.label }),
+          h('div', { class: 'small muted', title: i.uses.join('\n') }, shown.join(', ') + (rest > 0 ? ` +${rest} more` : '')),
+        ),
+        `item reward ${i.name} ${i.label} ${i.uses.join(' ')}`,
+      ),
+    );
+  }
+  // Nadirlik: aynı nesne, yalnızca taş / kenar ayrıntısı nadirlik renginde
+  const tints = h('div', { class: 'cards icons' });
+  for (const name of ['amulet', 'sword', 'mail']) {
+    for (const r of itemsJson.rarities) {
+      const url = itemIconUrl(name, r.color);
+      tints.append(searchable(h('article', { class: 'card icon-card' }, h('img', { class: 'bigicon pixelated', attrs: { src: url, alt: `${name} ${r.name}` }, on: { click: () => openLightbox(url, `${name} (${r.name})`, true) } }), h('div', { class: 'card-title mono', text: name }), h('div', { class: 'small', style: { color: r.color }, text: r.name })), `item rarity ${name} ${r.name}`));
+    }
+  }
+
   const refresh = (): number => {
     const n = applyFilter(grid, query, group);
     applyFilter(fx, query);
+    applyFilter(items, query);
+    applyFilter(tints, query);
     countEl.textContent = `${n} / ${cat.icons.length}`;
     return n;
   };
@@ -80,6 +115,12 @@ export function mountIcons(cat: Catalog): SectionApi {
     h('div', { class: 'toolbar' }, h('label', { class: 'inline' }, zoomLabel, zoom)),
     chips,
     grid,
+    h('h3', { class: 'sub', text: `Items and rewards (${cat.itemIcons.length})` }),
+    h('p', { class: 'note', text: 'Gear, Spoils, Endless reward cards and the Codex all draw these (src/game/item-icons.ts). Items show with the Rare tint here.' }),
+    items,
+    h('h3', { class: 'sub', text: 'Rarity tints' }),
+    h('p', { class: 'note', text: 'Rarity colours only the gem, trim or band; the object keeps its own materials.' }),
+    tints,
     h('h3', { class: 'sub', text: `Effect sprites (${cat.fxSprites.length})` }),
     h('p', { class: 'note', text: 'Small sprites that animations draw with (not icons).' }),
     fx,

@@ -240,6 +240,7 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       if (e.bonusFromShield) add(`+${pct(e.bonusFromShield.ratio)} of your shield${e.bonusFromShield.consume ? ' (consumed)' : ''}`, element);
     } else if (e.type === 'heal') {
       add(`Heal ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)})${who}`);
+      if (e.missingHpBonus) add(`Heals more the lower the ally's health: up to +${pct(e.missingHpBonus)}`);
     } else if (e.type === 'revive') {
       add(`Choose a fallen ally, then choose an empty cell on your side: it rises there with ${pct(e.hpRatio)} HP and ${pct(e.mpRatio)} MP (even if something now stands on its corpse)`);
       add('Needs at least one empty cell on your side; the revived ally starts with an empty turn bar');
@@ -371,6 +372,8 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
   if (skill.effects.some((e) => e.type === 'damage' && e.guaranteedCrit)) add(`Always a critical hit (x${formulas.attributes.critMult}); it can still miss`, 'physical');
   if (skill.requiresOpenBehind) add('Only targets with an empty cell right behind them (a living unit there blocks it; a corpse does not); never a unit in the back row');
   if (skill.motion === 'melee' && skill.target !== 'self') add(skill.requiresOpenBehind ? 'Slips behind any enemy, strikes, and returns' : skill.ignoreReach ? 'Charges at any enemy' : skill.reach ? `Melee: front ${skill.reach + 1} rows only (reach +${skill.reach})` : 'Melee: front row only');
+  // ignoreReachBonus (Whirlwind, madde 284): durumların menzil eki (Abyssal Fury) bu skill'e işlemez
+  if (skill.motion === 'melee' && skill.ignoreReachBonus && !skill.ignoreReach) add('Reach bonuses (Abyssal Fury) do not extend it');
   if (skill.advanceToFront) add('If you are not in the front row, you then step into the front row: the front cell of your own lane, or the nearest empty front cell if that one is taken (you stay put if the front row is full)');
   // Oranlı bedel (Wail of the Dead: mevcut canın %20'si): açıklama satırı; başlık skillCostLabel
   if (isRatioCost(skill.cost)) add(`Costs ${pct(skill.cost.ofCurrent!)} of current ${skill.cost.resource.toUpperCase()} (rounded, at least 1)${skill.cost.resource === 'hp' ? ': it can never bring you below 1 HP' : ''}`);

@@ -112,6 +112,12 @@ export function avatarTexture(scene: Phaser.Scene, spriteId: string): string | n
   return scene.textures.exists(key) ? key : null;
 }
 
+/** Gerçek sprite dokusu (assets/sprites/<id>/<anim>.png yüklüyse anahtarı, yoksa null). Sınıf dışı figürler için (ör. tüccar). */
+export function spriteTexture(scene: Phaser.Scene, id: string, anim = 'idle'): string | null {
+  const key = spriteKey(id, anim);
+  return scene.textures.exists(key) ? key : null;
+}
+
 export function hasBackground(scene: Phaser.Scene, id: string): boolean {
   return scene.textures.exists(backgroundKey(id));
 }

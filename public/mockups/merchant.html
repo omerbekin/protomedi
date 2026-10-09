@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Merchant Mockups</title>
+<!--
+  Tüccar ekranı taslakları (Ömer 2026-10-09). Oyun kodu DEĞİL; seçim için karşılaştırma sayfası. Açılış: mockups/merchant.html?v=1..3
+  Ortak kurallar: solda tüccar, sağda mallar; altın + torba sayısı; Buy / Sell sekmeleri; alınamayan mal soluk + fiyat kırmızı;
+  silahı partide kimin kullanabildiği (avatarlar, kullanamayan soluk); takılıyla karşılaştırma; Move on; Reroll wares (İSTEĞE BAĞLI).
+  Görseller: item ikonları src/game/item-icons.ts'ten PNG'ye çizildi (merchant/icons), avatarlar assets/avatars, arka plan Endless arenası
+  (proving-grounds-sunset). Tüccar figürü YER TUTUCU siluet (SVG); gerçek pixel art gelince yerine konur.
+  Sağ kenardaki küçük düğmeler: taslak seçimi (1-3) ve açıklamayı gizle (◐).
+-->
+<style>
+@font-face { font-family: 'Cinzel'; font-weight: 400 900; font-display: swap; src: url('merchant/fonts/Cinzel-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-weight: 400 800; font-display: swap; src: url('merchant/fonts/EBGaramond-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400 800; font-display: swap; src: url('merchant/fonts/EBGaramond-italic-latin.woff2') format('woff2'); }
+:root {
+  --gold: 217, 178, 106; --on: #f3d999; --txt: #d9c8a2; --muted: #a8977a; --dim: #7d705a; --note: #cdb88d; --pri: #ffd76a;
+  --ember: #e0702a; --ember2: #ffb35a; --bad: #e8806a; --good: #8cc76a; --stat: #e9dcc0;
+  --cin: Cinzel, Georgia, 'Palatino Linotype', serif; --gar: 'EB Garamond', Georgia, 'Palatino Linotype', serif;
+  --num: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+  --ease: cubic-bezier(0.33, 1, 0.68, 1);
+  --sh: 0 2px 4px rgba(12, 8, 5, .95); --glow: 0 0 14px rgba(240, 140, 40, .85);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #050403; overflow: hidden; color: var(--txt); -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; }
+#stage { position: absolute; left: 0; top: 0; height: 1080px; transform-origin: 0 0; overflow: hidden; background: #0d0a07; user-select: none; font-family: var(--gar); }
+.bg { position: absolute; inset: 0; background: url('merchant/img/bg.webp') center 40% / cover; filter: saturate(.85); }
+.veil { position: absolute; inset: 0; background: radial-gradient(ellipse at 22% 60%, rgba(8,6,4,.25), rgba(8,6,4,.72) 70%), linear-gradient(180deg, rgba(8,6,4,.55), rgba(8,6,4,.35) 40%, rgba(8,6,4,.8)); }
+#frame { position: absolute; top: 0; width: 1920px; height: 1080px; }
+.abs { position: absolute; }
+.px { image-rendering: pixelated; display: block; flex: none; }
+
+/* --- taslak seçici --- */
+#pick { position: fixed; right: calc(4px + env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); z-index: 50; display: flex; flex-direction: column; gap: 4px; }
+#pick button { all: unset; cursor: pointer; width: 30px; height: 30px; display: grid; place-items: center; font: 600 13px var(--cin); color: var(--muted); background: rgba(8,6,4,.78); border: 1px solid rgba(var(--gold), .3); }
+#pick button.on { color: #1a0f06; background: var(--ember); border-color: var(--ember2); }
+#pick.min button:not(.tog) { display: none; }
+#cap { position: fixed; left: calc(10px + env(safe-area-inset-left)); bottom: 10px; z-index: 50; font: italic 13px/1.25 var(--gar); color: var(--note); background: rgba(8,6,4,.86); border: 1px solid rgba(var(--gold), .25); padding: 6px 10px; max-width: 26vw; }
+#cap b { display: block; font: 600 11px var(--cin); letter-spacing: .16em; text-transform: uppercase; color: var(--on); margin-bottom: 2px; font-style: normal; }
+#pick.min ~ #cap { display: none; }
+#cap.mid { left: 50%; transform: translateX(-50%); max-width: 30vw; }
+@media (max-height: 500px) { #cap { font-size: 10px; max-width: 30vw; padding: 4px 7px; } #cap b { font-size: 9px; } #pick { gap: 2px; } #pick button { width: 24px; height: 24px; font-size: 11px; } }
+
+/* --- kit parçaları --- */
+.cin { font-family: var(--cin); font-weight: 600; text-transform: uppercase; letter-spacing: .1em; }
+.it { font-style: italic; }
+.heading { display: flex; align-items: center; gap: 14px; font: 600 18px var(--cin); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+.heading::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(var(--gold), .4), rgba(var(--gold), 0)); }
+.dia { display: inline-block; flex: none; width: 10px; height: 10px; transform: rotate(45deg); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2), 0 0 10px rgba(240,140,40,.6); }
+.dia.hollow { background: #140e09; box-shadow: 0 0 0 1px rgba(var(--gold), .5); }
+.panel { position: absolute; background: linear-gradient(180deg, rgba(30,22,14,.94), rgba(12,9,6,.95)); border: 1px solid rgba(var(--gold), .42); box-shadow: 0 0 0 3px rgba(8,6,4,.7), 0 18px 40px rgba(0,0,0,.6); }
+.panel.corners::before, .panel.corners::after { content: ''; position: absolute; top: -5px; width: 9px; height: 9px; transform: rotate(45deg); background: #140e09; box-shadow: 0 0 0 1px rgba(var(--gold), .7); }
+.panel.corners::before { left: -5px; } .panel.corners::after { right: -5px; }
+
+.btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 60px; padding: 0 46px 0 calc(46px + .12em); font: 600 23px var(--cin); letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; color: var(--on); text-shadow: var(--sh); background: linear-gradient(180deg, rgba(38,27,17,.92), rgba(12,9,6,.95)); border: 2px solid var(--gold-c, #d9b26a); box-shadow: 0 0 0 3px rgba(12,8,5,.8), 0 14px 30px rgba(0,0,0,.55); cursor: pointer; transition: color .2s, border-color .2s, text-shadow .2s, transform .25s var(--ease); }
+.btn::before, .btn::after { content: ''; position: absolute; top: 50%; width: 12px; height: 12px; margin-top: -6px; transform: rotate(45deg); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2), 0 0 12px rgba(240,140,40,.8); }
+.btn::before { left: -8px; } .btn::after { right: -8px; }
+.btn:hover:not(:disabled) { border-color: rgba(243,217,153,.95); text-shadow: var(--glow); transform: translateY(-3px); }
+.btn:active:not(:disabled) { transform: scale(.97); }
+.btn:disabled { color: var(--dim); border-color: rgba(var(--gold), .28); cursor: default; }
+.btn:disabled::before, .btn:disabled::after { background: #3a2d20; box-shadow: 0 0 0 1px rgba(var(--gold), .35); }
+.btn.sec { min-height: 52px; font-size: 20px; padding: 0 34px 0 calc(34px + .1em); color: var(--txt); border: 1px solid rgba(var(--gold), .3); }
+.btn.sec::before, .btn.sec::after { width: 9px; height: 9px; margin-top: -5px; background: #1a130c; box-shadow: 0 0 0 1px rgba(var(--gold), .45); }
+.btn.sec::before { left: -6px; } .btn.sec::after { right: -6px; }
+.btn .coin { width: 30px; height: 30px; }
+.btn.ready:not(:disabled) { animation: breathe 2.6s ease-in-out infinite; }
+@keyframes breathe { 0%,100% { box-shadow: 0 0 0 3px rgba(12,8,5,.8), 0 14px 30px rgba(0,0,0,.55), 0 0 0 rgba(224,112,42,0); } 50% { box-shadow: 0 0 0 3px rgba(12,8,5,.8), 0 14px 30px rgba(0,0,0,.55), 0 0 34px rgba(224,112,42,.32); } }
+
+.lnk { display: inline-flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 14px 0 6px; font: 600 21px var(--cin); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; color: var(--txt); text-shadow: var(--sh); background: none; border: 0; cursor: pointer; transition: color .18s, text-shadow .18s; }
+.lnk::before { content: ''; flex: none; width: 10px; height: 10px; transform: rotate(45deg) scale(.4); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2); opacity: 0; transition: opacity .18s, transform .18s var(--ease); }
+.lnk > span { display: inline-flex; align-items: center; gap: 8px; transition: transform .18s var(--ease); }
+.lnk:hover:not(:disabled) { color: var(--on); text-shadow: var(--glow); }
+.lnk:hover:not(:disabled)::before { opacity: 1; transform: rotate(45deg) scale(1); }
+.lnk:hover:not(:disabled) > span { transform: translateX(4px); }
+.lnk:disabled { color: var(--dim); cursor: default; }
+.lnk small { font: italic 18px var(--gar); letter-spacing: 0; text-transform: none; color: var(--dim); }
+.opt { display: inline-block; margin-left: 6px; padding: 1px 8px 0; font: 600 13px var(--cin); letter-spacing: .16em; color: var(--dim); border: 1px dashed rgba(var(--gold), .35); vertical-align: middle; text-shadow: none; }
+.lnk .coin { width: 26px; height: 26px; }
+
+/* sekmeler */
+.tabs { display: flex; align-items: flex-end; gap: 44px; }
+.tab { position: relative; all: unset; cursor: pointer; padding: 6px 2px 16px; font: 600 26px var(--cin); letter-spacing: .18em; color: var(--dim); text-shadow: var(--sh); transition: color .18s, text-shadow .18s; }
+.tab:hover { color: var(--txt); }
+.tab.on { color: var(--on); text-shadow: 0 0 12px rgba(240,140,40,.55), var(--sh); }
+.tab .dia { position: absolute; left: 50%; bottom: -1px; margin-left: -5px; opacity: 0; transition: opacity .2s; }
+.tab.on .dia { opacity: 1; }
+.tab small { font: italic 19px var(--gar); letter-spacing: 0; color: var(--dim); text-transform: none; margin-left: 6px; }
+.tabline { height: 1px; background: linear-gradient(90deg, rgba(var(--gold), .45), rgba(var(--gold), .12) 80%, rgba(var(--gold), 0)); }
+
+/* kaynaklar */
+.res { display: flex; align-items: center; gap: 22px; font: 600 30px var(--cin); color: var(--on); text-shadow: var(--sh); }
+.res .coin { width: 44px; height: 44px; }
+.res .sep { width: 1px; height: 38px; background: rgba(var(--gold), .3); }
+.res .lbl { font: italic 21px var(--gar); color: var(--muted); text-transform: none; letter-spacing: 0; }
+.res .bag b { font-weight: 600; color: var(--txt); }
+.flash { animation: flash .7s var(--ease); }
+@keyframes flash { 0% { color: #fff3c4; text-shadow: 0 0 18px rgba(255,190,90,.95); } 100% { } }
+
+/* nadirlik çerçevesi */
+.rf { position: relative; display: grid; place-items: center; background: radial-gradient(circle at 50% 55%, rgba(var(--rc), .26), rgba(var(--rc), .04) 62%), linear-gradient(180deg, rgba(24,18,12,.92), rgba(10,8,5,.94)); border: 1px solid rgba(var(--rc), .55); }
+.rf::before, .rf::after { content: ''; position: absolute; width: 14px; height: 14px; border-color: rgb(var(--rcl)); border-style: solid; opacity: .9; }
+.rf::before { left: -1px; top: -1px; border-width: 2px 0 0 2px; }
+.rf::after { right: -1px; bottom: -1px; border-width: 0 2px 2px 0; }
+.r-common { --rc: 150,148,140; --rcl: 196,192,180; --rt: #c9c5b8; }
+.r-uncommon { --rc: 95,143,62; --rcl: 140,191,99; --rt: #9ccc72; }
+.r-rare { --rc: 63,111,168; --rcl: 122,166,220; --rt: #8db6e6; }
+.r-epic { --rc: 122,63,154; --rcl: 180,122,214; --rt: #c590e4; }
+.rname { color: var(--rt); }
+
+/* tüccar */
+.merchant svg { display: block; overflow: visible; }
+.speech { font: italic 27px/1.32 var(--gar); color: var(--note); text-shadow: var(--sh); }
+.speech q { quotes: '\201C' '\201D'; }
+.speech q::before { color: var(--ember2); font-size: 1.3em; margin-right: 2px; }
+.mname { font: 600 34px var(--cin); letter-spacing: .12em; color: var(--on); text-shadow: var(--sh); }
+.msub { font: italic 21px var(--gar); color: var(--muted); }
+.ph-tag { font: 600 12px var(--cin); letter-spacing: .2em; color: var(--dim); border: 1px dashed rgba(var(--gold), .35); padding: 2px 8px 1px; background: rgba(8,6,4,.6); }
+
+/* fiyat */
+.price { display: inline-flex; align-items: center; gap: 8px; font: 600 25px var(--cin); color: var(--on); letter-spacing: .04em; text-shadow: var(--sh); }
+.price .coin { width: 26px; height: 26px; }
+.price.no { color: var(--bad); }
+.price.sold { color: var(--dim); font-size: 19px; letter-spacing: .18em; }
+.cant .ico { opacity: .38; filter: grayscale(.7) brightness(.8); }
+
+/* parti / karşılaştırma */
+.party { display: flex; gap: 14px; }
+.pc { all: unset; position: relative; cursor: pointer; width: 128px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 12px; transition: transform .2s var(--ease); }
+.pc .av { position: relative; width: 84px; height: 84px; border: 1px solid rgba(var(--gold), .35); background: #0c0906; overflow: hidden; transition: border-color .2s, box-shadow .2s, filter .2s, opacity .2s; }
+.pc .av img { width: 100%; height: 100%; display: block; }
+.pc:hover .av { border-color: rgba(243,217,153,.8); }
+.pc.cmp .av { border: 2px solid var(--gold-c, #d9b26a); box-shadow: 0 0 16px rgba(240,140,40,.4); }
+.pc .dia { position: absolute; bottom: 0; left: 50%; margin-left: -5px; opacity: 0; }
+.pc.cmp .dia { opacity: 1; }
+.pc .nm { font: 600 17px var(--cin); letter-spacing: .08em; color: var(--txt); text-transform: uppercase; white-space: nowrap; }
+.pc .dl { font: 19px/1.15 var(--gar); text-align: center; min-height: 44px; color: var(--dim); }
+.pc.no .av { filter: grayscale(1) brightness(.45); opacity: .55; }
+.pc.no .nm { color: var(--dim); }
+.pc.no { cursor: default; }
+.pc .best { position: absolute; top: -10px; right: 12px; z-index: 2; font: 600 12px var(--cin); letter-spacing: .16em; color: #1a0f06; background: var(--ember2); padding: 2px 6px 1px; box-shadow: 0 0 10px rgba(240,140,40,.6); }
+.up { color: var(--good); } .down { color: var(--bad); } .same { color: var(--dim); }
+.cmpt { width: 100%; border-collapse: collapse; font: 22px var(--gar); }
+.cmpt td { padding: 5px 0; border-bottom: 1px solid rgba(var(--gold), .1); }
+.cmpt td.n { text-align: right; font-family: var(--num); width: 80px; color: var(--stat); }
+.cmpt td.d { text-align: right; width: 90px; font-family: var(--num); }
+.cmpt th { font: 600 14px var(--cin); letter-spacing: .16em; color: var(--dim); text-align: right; padding-bottom: 6px; font-weight: 600; }
+.cmpt th:first-child { text-align: left; }
+.stats { font: 26px/1.35 var(--gar); color: var(--stat); }
+.sub { font: italic 21px var(--gar); color: var(--muted); }
+
+#toast { position: absolute; left: 50%; top: 26px; transform: translate(-50%, -20px); opacity: 0; transition: opacity .3s, transform .3s var(--ease); font: italic 24px var(--gar); color: var(--on); background: rgba(12,9,6,.9); border: 1px solid rgba(var(--gold), .4); padding: 8px 26px; display: flex; gap: 12px; align-items: center; pointer-events: none; z-index: 40; }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+.fade-in { animation: fin .28s var(--ease); }
+@keyframes fin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ============ V1: Travelling cart ============ */
+.v1 .grid { display: grid; grid-template-columns: repeat(3, 156px); gap: 26px 26px; }
+.v1 .cell { all: unset; position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 10px; transition: transform .22s var(--ease); }
+.v1 .cell .rf { width: 156px; height: 156px; transition: box-shadow .2s, border-color .2s; }
+.v1 .cell .ico { width: 112px; height: 112px; transition: transform .25s var(--ease); }
+.v1 .cell:hover .ico { transform: scale(1.06); }
+.v1 .cell.sel { transform: translateY(-6px); }
+.v1 .cell.sel .rf { border-color: var(--on); box-shadow: 0 0 0 3px rgba(12,8,5,.85), 0 0 26px rgba(240,140,40,.45); }
+.v1 .cell.sel .rf .seld { position: absolute; left: 50%; top: -6px; margin-left: -5px; }
+.v1 .cell .fits { position: absolute; right: 6px; top: 6px; display: flex; gap: 3px; }
+.v1 .cell .fits img { width: 28px; height: 28px; border: 1px solid rgba(var(--gold), .45); background: #0c0906; }
+.v1 .cell.soldc .rf { opacity: .45; }
+.v1 .cell.soldc .ico { filter: grayscale(1); opacity: .35; }
+.v1 .cell .slotlbl { position: absolute; left: 8px; bottom: 5px; font: italic 16px var(--gar); color: var(--muted); }
+.v1 .empty .rf { --rc: 120,100,70; --rcl: 120,100,70; border-style: dashed; opacity: .5; }
+.v1 .purse { display: flex; align-items: center; gap: 16px; }
+.v1 .purse .coin { width: 64px; height: 64px; filter: drop-shadow(0 0 10px rgba(240,170,60,.35)); }
+.v1 .purse .amt { font: 600 44px var(--cin); color: var(--on); text-shadow: var(--sh); line-height: 1; }
+.v1 .purse .lbl { font: 600 15px var(--cin); letter-spacing: .2em; color: var(--muted); }
+.v1 .bubble { position: absolute; padding: 20px 28px 22px; }
+.v1 .bubble .tail { position: absolute; left: 120px; bottom: -9px; width: 16px; height: 16px; transform: rotate(45deg); background: rgba(14,10,7,.96); border-right: 1px solid rgba(var(--gold), .42); border-bottom: 1px solid rgba(var(--gold), .42); }
+
+/* ============ V2: Ledger ============ */
+.v2 .arch { position: absolute; border: 1px solid rgba(var(--gold), .45); border-radius: 220px 220px 0 0; overflow: hidden; background: radial-gradient(ellipse at 50% 70%, rgba(224,112,42,.22), rgba(12,9,6,.0) 60%), linear-gradient(180deg, rgba(20,15,10,.9), rgba(8,6,4,.95)); box-shadow: 0 0 0 6px rgba(8,6,4,.55), inset 0 0 0 6px rgba(8,6,4,.6), inset 0 0 0 7px rgba(var(--gold), .18); }
+.v2 .ledger { position: absolute; }
+.v2 .cols { display: flex; align-items: center; height: 40px; font: 600 14px var(--cin); letter-spacing: .2em; color: var(--dim); padding: 0 18px 0 24px; }
+.v2 .row { all: unset; box-sizing: border-box; position: relative; cursor: pointer; display: flex; align-items: center; width: 100%; height: 92px; padding: 0 18px 0 24px; border-bottom: 1px solid rgba(var(--gold), .12); transition: background .2s; }
+.v2 .row::before { content: ''; position: absolute; left: 4px; top: 50%; width: 9px; height: 9px; margin-top: -5px; transform: rotate(45deg) scale(.4); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2); opacity: 0; transition: opacity .18s, transform .18s var(--ease); }
+.v2 .row:hover, .v2 .row.sel { background: linear-gradient(90deg, rgba(224,112,42,.13), rgba(224,112,42,.03) 70%, rgba(224,112,42,0)); }
+.v2 .row:hover::before, .v2 .row.sel::before { opacity: 1; transform: rotate(45deg) scale(1); }
+.v2 .row .rf { width: 68px; height: 68px; flex: none; }
+.v2 .row .rf::before, .v2 .row .rf::after { width: 9px; height: 9px; }
+.v2 .row .ico { width: 54px; height: 54px; }
+.v2 .row .nm { font: 600 26px var(--cin); letter-spacing: .05em; white-space: nowrap; }
+.v2 .row .st { font: italic 20px var(--gar); color: var(--muted); white-space: nowrap; }
+.v2 .row .leader { flex: 1; align-self: center; margin: 14px 18px 0; border-bottom: 2px dotted rgba(var(--gold), .22); min-width: 30px; }
+.v2 .row .slot { width: 170px; font: italic 20px var(--gar); color: var(--muted); }
+.v2 .row .fits { width: 196px; display: flex; gap: 6px; }
+.v2 .row .fits img { width: 40px; height: 40px; border: 1px solid rgba(var(--gold), .4); background: #0c0906; }
+.v2 .row .fits img.no { filter: grayscale(1) brightness(.4); opacity: .5; border-color: rgba(var(--gold), .15); }
+.v2 .row .fits .all { font: italic 20px var(--gar); color: var(--muted); }
+.v2 .row .pr { width: 110px; display: flex; justify-content: flex-end; }
+.v2 .row .act { width: 120px; display: flex; justify-content: flex-end; }
+.v2 .row .act .lnk { min-height: 48px; font-size: 19px; padding-right: 0; opacity: 0; transition: opacity .18s, color .18s; }
+.v2 .row:hover .act .lnk, .v2 .row.sel .act .lnk { opacity: 1; }
+.v2 .row.soldr { cursor: default; }
+.v2 .row.soldr .nm, .v2 .row.soldr .st { opacity: .4; }
+.v2 .row.soldr .ico { filter: grayscale(1); opacity: .35; }
+.v2 .tip { position: absolute; width: 560px; padding: 22px 26px 22px; z-index: 20; pointer-events: none; }
+.v2 .tip.touch { pointer-events: auto; }
+.v2 .tip .party .pc { width: 120px; }
+
+/* ============ V3: Market table ============ */
+.v3 .table { position: absolute; }
+.v3 .top { position: absolute; inset: 0 0 70px 0; clip-path: polygon(7% 0, 93% 0, 100% 100%, 0 100%);
+  background: radial-gradient(ellipse at 50% 30%, rgba(120,40,30,.35), rgba(0,0,0,0) 65%), repeating-linear-gradient(90deg, rgba(255,255,255,.012) 0 3px, rgba(0,0,0,.03) 3px 6px), linear-gradient(180deg, #2c130f, #3d1a13 60%, #4a2016); }
+.v3 .topline { position: absolute; left: 0; right: 0; bottom: 70px; height: 2px; background: linear-gradient(90deg, rgba(var(--gold), .1), rgba(var(--gold), .7), rgba(var(--gold), .1)); box-shadow: 0 0 10px rgba(240,170,60,.3); }
+.v3 .apron { position: absolute; left: 0; right: 0; bottom: 0; height: 70px; background: linear-gradient(180deg, #3a1812, #1e0c09); }
+.v3 .apron::after { content: ''; position: absolute; left: 0; right: 0; bottom: -22px; height: 22px; background: radial-gradient(circle at 50% 0, #1e0c09 70%, transparent 72%) 0 0 / 44px 44px repeat-x; }
+.v3 .apron .fr { position: absolute; left: 0; right: 0; top: 10px; height: 1px; background: rgba(var(--gold), .35); }
+.v3 .apron .dias { position: absolute; left: 0; right: 0; top: 30px; display: flex; justify-content: space-around; }
+.v3 .ware { all: unset; position: absolute; cursor: pointer; display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%); transition: transform .3s var(--ease); }
+.v3 .ware .ico { transition: transform .3s var(--ease), filter .3s; filter: drop-shadow(0 6px 4px rgba(0,0,0,.6)); }
+.v3 .ware .shadow { width: 70%; height: 16px; margin-top: -8px; border-radius: 50%; background: radial-gradient(rgba(0,0,0,.6), rgba(0,0,0,0) 70%); transition: transform .3s var(--ease), opacity .3s; }
+.v3 .ware:hover .ico { transform: translateY(-8px); }
+.v3 .ware.sel .ico { transform: translateY(-22px) scale(1.06); filter: drop-shadow(0 0 14px rgba(var(--rc), .9)) drop-shadow(0 0 4px rgba(255,220,160,.6)); }
+.v3 .ware.sel .shadow { transform: scale(.7); opacity: .6; }
+.v3 .ware .glowring { position: absolute; left: 50%; bottom: 2px; width: 120%; height: 30px; margin-left: -60%; border-radius: 50%; background: radial-gradient(rgba(var(--rc), .5), rgba(var(--rc), 0) 70%); opacity: .65; }
+.v3 .ware.sel .glowring { opacity: 1; }
+.v3 .tag { position: absolute; display: flex; align-items: center; gap: 6px; padding: 3px 12px 2px 10px; background: rgba(12,9,6,.92); border: 1px solid rgba(var(--gold), .45); transform: translate(-50%, 0); white-space: nowrap; pointer-events: none; }
+.v3 .tag::before { content: ''; position: absolute; left: 50%; top: -15px; width: 1px; height: 14px; background: rgba(var(--gold), .45); }
+.v3 .tag .price { font-size: 21px; } .v3 .tag .price .coin { width: 22px; height: 22px; }
+.v3 .ware.cant .ico { opacity: .45; filter: grayscale(.7) brightness(.75) drop-shadow(0 6px 4px rgba(0,0,0,.6)); }
+.v3 .ware.soldw { cursor: default; }
+.v3 .ware.soldw .ico { opacity: 0.12; filter: grayscale(1); }
+.v3 .scroll { position: absolute; padding: 24px 34px; }
+.v3 .scroll .rod { position: absolute; left: -14px; right: -14px; height: 8px; background: linear-gradient(180deg, #6b4a26, #2a1a0c); border: 1px solid rgba(var(--gold), .5); }
+.v3 .scroll .rod::before, .v3 .scroll .rod::after { content: ''; position: absolute; top: -4px; width: 14px; height: 14px; transform: rotate(45deg); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2), 0 0 10px rgba(240,140,40,.6); }
+.v3 .scroll .rod::before { left: -9px; } .v3 .scroll .rod::after { right: -9px; }
+.v3 .partybar { position: absolute; display: flex; align-items: flex-end; gap: 18px; }
+.v3 .partybar .pc { width: 132px; }
+.v3 .partybar .pc .av { width: 92px; height: 92px; }
+.v3 .bubble3 { position: absolute; padding: 18px 26px 20px; }
+.v3 .bubble3 .tail { position: absolute; left: -9px; top: 40px; width: 16px; height: 16px; transform: rotate(45deg); background: rgba(24,18,12,.96); border-left: 1px solid rgba(var(--gold), .42); border-bottom: 1px solid rgba(var(--gold), .42); }
+.v3 .bell { display: inline-flex; }
+</style>
+</head>
+<body>
+<div id="stage"><div class="bg"></div><div class="veil"></div><div id="frame"></div><div id="toast"></div></div>
+<div id="pick"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button class="tog" title="Hide notes">◐</button></div>
+<div id="cap"></div>
+<script>
+const P = 'merchant/';
+const CAPS = {
+  1: ['1 · Travelling cart', 'Full-height merchant left with speech line and your purse; wares in a 3x3 stall of rarity frames (top-right badges = who can wield the weapon). Tap a ware: detail panel with stats, party (faded = can\'t use, BEST = biggest upgrade), compare with equipped and Buy.'],
+  2: ['2 · Ledger', 'Merchant bust in an arch, left. Right: a ledger with dotted leaders, slot, who fits, price and a Buy link. Hover (or tap) a row: a floating detail card with party and compare. Sell tab lists your bag.'],
+  3: ['3 · Market table', 'The merchant stands at a velvet table; wares lie on it with hanging price tags. The chosen ware lifts and glows; a scroll above unrolls its stats, compare and Buy. The party stands at the front: who can use it lights up, the rest fade.'],
+};
+const RC = { common: 'Common', uncommon: 'Uncommon', rare: 'Rare', epic: 'Epic' };
+const SLOT = { weapon: 'Weapon', helm: 'Helm', armor: 'Armor', gloves: 'Gloves', boots: 'Boots', trinket: 'Trinket' };
+const HEROES = [
+  { id: 'warrior', name: 'Warrior', eq: { weapon: 'woodcutters_axe', armor: 'padded_gambeson', helm: 'leather_coif', gloves: 'work_gloves' } },
+  { id: 'archer', name: 'Archer', eq: { weapon: 'short_bow', armor: 'quilted_jack', boots: 'soft_boots', trinket: 'rabbits_foot' } },
+  { id: 'mage', name: 'Mage', eq: { weapon: 'ash_staff', helm: 'iron_cap', trinket: 'copper_ring' } },
+  { id: 'cutthroat', name: 'Cutthroat', eq: { weapon: 'rondel_dagger', gloves: 'leather_gloves', boots: 'turnshoes' } },
+];
+const WARES = ['bearded_axe', 'yew_longbow', 'rune_staff', 'misericorde', 'brigandine', 'kettle_hat', 'hawkeye_gloves', 'saints_medal'];
+const BAG0 = ['iron_cap', 'short_bow', 'work_gloves', 'padded_gambeson', 'rabbits_foot', 'turnshoes', 'leather_coif'];
+const REROLL = 10, BAGMAX = 30;
+const LINES = {
+  idle: 'Steel, leather and a lucky charm or two. Honest prices. Well, honest enough.',
+  sell: 'I\'ll take it off your hands. A quarter of its worth, and not a copper more.',
+  poor: 'That one is beyond your purse, friend. Come back after the next fight.',
+  buy: 'A fine choice. Mind the edge, it bites.',
+  sold: 'Pleasure doing business. Next!',
+  reroll: 'Fresh from the bottom of the cart. Have a look.',
+};
+let ITEMS = {};
+const S = { v: 1, tab: 'buy', sel: 0, cmp: null, gold: 48, bag: [...BAG0], wares: WARES.map((id) => ({ id, sold: false })), line: 'idle', hover: -1, pinned: false, flash: '' };
+
+const coin = (c = 'coin') => `<img class="px ${c}" src="${P}icons/_gold.png" alt="">`;
+const icon = (id, c = 'ico') => `<img class="px ${c}" src="${P}icons/${id}.png" alt="">`;
+const av = (h) => `${P}img/av-${h}.png`;
+const parse = (it) => { const m = {}; for (const l of it ? it.lines : []) { const r = /^\+([\d.]+)(%?) (.+)$/.exec(l); if (r) m[r[3]] = { v: +r[1], p: r[2] }; } return m; };
+const canUse = (it, h) => !it.classes || it.classes.includes(h.id);
+function delta(it, h) {
+  const now = parse(ITEMS[h.eq[it.slot]]); const nw = parse(it); const keys = [...new Set([...Object.keys(nw), ...Object.keys(now)])];
+  return keys.map((k) => { const a = now[k]?.v ?? 0, b = nw[k]?.v ?? 0, p = (nw[k] || now[k]).p; return { k, a, b, d: Math.round((b - a) * 10) / 10, p }; });
+}
+const score = (it, h) => canUse(it, h) ? delta(it, h).reduce((s, x) => s + x.d * (x.p ? 0.3 : 1), 0) : -1e9;
+const best = (it) => HEROES.reduce((b, h) => (score(it, h) > score(it, b) ? h : b), HEROES[0]);
+const fmt = (x) => `${x.d > 0 ? '+' : x.d < 0 ? '−' : '±'}${Math.abs(x.d)}${x.p} ${x.k}`;
+const list = () => (S.tab === 'buy' ? S.wares.map((w) => ({ id: w.id, sold: w.sold, price: ITEMS[w.id].value })) : S.bag.map((id) => ({ id, sold: false, price: ITEMS[id].sell })));
+const cur = () => list()[S.sel];
+const afford = (e) => S.tab === 'sell' || e.price <= S.gold;
+const sub = (it) => `${RC[it.rarity]} ${SLOT[it.slot]}${it.family ? ' · ' + it.family : ''} · Item level ${it.ilvl}`;
+
+// --- tüccar siluet (YER TUTUCU) ---
+function merchantSVG(vb = '0 0 420 960', extra = '') {
+  return `<svg viewBox="${vb}" ${extra} xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a2817"/><stop offset=".55" stop-color="#1c130b"/><stop offset="1" stop-color="#0b0705"/></linearGradient>
+    <linearGradient id="mp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b2a18"/><stop offset="1" stop-color="#140d07"/></linearGradient>
+    <radialGradient id="lg"><stop offset="0" stop-color="#ffd27a" stop-opacity=".95"/><stop offset=".25" stop-color="#f08c28" stop-opacity=".55"/><stop offset="1" stop-color="#e0702a" stop-opacity="0"/></radialGradient>
+    <radialGradient id="face" cx=".45" cy=".55"><stop offset="0" stop-color="#2a1c10"/><stop offset="1" stop-color="#050302"/></radialGradient>
+  </defs>
+  <g stroke="rgba(217,178,106,.55)" stroke-width="2" stroke-linejoin="round">
+    <ellipse cx="210" cy="932" rx="190" ry="20" fill="rgba(0,0,0,.5)" stroke="none"/>
+    <!-- sırt yükü -->
+    <line x1="262" y1="150" x2="262" y2="600" stroke-width="6" stroke="#2a1d10"/><line x1="350" y1="150" x2="350" y2="600" stroke-width="6" stroke="#2a1d10"/>
+    <rect x="248" y="200" width="118" height="370" rx="14" fill="url(#mp)"/>
+    <line x1="250" y1="300" x2="364" y2="300"/><line x1="250" y1="430" x2="364" y2="430"/>
+    <ellipse cx="306" cy="176" rx="72" ry="28" fill="#2b1c10"/><path d="M240 176 Q306 196 372 176" fill="none"/>
+    <path d="M372 250 l22 4 l-4 46 q-14 10 -26 0 z" fill="#231709"/><circle cx="388" cy="345" r="20" fill="#1d1309"/><line x1="388" y1="325" x2="388" y2="308"/>
+    <path d="M366 400 q34 6 30 40 q-20 14 -34 -4" fill="#231709"/>
+    <!-- asa + fener -->
+    <line x1="76" y1="160" x2="60" y2="930" stroke="#2a1b0e" stroke-width="11"/><line x1="76" y1="160" x2="60" y2="930" stroke-width="1.5" fill="none"/>
+    <path d="M76 162 Q76 128 108 130 L108 150" fill="none" stroke-width="3"/>
+    <circle cx="108" cy="190" r="70" fill="url(#lg)" stroke="none"/>
+    <path d="M94 152 h28 l6 12 v40 l-6 10 h-28 l-6 -10 v-40 z" fill="#2a1a0c"/><rect x="98" y="166" width="20" height="36" fill="#ffc35e" stroke="none" opacity=".92"/>
+    <line x1="108" y1="166" x2="108" y2="202" stroke="#2a1a0c" stroke-width="2"/>
+    <!-- pelerin -->
+    <path d="M206 98 C156 98 132 148 134 204 C120 258 110 330 112 410 L90 872 Q200 910 334 874 L302 420 C302 330 292 252 280 206 C282 146 256 98 206 98 Z" fill="url(#mf)"/>
+    <path d="M130 600 L120 870 M178 560 L172 890 M250 560 L262 890" fill="none" stroke="rgba(217,178,106,.14)"/>
+    <!-- başlık + yüz gölgesi -->
+    <path d="M206 112 C170 112 156 150 160 196 C164 236 186 262 208 262 C232 262 250 236 252 196 C254 150 240 112 206 112 Z" fill="url(#face)" stroke="rgba(217,178,106,.3)"/>
+    <path d="M176 220 Q208 300 240 220 Q232 268 208 276 Q184 268 176 220 Z" fill="#3b2b1c" stroke="rgba(217,178,106,.25)"/>
+    <circle cx="194" cy="196" r="2.6" fill="#ffb35a" stroke="none" opacity=".85"/><circle cx="222" cy="196" r="2.6" fill="#ffb35a" stroke="none" opacity=".85"/>
+    <!-- kol -->
+    <path d="M150 250 C112 300 92 360 80 426 L102 440 C118 380 142 322 170 292 Z" fill="#20160c"/>
+    <circle cx="78" cy="434" r="14" fill="#3b2a1a"/>
+    <!-- kemer + kese -->
+    <path d="M118 470 Q210 492 306 466" fill="none" stroke="#d9b26a" stroke-width="3"/>
+    <path d="M226 482 q-22 30 -6 60 q26 14 48 -4 q12 -30 -8 -56 z" fill="#3a2614" stroke="#d9b26a"/><path d="M232 488 q16 8 30 -2" fill="none" stroke="#d9b26a"/>
+    <circle cx="232" cy="560" r="5" fill="#e8c06a" stroke="none"/><circle cx="246" cy="566" r="4" fill="#d9a548" stroke="none"/>
+    <!-- çizme -->
+    <ellipse cx="160" cy="912" rx="40" ry="16" fill="#140d07"/><ellipse cx="258" cy="912" rx="40" ry="16" fill="#140d07"/>
+  </g>
+  ${extra.includes('noTag') ? '' : ''}
+  </svg>`;
+}
+
+// --- ortak parçalar ---
+const tabs = () => `<div class="tabs"><button class="tab ${S.tab === 'buy' ? 'on' : ''}" data-act="tab" data-t="buy">Buy<i class="dia"></i></button><button class="tab ${S.tab === 'sell' ? 'on' : ''}" data-act="tab" data-t="sell">Sell <small>from your bag</small><i class="dia"></i></button></div>`;
+const goldRes = () => `<span style="display:flex;align-items:center;gap:12px">${coin()}<span class="${S.flash === 'gold' ? 'flash' : ''}">${S.gold}</span></span>`;
+const bagRes = () => `<span class="bag ${S.flash === 'bag' ? 'flash' : ''}"><span class="lbl">Bag </span><b>${S.bag.length}</b><span class="lbl"> / ${BAGMAX}</span></span>`;
+const reroll = () => `<button class="lnk" data-act="reroll" ${S.gold < REROLL || S.tab !== 'buy' ? 'disabled' : ''}><span>Reroll wares ${coin()}<b style="color:${S.gold < REROLL ? 'var(--bad)' : 'inherit'}">${REROLL}</b><i class="opt">OPTIONAL</i></span></button>`;
+const moveOn = () => `<button class="btn" data-act="leave">Move on</button>`;
+
+function partyCards(it, opts = {}) {
+  const b = best(it);
+  return `<div class="party">${HEROES.map((h) => {
+    const ok = canUse(it, h);
+    let dl;
+    if (!ok) dl = `<span class="it">Can't wield<br>${it.family}</span>`;
+    else if (S.tab === 'sell') dl = h.eq[it.slot] === it.id ? '<span class="it">Equipped</span>' : '<span class="it same">Can use</span>';
+    else {
+      const ds = delta(it, h).filter((x) => x.d !== 0).sort((a, c) => Math.abs(c.d) - Math.abs(a.d)).slice(0, 2);
+      dl = ds.length ? ds.map((x) => `<span class="${x.d > 0 ? 'up' : 'down'}">${fmt(x)}</span>`).join('<br>') : '<span class="same it">No change</span>';
+    }
+    const isBest = S.tab === 'buy' && ok && h === b && score(it, h) > 0;
+    return `<button class="pc ${ok ? '' : 'no'} ${opts.cmp && ok && S.cmp === h.id ? 'cmp' : ''}" data-act="${ok ? 'cmp' : ''}" data-h="${h.id}">
+      ${isBest ? '<span class="best">BEST</span>' : ''}<span class="av"><img src="${av(h.id)}" alt=""></span><span class="nm">${h.name}</span><span class="dl">${dl}</span><i class="dia"></i></button>`;
+  }).join('')}</div>`;
+}
+function ensureCmp(it) { const h = HEROES.find((x) => x.id === S.cmp); if (!h || !canUse(it, h)) S.cmp = best(it).id; }
+function compare(it) {
+  ensureCmp(it); const h = HEROES.find((x) => x.id === S.cmp); const old = ITEMS[h.eq[it.slot]];
+  const rows = delta(it, h).map((x) => `<tr><td>${x.k}</td><td class="n">${x.a ? x.a + x.p : '—'}</td><td class="n">${x.b ? x.b + x.p : '—'}</td><td class="d ${x.d > 0 ? 'up' : x.d < 0 ? 'down' : 'same'}">${x.d > 0 ? '+' : x.d < 0 ? '−' : ''}${x.d ? Math.abs(x.d) + x.p : '='}</td></tr>`).join('');
+  return `<div class="heading">Compared with ${h.name}</div>
+    <div style="display:flex;align-items:center;gap:14px;margin:12px 0 4px" class="sub">${old ? `<span class="rf r-${old.rarity}" style="width:46px;height:46px">${icon(old.id, 'ico" style="width:36px;height:36px')}</span><span>Now: <span class="rname r-${old.rarity}" style="font-style:normal">${old.name}</span></span>` : `<span>${SLOT[it.slot]} slot is empty</span>`}</div>
+    <table class="cmpt"><tr><th></th><th>Now</th><th>New</th><th></th></tr>${rows}</table>`;
+}
+function actionBtn(e, it, cls = '') {
+  if (S.tab === 'sell') return `<button class="btn ${cls}" data-act="sell">Sell · ${coin()} ${e.price}</button>`;
+  if (e.sold) return `<button class="btn ${cls}" disabled>Sold</button>`;
+  if (!afford(e)) return `<button class="btn ${cls}" disabled>Need ${coin()} <span style="color:var(--bad)">${e.price - S.gold}</span> more</button>`;
+  if (S.bag.length >= BAGMAX) return `<button class="btn ${cls}" disabled>Bag full</button>`;
+  return `<button class="btn ready ${cls}" data-act="buy">Buy · ${coin()} ${e.price}</button>`;
+}
+const priceTag = (e) => e.sold ? `<span class="price sold">SOLD</span>` : `<span class="price ${afford(e) ? '' : 'no'}">${coin()}${e.price}</span>`;
+const fitsMini = (it) => it.classes ? HEROES.filter((h) => canUse(it, h)).map((h) => `<img src="${av(h.id)}" alt="">`).join('') : '';
+
+// ================= V1 =================
+function v1() {
+  const L = list(), e = cur(), it = e && ITEMS[e.id];
+  const cells = L.map((w, i) => { const x = ITEMS[w.id]; return `<button class="cell ${i === S.sel ? 'sel' : ''} ${afford(w) ? '' : 'cant'} ${w.sold ? 'soldc' : ''}" data-act="sel" data-i="${i}">
+      <span class="rf r-${x.rarity}">${icon(x.id)}<span class="fits">${fitsMini(x)}</span><span class="slotlbl">${SLOT[x.slot]}</span>${i === S.sel ? '<i class="dia seld"></i>' : ''}</span>${priceTag(w)}</button>`; });
+  while (cells.length < 9) cells.push(`<div class="cell empty"><span class="rf"></span><span class="price sold">&nbsp;</span></div>`);
+  return `<div class="v1">
+    <div class="abs" style="left:70px;top:48px"><div class="mname">Odo the Peddler</div><div class="msub">Travelling merchant · follows the company</div></div>
+    <div class="panel bubble" style="left:70px;top:150px;width:520px;background:rgba(14,10,7,.9)"><div class="speech"><q>${LINES[S.line]}</q></div><i class="tail"></i></div>
+    <div class="abs merchant" style="left:110px;top:290px;width:400px">${merchantSVG('0 0 420 960', 'width="400" height="760"')}</div>
+    <div class="abs" style="left:440px;top:330px"><span class="ph-tag">PLACEHOLDER ART</span></div>
+    <div class="abs purse" style="left:430px;top:930px">${coin('coin')}<div><div class="lbl">YOUR PURSE</div><div class="amt ${S.flash === 'gold' ? 'flash' : ''}">${S.gold}</div></div></div>
+    <div class="abs" style="left:700px;top:46px;width:1180px">${tabs()}<div class="tabline"></div></div>
+    <div class="abs res" style="right:40px;top:58px">${bagRes()}</div>
+    <div class="abs grid" style="left:700px;top:150px">${cells.join('')}</div>
+    <div class="abs" style="left:690px;top:850px">${S.tab === 'buy' ? reroll() : `<span class="sub">The merchant pays a quarter of an item's worth.</span>`}</div>
+    ${it ? `<div class="panel corners fade-in" style="left:1270px;top:150px;width:610px;height:760px;padding:26px 30px" key="${e.id}">
+      <div style="display:flex;gap:20px;align-items:center"><span class="rf r-${it.rarity}" style="width:104px;height:104px;flex:none">${icon(it.id, 'ico" style="width:84px;height:84px')}</span>
+        <div><div class="cin rname r-${it.rarity}" style="font-size:30px;letter-spacing:.06em;line-height:1.1">${it.name}</div><div class="sub" style="margin-top:6px">${sub(it)}</div></div></div>
+      <div class="stats" style="margin:16px 0 18px">${it.lines.join('<span style="color:var(--dim)">  ·  </span>')}</div>
+      <div class="heading" style="margin-bottom:14px">${it.classes ? 'Who can wield it' : 'Party'}</div>
+      ${partyCards(it, { cmp: true })}
+      <div style="margin-top:8px">${S.tab === 'buy' ? compare(it) : ''}</div>
+      <div style="position:absolute;left:30px;right:30px;bottom:26px;display:flex;justify-content:center">${actionBtn(e, it)}</div>
+    </div>` : ''}
+    <div class="abs" style="right:80px;bottom:44px">${moveOn()}</div>
+  </div>`;
+}
+
+// ================= V2 =================
+function v2() {
+  const L = list();
+  const rows = L.map((w, i) => { const x = ITEMS[w.id]; const fits = x.classes ? HEROES.map((h) => `<img class="${canUse(x, h) ? '' : 'no'}" src="${av(h.id)}" alt="">`).join('') : '<span class="all">Anyone</span>';
+    return `<button class="row ${i === S.sel ? 'sel' : ''} ${afford(w) ? '' : 'cant'} ${w.sold ? 'soldr' : ''}" data-act="sel" data-i="${i}">
+      <span class="rf r-${x.rarity}">${icon(x.id)}</span>
+      <span style="margin-left:20px;display:flex;flex-direction:column;gap:2px"><span class="nm rname r-${x.rarity}">${x.name}</span><span class="st">${x.lines.join(' · ')}</span></span>
+      <span class="leader"></span><span class="slot">${SLOT[x.slot]} · ilvl ${x.ilvl}</span><span class="fits">${fits}</span>
+      <span class="pr">${priceTag(w)}</span><span class="act">${w.sold ? '' : S.tab === 'sell' ? '<span class="lnk" data-act="sell"><span>Sell</span></span>' : afford(w) ? '<span class="lnk" data-act="buy"><span>Buy</span></span>' : ''}</span></button>`; }).join('');
+  const hi = S.hover >= 0 ? S.hover : S.pinned ? S.sel : -1; const e = L[hi]; const it = e && ITEMS[e.id];
+  let tip = '';
+  if (it) {
+    const rowTop = 210 + 40 + hi * 92;
+    tip = `<div class="panel corners tip fade-in ${S.pinned && S.hover < 0 ? 'touch' : ''}" data-row="${rowTop}" style="left:40px;top:${rowTop}px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><div class="cin rname r-${it.rarity}" style="font-size:26px;letter-spacing:.06em">${it.name}</div>${priceTag(e)}</div>
+      <div class="sub">${sub(it)}</div><div class="stats" style="font-size:24px;margin:8px 0 14px">${it.lines.join('  ·  ')}</div>
+      ${partyCards(it, { cmp: true })}${S.tab === 'buy' ? compare(it) : ''}
+      <div class="sub" style="margin-top:10px;text-align:center">${e.sold ? 'Sold.' : S.tab === 'sell' ? 'Click to sell' : afford(e) ? 'Click Buy on the row' : `<span style="color:var(--bad)">You need ${e.price - S.gold} more gold</span>`}</div></div>`;
+  }
+  return `<div class="v2">
+    <div class="arch merchant" style="left:90px;top:70px;width:440px;height:560px"><div style="position:absolute;left:0;right:0;bottom:-40px;display:flex;justify-content:center">${merchantSVG('70 70 300 420', 'width="440" height="616"')}</div></div>
+    <div class="abs" style="left:96px;top:44px"><span class="ph-tag">PLACEHOLDER ART</span></div>
+    <div class="abs" style="left:70px;top:654px;width:480px;text-align:center"><div class="mname">Odo the Peddler</div><div class="msub">Travelling merchant</div>
+      <div style="display:flex;align-items:center;gap:12px;justify-content:center;margin:14px 0"><span style="flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(var(--gold),.45))"></span><i class="dia hollow"></i><span style="flex:1;height:1px;background:linear-gradient(270deg,transparent,rgba(var(--gold),.45))"></span></div>
+      <div class="speech"><q>${LINES[S.line]}</q></div></div>
+    <div class="abs res" style="left:70px;bottom:46px;width:480px;justify-content:center">${goldRes()}<span class="sep"></span>${bagRes()}</div>
+    <div class="ledger" style="left:620px;top:60px;width:1260px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between">${tabs()}${S.tab === 'buy' ? reroll() : ''}</div><div class="tabline"></div>
+      <div class="cols" style="margin-top:110px;display:none"></div>
+    </div>
+    <div class="ledger" style="left:620px;top:170px;width:1260px">
+      <div class="cols"><span style="flex:1">${S.tab === 'buy' ? 'Wares' : 'Your bag'}</span><span style="width:170px">Slot</span><span style="width:196px">Fits</span><span style="width:110px;text-align:right">${S.tab === 'buy' ? 'Price' : 'Pays'}</span><span style="width:120px"></span></div>
+      <div style="height:1px;background:rgba(var(--gold),.3)"></div>
+      <div style="height:${8 * 92}px;overflow:hidden">${rows}</div>
+    </div>
+    ${tip}
+    <div class="abs" style="right:80px;bottom:44px">${moveOn()}</div>
+  </div>`;
+}
+
+// ================= V3 =================
+function v3() {
+  const L = list(), e = cur(), it = e && ITEMS[e.id];
+  const n = L.length; const back = n > 4 ? Math.floor(n / 2) : 0; const front = n - back;
+  const row = (k, y, sz, x0, x1) => Array.from({ length: k }, (_, i) => [k === 1 ? (x0 + x1) / 2 : x0 + ((x1 - x0) * i) / (k - 1), y, sz]);
+  const spots = [...row(back, 560, 100, 830, 1690), ...row(front, 745, 124, 770, 1750)];
+  const wares = L.map((w, i) => { const x = ITEMS[w.id]; const [sx, sy, sz] = spots[i];
+    return `<button class="ware r-${x.rarity} ${i === S.sel ? 'sel' : ''} ${afford(w) ? '' : 'cant'} ${w.sold ? 'soldw' : ''}" data-act="sel" data-i="${i}" style="left:${sx}px;top:${sy}px"><span class="glowring"></span>${icon(x.id, 'ico" style="width:' + sz + 'px;height:' + sz + 'px')}<span class="shadow"></span></button>
+      <span class="tag" style="left:${sx}px;top:${sy + 16}px">${priceTag(w)}</span>`; }).join('');
+  const scroll = it ? `<div class="panel scroll fade-in" style="left:640px;top:118px;width:1240px;height:300px">
+      <i class="rod" style="top:-6px"></i><i class="rod" style="bottom:-6px"></i>
+      <div style="display:flex;gap:30px;height:100%">
+        <div style="width:440px">
+          <div style="display:flex;gap:18px;align-items:center"><span class="rf r-${it.rarity}" style="width:88px;height:88px;flex:none">${icon(it.id, 'ico" style="width:72px;height:72px')}</span>
+          <div><div class="cin rname r-${it.rarity}" style="font-size:28px;letter-spacing:.05em;line-height:1.1">${it.name}</div><div class="sub" style="font-size:19px;margin-top:4px">${sub(it)}</div></div></div>
+          <div class="stats" style="margin-top:14px">${it.lines.join('<br>')}</div>
+        </div>
+        <div style="width:1px;background:linear-gradient(180deg,transparent,rgba(var(--gold),.4),transparent)"></div>
+        <div style="flex:1">${S.tab === 'buy' ? compare(it) : `<div class="heading">Selling</div><div class="speech" style="font-size:23px;margin-top:12px">Worth ${it.value} gold new. The merchant pays ${e.price}.</div>`}</div>
+        <div style="width:300px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:16px">${actionBtn(e, it)}${!e.sold && S.tab === 'buy' && !afford(e) ? '' : ''}</div>
+      </div></div>` : '';
+  return `<div class="v3">
+    <div class="abs merchant" style="left:70px;top:170px;width:470px">${merchantSVG('0 0 420 960', 'width="470" height="860"')}</div>
+    <div class="abs" style="left:76px;top:150px"><span class="ph-tag">PLACEHOLDER ART</span></div>
+    <div class="abs" style="left:70px;top:44px"><div class="mname">Odo the Peddler</div><div class="msub">Travelling merchant</div></div>
+    <div class="panel bubble3" style="left:400px;top:190px;width:250px;background:rgba(24,18,12,.94);z-index:5"><div class="speech" style="font-size:22px"><q>${LINES[S.line]}</q></div><i class="tail"></i></div>
+    <div class="abs" style="left:640px;top:30px;width:1240px;display:flex;align-items:flex-end;justify-content:space-between">${tabs().replace('>Buy<', '>Wares<').replace('Sell <small>from your bag</small>', 'Your bag')}<div class="res" style="padding-bottom:12px">${goldRes()}<span class="sep"></span>${bagRes()}</div></div>
+    <div class="abs tabline" style="left:640px;top:96px;width:1240px"></div>
+    ${scroll}
+    <div class="table" style="left:640px;top:452px;width:1240px;height:370px"><div class="top"></div><div class="topline"></div><div class="apron"><span class="fr"></span><span class="dias">${'<i class="dia hollow"></i>'.repeat(7)}</span></div></div>
+    ${wares}
+    <div class="partybar" style="left:660px;top:868px">${it ? partyCards(it, { cmp: true }).replace('<div class="party">', '').replace(/<\/div>$/, '') : ''}</div>
+    <div class="abs" style="left:1260px;top:920px">${S.tab === 'buy' ? reroll().replace('Reroll wares', 'Ring for new wares') : ''}</div>
+    <div class="abs" style="right:80px;bottom:30px">${moveOn()}</div>
+  </div>`;
+}
+
+// --- çizim + olaylar ---
+const frame = document.getElementById('frame');
+function render() {
+  S.sel = Math.min(S.sel, Math.max(0, list().length - 1));
+  frame.innerHTML = S.v === 1 ? v1() : S.v === 2 ? v2() : v3();
+  const tp = frame.querySelector('.tip'); if (tp) { const h = tp.offsetHeight, r = +tp.dataset.row; tp.style.top = Math.max(20, Math.min(1060 - h, r + 46 - h / 2)) + 'px'; }
+  S.flash = '';
+  document.querySelectorAll('#pick button[data-v]').forEach((b) => b.classList.toggle('on', +b.dataset.v === S.v));
+  const c = CAPS[S.v]; const cp = document.getElementById('cap'); cp.innerHTML = `<b>${c[0]}</b>${c[1]}`; cp.classList.toggle('mid', S.v !== 3);
+}
+let toastT;
+function toast(html) { const t = document.getElementById('toast'); t.innerHTML = html; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1800); }
+frame.addEventListener('click', (ev) => {
+  const el = ev.target.closest('[data-act]'); if (!el || !el.dataset.act) { if (S.pinned) { S.pinned = false; render(); } return; }
+  const a = el.dataset.act;
+  if (a === 'tab') { S.tab = el.dataset.t; S.sel = 0; S.hover = -1; S.pinned = false; S.line = S.tab === 'sell' ? 'sell' : 'idle'; }
+  else if (a === 'sel') { const i = +el.dataset.i; const w = list()[i]; if (S.v === 2 && S.sel === i && !w.sold && ev.target.closest('.lnk')) return; S.sel = i; S.pinned = true; S.cmp = null; S.line = S.tab === 'sell' ? 'sell' : w.sold ? 'sold' : afford(w) ? 'idle' : 'poor'; }
+  else if (a === 'cmp') { S.cmp = el.dataset.h; }
+  else if (a === 'buy') { const row = el.closest('[data-i]'); if (row) S.sel = +row.dataset.i; const w = S.wares[S.sel]; if (w.sold || w.id && ITEMS[w.id].value > S.gold) return; S.gold -= ITEMS[w.id].value; w.sold = true; S.bag.push(w.id); S.flash = 'gold'; S.line = 'buy'; toast(`${icon(w.id, 'ico" style="width:36px;height:36px')} ${ITEMS[w.id].name} added to your bag`); }
+  else if (a === 'sell') { const row = el.closest('[data-i]'); if (row) S.sel = +row.dataset.i; const id = S.bag[S.sel]; if (!id) return; S.gold += ITEMS[id].sell; S.bag.splice(S.sel, 1); S.flash = 'gold'; S.line = 'sold'; toast(`Sold ${ITEMS[id].name} for ${ITEMS[id].sell} gold`); }
+  else if (a === 'reroll') { if (S.gold < REROLL) return; S.gold -= REROLL; const pool = Object.keys(ITEMS).filter((k) => !HEROES.some((h) => Object.values(h.eq).includes(k))); S.wares = pool.sort(() => Math.random() - 0.5).slice(0, 8).map((id) => ({ id, sold: false })); S.sel = 0; S.flash = 'gold'; S.line = 'reroll'; }
+  else if (a === 'leave') { toast('The company moves on to wave 6'); return; }
+  render();
+});
+frame.addEventListener('mouseover', (ev) => {
+  if (S.v !== 2) return; const r = ev.target.closest('.row'); const i = r ? +r.dataset.i : -1;
+  if (r && i !== S.hover) { S.hover = i; render(); } else if (!r && !ev.target.closest('.tip') && S.hover !== -1) { S.hover = -1; render(); }
+});
+frame.addEventListener('mouseleave', () => { if (S.v === 2 && S.hover !== -1) { S.hover = -1; render(); } });
+document.getElementById('pick').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  if (b.classList.contains('tog')) { document.getElementById('pick').classList.toggle('min'); return; }
+  S.v = +b.dataset.v; S.hover = -1; history.replaceState(null, '', `?v=${S.v}`); render();
+});
+
+// --- sahne ölçeği: yükseklik 1080 sabit, genişlik 1920-2580 ---
+function fit() {
+  const vw = window.visualViewport?.width ?? innerWidth, vh = window.visualViewport?.height ?? innerHeight;
+  const W = Math.max(1920, Math.min(2580, Math.round((vw / vh) * 1080)));
+  const k = Math.min(vw / W, vh / 1080);
+  const st = document.getElementById('stage'); st.style.width = W + 'px';
+  st.style.transform = `translate(${(vw - W * k) / 2}px, ${(vh - 1080 * k) / 2}px) scale(${k})`;
+  frame.style.left = (W - 1920) / 2 + 'px';
+}
+addEventListener('resize', fit); window.visualViewport?.addEventListener('resize', fit);
+if (innerHeight <= 500) document.getElementById('pick').classList.add('min');
+S.v = Math.min(3, Math.max(1, +(new URLSearchParams(location.search).get('v') || 1)));
+fetch(P + 'items.json').then((r) => r.json()).then((a) => { for (const it of a) ITEMS[it.id] = it; fit(); render(); });
+</script>
+</body>
+</html>

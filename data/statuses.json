@@ -126,7 +126,7 @@
     "attackAttrPct": {
       "str": 0.5
     },
-    "text": "Next 3 attacks: melee reach +1 row and +50% STR (damage only)"
+    "text": "Next 3 attacks: melee reach +1 row (not Whirlwind) and +50% STR (damage only)"
   },
   "silence": {
     "_not": "Anti-Mage Drain Field (madde 260): manası biten düşmana %50 şansla. blocksMpSkills: MP bedelli skill'ler kullanılamaz (bedelsiz temel saldırı, Rage/can bedelliler, Rest/Skip/Move serbest). tickAtTurnEnd: süre taşıyanın turu BİTİNCE azalır (1 tur = bir sonraki turunun tamamı). Debuff: Resilience (1 turlukta zar yok) ve Mana Barrier dispel ile uyumlu. İkon YER TUTUCU: manaburn (content-designer gerçeğini yapacak). Süre PROVİZYON.",

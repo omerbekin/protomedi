@@ -5,6 +5,7 @@ import { drawMiniShape, miniShapeSize } from './shape-draw';
 import type { MiniShape } from '../ui/shape-diagram';
 import { onStageResize, stageView } from './stage';
 import { FULL_W, FULL_X0 } from '../ui/viewport';
+import { isBackdropTap } from '../ui/backdrop';
 
 /**
  * ZARİF TASARIM KİTİ (Phaser tarafı; Ömer 2026-10-09: ana menü + Quick Battle "Twin Formations" dili HER ekranda).
@@ -236,6 +237,15 @@ export function elButton(scene: Phaser.Scene, label: string, run: () => void, o:
   const breath = scene.add.image(0, 0, ensureGlow(scene)).setTint(EL.EMBER).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(w * 1.35, h * 2.6).setAlpha(0);
   const plate = scene.add.graphics();
   const text = elText(scene, 0, 0, label, size, EL.DIM, { em, pad: true }).setOrigin(0.5);
+  // Ortalama: Phaser harf aralığını son harfin sonuna da ekler, yazı sola kayar; yarısı kadar sağa alınır. Sığmayan yazı küçültülür
+  // (düğme sabit genişlikliyse yazı taşmaz; elmaslar çerçevenin dışında, iç boşluk iki yanda).
+  const fitLabel = () => {
+    text.setScale(1).setX((size * em) / 2);
+    const inner = text.width - EL.PAD * 2 - size * em;
+    const room = w - (primary ? 64 : 40);
+    if (inner > room) text.setScale(room / inner);
+  };
+  fitLabel();
   const lift = scene.add.container(0, 0, [plate, text]);
   const zone = scene.add.zone(0, 0, w + 16, Math.max(h + 12, EL.HIT - 6)).setInteractive({ useHandCursor: true });
   root.add([breath, lift, zone]);
@@ -309,7 +319,10 @@ export function elButton(scene: Phaser.Scene, label: string, run: () => void, o:
     h,
     setReady: (r: boolean) => (r === ready ? draw() : setReady(r)),
     setLabel: (l: string) => {
-      if (text.text !== l.toUpperCase()) text.setText(l.toUpperCase());
+      if (text.text !== l.toUpperCase()) {
+        text.setText(l.toUpperCase());
+        fitLabel();
+      }
     },
     shake: () => scene.tweens.add({ targets: lift, x: { from: -10, to: 0 }, duration: 260, ease: 'Bounce.easeOut' }),
   };
@@ -427,11 +440,40 @@ export interface ElTipSpec {
   title: string;
   titleHex?: string;
   badge?: string;
+  /** Başlığın altında yan yana küçük Cinzel etiketler (skill: hedef türü · element · Melee / Ranged; src/ui/skill-tags.ts). Varsa badge yerine. */
+  tags?: Array<{ text: string; color?: string; icon?: string }>;
   /** Başlık altı ince çizginin altındaki küçük Cinzel satır (Cost · Cooldown). */
   meta?: string;
   shape?: MiniShape | null;
   lines: Array<[string, string?]>;
   width?: number;
+}
+
+/** Etiket satırı (yan yana, ince noktalarla ayrılmış küçük büyük harf Cinzel; element kendi renginde, ikonlu). Kök sol üst. */
+function tagRow(scene: Phaser.Scene, x: number, tags: NonNullable<ElTipSpec['tags']>): Phaser.GameObjects.Container {
+  const c = scene.add.container(x, 0);
+  let cx = 0;
+  const h = 22;
+  tags.forEach((t, i) => {
+    if (i > 0) {
+      const dot = scene.add.graphics();
+      dot.fillStyle(EL.GOLD, 0.55).fillCircle(cx + 6, h / 2, 1.6);
+      c.add(dot);
+      cx += 12;
+    }
+    if (t.icon) {
+      c.add(scene.add.image(cx + 8, h / 2, t.icon).setDisplaySize(16, 16));
+      cx += 20;
+    }
+    const tx = elText(scene, cx, h / 2, t.text, 13, t.color ?? EL.MUTED, { em: 0.14 }).setOrigin(0, 0.5);
+    c.add(tx);
+    cx += tx.displayWidth;
+  });
+  c.setSize(cx, h);
+  // elBody ile aynı arayüz: yükseklik / genişlik ölçüsü
+  (c as unknown as { height: number }).height = h;
+  (c as unknown as { width: number }).width = cx;
+  return c;
 }
 
 /** Tooltip kutusu (konumlanmamış; derinlik 5000). */
@@ -452,7 +494,7 @@ export function elTip(scene: Phaser.Scene, spec: ElTipSpec): { container: Phaser
   const shapeSz = spec.shape ? miniShapeSize(spec.shape) : null;
   const textW = w - hx - px - (shapeSz ? shapeSz.w + 10 : 0);
   const title = fitW(elText(scene, hx, 0, spec.title, 24, spec.titleHex ?? EL.ON).setOrigin(0, 0), textW);
-  const badge = spec.badge ? elBody(scene, hx, 0, spec.badge, 18, EL.MUTED).setOrigin(0, 0) : null;
+  const badge = spec.tags?.length ? tagRow(scene, hx, spec.tags) : spec.badge ? elBody(scene, hx, 0, spec.badge, 18, EL.MUTED).setOrigin(0, 0) : null;
   const headH = title.displayHeight + (badge ? badge.height : 0);
   const blockH = Math.max(iconS, headH);
   title.y = y0 + (blockH - headH) / 2;
@@ -502,6 +544,30 @@ const confirmOpen = new WeakSet<Phaser.Scene>();
 export const elConfirmOpen = (scene: Phaser.Scene): boolean => confirmOpen.has(scene);
 
 /**
+ * Zemine dokununca kapanma (oyun geneli kural, CLAUDE.md > Geri / Menu kuralı; DOM eşi src/ui/backdrop.ts): `shade` tüm alanı kaplayan
+ * etkileşimli koyu örtü (sol üst köşesi `origin`), `rect` panel. Basış ve bırakış ikisi de panelin dışında ve örtünün üstündeyse `run`.
+ * Panelin içinde başlayıp dışarıda biten sürükleme kapatmaz. Konumlar örtünün yerel koordinatından (kameradan bağımsız).
+ */
+export function elBackdropTap(scene: Phaser.Scene, shade: Phaser.GameObjects.Rectangle, rect: { x: number; y: number; w: number; h: number }, run: () => void): void {
+  let down: { x: number; y: number } | null = null;
+  const at = (lx: number, ly: number) => ({ x: shade.x + lx, y: shade.y + ly });
+  shade.on('pointerdown', (_p: Phaser.Input.Pointer, lx: number, ly: number) => {
+    down = at(lx, ly);
+  });
+  shade.on('pointerup', (_p: Phaser.Input.Pointer, lx: number, ly: number) => {
+    const d = down;
+    down = null;
+    if (isBackdropTap(d, at(lx, ly), rect)) run();
+  });
+  // Başka bir nesnede başlayan basış (sürükleme) örtüde bitse de sayılmaz
+  const reset = (_p: unknown, o: unknown) => {
+    if (o !== shade) down = null;
+  };
+  scene.input.on('gameobjectdown', reset);
+  shade.once('destroy', () => scene.input.off('gameobjectdown', reset));
+}
+
+/**
  * Onay penceresi (yalnızca ilerleme kaybolacaksa: savaşın ortasında çıkmak, koşuyu bırakmak; CLAUDE.md > "Geri / Menu kuralı").
  * Tüm görünür alanı kaplayan koyu örtü + ince çerçeveli panel + Yes (primary) / No (secondary). Esc ve örtüye dokunmak = No.
  */
@@ -538,7 +604,8 @@ export function elConfirm(scene: Phaser.Scene, o: { title?: string; text: string
     o.onNo?.();
   };
   scene.input.keyboard?.on('keydown-ESC', onEsc);
-  shade.on('pointerup', () => (close(), o.onNo?.()));
+  // Zemine dokunmak = No (iptal); panelin içinde başlayan sürükleme kapatmaz
+  elBackdropTap(scene, shade, { x: 960 - w / 2, y: y0, w, h }, () => (close(), o.onNo?.()));
   root.setAlpha(0);
   scene.tweens.add({ targets: root, alpha: 1, duration: 160, ease: EL.EASE });
   return { close };

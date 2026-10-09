@@ -19,7 +19,6 @@ import { buildGrounds, buildStatuses, skillOwner, searchText, avatarMap, groupBy
 import type { GroundEntry, Owner, StatusEntry } from '../gallery/catalog';
 import { STAT_COLOR, STAT_ICON, STAT_LABEL } from '../ui/stat-icons';
 import { shapeMiniGrid, skillMiniGrid } from '../ui/shape-diagram';
-import { ELEMENT_ICON } from '../game/float-text';
 import type { MiniShape } from '../ui/shape-diagram';
 
 const f: Formulas = content.formulas;
@@ -45,7 +44,7 @@ export interface WikiArticle {
   /** Küçük şekil şemaları (Area shapes makalesi): etiket + mini ızgara. */
   shapes?: Array<{ label: string; shape: MiniShape }>;
   /** Items and gear makalesi: yuvalar (Codex yuva siluetleri) ve nadirlik renkleri (data/items.json). */
-  gear?: { slots: Array<{ id: string; name: string }>; rarities: Array<{ id: string; name: string; color: string }> };
+  gear?: { slots: Array<{ id: string; name: string }>; rarities: Array<{ id: string; name: string; color: string }>; families?: Array<{ id: string; name: string }> };
   search: string;
 }
 
@@ -85,7 +84,9 @@ export interface WikiSkill {
   search: string;
 }
 
-export type SkillRange = 'Melee' | 'Ranged' | 'Support' | 'Self';
+// Menzil / element etiketleri savaş HUD'ı ve takım seçimiyle ortak (src/ui/skill-tags.ts): Codex de aynı kuralı gösterir
+import { elementIcon, skillElements, skillRange, type SkillRange } from '../ui/skill-tags';
+export { elementIcon, skillElements, skillRange, type SkillRange };
 
 export interface WikiStatRow {
   key: string;
@@ -93,6 +94,8 @@ export interface WikiStatRow {
   icon: string;
   color: string;
   value: string;
+  /** Çok hâlli değerin açıklaması (ceset tüketen çağrı: 'fed / unfed'); değerin altında küçük yazılır. */
+  sub?: string;
 }
 
 export interface WikiUnit {
@@ -201,26 +204,8 @@ export function skillGroundIds(skill: SkillDef): string[] {
 
 const skillRefOf = (s: SkillDef): WikiSkillRef => ({ id: s.id, name: s.name, icon: s.icon, ownerId: skillOwner(s.id).id });
 
-/** Element -> Codex ikonu (fiziksel ve bilinmeyen: kılıç). */
-export const elementIcon = (id: string): string => ELEMENT_ICON[id] ?? 'sword';
 
-export function skillElements(skill: SkillDef): Element[] {
-  const out: Element[] = [];
-  for (const e of skill.effects) {
-    if (e.type === 'damage') out.push(e.element ?? 'physical');
-    else if (e.type === 'ground') out.push(content.grounds[e.ground]?.element as Element);
-  }
-  if (skill.splash) out.push('physical');
-  return [...new Set(out.filter(Boolean))];
-}
 
-/** Etiket: engine'in melee kuralı (`motion === 'melee'`); kendine = Self; dost hedefli = Support; kalanı (büyü, alan, gökten, ok) Ranged. */
-export function skillRange(skill: SkillDef): SkillRange {
-  if (skill.motion === 'melee') return 'Melee';
-  if (skill.target === 'self') return 'Self';
-  if (skill.target === 'single_ally' || skill.target === 'dead_ally' || skill.target === 'all_allies') return 'Support';
-  return 'Ranged';
-}
 
 function slotOf(skillId: string, owner: Owner): number | null {
   const def = unitDefs()[owner.id];
@@ -273,19 +258,21 @@ function buildUnit(kind: WikiUnit['kind'], def: CombatantDef, files: WikiFiles):
   const st = def.stats;
   const sprite = groupByDir(files.sprites)[def.spriteId]?.find((s) => s.anim === 'idle')?.url ?? null;
   const avatar = avatarMap(files.avatars)[def.spriteId] ?? null;
-  const row = (key: StatKind | 'mpRegen' | 'hpRegen', label: string, value: string): WikiStatRow => ({
+  const row = (key: StatKind | 'mpRegen' | 'hpRegen', label: string, value: string, sub?: string): WikiStatRow => ({
     key,
     label,
     icon: key === 'mpRegen' ? STAT_ICON.mp : key === 'hpRegen' ? STAT_ICON.hp : STAT_ICON[key],
     color: key === 'mpRegen' ? STAT_COLOR.mp : key === 'hpRegen' ? STAT_COLOR.hp : STAT_COLOR[key],
     value,
+    ...(sub ? { sub } : {}),
   });
   // Ceset tüketen çağrının iki hâli (Skeleton): beslenmiş (taban) ve beslenmemiş can/STR (stats.ts > applySummonVariant)
   const unfed = def.variants ? applySummonVariant(def, 'unfed').stats : null;
   const fed = def.variants ? applySummonVariant(def, 'fed').stats : null;
   const derived: WikiStatRow[] = [
-    row('hp', 'HP', fed && unfed ? `${fed.hp} empowered / ${unfed.hp} unfed` : String(st.hp)),
-    ...(fed && unfed ? [row('str', 'STR (empowered / unfed)', `${num(fed.str)} / ${num(unfed.str)}`)] : []),
+    // Çok hâlli değer kısa yazılır (105 / 70), hâllerin adı altında küçük satırda: satır taşmaz, yan sütunla çakışmaz
+    row('hp', 'HP', fed && unfed ? `${fed.hp} / ${unfed.hp}` : String(st.hp), fed && unfed ? 'empowered / unfed' : undefined),
+    ...(fed && unfed ? [row('str', 'STR', `${num(fed.str)} / ${num(unfed.str)}`, 'empowered / unfed')] : []),
     row('mp', 'MP', String(st.mp)),
     row('spd', 'SPD', String(st.spd)),
     row('evasion', 'Evasion', pct(st.evasion)),
@@ -394,7 +381,7 @@ export function buildGettingStarted(): WikiArticle[] {
     article('formation', 'Basics', 'Formation and rows', 'team', [
       p(`Each side stands on a ${rows} x ${lanes} grid: ${rows} rows deep and ${lanes} lanes wide (${rows * lanes} cells). A normal team of ${teamSize()} leaves cells empty; a side of ${rows * lanes} fills the whole grid. Empty cells matter: a unit can step onto one with the Move action (see Actions in the Mechanics section).`),
       p(`Melee skills can only reach the first ${f.formation.meleeRows === 1 ? 'occupied row' : `${f.formation.meleeRows} occupied rows`} of the enemy team, so the units in front shield the ones behind them. Ranged and magic skills reach anyone. Some melee skills say they charge or reach further; their description tells you.`),
-      ...Object.values(content.statuses).filter((d) => d.reachBonus).map((d) => p(`${d.name} adds ${d.reachBonus} row${(d.reachBonus ?? 0) > 1 ? 's' : ''} to melee reach while it lasts: melee skills also hit the row behind the front row, and the unit can strike from one row further back.${d.attackCharges ? ` It lasts for ${d.attackCharges} attacks, not turns: every damaging skill the unit uses spends one charge (a multi-hit or area skill counts as one attack).` : ''}`)),
+      ...Object.values(content.statuses).filter((d) => d.reachBonus).map((d) => p(`${d.name} adds ${d.reachBonus} row${(d.reachBonus ?? 0) > 1 ? 's' : ''} to melee reach while it lasts: melee skills also hit the row behind the front row, and the unit can strike from one row further back. Skills that say reach bonuses do not extend them (Whirlwind) keep their normal reach.${d.attackCharges ? ` It lasts for ${d.attackCharges} attacks, not turns: every damaging skill the unit uses spends one charge (a multi-hit or area skill counts as one attack).` : ''}`)),
       p('Melee classes are placed in front. A melee unit only stands in a back row once the rows before it are full, so fighters in front, archers and mages behind is the normal picture.'),
       p('Area skills hit a group of cells around the cell you pick, in a fixed shape (a whole row, a whole column, a block or a cross; see Area shapes in the Mechanics section). You can pick an empty cell too, as long as the shape still covers an enemy.'),
     ]),
@@ -698,6 +685,10 @@ export function buildMechanics(): WikiArticle[] {
       list(...allSkills().flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'bond' }> => e.type === 'bond').map((e) => `${s.name}: bond for ${e.turns} turns; the ally heals ${e.ratio === 1 ? 'the same amount' : pct(e.ratio)} of every life steal heal.`))),
       p(`Life steal passives: ${Object.values(content.classes).filter((c) => c.passive?.effect.type === 'soulDrain').map((c) => `${c.name} (${c.passive!.name}, ${pct((c.passive!.effect as { ratio: number }).ratio)})`).join(', ') || 'none'}.`),
     ], '#b0304f'),
+    article('low-hp-heal', 'Special rules', 'Heals that favour the wounded', 'radiance', [
+      p('Some heals grow with how much health the ally is missing. The bonus is worked out for each ally on its own, just before the heal lands: an ally at full health gets no bonus, an ally with half its health gets half of the bonus, and an ally close to death gets nearly all of it. The heal is rolled and can crit as usual; the bonus is applied on top.'),
+      list(...allSkills().flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'heal' }> => e.type === 'heal' && !!e.missingHpBonus).map((e) => `${s.name}: up to +${pct(e.missingHpBonus!)} healing on a nearly dead ally.`))),
+    ], '#fff0a0'),
     article('half-turn', 'Special rules', 'Half-turn skills', 'hourglass', [
       p(`Using a skill normally takes a whole turn: the unit's action counter drops by ${f.turn.threshold}. A half-turn skill only takes half of that, so the unit's next turn comes in half the usual time (Haste, Slow and the Skip Turn boost still change how fast the counter fills). The turn bar shows this as soon as the skill is used.`),
       p('Cooldown and MP work as usual, and a half-turn skill always has a cooldown, so it cannot be chained. In test mode there is no turn order, so this has no effect there.'),
@@ -737,7 +728,7 @@ export function buildMechanics(): WikiArticle[] {
 
 /** Item'ler (madde 280; sayılar data/items.json'dan): yuvalar, nadirlik, silah aileleri, loot, primary uyarısı. */
 function itemsArticle(): WikiArticle {
-  const gear = { slots: itemsJson.slots.map((x) => ({ id: x.id, name: x.name })), rarities: itemsJson.rarities.map((x) => ({ id: x.id, name: x.name, color: x.color })) };
+  const gear = { slots: itemsJson.slots.map((x) => ({ id: x.id, name: x.name })), rarities: itemsJson.rarities.map((x) => ({ id: x.id, name: x.name, color: x.color })), families: itemsJson.weaponFamilies.map((x) => ({ id: x.id, name: x.name })) };
   return { ...itemsArticleBody(), gear };
 }
 

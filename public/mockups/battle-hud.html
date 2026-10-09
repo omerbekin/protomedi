@@ -5,10 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Battle HUD Mockups</title>
 <!--
-  Savaş HUD'ı taslakları (Ömer 2026-10-09). Oyun kodu DEĞİL; seçim için karşılaştırma sayfası. Açılış: mockups/battle-hud.html?v=1..5
-  Gerçek oyun görselleri (arka plan, sprite, avatar, oyunun kendi ikonları) battle-hud/ altında; HUD HTML ile yeniden çizildi.
-  Sahne oyundaki gibi 1080 yüksekliğinde, genişliği ekran oranına göre 1920-2580 (telefon 2000x900 ~ 2400 genişlik).
-  Sağ kenardaki küçük düğmeler: taslak seçimi (1-5) ve gizle. Dokunmatik: skill seç, stat / çekmece / portre aç.
+  Savaş HUD'ı taslakları, 3. tur (Ömer 2026-10-09). Oyun kodu DEĞİL; seçim için karşılaştırma sayfası. Açılış: mockups/battle-hud.html?v=1..5
+  Tüm taslaklar için kurallar:
+   1. 4 ana skill alt çubuğun TAM ORTASINDA; küçük global eylemler (Rest / Skip / Move) skill'lerin hemen sağında DİKEY sütun (eski oyun düzeni).
+   2. Düşman (ve dost) birimin üstüne gelince / dokununca kit kartı: ad, HP/MP, ana statlar, durumlar, pasif, seçili skill'in isabet/hasar önizlemesi.
+   3. Her statın üstüne gelince kısa açıklama (formulas.json ve src/engine/stat-info.ts anlamları).
+   4. Sıra çubuğu ekranın tam ortasında; şu an oynayan birim tam ortada, geçmiş solda, sıradakiler sağda.
+   5. Boş yere gelince açıklama YOK; skill açıklaması yalnızca skill'in hemen üstünde (üstüne gelince ya da seçiliyken).
+   6. Portre sol altta.  7. 1920x1080 öncelikli; 2000x900 ve 844x390'da da çalışır.
+  Gerçek oyun görselleri battle-hud/ altında. Sağ kenardaki küçük düğmeler: taslak seçimi (1-5) ve gizle (◐).
 -->
 <link rel="stylesheet" href="battle-hud/kit.css" />
 <style>
@@ -16,95 +21,330 @@
 @font-face { font-family: 'EB Garamond'; font-weight: 400 800; font-display: swap; src: url('battle-hud/fonts/EBGaramond-normal-latin.woff2') format('woff2'); }
 @font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400 800; font-display: swap; src: url('battle-hud/fonts/EBGaramond-italic-latin.woff2') format('woff2'); }
 :root {
-  --gold: 217, 178, 106; --on: #f3d999; --txt: #d9c8a2; --muted: #a8977a; --dim: #7d705a; --note: #cdb88d; --ember: #e0702a; --ember2: #ffb35a;
-  --ink: 8, 6, 4; --hp: #5cc46b; --hpE: #e0574a; --mp: #4f8cff; --rage: #e8622a;
+  --gold: 217, 178, 106; --on: #f3d999; --txt: #d9c8a2; --muted: #a8977a; --dim: #7d705a; --note: #cdb88d; --pri: #ffd76a; --ember: #e0702a; --ember2: #ffb35a;
+  --party: #4fa3ff; --enemy: #ff5a5a;
   --cin: Cinzel, Georgia, 'Palatino Linotype', serif; --gar: 'EB Garamond', Georgia, 'Palatino Linotype', serif; --num: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+  --ease: cubic-bezier(0.33, 1, 0.68, 1);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: #050403; overflow: hidden; color: var(--txt); -webkit-tap-highlight-color: transparent; }
-button { font: inherit; color: inherit; }
 #stage { position: absolute; left: 0; top: 0; height: 1080px; transform-origin: 0 0; overflow: hidden; background: #0d0a07; user-select: none; font-family: var(--gar); }
 .abs { position: absolute; }
-/* --- taslak seçici (sahnenin dışında, sol kenarda) --- */
+.ico { image-rendering: pixelated; display: block; flex: none; }
+
+/* --- taslak seçici --- */
 #pick { position: fixed; right: calc(4px + env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); z-index: 50; display: flex; flex-direction: column; gap: 4px; }
 #pick button { all: unset; cursor: pointer; width: 30px; height: 30px; display: grid; place-items: center; font: 600 13px var(--cin); color: var(--muted); background: rgba(8,6,4,.78); border: 1px solid rgba(var(--gold), .3); }
 #pick button.on { color: #1a0f06; background: var(--ember); border-color: var(--ember2); }
 #pick.min button:not(.tog) { display: none; }
-#cap { position: fixed; right: calc(42px + env(safe-area-inset-right)); top: 22%; text-align: right; z-index: 50; font: italic 13px var(--gar); color: var(--note); background: rgba(8,6,4,.78); border: 1px solid rgba(var(--gold), .25); padding: 4px 10px; max-width: 30vw; line-height: 1.2; }
+#cap { position: fixed; left: calc(10px + env(safe-area-inset-left)); top: 10px; z-index: 50; font: italic 13px/1.25 var(--gar); color: var(--note); background: rgba(8,6,4,.84); border: 1px solid rgba(var(--gold), .25); padding: 6px 10px; max-width: 24vw; text-align: left; }
+#cap b { display: block; font: 600 11px var(--cin); letter-spacing: .16em; text-transform: uppercase; color: var(--on); margin-bottom: 2px; font-style: normal; }
 #pick.min ~ #cap { display: none; }
-/* --- sahne: arka plan + birimler --- */
+@media (max-height: 500px) { #cap { font-size: 10px; max-width: 30vw; padding: 4px 7px; } #cap b { font-size: 9px; } #pick { gap: 2px; } #pick button { width: 24px; height: 24px; font-size: 11px; } }
+
+/* --- sahne --- */
 .bg { position: absolute; inset: 0; background: url('battle-hud/img/bg.webp') center 30% / cover; }
-.unit { position: absolute; transform: translate(-50%, -100%); height: 224px; }
-.unit img { height: 100%; display: block; }
+.unit { position: absolute; transform: translate(-50%, -100%); height: 224px; cursor: pointer; }
+.unit img { height: 100%; display: block; pointer-events: none; }
 .unit.enemy img { transform: scaleX(-1); }
-.unit.active::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 120px; height: 22px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(rgba(240,140,40,.55), rgba(240,140,40,0) 70%); z-index: -1; }
-.target-ring { position: absolute; transform: translate(-50%, -50%); width: 150px; height: 34px; border: 2px solid rgba(232,128,106,.8); border-radius: 50%; box-shadow: 0 0 14px rgba(232,128,106,.5); }
-/* --- ortak kit parçaları --- */
-.k { font: 600 15px var(--cin); letter-spacing: .22em; text-transform: uppercase; color: rgba(var(--gold), .85); }
-.n { font: 600 26px var(--cin); letter-spacing: .04em; color: var(--on); }
-.m { font: italic 22px var(--gar); color: var(--muted); }
-.panel { background: linear-gradient(180deg, rgba(30,22,14,.94), rgba(12,9,6,.95)); border: 1px solid rgba(var(--gold), .42); box-shadow: 0 12px 30px rgba(0,0,0,.45); }
-.dia { display: inline-block; width: 10px; height: 10px; transform: rotate(45deg); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2), 0 0 10px rgba(240,140,40,.6); }
-.dia.h { background: rgba(var(--ink), .6); box-shadow: 0 0 0 1px rgba(var(--gold), .55); }
-.fade { height: 1px; background: linear-gradient(90deg, rgba(var(--gold),0), rgba(var(--gold),.55) 25%, rgba(var(--gold),.55) 75%, rgba(var(--gold),0)); }
-.bar { position: relative; height: 10px; background: rgba(0,0,0,.65); box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
+.unit::after { content: ''; position: absolute; left: 50%; bottom: -8px; width: 128px; height: 24px; transform: translateX(-50%); border-radius: 50%; z-index: -1; opacity: 0; transition: opacity .2s; }
+.unit.active::after { opacity: 1; background: radial-gradient(rgba(240,140,40,.55), rgba(240,140,40,0) 70%); }
+.unit.enemy.hov::after { opacity: 1; background: radial-gradient(rgba(255,90,90,.5), rgba(255,90,90,0) 70%); }
+.unit.party.hov:not(.active)::after { opacity: 1; background: radial-gradient(rgba(79,163,255,.45), rgba(79,163,255,0) 70%); }
+.unit.hov img { filter: brightness(1.12) drop-shadow(0 0 6px rgba(255,220,160,.35)); }
+.plate { position: absolute; transform: translate(-50%, -100%); width: 150px; text-align: center; z-index: 2000; cursor: pointer; }
+.plate .nm { font: 600 19px var(--cin); color: #f4ede1; letter-spacing: .04em; text-shadow: 0 2px 4px rgba(0,0,0,.95), 0 0 2px #000; white-space: nowrap; transition: color .18s, text-shadow .18s; }
+.plate.hov .nm { color: var(--on); text-shadow: 0 2px 4px rgba(0,0,0,.95), 0 0 12px rgba(240,140,40,.8); }
+.plate .bar { height: 8px; margin: 4px auto 0; width: 120px; }
+.plate .bar.mp { height: 4px; margin-top: 2px; }
+.plate .fx { display: flex; justify-content: center; gap: 7px; height: 12px; margin-top: 6px; }
+.plate .fx i { width: 8px; height: 8px; transform: rotate(45deg); background: var(--c); box-shadow: 0 0 0 1px rgba(0,0,0,.8), 0 0 6px var(--c); }
+
+/* --- kit parçaları --- */
+.k { font: 600 13px var(--cin); letter-spacing: .24em; text-transform: uppercase; color: rgba(var(--gold), .85); }
+.n { font: 600 22px var(--cin); letter-spacing: .06em; color: var(--on); text-transform: uppercase; }
+.m { font: italic 17px var(--gar); color: var(--muted); }
+.dia { display: inline-block; width: 10px; height: 10px; transform: rotate(45deg); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2), 0 0 10px rgba(240,140,40,.6); flex: none; }
+.dia.h { background: rgba(8,6,4,.6); box-shadow: 0 0 0 1px rgba(var(--gold), .55); }
+.dia.s { width: 7px; height: 7px; }
+.fade { height: 1px; flex: none; background: linear-gradient(90deg, rgba(var(--gold),0), rgba(var(--gold),.55) 25%, rgba(var(--gold),.55) 75%, rgba(var(--gold),0)); }
+.fade.l { background: linear-gradient(90deg, rgba(var(--gold),.5), rgba(var(--gold),.3) 60%, rgba(var(--gold),0)); }
+.vfade { width: 1px; flex: none; align-self: stretch; background: linear-gradient(180deg, rgba(var(--gold),0), rgba(var(--gold),.34) 25%, rgba(var(--gold),.34) 75%, rgba(var(--gold),0)); }
+.hd { display: flex; align-items: center; gap: 9px; padding-bottom: 6px; margin-bottom: 6px; font: 600 12px var(--cin); letter-spacing: .26em; text-transform: uppercase; color: rgba(var(--gold), .82); border-bottom: 1px solid rgba(var(--gold), .16); }
+.panel { position: relative; background: linear-gradient(180deg, rgba(30,22,14,.96), rgba(12,9,6,.97)); border: 1px solid rgba(var(--gold), .42); box-shadow: 0 0 0 3px rgba(8,6,4,.7), 0 18px 40px rgba(0,0,0,.6); }
+.panel.corners::before, .panel.corners::after { content: ''; position: absolute; top: -5px; width: 9px; height: 9px; transform: rotate(45deg); background: #140e09; box-shadow: 0 0 0 1px rgba(var(--gold), .7); }
+.panel.corners::before { left: -5px; } .panel.corners::after { right: -5px; }
+.bar { position: relative; height: 10px; background: rgba(0,0,0,.65); box-shadow: 0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(var(--gold), .12); }
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; }
 .bar.hp i { background: linear-gradient(180deg, #7ad987, #3e9a4c); }
 .bar.hpE i { background: linear-gradient(180deg, #f07a6c, #b83a30); }
 .bar.mp i { background: linear-gradient(180deg, #78a8ff, #3566cc); }
-.bar.rage i { background: linear-gradient(90deg, #ffa23a, #d8341c); }
-.ico { image-rendering: pixelated; display: block; }
-/* sağ üst kontroller (yeni dil, tüm taslaklarda aynı) */
-.tr { position: absolute; top: 18px; display: flex; align-items: center; gap: 14px; }
-.menu-link { display: flex; align-items: center; gap: 14px; height: 72px; padding: 0 18px; font: 600 28px var(--cin); letter-spacing: .16em; color: var(--txt); text-shadow: 0 2px 6px rgba(0,0,0,.9); position: relative; }
-.menu-link::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 12px; height: 1px; background: linear-gradient(90deg, rgba(var(--gold),0), rgba(var(--gold),.6) 30%, rgba(var(--gold),.6) 70%, rgba(var(--gold),0)); }
-.fs-ico { width: 72px; height: 72px; display: grid; place-items: center; position: relative; color: var(--txt); }
-.fs-ico::before { content: ''; position: absolute; inset: 12px; border: 1px solid rgba(var(--gold), .42); background: rgba(var(--ink), .45); }
-.fs-ico svg { position: relative; width: 26px; height: 26px; }
-/* sıra çubuğu (ortak hücre) */
-.cell { position: relative; width: 84px; height: 84px; background: linear-gradient(180deg, #22180f, #0a0705); box-shadow: inset 0 0 0 1px rgba(var(--gold), .45); overflow: hidden; }
-.cell img { width: 100%; height: 100%; object-fit: cover; }
+.num { font: 700 17px var(--num); color: #f4ede1; text-shadow: 0 2px 3px rgba(0,0,0,.9); white-space: nowrap; }
+[data-tip] { cursor: help; }
+
+.tbar { position: relative; height: 17px; background: rgba(0,0,0,.7); box-shadow: 0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(var(--gold), .18); }
+.tbar i { position: absolute; left: 1px; top: 1px; bottom: 1px; }
+.tbar.hp i { background: linear-gradient(180deg, #6cc97a, #2f7d3c); }
+.tbar.mp i { background: linear-gradient(180deg, #6c98f0, #2c55aa); }
+.tbar span { position: relative; display: block; text-align: center; font: 700 14px/17px var(--num); color: #fff; text-shadow: 0 1px 2px #000, 0 0 3px #000; }
+/* --- sağ üst --- */
+.tr { position: absolute; top: 14px; right: 24px; display: flex; align-items: center; gap: 10px; z-index: 3000; }
+.menu-link { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px; font: 600 20px var(--cin); letter-spacing: .16em; color: var(--txt); text-shadow: 0 2px 6px rgba(0,0,0,.9); position: relative; cursor: pointer; transition: color .18s, text-shadow .18s; }
+.menu-link:hover { color: var(--on); text-shadow: 0 0 14px rgba(240,140,40,.85); }
+.menu-link::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 10px; height: 1px; background: linear-gradient(90deg, rgba(var(--gold),0), rgba(var(--gold),.6) 30%, rgba(var(--gold),.6) 70%, rgba(var(--gold),0)); }
+.fs-ico { width: 56px; height: 56px; display: grid; place-items: center; position: relative; color: var(--txt); }
+.fs-ico::before { content: ''; position: absolute; inset: 10px; border: 1px solid rgba(var(--gold), .42); background: rgba(8,6,4,.45); }
+.fs-ico svg { position: relative; width: 20px; height: 20px; }
+
+/* --- sıra çubuğu: tam ortada, şu anki birim tam ortada --- */
+.turn { position: absolute; top: 18px; height: 92px; display: flex; gap: 10px; align-items: center; z-index: 3000; }
+.turn::before { content: ''; position: absolute; left: -60px; right: -60px; top: 50%; height: 1px; background: linear-gradient(90deg, rgba(var(--gold),0), rgba(var(--gold),.45) 15%, rgba(var(--gold),.45) 85%, rgba(var(--gold),0)); z-index: -1; }
+.cell { position: relative; width: 70px; height: 70px; background: linear-gradient(180deg, #22180f, #0a0705); box-shadow: inset 0 0 0 1px rgba(var(--gold), .45), 0 0 0 3px rgba(8,6,4,.7); flex: none; transition: transform .18s var(--ease); }
+.cell:hover { transform: translateY(-2px); }
+.cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .cell.enemy img { transform: scaleX(-1); }
-.cell::after { content: ''; position: absolute; inset: 4px; box-shadow: inset 0 0 0 1px var(--side, #4fa3ff); opacity: .7; }
-.cell.enemy { --side: #ff5a5a; }
-.cell.past { opacity: .38; filter: grayscale(.7); }
-.cell.now { box-shadow: inset 0 0 0 2px var(--on), 0 0 0 2px rgba(240,140,40,.35), 0 0 22px rgba(240,140,40,.45); }
-/* ad plakası (birim üstü) */
-.plate { position: absolute; transform: translate(-50%, -100%); width: 150px; text-align: center; }
-.plate .nm { font: 600 22px var(--cin); color: #f4ede1; letter-spacing: .03em; text-shadow: 0 2px 4px rgba(0,0,0,.95), 0 0 2px #000; white-space: nowrap; }
-.plate .bar { height: 9px; margin-top: 4px; }
-.plate .bar.mp { height: 6px; margin-top: 2px; }
-/* skill kartı (ortak) */
-.sk { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(180deg, rgba(34,24,15,.96), rgba(11,8,5,.96)); border: 1px solid rgba(var(--gold), .36); cursor: pointer; transition: border-color .18s, transform .18s; }
-.sk .nm { font: 600 24px var(--cin); color: #ece0c4; letter-spacing: .02em; white-space: nowrap; }
-.sk .cost { display: flex; gap: 14px; align-items: center; font: 700 24px var(--num); color: #f4ede1; }
-.sk .cost span { display: flex; align-items: center; gap: 5px; }
-.sk .cost .ico { width: 24px; height: 24px; }
-.sk .key { position: absolute; left: 10px; top: 6px; font: 700 18px var(--num); color: var(--muted); }
-.sk.ult { border-color: rgba(var(--gold), .6); }
-.sk.ult::before { content: ''; position: absolute; left: 8px; right: 8px; top: 1px; height: 2px; background: linear-gradient(90deg, rgba(255,179,90,0), rgba(255,179,90,.9), rgba(255,179,90,0)); }
-.sk.sel { border: 2px solid var(--on); box-shadow: 0 0 0 1px rgba(240,140,40,.35), 0 0 26px rgba(240,140,40,.4); }
-.sk.sel .nm { color: var(--on); text-shadow: 0 0 14px rgba(240,140,40,.8); }
-.sk.off { opacity: .5; }
-.glob { display: grid; place-items: center; background: rgba(var(--ink), .55); border: 1px solid rgba(var(--gold), .3); cursor: pointer; }
-.stat { display: flex; align-items: center; gap: 8px; font: 700 26px var(--num); color: var(--txt); white-space: nowrap; text-shadow: 0 2px 3px rgba(0,0,0,.9); }
-.stat .ico { width: 26px; height: 26px; }
-.stat b { font-weight: 700; color: #f4ede1; }
-.stat.pri b, .stat.pri { color: #ffd76a; }
-.chip { display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; font: 600 18px var(--cin); letter-spacing: .14em; color: var(--txt); border: 1px solid rgba(var(--gold), .3); background: rgba(var(--ink), .5); cursor: pointer; }
-.chip.on { color: var(--on); border-color: var(--on); }
-.banner { position: absolute; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; padding: 8px 90px; font: 600 26px var(--cin); letter-spacing: .2em; color: var(--on); background: linear-gradient(90deg, rgba(10,7,5,0), rgba(10,7,5,.94) 22%, rgba(10,7,5,.94) 78%, rgba(10,7,5,0)); white-space: nowrap; }
-.banner::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, rgba(var(--gold),0), rgba(var(--gold),.5), rgba(var(--gold),0)); }
-.tipbox { position: absolute; padding: 18px 22px; width: 560px; }
-.tipbox .t { display: flex; align-items: center; gap: 14px; }
-.tipbox .t .ico { width: 48px; height: 48px; }
-.tipbox p { margin: 10px 0 0; font: 22px var(--gar); color: var(--note); line-height: 1.25; }
-.tipbox .tag { margin-left: auto; font: 600 14px var(--cin); letter-spacing: .14em; color: var(--on); border: 1px solid rgba(var(--gold), .7); padding: 3px 8px; }
-.popover { position: absolute; padding: 20px 24px; }
-.grid2 { display: grid; grid-template-columns: auto auto; gap: 10px 36px; }
-.hidden { display: none !important; }
-#stage > .abs, #stage > .banner, #stage > .tr { z-index: 3000; }
-#stage > .popover, #stage > .tipbox { z-index: 3100; }
+.cell::after { content: ''; position: absolute; inset: 4px; box-shadow: inset 0 0 0 1px var(--side, var(--party)); opacity: .7; }
+.cell.enemy { --side: var(--enemy); }
+.cell.past { opacity: .42; filter: grayscale(.75); }
+.cell.now { width: 92px; height: 92px; box-shadow: inset 0 0 0 2px var(--on), 0 0 0 3px rgba(8,6,4,.8), 0 0 24px rgba(240,140,40,.5); }
+.turn-lbl { position: absolute; top: 118px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; font: 600 15px var(--cin); letter-spacing: .3em; color: var(--on); text-shadow: 0 2px 6px rgba(0,0,0,.95), 0 0 14px rgba(240,140,40,.5); white-space: nowrap; z-index: 3000; }
+.turn-side { position: absolute; top: 50px; font: italic 15px var(--gar); color: var(--dim); text-shadow: 0 2px 4px #000; z-index: 3000; transform: translateY(-50%); }
+
+/* --- alt bant --- */
+.band { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, rgba(22,16,11,.95), rgba(7,5,4,.985) 70%); z-index: 2900; }
+.band::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, rgba(var(--gold),.12), rgba(var(--gold),.6) 50%, rgba(var(--gold),.12)); }
+.band::after { content: ''; position: absolute; left: 0; right: 0; top: -26px; height: 26px; background: linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.4)); }
+.band .cd { position: absolute; top: -5px; left: 50%; margin-left: -5px; }
+.hud { position: absolute; z-index: 3100; }
+
+/* --- skill: kutusuz çerçeveli ikon + ad + bedel; açıklama hemen üstünde --- */
+.skills { display: flex; gap: 12px; }
+.sk { position: relative; width: 146px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding-top: 8px; cursor: pointer; }
+.sk .fr { position: relative; width: 78px; height: 78px; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, rgba(46,33,20,.95), rgba(10,7,5,.97) 75%); box-shadow: inset 0 0 0 1px rgba(var(--gold), .45), 0 0 0 3px rgba(8,6,4,.75); transition: box-shadow .2s, transform .25s var(--ease); }
+.sk .fr::before, .sk .fr::after { content: ''; position: absolute; top: 50%; width: 8px; height: 8px; margin-top: -4px; transform: rotate(45deg); background: #1a130c; box-shadow: 0 0 0 1px rgba(var(--gold), .45); transition: background .2s, box-shadow .2s; }
+.sk .fr::before { left: -5px; } .sk .fr::after { right: -5px; }
+.sk .fr .ico { width: 62px; height: 62px; }
+.sk .key { position: absolute; left: 5px; top: 2px; font: 700 13px var(--num); color: var(--dim); text-shadow: 0 1px 2px #000; }
+.sk .nm { font: 600 15px var(--cin); letter-spacing: .08em; text-transform: uppercase; color: var(--txt); white-space: nowrap; text-shadow: 0 2px 4px rgba(0,0,0,.9); transition: color .18s, text-shadow .18s; }
+.sk .cost { display: flex; gap: 12px; align-items: center; height: 18px; font: 700 16px var(--num); color: #f4ede1; }
+.sk .cost span { display: flex; align-items: center; gap: 4px; }
+.sk .cost .ico { width: 17px; height: 17px; }
+.sk .cost .free { font: italic 16px var(--gar); color: var(--dim); }
+.sk:hover .fr { transform: translateY(-3px); box-shadow: inset 0 0 0 1px rgba(243,217,153,.9), 0 0 0 3px rgba(8,6,4,.75), 0 0 16px rgba(240,140,40,.25); }
+.sk:hover .fr::before, .sk:hover .fr::after { background: var(--ember); box-shadow: 0 0 0 1px var(--ember2); }
+.sk:hover .nm { color: var(--on); }
+.sk.sel .fr { box-shadow: inset 0 0 0 2px var(--on), 0 0 0 3px rgba(8,6,4,.75), 0 0 26px rgba(240,140,40,.5); }
+.sk.sel .fr::before, .sk.sel .fr::after { background: var(--ember); box-shadow: 0 0 0 1px var(--ember2), 0 0 8px rgba(240,140,40,.8); }
+.sk.sel .nm { color: var(--on); text-shadow: 0 0 12px rgba(240,140,40,.8), 0 2px 4px #000; }
+.sk::after { content: ''; position: absolute; left: 50%; bottom: -10px; width: 30px; height: 1px; transform: translateX(-50%) scaleX(0); background: var(--ember2); box-shadow: 0 0 8px rgba(240,140,40,.9); transition: transform .25s var(--ease); }
+.sk.sel::after { transform: translateX(-50%) scaleX(1); }
+.sk.ult .fr { box-shadow: inset 0 0 0 1px rgba(255,190,110,.75), 0 0 0 3px rgba(8,6,4,.75); }
+.sk.cdn .fr .ico { filter: grayscale(.85) brightness(.45); }
+.sk .cdv { position: absolute; inset: 0; display: grid; place-items: center; font: 600 30px var(--cin); color: var(--on); text-shadow: 0 2px 6px #000, 0 0 12px rgba(240,140,40,.6); }
+.sk.cdn .nm { color: var(--dim); }
+.sk .tip { position: absolute; bottom: calc(100% + 18px); left: 50%; width: 430px; padding: 14px 18px 14px; text-align: left; cursor: default; z-index: 5; opacity: 0; visibility: hidden; transform: translate(-50%, 6px); transition: opacity .18s, transform .22s var(--ease), visibility 0s .2s; pointer-events: none; }
+.sk .tip::after { content: ''; position: absolute; left: 50%; bottom: -8px; width: 14px; height: 14px; transform: translateX(-50%) rotate(45deg); background: #0f0b07; border-right: 1px solid rgba(var(--gold), .42); border-bottom: 1px solid rgba(var(--gold), .42); }
+.sk:hover .tip, .sk.sel .tip { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity .18s, transform .22s var(--ease); }
+.skills:has(.sk:hover) .sk.sel:not(:hover) .tip { opacity: 0; visibility: hidden; }
+.tip .t { display: flex; align-items: center; gap: 12px; }
+.tip .t .ico { width: 40px; height: 40px; }
+.tip .tag { margin-left: auto; font: 600 11px var(--cin); letter-spacing: .16em; text-transform: uppercase; color: var(--on); border: 1px solid rgba(var(--gold), .55); padding: 3px 8px; white-space: nowrap; }
+.tip p { margin: 9px 0 0; font: 18px/1.28 var(--gar); color: var(--note); }
+.tip .meta { display: flex; gap: 18px; margin-top: 9px; font: 700 16px var(--num); color: #f4ede1; }
+.tip .meta span { display: flex; gap: 5px; align-items: center; }
+.tip .meta .ico { width: 17px; height: 17px; }
+.tip .meta em { font: italic 16px var(--gar); color: var(--muted); }
+
+/* --- global eylemler: skill'lerin hemen sağında dikey sütun, kutusuz yazı düğmeleri --- */
+.globs { display: flex; flex-direction: column; gap: 2px; }
+.gl { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px 0 2px; cursor: pointer; font: 600 15px var(--cin); letter-spacing: .14em; text-transform: uppercase; color: var(--txt); text-shadow: 0 2px 4px rgba(0,0,0,.9); white-space: nowrap; transition: color .18s, text-shadow .18s; }
+.gl::before { content: ''; width: 8px; height: 8px; flex: none; transform: rotate(45deg) scale(.4); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2); opacity: 0; transition: opacity .18s, transform .18s var(--ease); }
+.gl .ico { width: 26px; height: 26px; transition: transform .18s var(--ease); }
+.gl > span { transition: transform .18s var(--ease); }
+.gl:hover { color: var(--on); text-shadow: 0 0 14px rgba(240,140,40,.85); }
+.gl:hover::before { opacity: 1; transform: rotate(45deg) scale(1); }
+.gl:hover > span, .gl:hover .ico { transform: translateX(3px); }
+.gl small { font: italic 14px var(--gar); letter-spacing: 0; text-transform: none; color: var(--dim); }
+
+/* --- sağ blok: pasif + primary bonus --- */
+.side { display: flex; flex-direction: column; gap: 10px; }
+.pas { display: flex; gap: 12px; align-items: center; }
+.pas .t { font: 600 16px var(--cin); letter-spacing: .06em; color: var(--on); text-transform: uppercase; }
+.pas .d { font: italic 16px/1.2 var(--gar); color: var(--note); }
+.medal { border-radius: 50%; display: grid; place-items: center; background: radial-gradient(#2a1d12, #0c0906); box-shadow: inset 0 0 0 1.5px rgba(var(--gold), .65), 0 0 0 3px rgba(10,7,5,.75); flex: none; }
+
+/* --- stat parçaları --- */
+.st { display: flex; align-items: center; gap: 7px; font: 700 18px var(--num); color: #f4ede1; white-space: nowrap; text-shadow: 0 2px 3px rgba(0,0,0,.9); transition: color .15s; }
+.st .ico { width: 19px; height: 19px; }
+.st .l { font: 600 12px var(--cin); letter-spacing: .1em; color: var(--muted); }
+.st.pri { color: var(--pri); }
+.st.pri .l { color: #e8c47e; }
+.st:hover, .st:hover .l { color: var(--on); }
+.row { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 8px; height: 20px; }
+.row .l { font: 600 12px var(--cin); letter-spacing: .1em; color: var(--muted); }
+.row .v { font: 700 17px var(--num); color: #f4ede1; text-align: right; text-shadow: 0 2px 3px #000; }
+.row.pri .l { color: #e8c47e; } .row.pri .v { color: var(--pri); }
+.row:hover .l, .row:hover .v { color: var(--on); }
+.row .ico { width: 18px; height: 18px; }
+
+/* --- kayan tooltip (stat / global / sıra) --- */
+#ftip { position: absolute; z-index: 5000; max-width: 400px; padding: 12px 16px 12px; pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .2s var(--ease); }
+#ftip.on { opacity: 1; transform: none; }
+#ftip .tt { display: flex; align-items: center; gap: 10px; font: 600 17px var(--cin); letter-spacing: .06em; text-transform: uppercase; color: var(--on); }
+#ftip .tt .ico { width: 24px; height: 24px; }
+#ftip .tt .v { margin-left: auto; font: 700 19px var(--num); color: #f4ede1; letter-spacing: 0; padding-left: 14px; }
+#ftip .tt .v.pri { color: var(--pri); }
+#ftip ul { margin: 8px 0 0; padding: 0; list-style: none; }
+#ftip li { position: relative; padding-left: 16px; font: 17px/1.25 var(--gar); color: var(--note); margin-top: 3px; }
+#ftip li::before { content: ''; position: absolute; left: 1px; top: 8px; width: 5px; height: 5px; transform: rotate(45deg); background: rgba(var(--gold), .6); }
+#ftip .bn { margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(var(--gold), .16); font: italic 16px/1.22 var(--gar); color: var(--pri); }
+#ftip .fx { margin-top: 7px; font: italic 15px var(--gar); color: var(--dim); }
+
+/* --- birim kartı (düşman / dost) --- */
+.ucard { position: absolute; top: 172px; width: 384px; padding: 16px 18px 14px; z-index: 4000; opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity .18s, transform .22s var(--ease), visibility 0s .2s; pointer-events: none; }
+.ucard.on { opacity: 1; visibility: visible; transform: none; transition: opacity .18s, transform .22s var(--ease); }
+.ucard.pin { pointer-events: auto; }
+.ucard .hdr { display: flex; gap: 14px; align-items: center; }
+.ucard .hdr .cell { width: 66px; height: 66px; }
+.ucard .side-tag { margin-left: auto; align-self: flex-start; font: 600 11px var(--cin); letter-spacing: .18em; padding: 3px 8px; border: 1px solid; }
+.ucard.enemy .side-tag { color: #ffb0a0; border-color: rgba(255,90,90,.55); }
+.ucard.party .side-tag { color: #b8d8ff; border-color: rgba(79,163,255,.55); }
+.ucard .bars { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin-top: 12px; }
+.ucard .bars .lab { display: flex; justify-content: space-between; align-items: center; font: 700 16px var(--num); color: #f4ede1; margin-bottom: 3px; }
+.ucard .bars .lab span { display: flex; align-items: center; gap: 5px; }
+.ucard .bars .ico { width: 16px; height: 16px; }
+.ucard .attrs { display: flex; justify-content: space-between; margin-top: 10px; }
+.ucard .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 18px; }
+.ucard .grid .row .v small { font: italic 14px var(--gar); color: var(--dim); font-weight: 400; margin-left: 3px; }
+.ucard .eff { display: flex; flex-direction: column; gap: 5px; }
+.ucard .eff .e { display: grid; grid-template-columns: 12px 1fr; gap: 1px 9px; align-items: baseline; }
+.ucard .eff .e span { grid-column: 2; }
+.ucard .eff .e i { width: 8px; height: 8px; transform: rotate(45deg) translateY(-1px); background: var(--c); box-shadow: 0 0 6px var(--c); }
+.ucard .eff .e b { font: 600 14px var(--cin); letter-spacing: .06em; color: #f4ede1; text-transform: uppercase; white-space: nowrap; }
+.ucard .eff .e b em { font: 700 14px var(--num); color: var(--muted); font-style: normal; margin-left: 4px; }
+.ucard .eff .e span { font: italic 16px/1.15 var(--gar); color: var(--note); }
+.ucard .sec { margin-top: 12px; }
+.ucard .pv { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(var(--gold), .16); display: flex; align-items: center; gap: 10px; font: 700 16px var(--num); color: #f4ede1; }
+.ucard .pv .ico { width: 26px; height: 26px; }
+.ucard .pv b { font: 600 13px var(--cin); letter-spacing: .1em; color: var(--on); }
+.ucard .pv em { font: italic 16px var(--gar); color: var(--muted); }
+.ucard .hint { margin-top: 8px; font: italic 14px var(--gar); color: var(--dim); text-align: right; }
+
+.cg .big, .sheet, .reveal, #ftip, .ucard, .sk .tip { background: linear-gradient(180deg, rgb(31,23,15), rgb(12,9,6)); }
+/* --- v2 sağ alt seçenekleri (br=a|b|c|d) --- */
+#pick .sep { height: 1px; margin: 4px 3px; background: rgba(var(--gold), .4); }
+#pick button.br { font-size: 12px; text-transform: lowercase; }
+.pmed { position: absolute; right: -16px; bottom: -12px; width: 46px; height: 46px; z-index: 2; cursor: help; transition: box-shadow .18s, transform .2s var(--ease); }
+.pmed:hover { transform: scale(1.06); box-shadow: inset 0 0 0 1.5px var(--on), 0 0 0 3px rgba(10,7,5,.8), 0 0 14px rgba(240,140,40,.55); }
+.pmed .ico { width: 30px; height: 30px; }
+.ppip { position: absolute; right: 38px; bottom: -6px; width: 22px; height: 22px; display: grid; place-items: center; z-index: 2; cursor: help; }
+.ppip i { width: 10px; height: 10px; transform: rotate(45deg); background: var(--pri); box-shadow: 0 0 0 1px #fff3c4, 0 0 0 3px rgba(10,7,5,.8), 0 0 10px rgba(255,215,106,.7); transition: transform .2s var(--ease); }
+.ppip:hover i { transform: rotate(45deg) scale(1.25); }
+.roster { display: flex; gap: 14px; }
+.ra { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 66px; cursor: pointer; }
+.ra .cell { width: 62px; height: 62px; }
+.ra.now .cell { box-shadow: inset 0 0 0 2px var(--on), 0 0 0 3px rgba(8,6,4,.8), 0 0 16px rgba(240,140,40,.4); }
+.ra .bar { width: 62px; height: 6px; } .ra .bar.mp { height: 3px; margin-top: -2px; }
+.ra .pips { display: flex; gap: 6px; height: 9px; justify-content: center; }
+.ra .pips i { width: 7px; height: 7px; transform: rotate(45deg); background: var(--c); box-shadow: 0 0 0 1px rgba(0,0,0,.8), 0 0 5px var(--c); }
+.ra .nm { font: 600 11px var(--cin); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; white-space: nowrap; transition: color .15s; }
+.ra:hover .nm, .ra.hov .nm { color: var(--on); }
+.ra:hover .cell, .ra.hov .cell { transform: translateY(-2px); }
+.ra.hov .cell { box-shadow: inset 0 0 0 1px var(--on), 0 0 0 3px rgba(8,6,4,.8), 0 0 12px rgba(240,140,40,.35); }
+.fg { display: grid; grid-template-columns: 62px repeat(4, 50px); gap: 6px 10px; align-items: center; }
+.fg .ra { width: 50px; gap: 3px; } .fg .ra .cell { width: 44px; height: 44px; } .fg .ra .bar { width: 44px; height: 5px; }
+.fg .side-k { font: 600 10px var(--cin); letter-spacing: .22em; text-transform: uppercase; }
+.binfo { display: flex; flex-direction: column; gap: 10px; }
+.binfo .rnd { display: flex; align-items: center; gap: 12px; font: 600 20px var(--cin); letter-spacing: .22em; color: var(--on); }
+.binfo .rnd em { font: italic 16px var(--gar); letter-spacing: 0; color: var(--muted); }
+.binfo .nx { display: flex; align-items: center; gap: 10px; }
+.binfo .nx .cell { width: 46px; height: 46px; }
+.binfo .nx .cell.sm { width: 32px; height: 32px; opacity: .8; }
+.logp { position: absolute; left: -10px; bottom: calc(100% + 22px); width: 440px; padding: 16px 20px 14px; z-index: 3300; opacity: 0; visibility: hidden; transform-origin: 0 100%; transform: translateY(14px) scale(.97); transition: opacity .22s, transform .3s var(--ease), visibility 0s .3s; background: linear-gradient(180deg, rgb(31,23,15), rgb(12,9,6)); cursor: default; }
+.logp.open { opacity: 1; visibility: visible; transform: none; transition: opacity .22s, transform .3s var(--ease); }
+.logp .ln { display: grid; grid-template-columns: 28px 1fr; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(var(--gold), .1); font: 16px/1.25 var(--gar); color: var(--note); }
+.logp .ln:last-child { border-bottom: 0; }
+.logp .ln .r { font: 700 13px var(--num); color: var(--dim); padding-top: 2px; }
+.logp .ln b { font: 600 13px var(--cin); letter-spacing: .06em; text-transform: uppercase; }
+.logp .ln b.p { color: #b8d8ff; } .logp .ln b.e { color: #ffb0a0; }
+.logp .ln .dm { font: 700 15px var(--num); color: #f4ede1; }
+.logp .ln .cr { color: var(--pri); }
+.loglink { cursor: pointer; }
+.loglink.open > .more, .loglink:hover > .more { color: var(--on); }
+.loglink.open > .more::before, .loglink:hover > .more::before { background: var(--ember); box-shadow: 0 0 0 1px var(--ember2); }
+/* --- v2 / v5 açılan sayfa, v3 hover ızgara, v4 şerit --- */
+.sheet { position: absolute; z-index: 3300; padding: 18px 24px 16px; opacity: 0; visibility: hidden; pointer-events: none; transform-origin: 0 100%; transform: translateY(14px) scale(.97); transition: opacity .22s, transform .3s var(--ease), visibility 0s .3s; }
+.open .sheet, .sheet.open { opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition: opacity .22s, transform .3s var(--ease); }
+.sheet .cols { display: flex; gap: 26px; }
+.sheet .col { width: 192px; }
+#stage:has(.gl:hover) .sk.sel .tip, #stage.is-open .sk.sel:not(:hover) .tip { opacity: 0; visibility: hidden; }
+.sheet .srow { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 10px; height: 31px; border-bottom: 1px solid rgba(var(--gold), .1); }
+.sheet .srow:last-child { border-bottom: 0; }
+.sheet .srow .ico { width: 20px; height: 20px; }
+.sheet .srow .l { font: 17px var(--gar); color: var(--txt); }
+.sheet .srow .v { font: 700 18px var(--num); color: #f4ede1; }
+.sheet .srow.pri .l { color: #e8c47e; } .sheet .srow.pri .v { color: var(--pri); }
+.sheet .srow:hover .l, .sheet .srow:hover .v { color: var(--on); }
+.sheet .srow .pd { display: inline-block; width: 6px; height: 6px; margin-left: 8px; transform: rotate(45deg) translateY(-2px); background: var(--ember); box-shadow: 0 0 6px rgba(240,140,40,.8); }
+.opener { cursor: pointer; }
+.more { display: inline-flex; align-items: center; gap: 9px; font: 600 12px var(--cin); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); transition: color .18s; }
+.more::before { content: ''; width: 7px; height: 7px; transform: rotate(45deg); box-shadow: 0 0 0 1px rgba(var(--gold), .55); transition: background .18s, box-shadow .18s; }
+.opener:hover .more, .open .more { color: var(--on); }
+.opener:hover .more::before, .open .more::before { background: var(--ember); box-shadow: 0 0 0 1px var(--ember2); }
+.pframe { position: relative; flex: none; background: linear-gradient(180deg, #22180f, #0a0705); box-shadow: inset 0 0 0 2px var(--on), 0 0 0 3px rgba(8,6,4,.8), 0 0 20px rgba(240,140,40,.22); transition: box-shadow .2s; }
+.pframe img { width: 100%; height: 100%; object-fit: cover; display: block; padding: 3px; }
+.opener:hover .pframe { box-shadow: inset 0 0 0 2px var(--on), 0 0 0 3px rgba(8,6,4,.8), 0 0 28px rgba(240,140,40,.45); }
+
+/* v3: kompakt ızgara, üstüne gelince yerinde büyür */
+.cg { position: absolute; z-index: 3200; }
+.cg .compact { display: grid; grid-template-columns: repeat(7, auto); gap: 6px 16px; }
+.cg .big { position: absolute; left: -166px; bottom: -14px; padding: 16px 18px 14px; opacity: 0; visibility: hidden; transform-origin: 0 100%; transform: scale(.9); transition: opacity .2s, transform .28s var(--ease), visibility 0s .28s; }
+.cg:hover .big, .cg.open .big { opacity: 1; visibility: visible; transform: none; transition: opacity .2s, transform .28s var(--ease); }
+.cg .big .grp { display: grid; grid-template-columns: 78px repeat(5, 90px); align-items: center; gap: 0 8px; }
+.cg .big .grp + .grp { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(var(--gold), .12); }
+.cg .tile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0 5px; transition: background .15s; }
+.cg .tile:hover { background: rgba(var(--gold), .07); }
+.cg .tile .top { display: flex; align-items: center; gap: 7px; font: 700 20px var(--num); color: #f4ede1; }
+.cg .tile .top .ico { width: 22px; height: 22px; }
+.cg .tile .l { font: 600 10px var(--cin); letter-spacing: .1em; white-space: nowrap; text-transform: uppercase; color: var(--muted); }
+.cg .tile.pri .top { color: var(--pri); } .cg .tile.pri .l { color: #e8c47e; }
+
+/* v4: sol şerit */
+.strip { position: absolute; z-index: 3200; padding: 14px 0 12px; }
+.strip::before, .strip::after { content: ''; position: absolute; top: 0; bottom: 0; width: 1px; background: linear-gradient(180deg, rgba(var(--gold),0), rgba(var(--gold),.5) 12%, rgba(var(--gold),.5) 88%, rgba(var(--gold),0)); }
+.strip::before { left: 0; } .strip::after { right: 0; }
+.strip .bgl { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,7,5,0), rgba(10,7,5,.82) 10%, rgba(10,7,5,.9)); z-index: -1; }
+.strip .g { font: 600 10px var(--cin); letter-spacing: .3em; color: var(--dim); text-align: center; margin: 8px 0 4px; display: flex; align-items: center; gap: 6px; justify-content: center; }
+.strip .g::before, .strip .g::after { content: ''; flex: 1; height: 1px; max-width: 26px; background: rgba(var(--gold), .25); }
+.strip .sr { display: grid; grid-template-columns: 20px 1fr auto; gap: 8px; align-items: center; height: 29px; padding: 0 12px; position: relative; transition: background .15s; }
+.strip .sr .ico { width: 19px; height: 19px; }
+.strip .sr .l { font: 600 11px var(--cin); letter-spacing: .1em; color: var(--muted); }
+.strip .sr .v { font: 700 18px var(--num); color: #f4ede1; text-shadow: 0 2px 3px #000; }
+.strip .sr.pri .l { color: #e8c47e; } .strip .sr.pri .v { color: var(--pri); }
+.strip .sr:hover { background: linear-gradient(90deg, rgba(var(--gold), .12), rgba(var(--gold), 0)); }
+.strip .sr:hover::before { content: ''; position: absolute; left: -4px; top: 50%; width: 7px; height: 7px; margin-top: -4px; transform: rotate(45deg); background: var(--ember); box-shadow: 0 0 0 1px var(--ember2); }
+.strip .sr:hover .l, .strip .sr:hover .v { color: var(--on); }
+
+/* v5: madalyon */
+.mdl { position: absolute; z-index: 3200; }
+.mdl .face { position: absolute; border-radius: 50%; overflow: hidden; background: radial-gradient(#2a1d12, #0a0705); box-shadow: 0 0 0 2px var(--on), 0 0 0 6px rgba(8,6,4,.85), 0 0 30px rgba(240,140,40,.3); cursor: pointer; transition: box-shadow .2s; }
+.mdl .face:hover, .mdl.open .face { box-shadow: 0 0 0 2px var(--on), 0 0 0 6px rgba(8,6,4,.85), 0 0 40px rgba(240,140,40,.55); }
+.mdl .face img { width: 100%; height: 100%; object-fit: cover; }
+.mdl svg { position: absolute; overflow: visible; pointer-events: none; }
+.chipr { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; background: radial-gradient(#241910, #0b0806); box-shadow: inset 0 0 0 1px rgba(var(--gold), .55), 0 0 0 3px rgba(8,6,4,.8); font: 700 16px var(--num); color: #f4ede1; transition: transform .3s var(--ease), opacity .25s, box-shadow .18s; }
+.chipr .ico { width: 20px; height: 20px; }
+.chipr.pri { color: var(--pri); box-shadow: inset 0 0 0 1.5px var(--pri), 0 0 0 3px rgba(8,6,4,.8), 0 0 12px rgba(255,215,106,.35); }
+.chipr:hover { box-shadow: inset 0 0 0 1.5px var(--on), 0 0 0 3px rgba(8,6,4,.8), 0 0 14px rgba(240,140,40,.5); }
+.chipr .cl { position: absolute; top: calc(100% + 3px); left: 50%; transform: translateX(-50%); padding: 1px 5px; font: 600 10px var(--cin); letter-spacing: .14em; color: var(--txt); background: rgba(8,6,4,.78); text-shadow: 0 1px 3px #000; white-space: nowrap; }
+.reveal .chipr .cl { background: none; color: var(--muted); }
+.chipr.pri .cl { color: #e8c47e; }
+.reveal { position: absolute; z-index: 3150; padding: 20px 26px 18px; clip-path: circle(0 at var(--ox) var(--oy)); opacity: .3; visibility: hidden; transition: clip-path .45s var(--ease), opacity .3s, visibility 0s .45s; }
+.mdl.open ~ .reveal, .reveal.open { clip-path: circle(150% at var(--ox) var(--oy)); opacity: 1; visibility: visible; transition: clip-path .45s var(--ease), opacity .3s; }
+.reveal .rg { display: flex; align-items: center; gap: 22px; }
+.reveal .rg + .rg { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(var(--gold), .12); }
+.reveal .rg .k { width: 86px; font-size: 11px; }
+.reveal .rg .chips { display: flex; gap: 26px; }
+.reveal .chipr { position: relative; margin: 0 0 16px; }
 </style>
 </head>
 <body>
@@ -112,220 +352,441 @@ button { font: inherit; color: inherit; }
 <div id="pick"></div>
 <div id="cap"></div>
 <script>
-// ---------------------------------------------------------------- veri (Ömer'in ekran görüntüsündeki savaş)
+// ---------------------------------------------------------------- veri (gerçek değerler: data/classes/*.json + data/formulas.json)
 const I = (n) => `battle-hud/icons/${n}.png`;
-const UNITS = [
-  { id: 'warrior', name: 'Warrior', side: 'party', slot: [784, 785], hp: [96, 110], mp: [20, 36], rage: [18, 50] },
-  { id: 'gambler', name: 'Gambler', side: 'party', slot: [725, 842], hp: [78, 78], mp: [36, 36], active: true },
-  { id: 'hexer', name: 'Hexer', side: 'party', slot: [599, 785], hp: [64, 70], mp: [40, 48] },
-  { id: 'undead', name: 'Undead', side: 'party', slot: [540, 842], hp: [70, 88], mp: [30, 40] },
-  { id: 'warrior', name: 'Warrior', side: 'enemy', slot: [1136, 785], hp: [104, 110], mp: [30, 36], rage: [24, 50] },
-  { id: 'defender', name: 'Defender', side: 'enemy', slot: [1195, 842], hp: [120, 140], mp: [28, 36], shield: 8 },
-  { id: 'cutthroat', name: 'Cutthroat', side: 'enemy', slot: [1321, 785], hp: [66, 72], mp: [30, 40], shield: 8 },
-  { id: 'undead', name: 'Undead', side: 'enemy', slot: [1380, 842], hp: [88, 88], mp: [40, 40] },
-];
-const ACTIVE = UNITS[1];
-const QUEUE = { past: [['cutthroat', 'enemy'], ['hexer', 'party'], ['defender', 'enemy']], now: ['gambler', 'party'], next: [['warrior', 'enemy'], ['warrior', 'party'], ['defender', 'enemy'], ['undead', 'enemy'], ['undead', 'party']] };
-const STATS = {
-  main: [['str', 'STR', 8], ['dex', 'DEX', 7], ['int', 'INT', 3], ['luck', 'LCK', 12, true]],
-  atk: [['critChance', 'CRIT', '11%'], ['critMult', 'CDMG', 'x1.5'], ['accuracy', 'ACC', '92%'], ['spd', 'SPD', 10]],
-  def: [['armor', 'ARM', 12], ['magicArmor', 'M.ARM', 0], ['evasion', 'EVA', '2%'], ['hpRegen', 'HP+', '2/t'], ['mpRegen', 'MP+', '1/t']],
+const F = { hpBase: 30, hpPerStr: 6, mpBase: 30, mpPerInt: 2, spdBase: 7, spdPerDex: 0.4, critBase: 5, critPerLuck: 0.5, accBase: 80, accPerLuck: 1, evaStep: 5, evaPer: 2, evaMax: 75, k: 30 };
+const CLS = {
+  warrior: { name: 'Warrior', role: 'Melee Bruiser', a: { str: 15, int: 8, dex: 4, luck: 3 }, pri: 'str', armor: 9, mArmor: 0, passive: ['Berserker', 'The lower its HP, the harder it hits: up to +80% damage at the brink of death.'] },
+  defender: { name: 'Defender', role: 'Tank', a: { str: 15, int: 10, dex: 3, luck: 2 }, pri: 'str', armor: 19, mArmor: 0, passive: ['Bulwark Aura', 'It and the allies right next to it gain armor equal to 40% of its own.'] },
+  cutthroat: { name: 'Cutthroat', role: 'Assassin', a: { str: 5, int: 5, dex: 15, luck: 5 }, pri: 'dex', armor: 5, mArmor: 0, passive: ['Opportunist', '+25% damage against Wounded, Slowed, Stunned or Withering targets.'] },
+  undead: { name: 'Undead', role: 'Dark Mage', a: { str: 12, int: 14, dex: 2, luck: 2 }, pri: 'int', armor: 8, mArmor: 0, passive: ['Vampiric Bite', 'Drains 35% of the damage it deals as health.'] },
+  hexer: { name: 'Hexer', role: 'Curse Caster', a: { str: 8, int: 5, dex: 3, luck: 14 }, pri: 'luck', armor: 4, mArmor: 0, passive: ['Ill Omen', 'When a cursed enemy dies, its Omens pass to the nearest enemy.'] },
+  gambler: { name: 'Gambler', role: 'Risk Taker', a: { str: 8, int: 3, dex: 7, luck: 12 }, pri: 'luck', armor: 12, mArmor: 0, passive: ['Double or Nothing', 'Damaging skills with a cooldown have a 25% chance to be ready again immediately.'] },
 };
-const SKILLS = [
-  { id: 'loaded_dice', name: 'Loaded Dice', cost: [], text: 'Roll the bones: 90-160% LCK damage to one enemy. A double six always crits.', tag: 'Enemy' },
-  { id: 'high_stakes', name: 'High Stakes', cost: [['stat_mp', 4], ['hourglass', 2]], text: 'Bet on a hit: 140% LCK damage; on a miss you lose 10% HP.', tag: 'Enemy' },
-  { id: 'card_trick', name: 'Card Trick', cost: [['stat_mp', 9], ['hourglass', 2]], text: 'Three cards fly at random enemies, 60% LCK each.', tag: 'Random' },
-  { id: 'all_in', name: 'All In', cost: [['hourglass', 2]], text: 'Spend all MP: damage grows with every point spent.', tag: 'Enemy', ult: true },
-];
-const PASSIVE = { name: 'Double or Nothing', text: 'Critical hits have a 25% chance to strike twice.' };
-const GLOBALS = [['g_rest', 'Rest'], ['g_skip', 'Skip turn'], ['g_move', 'Move']];
-const S = { v: 1, sel: 'high_stakes', pop: '', drawer: true, W: 1920 };
-const q = new URLSearchParams(location.search);
-S.v = Math.min(5, Math.max(1, Number(q.get('v')) || 1));
-
-// ---------------------------------------------------------------- yardımcılar
-const X = (x) => x + (S.W - 1920) / 2; // 1920 çerçevesinden geniş sahneye
-const stageL = 0, stageR = () => S.W;
-const pct = (a) => `${Math.round((a[0] / a[1]) * 100)}%`;
-const bar = (kind, a, w) => `<div class="bar ${kind}" style="${w ? `width:${w}px` : ''}"><i style="width:${pct(a)}"></i></div>`;
-const statRow = ([k, label, v, pri]) => `<div class="stat${pri ? ' pri' : ''}"><img class="ico" src="${I('stat_' + k)}" alt=""><span>${label} <b>${v}</b></span></div>`;
-const FS = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"><path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/></svg>`;
-const topRight = () => `<div class="tr" style="right:${24}px"><div class="menu-link"><i class="dia h"></i>MENU</div><div class="fs-ico">${FS}</div></div>`;
-const cell = ([id, side], cls = '') => `<div class="cell ${side === 'enemy' ? 'enemy' : ''} ${cls}"><img src="battle-hud/img/av-${id}.webp" alt=""></div>`;
-function turnBar(o = {}) {
-  const size = o.size ?? 84, gap = o.gap ?? 12;
-  const cells = [...QUEUE.past.map((c) => cell(c, 'past')), cell(QUEUE.now, 'now'), ...QUEUE.next.map((c) => cell(c))];
-  const n = cells.length, w = n * size + (n - 1) * gap;
-  return `<div class="abs" style="left:${S.W / 2 - w / 2}px;top:${o.y ?? 20}px;display:flex;gap:${gap}px;--s:${size}px">${cells.join('').replaceAll('class="cell', `style="width:${size}px;height:${size}px" class="cell`)}</div>
-    <div class="abs" style="left:${S.W / 2 - w / 2 + 3 * (size + gap) + size / 2 - 7}px;top:${(o.y ?? 20) + size + 12}px"><i class="dia"></i></div>`;
+function derive(c) {
+  const a = c.a;
+  return { hp: F.hpBase + F.hpPerStr * a.str, mp: F.mpBase + F.mpPerInt * a.int, spd: +(F.spdBase + F.spdPerDex * a.dex).toFixed(1), crit: F.critBase + F.critPerLuck * a.luck, acc: F.accBase + F.accPerLuck * a.luck, eva: Math.min(F.evaMax, Math.floor(a.dex / F.evaStep) * F.evaPer), red: c.armor / (c.armor + F.k) };
 }
-function scene(o = {}) {
+const STATUS = {
+  fortify: { n: 'Fortified', c: '#c58bff', d: 'Damage taken −50%' },
+  omen: { n: 'Bad Omen', c: '#b04fa8', d: 'Crit −3% per stack; at 3 stacks Doom strikes' },
+  wound: { n: 'Wound', c: '#c0203a', d: 'Healing received −25%' },
+  jinxed: { n: 'Jinxed', c: '#e06a5a', d: 'Accuracy −20%, no crit on its next attack' },
+  blessed: { n: 'Blessed', c: '#ffd166', d: 'Speed up' },
+};
+const UNITS = [
+  { cls: 'warrior', side: 'party', slot: [784, 785], hp: 96, mp: 40 },
+  { cls: 'gambler', side: 'party', slot: [725, 842], hp: 61, mp: 30, active: true },
+  { cls: 'hexer', side: 'party', slot: [599, 785], hp: 64, mp: 36, fx: [['wound', '1 turn']] },
+  { cls: 'undead', side: 'party', slot: [540, 842], hp: 70, mp: 44, fx: [['fortify', '1 turn']] },
+  { cls: 'warrior', side: 'enemy', slot: [1136, 785], hp: 104, mp: 46, fx: [['jinxed', '1 attack']] },
+  { cls: 'defender', side: 'enemy', slot: [1195, 842], hp: 120, mp: 50, fx: [['fortify', '1 turn']] },
+  { cls: 'cutthroat', side: 'enemy', slot: [1321, 785], hp: 41, mp: 30, fx: [['omen', '×2 · 2 turns'], ['wound', '2 turns']] },
+  { cls: 'undead', side: 'enemy', slot: [1380, 842], hp: 102, mp: 58 },
+];
+UNITS.forEach((u) => { u.c = CLS[u.cls]; u.d = derive(u.c); });
+const ACTIVE = UNITS[1];
+// sıra: 4 geçmiş + şu an + 4 sıradaki => şu anki birim çubuğun ve ekranın tam ortasında
+const QUEUE = { past: [6, 2, 5, 3], now: 1, next: [4, 0, 7, 6] };
+
+const G = ACTIVE.d;
+const ST = {
+  hp: { l: 'HP', n: 'Health', v: `${ACTIVE.hp}/${G.hp}`, d: ['Max HP = 30 + 6 per Strength', 'Regenerates 2 at the start of each of your turns', 'At 0 HP the unit falls'] },
+  mp: { l: 'MP', n: 'Mana', v: `${ACTIVE.mp}/${G.mp}`, d: ['Max MP = 30 (every class) + 2 per Intelligence', 'Regenerates 1 at the start of each of your turns', 'Rest restores 15 MP'] },
+  str: { l: 'STR', n: 'Strength', v: 8, d: ['Max HP +6 per point (now 78)', 'HP regen +0.25 per point (now 2 a turn)', 'Strength skills scale with STR'] },
+  dex: { l: 'DEX', n: 'Dexterity', v: 7, d: ['Speed +0.4 per point (now 9.8)', 'Evasion +2% per 5 Dexterity (now 2%)', 'Dexterity skills scale with DEX'] },
+  int: { l: 'INT', n: 'Intelligence', v: 3, d: ['Max MP +2 per point (now 36)', 'MP regen +0.33 per point (now 1 a turn)', 'Magic damage, heals and wards scale with INT'] },
+  luck: { l: 'LCK', n: 'Luck', v: 12, p: 1, d: ['Crit chance +0.5% per point (now 11%)', 'Accuracy +1% per point (now 92%)', 'Every Gambler skill scales with Luck'], bn: 'Primary · Lucky Escape: once per battle, 30% chance to ignore a killing blow.' },
+  critChance: { l: 'CRIT', n: 'Crit chance', v: '11%', d: ['Chance that a hit or heal is critical', 'Base 5%, +0.5% per Luck'] },
+  critMult: { l: 'CDMG', n: 'Crit damage', v: '×1.5', d: ['A crit multiplies the final damage or healing by ×1.5', 'Fixed for every unit; never applies to shields'] },
+  accuracy: { l: 'ACC', n: 'Accuracy', v: '92%', d: ['Your hit chance = accuracy − target evasion', 'Base 80%, +1% per Luck'] },
+  spd: { l: 'SPD', n: 'Speed', v: '9.8', d: ['Decides how soon you act: higher speed, more turns', '7 base, +0.4 per Dexterity'] },
+  armor: { l: 'ARM', n: 'Armor', v: 12, d: ['Cuts physical damage taken by 28.6%', 'armor ÷ (armor + 30): 30 armor halves it'] },
+  magicArmor: { l: 'M.ARM', n: 'Magic armor', v: 0, d: ['No magic armor: magic damage is not reduced', 'Works like armor, against magic'] },
+  evasion: { l: 'EVA', n: 'Evasion', v: '2%', d: ['Lowers the chance that attacks hit you', '+2% per 5 Dexterity, whole steps, max 75%'] },
+  hpRegen: { l: 'HP+', n: 'HP regen', v: 2, d: ['Restores 2 HP at the start of each of your turns', 'Strength × 0.25'] },
+  mpRegen: { l: 'MP+', n: 'MP regen', v: 1, d: ['Restores 1 MP at the start of each of your turns', 'Intelligence × 0.33 (0 INT = none)'] },
+};
+const MAIN = ['str', 'dex', 'int', 'luck'];
+const ATK = ['critChance', 'critMult', 'accuracy', 'spd'];
+const DEF = ['armor', 'magicArmor', 'evasion', 'hpRegen', 'mpRegen'];
+const GROUPS = [['Main', MAIN], ['Attack', ATK], ['Defense', DEF]];
+const SKILLS = [
+  { id: 'loaded_dice', name: 'Loaded Dice', power: 1.55, cost: [], tag: 'One enemy', text: 'Roll the bones at one enemy: 155% LCK physical damage. 25% chance to roll again for a second hit.' },
+  { id: 'high_stakes', name: 'High Stakes', power: 2.2, cost: [['stat_mp', 4]], cd: 2, tag: 'One enemy', text: 'Bet 15% of your HP on a 220% LCK strike. Win (50%) and it hits twice as hard; lose and it deals 60%.' },
+  { id: 'card_trick', name: 'Card Trick', power: 1.3, cost: [['stat_mp', 9]], cd: 2, tag: '2 random', text: 'Two cards fly at random enemies: 130% LCK each, plus a random Slow, Wound or Stun.' },
+  { id: 'all_in', name: 'All In', power: 1.98, cost: [['stat_mp', 8]], cd: 3, tag: 'One enemy', ult: true, cdNow: 2, text: 'Stake all your MP on one enemy: 198% LCK, growing with every point staked. 75% to win ×1.8, otherwise ×0.6.' },
+];
+const GLOBALS = [
+  { id: 'rest', ic: 'g_rest', n: 'Rest', sub: '+15 MP', d: ['Catch your breath: +15 MP (never above max)', 'Ends your turn'] },
+  { id: 'skip', ic: 'g_skip', n: 'Skip', sub: 'turn', d: ['Pass the turn', 'Your speed is doubled until your next turn: it arrives in half the time', 'Not twice in a row'] },
+  { id: 'move', ic: 'g_move', n: 'Move', sub: 'cell', d: ['Step onto an empty cell of your own side', 'Ends your turn'] },
+];
+const S = { v: 1, sel: 'high_stakes', open: false, W: 1920, sc: 1, hov: -1, pinL: -1, pinR: -1, br: 'a', log: false };
+S.v = Math.min(5, Math.max(1, Number(new URLSearchParams(location.search).get('v')) || 1));
+{ const b = new URLSearchParams(location.search).get('br'); if (['a', 'b', 'c', 'd'].includes(b)) S.br = b; }
+
+// ---------------------------------------------------------------- ortak parçalar
+const X = (x) => x + (S.W - 1920) / 2;
+const pct = (a, b) => `${Math.max(0, Math.min(100, Math.round((a / b) * 100)))}%`;
+const bar = (kind, a, b, w) => `<div class="bar ${kind}" style="${w ? `width:${w}px` : ''}"><i style="width:${pct(a, b)}"></i></div>`;
+const FS = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"><path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/></svg>`;
+const topRight = () => `<div class="tr"><div class="menu-link"><i class="dia h"></i>MENU</div><div class="fs-ico">${FS}</div></div>`;
+const tipAttr = (key) => `data-tip="${key}"`;
+
+function turnBar() {
+  const cw = 70, nw = 92, gap = 10;
+  const left = S.W / 2 - nw / 2 - QUEUE.past.length * (cw + gap);
+  const cell = (i, cls) => { const u = UNITS[i]; return `<div class="cell ${u.side === 'enemy' ? 'enemy' : ''} ${cls}" ${tipAttr('q:' + i + ':' + cls)}><img src="battle-hud/img/av-${u.cls}.webp" alt=""></div>`; };
+  const html = [...QUEUE.past.map((i) => cell(i, 'past')), cell(QUEUE.now, 'now'), ...QUEUE.next.map((i, n) => cell(i, 'n' + (n + 1)))].join('');
+  const half = nw / 2 + QUEUE.past.length * (cw + gap);
+  return `<div class="turn" style="left:${left}px">${html}</div>
+    <div class="turn-lbl" style="left:${S.W / 2}px"><i class="dia s"></i>YOUR TURN<i class="dia s"></i></div>`;
+}
+function scene() {
   let html = '<div class="bg"></div>';
-  const sorted = [...UNITS].sort((a, b) => a.slot[1] - b.slot[1]);
-  for (const u of sorted) {
-    html += `<div class="unit ${u.side} ${u.active ? 'active' : ''}" style="left:${X(u.slot[0])}px;top:${u.slot[1]}px;z-index:${u.slot[1]}"><img src="battle-hud/img/${u.id}.webp" alt=""></div>`;
-  }
-  if (o.target) html += `<div class="target-ring" style="left:${X(1136)}px;top:${785}px;z-index:784"></div>`;
-  if (o.plates !== false) for (const u of UNITS) html += plate(u, o.plate);
+  UNITS.map((u, i) => [u, i]).sort((a, b) => a[0].slot[1] - b[0].slot[1]).forEach(([u, i]) => {
+    html += `<div class="unit ${u.side} ${u.active ? 'active' : ''}" data-u="${i}" style="left:${X(u.slot[0])}px;top:${u.slot[1]}px;z-index:${u.slot[1]}"><img src="battle-hud/img/${u.cls}.webp" alt=""></div>`;
+  });
+  UNITS.forEach((u, i) => {
+    html += `<div class="plate" data-u="${i}" style="left:${X(u.slot[0])}px;top:${u.slot[1] - 220}px"><div class="nm">${u.c.name}</div>${bar(u.side === 'enemy' ? 'hpE' : 'hp', u.hp, u.d.hp)}${bar('mp', u.mp, u.d.mp)}<div class="fx">${(u.fx || []).map(([k]) => `<i style="--c:${STATUS[k].c}"></i>`).join('')}</div></div>`;
+  });
   return html;
 }
-function plate(u, kind = 'basic') {
-  const x = X(u.slot[0]), y = u.slot[1] - 232;
-  const hpK = u.side === 'enemy' ? 'hpE' : 'hp';
-  if (kind === 'basic')
-    return `<div class="plate" style="left:${x}px;top:${y}px;z-index:2000"><div class="nm">${u.name}</div>${bar(hpK, u.hp)}${bar('mp', u.mp)}</div>`;
-  if (kind === 'thin')
-    return `<div class="plate" style="left:${x}px;top:${y + 10}px;z-index:2000;width:120px">${bar(hpK, u.hp)}${bar('mp', u.mp)}</div>`;
-  // 'card': yüzen birim kartı (taslak 5)
-  const act = u.active;
-  return `<div class="plate" style="left:${x}px;top:${y - (act ? 6 : 0)}px;z-index:${act ? 2100 : 2000};width:${act ? 230 : 170}px">
-    <div class="panel" style="padding:8px 10px 9px;${act ? 'border-color:var(--on);box-shadow:0 0 0 1px rgba(240,140,40,.35),0 0 20px rgba(240,140,40,.35)' : 'background:rgba(10,7,5,.72)'}">
-      <div style="display:flex;align-items:center;gap:8px;justify-content:center"><img class="ico" src="${I('logo_' + u.id)}" style="width:22px;height:22px"><span class="nm" style="font-size:${act ? 22 : 19}px">${u.name}</span>${u.shield ? `<span style="font:700 18px var(--num);color:#8fe3ff">◈${u.shield}</span>` : ''}</div>
-      ${bar(hpK, u.hp)}<div style="display:flex;justify-content:space-between;font:700 17px var(--num);color:#f4ede1;margin-top:2px"><span>${u.hp[0]}/${u.hp[1]}</span><span style="color:#9cc4ff">${u.mp[0]}</span></div>
-      ${act ? `<div style="display:flex;justify-content:center;gap:12px;margin-top:6px">${STATS.main.map(([k, l, v, p]) => `<span class="stat${p ? ' pri' : ''}" style="font-size:19px;gap:4px"><img class="ico" src="${I('stat_' + k)}" style="width:18px;height:18px">${v}</span>`).join('')}</div>` : ''}
-    </div></div>`;
+const costLine = (s) => s.cost.map(([ic, v]) => `<span><img class="ico" src="${I(ic)}">${v}</span>`).join('') + (s.cd ? `<span><img class="ico" src="${I('hourglass')}">${s.cd}</span>` : '') || '<span class="free">Free</span>';
+const skTip = (s) => `<div class="tip panel corners"><div class="t"><img class="ico" src="${I('skill_' + s.id)}"><span class="n">${s.name}</span><span class="tag">${s.tag}</span></div><div class="fade" style="margin-top:10px"></div><p>${s.text}</p>
+  <div class="meta">${s.cost.map(([ic, v]) => `<span><img class="ico" src="${I(ic)}">${v} MP</span>`).join('') || '<em>No mana</em>'}${s.cd ? `<span><img class="ico" src="${I('hourglass')}">${s.cd} turn cooldown</span>` : '<em>No cooldown</em>'}<span><img class="ico" src="${I('stat_luck')}">LCK</span></div>
+  ${s.cdNow ? `<p style="margin-top:6px;font-style:italic;color:#e8a070">Ready in ${s.cdNow} turns.</p>` : ''}</div>`;
+const skill = (s, i) => `<div class="sk ${s.ult ? 'ult' : ''} ${s.cdNow ? 'cdn' : ''} ${S.sel === s.id ? 'sel' : ''}" data-skill="${s.id}">
+  <div class="fr"><img class="ico" src="${I('skill_' + s.id)}">${s.cdNow ? `<span class="cdv">${s.cdNow}</span>` : ''}<span class="key">${i + 1}</span></div>
+  <span class="nm">${s.name}</span><span class="cost">${costLine(s)}</span>${skTip(s)}</div>`;
+const globs = () => `<div class="globs">${GLOBALS.map((g) => `<div class="gl" ${tipAttr('g:' + g.id)}><img class="ico" src="${I(g.ic)}"><span>${g.n}</span></div>`).join('')}</div>`;
+const SKW = 4 * 146 + 3 * 12;
+/** Alt orta: 4 skill tam ortada, global sütun hemen sağında; sağda pasif. Dönen x: sağ bloğun başladığı yer. */
+function centre(y) {
+  const sx = S.W / 2 - SKW / 2;
+  let s = `<div class="hud" style="left:${sx}px;top:${y}px"><div class="skills">${SKILLS.map(skill).join('')}</div></div>`;
+  const gx = sx + SKW + 22;
+  s += `<div class="hud" style="left:${gx}px;top:${y + 4}px;display:flex;gap:16px;height:122px"><div class="vfade"></div>${globs()}</div>`;
+  return { html: s, right: gx + 150 };
 }
-const skillCard = (s, i, w, h, o = {}) => `<div class="sk ${s.ult ? 'ult' : ''} ${S.sel === s.id ? 'sel' : ''}" data-skill="${s.id}" style="width:${w}px;height:${h}px">
-  <span class="key">${i + 1}</span><img class="ico" src="${I('skill_' + s.id)}" style="width:${o.icon ?? 60}px;height:${o.icon ?? 60}px">
-  <span class="nm" style="font-size:${o.font ?? 24}px">${s.name}</span>
-  ${o.desc ? `<span style="font:italic ${o.descSize ?? 20}px var(--gar);color:var(--muted);text-align:center;padding:0 14px;line-height:1.15;white-space:normal">${s.text}</span>` : ''}
-  <span class="cost">${s.cost.map(([ic, v]) => `<span><img class="ico" src="${I(ic)}">${v}</span>`).join('') || '<span style="font:italic 20px var(--gar);color:var(--dim)">Free</span>'}</span></div>`;
-const globals = (size, dir = 'column', gap = 10) => `<div style="display:flex;flex-direction:${dir};gap:${gap}px">${GLOBALS.map(([ic, l]) => `<div class="glob" title="${l}" style="width:${size}px;height:${size}px"><img class="ico" src="${I(ic)}" style="width:${size * 0.6}px;height:${size * 0.6}px"></div>`).join('')}</div>`;
-const selSkill = () => SKILLS.find((s) => s.id === S.sel);
-const tipBox = (x, y, w = 560) => {
-  const s = selSkill(); if (!s) return '';
-  return `<div class="tipbox panel" style="left:${x}px;top:${y}px;width:${w}px"><div class="t"><img class="ico" src="${I('skill_' + s.id)}"><span class="n" style="font-size:26px">${s.name}</span><span class="tag">${s.tag}</span></div><div class="fade" style="margin-top:10px"></div><p>${s.text}</p></div>`;
-};
-const passiveBadge = (size) => `<div title="${PASSIVE.name}" style="width:${size}px;height:${size}px;border-radius:50%;display:grid;place-items:center;background:#140e09;box-shadow:inset 0 0 0 1.5px rgba(var(--gold),.6),0 0 0 4px rgba(10,7,5,.6)"><img class="ico" src="${I('passive_gambler')}" style="width:${size * 0.62}px;height:${size * 0.62}px"></div>`;
-const portrait = (size, o = {}) => `<div style="position:relative;width:${size}px;height:${size}px;background:linear-gradient(180deg,#22180f,#0a0705);box-shadow:inset 0 0 0 ${o.on ? 2 : 1}px ${o.on ? 'var(--on)' : 'rgba(var(--gold),.55)'};${o.round ? 'border-radius:50%;overflow:hidden;' : ''}"><img src="battle-hud/img/av-gambler.webp" style="width:100%;height:100%;object-fit:cover;${o.round ? '' : 'padding:2px'}"></div>`;
-const hpmp = (w, big) => `<div style="width:${w}px"><div style="display:flex;justify-content:space-between;font:700 ${big ? 24 : 21}px var(--num);color:#f4ede1"><span style="display:flex;gap:6px;align-items:center"><img class="ico" src="${I('stat_hp')}" style="width:20px;height:20px">${ACTIVE.hp[0]}/${ACTIVE.hp[1]}</span><span style="display:flex;gap:6px;align-items:center;color:#9cc4ff"><img class="ico" src="${I('stat_mp')}" style="width:20px;height:20px">${ACTIVE.mp[0]}/${ACTIVE.mp[1]}</span></div>${bar('hp', ACTIVE.hp)}<div style="height:4px"></div>${bar('mp', ACTIVE.mp)}</div>`;
-const fullStats = () => `<div class="k" style="margin-bottom:12px">Gambler · Luck</div><div style="display:flex;gap:40px">
-  <div style="display:flex;flex-direction:column;gap:10px">${STATS.main.map(statRow).join('')}</div>
-  <div style="display:flex;flex-direction:column;gap:10px">${STATS.atk.map(statRow).join('')}</div>
-  <div style="display:flex;flex-direction:column;gap:10px">${STATS.def.map(statRow).join('')}</div></div>
-  <div class="fade" style="margin:16px 0 12px"></div><div style="display:flex;gap:14px;align-items:center">${passiveBadge(56)}<div><div class="n" style="font-size:22px">${PASSIVE.name}</div><div class="m" style="font-size:20px">${PASSIVE.text}</div></div></div>`;
-const bandBg = (y, h) => `<div class="abs" style="left:0;right:0;top:${y}px;height:${h}px;background:linear-gradient(180deg,rgba(26,19,12,.97),rgba(7,5,4,.98));"></div><div class="abs fade" style="left:0;right:0;top:${y}px;opacity:.9"></div><div class="abs" style="left:0;right:0;top:${y - 18}px;height:18px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.35))"></div>`;
+function sideBlock(x, y, w) {
+  const p = CLS.gambler.passive;
+  return `<div class="hud side" style="left:${x}px;top:${y}px;width:${w}px">
+    <div class="hd" style="margin:0"><i class="dia h s"></i>Passive</div>
+    <div class="pas"><div class="medal" style="width:46px;height:46px"><img class="ico" src="${I('passive_gambler')}" style="width:30px;height:30px"></div><div><div class="t">${p[0]}</div><div class="d">${p[1]}</div></div></div>
+    <div class="pas" ${tipAttr('s:luck')} style="gap:10px;cursor:help"><i class="dia s"></i><div class="d" style="font-style:normal;color:var(--txt)"><span style="font:600 13px var(--cin);letter-spacing:.1em;color:var(--pri)">LUCKY ESCAPE</span> <em style="color:var(--muted)">· primary bonus, ready</em></div></div></div>`;
+}
+function band(H) { return `<div class="band" style="height:${H}px"><i class="dia cd"></i></div>`; }
+const portrait = (w, h, o = {}) => `<div class="pframe" style="width:${w}px;height:${h}px"><img src="battle-hud/img/av-gambler.webp" style="${o.pos ? `object-position:${o.pos}` : ''}"></div>`;
+const nameLine = (size = 22) => `<div style="display:flex;align-items:baseline;gap:12px;white-space:nowrap"><span class="n" style="font-size:${size}px">Gambler</span><span class="m">Risk Taker</span></div>`;
+const hpmpCols = (w) => `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;width:${w}px">
+  <div ${tipAttr('s:hp')}><div class="num" style="display:flex;align-items:center;gap:5px;margin-bottom:3px"><img class="ico" src="${I('stat_hp')}" style="width:16px;height:16px">${ACTIVE.hp}<span style="color:var(--muted);font-size:14px">/ ${G.hp}</span></div>${bar('hp', ACTIVE.hp, G.hp)}</div>
+  <div ${tipAttr('s:mp')}><div class="num" style="display:flex;align-items:center;gap:5px;margin-bottom:3px;color:#9cc4ff"><img class="ico" src="${I('stat_mp')}" style="width:16px;height:16px">${ACTIVE.mp}<span style="color:var(--muted);font-size:14px">/ ${G.mp}</span></div>${bar('mp', ACTIVE.mp, G.mp)}</div></div>`;
+const tbar = (k) => { const hp = k === 'hp'; const a = hp ? ACTIVE.hp : ACTIVE.mp, b = hp ? G.hp : G.mp; return `<div class="tbar ${k}" ${tipAttr('s:' + k)}><i style="width:${pct(a, b)}"></i><span>${a} / ${b}</span></div>`; };
+const row = (k) => { const s = ST[k]; return `<div class="row ${s.p ? 'pri' : ''}" ${tipAttr('s:' + k)}><img class="ico" src="${I('stat_' + k)}"><span class="l">${s.l}</span><span class="v">${s.v}</span></div>`; };
+const st = (k, o = {}) => { const s = ST[k]; return `<div class="st ${s.p ? 'pri' : ''}" ${tipAttr('s:' + k)} style="${o.size ? `font-size:${o.size}px` : ''}"><img class="ico" src="${I('stat_' + k)}">${o.noLabel ? '' : `<span class="l">${s.l}</span>`}<span>${s.v}</span></div>`; };
+const srow = (k) => { const s = ST[k]; return `<div class="srow ${s.p ? 'pri' : ''}" ${tipAttr('s:' + k)}><img class="ico" src="${I('stat_' + k)}"><span class="l">${s.n}${s.p ? '<i class="pd"></i>' : ''}</span><span class="v">${s.v}</span></div>`; };
+const sheetBody = (title = true) => `${title ? `<div style="display:flex;align-items:baseline;gap:14px;margin-bottom:12px"><span class="n" style="font-size:20px">Gambler</span><span class="m">Risk Taker · Luck primary</span><span class="k" style="margin-left:auto;font-size:11px;color:var(--dim)">Character</span></div>` : ''}
+  <div class="cols">${GROUPS.map(([t, ks], gi) => `${gi ? '<div class="vfade"></div>' : ''}<div class="col"><div class="hd"><i class="dia h s"></i>${t}</div>${ks.map(srow).join('')}</div>`).join('')}</div>`;
 
 // ---------------------------------------------------------------- 5 taslak
 const V = {};
-V[1] = { name: 'Ledger strip', cap: 'Ledger strip: one tidy bottom strip. Primary stats always visible, big numbers; ATK / DEF details open on tap. Wider skill cards, globals as a slim column, info above the chosen skill.', html() {
-  const y = 846, h = 234, W = S.W;
-  const sw = 230, sh = 180, gap = 14;
-  const sx = Math.max(704, W / 2 - (4 * sw + 3 * gap) / 2 + 80);
-  let s = scene({ target: S.sel !== '' }) + turnBar() + topRight() + bandBg(y, h);
-  s += `<div class="banner" style="left:${W / 2 + 60}px;top:${y - 52}px"><i class="dia h"></i>YOUR TURN<i class="dia h"></i></div>`;
-  // sol: portre + can/MP + ana statlar + ATK/DEF çipleri
-  s += `<div class="abs" style="left:${40}px;top:${y + 20}px;display:flex;gap:22px;align-items:flex-start">
-    <div style="position:relative">${portrait(190, { on: true })}<div class="abs" style="right:-16px;bottom:-10px">${passiveBadge(60)}</div></div>
-    <div style="display:flex;flex-direction:column;gap:12px;width:430px">
-      <div class="k" style="color:var(--on);font-size:17px">Gambler · Luck</div>
-      ${hpmp(420)}
-      <div style="display:flex;gap:14px;font-size:0">${STATS.main.map(statRow).join('').replaceAll('class="stat', 'style="font-size:24px;gap:6px" class="stat')}</div>
-      <div style="display:flex;gap:10px"><span class="chip ${S.pop === 'atk' ? 'on' : ''}" data-pop="atk">ATK ▸</span><span class="chip ${S.pop === 'def' ? 'on' : ''}" data-pop="def">DEF ▸</span></div>
-    </div></div>`;
-  if (S.pop) s += `<div class="popover panel" style="left:240px;top:${y - 250}px"><div class="k" style="margin-bottom:12px">${S.pop === 'atk' ? 'Attack' : 'Defense'}</div><div class="grid2">${STATS[S.pop].map(statRow).join('')}</div></div>`;
-  s += `<div class="abs" style="left:${sx}px;top:${y + 20}px;display:flex;gap:${gap}px">${SKILLS.map((k, i) => skillCard(k, i, sw, sh)).join('')}</div>`;
-  s += `<div class="abs" style="left:${sx + 4 * sw + 3 * gap + 20}px;top:${y + 20}px">${globals(52)}</div>`;
-  const si = SKILLS.findIndex((k) => k.id === S.sel);
-  if (si >= 0) s += tipBox(W / 2 - 280, 150);
+V[1] = { name: 'Three columns', cap: 'The previous v3 in the kit: framed portrait with HP/MP bars under it, then Main / Attack / Defense as three labelled columns, always visible. Skills in the exact centre, Rest / Skip / Move as a column right beside them, passive at the far right.', html() {
+  const H = 212, y = 1080 - H;
+  const c = centre(y + 32);
+  let s = band(H);
+  const col = (t, ks) => `<div style="width:114px"><div class="hd" style="font-size:10px;letter-spacing:.24em;margin-bottom:3px;padding-bottom:4px">${t}</div>${ks.map(row).join('')}</div>`;
+  s += `<div class="hud" style="left:28px;top:${y + 18}px;display:flex;gap:22px">
+    <div style="display:flex;flex-direction:column;gap:6px;width:140px">${portrait(140, 128, { pos: '50% 20%' })}<div style="height:4px"></div>${tbar('hp')}${tbar('mp')}</div>
+    <div style="display:flex;flex-direction:column;gap:8px;width:${3 * 114 + 2 * 29}px">${nameLine(21)}<div class="fade l"></div>
+      <div style="display:flex;gap:14px">${col('Main', MAIN)}<div class="vfade"></div>${col('Attack', ATK)}<div class="vfade"></div>${col('Defense', DEF)}</div></div></div>`;
+  s += c.html + sideBlock(c.right + 30, y + 30, Math.min(400, S.W - c.right - 80));
   return s;
 } };
-V[2] = { name: 'Side drawer', cap: 'Side drawer: all stats and the passive live in a drawer on the left (STATS tab, open here). The bottom bar keeps only portrait, HP/MP and the skills, so nothing is cramped.', html() {
-  const y = 880, h = 200, W = S.W;
-  const sw = 250, sh = 160, gap = 16;
-  const sx = Math.max(560, W / 2 - (4 * sw + 3 * gap) / 2);
-  let s = scene({ target: true }) + turnBar() + topRight() + bandBg(y, h);
-  s += `<div class="banner" style="left:${W / 2}px;top:${y - 52}px"><i class="dia h"></i>YOUR TURN<i class="dia h"></i></div>`;
-  s += `<div class="abs" style="left:${40}px;top:${y + 18}px;display:flex;gap:18px;align-items:center">${portrait(160, { on: true })}<div style="display:flex;flex-direction:column;gap:12px"><span class="n" style="font-size:28px">Gambler</span>${hpmp(300)}<span class="chip ${S.drawer ? 'on' : ''}" data-drawer="1" style="width:max-content">STATS ${S.drawer ? '◂' : '▸'}</span></div></div>`;
-  s += `<div class="abs" style="left:${sx}px;top:${y + 20}px;display:flex;gap:${gap}px">${SKILLS.map((k, i) => skillCard(k, i, sw, sh)).join('')}</div>`;
-  s += `<div class="abs" style="left:${sx + 4 * sw + 3 * gap + 24}px;top:${y + 26}px">${globals(70, 'row', 12)}</div>`;
-  s += `<div class="abs" style="right:40px;top:${y + 110}px;width:${W - (sx + 4 * sw + 3 * gap + 24) - 40}px"><div class="m" style="font-size:20px;text-align:center">Rest · Skip · Move</div></div>`;
-  if (S.drawer) s += `<div class="abs panel" style="left:0;top:140px;bottom:${1080 - y + 24}px;width:620px;padding:26px 30px;border-left:0">${fullStats()}</div>`;
-  else s += `<div class="abs panel" data-drawer="1" style="left:0;top:380px;padding:18px 10px;border-left:0;writing-mode:vertical-rl;font:600 20px var(--cin);letter-spacing:.2em;color:var(--txt);cursor:pointer">STATS ▸</div>`;
-  if (selSkill()) s += tipBox(W / 2 - 280, 150);
+const BR = {
+  a: { name: 'Clean right', cap: 'No right block: the passive is a small medallion on the portrait corner and Lucky Escape a tiny gold pip beside it (both with tooltips). The right side of the bar stays empty.' },
+  b: { name: 'Party glance', cap: 'Party glance: your four heroes as small avatars with thin HP / MP bars and status pips. Hover one to preview its card on the left, click to pin it.' },
+  c: { name: 'Battle info', cap: 'Battle info: round counter, who acts next (then the two after), and a Combat log link that raises a small log panel.' },
+  d: { name: 'Field glance', cap: 'Field glance: both teams as two mini rows (party blue, enemies red) with HP bars and status pips. Hover or click any of them: ally cards open on the left, enemy cards on the right, both can stay pinned.' },
+};
+const LOG = [
+  [3, 'e', 'Cutthroat', 'used <i>Venom Edge</i> on', 'p', 'Hexer', '9', ''],
+  [3, 'p', 'Hexer', 'cursed', 'e', 'Cutthroat', '', 'Bad Omen ×2'],
+  [3, 'e', 'Defender', 'raised <i>Guard</i>: Fortified', '', '', '', ''],
+  [3, 'p', 'Undead', 'used <i>Bone Throw</i> on', 'e', 'Warrior', '14', ''],
+  [2, 'e', 'Warrior', 'used <i>Whirlwind</i> on', 'p', 'Warrior', '18', 'crit'],
+  [2, 'p', 'Gambler', 'used <i>Loaded Dice</i> on', 'e', 'Cutthroat', '19', ''],
+];
+function portraitV2() {
+  return `<div style="position:relative;flex:none">${portrait(126, 126)}
+    <div class="pmed medal" ${tipAttr('p:passive')} data-solo="1"><img class="ico" src="${I('passive_gambler')}"></div>
+    <div class="ppip" ${tipAttr('p:lucky')} data-solo="1"><i></i></div></div>`;
+}
+const raItem = (i, o = {}) => { const u = UNITS[i]; const en = u.side === 'enemy'; return `<div class="ra ${u.active ? 'now' : ''}" data-u="${i}"><div class="cell ${en ? 'enemy' : ''}"><img src="battle-hud/img/av-${u.cls}.webp"></div>${bar(en ? 'hpE' : 'hp', u.hp, u.d.hp)}${o.mp === false ? '' : bar('mp', u.mp, u.d.mp)}<div class="pips">${(u.fx || []).map(([k]) => `<i style="--c:${STATUS[k].c}"></i>`).join('')}</div>${o.name === false ? '' : `<span class="nm">${u.c.name}</span>`}</div>`; };
+function brBlock(x, y, w) {
+  if (S.br === 'a') return '';
+  if (S.br === 'b') return `<div class="hud" style="left:${x}px;top:${y}px;width:${w}px"><div class="hd"><i class="dia h s"></i>Party<span style="margin-left:auto;font:italic 14px var(--gar);letter-spacing:0;text-transform:none;color:var(--dim)">hover for details</span></div>
+    <div class="roster" style="margin-top:6px">${[1, 0, 2, 3].map((i) => raItem(i)).join('')}</div></div>`;
+  if (S.br === 'c') {
+    const nx = QUEUE.next.map((i) => UNITS[i]);
+    const log = LOG.map(([r, sa, a, verb, sb, b, dm, extra]) => `<div class="ln"><span class="r">R${r}</span><span><b class="${sa}">${a}</b> ${verb} ${b ? `<b class="${sb}">${b}</b>` : ''}${dm ? ` · <span class="dm ${extra === 'crit' ? 'cr' : ''}">${dm}${extra === 'crit' ? ' crit' : ''}</span>` : ''}${extra && extra !== 'crit' ? ` · <em>${extra}</em>` : ''}</span></div>`).join('');
+    return `<div class="hud binfo" style="left:${x}px;top:${y}px;width:${w}px">
+      <div class="rnd"><i class="dia s"></i>ROUND 3<em>· turn 14</em></div>
+      <div class="nx" ${tipAttr('q:' + QUEUE.next[0] + ':n1')}><span class="k" style="font-size:11px;width:52px">Next</span><div class="cell ${nx[0].side === 'enemy' ? 'enemy' : ''}"><img src="battle-hud/img/av-${nx[0].cls}.webp"></div>
+        <div style="display:flex;flex-direction:column"><span style="font:600 15px var(--cin);letter-spacing:.06em;color:#f4ede1">${nx[0].c.name.toUpperCase()}</span><span class="m" style="font-size:15px">enemy · then</span></div>
+        ${nx.slice(1, 3).map((u) => `<div class="cell sm ${u.side === 'enemy' ? 'enemy' : ''}"><img src="battle-hud/img/av-${u.cls}.webp"></div>`).join('')}</div>
+      <div class="loglink ${S.log ? 'open' : ''}" data-log="1" style="align-self:flex-start"><span class="more">Combat log</span></div>
+      <div class="logp panel corners ${S.log ? 'open' : ''}" style="left:${Math.min(-10, S.W - 40 - 440 - x)}px"><div class="hd"><i class="dia h s"></i>Combat log<span style="margin-left:auto;font:italic 14px var(--gar);letter-spacing:0;text-transform:none;color:var(--dim)">latest first</span></div>${log}</div></div>`;
+  }
+  return `<div class="hud" style="left:${x}px;top:${y - 4}px;width:${w}px"><div class="fg">
+    <span class="side-k" style="color:#9cc4ff">Party</span>${[1, 0, 2, 3].map((i) => raItem(i, { name: false, mp: false })).join('')}
+    <span class="side-k" style="color:#ff9c8c">Enemy</span>${[4, 5, 6, 7].map((i) => raItem(i, { name: false, mp: false })).join('')}</div></div>`;
+}
+V[2] = { name: 'Slim bar, sheet rises', cap: 'Chosen version. Slim bar with portrait, HP/MP and the four main stats; click / tap the portrait or stat area and the full character sheet rises from it. Bottom-right options: buttons a-d under the version picker (or &br=a|b|c|d).', html() {
+  const H = 170, y = 1080 - H;
+  const c = centre(y + 18);
+  let s = band(H);
+  s += `<div class="hud opener ${S.open ? 'open' : ''}" data-open="1" style="left:28px;top:${y + 20}px;display:flex;gap:24px;align-items:flex-start">
+    <div class="sheet panel corners" style="left:-6px;bottom:calc(100% + 26px)">${sheetBody()}</div>
+    ${portraitV2()}
+    <div style="display:flex;flex-direction:column;gap:10px;padding-top:2px">${nameLine(21)}${hpmpCols(320)}
+      <div style="display:flex;gap:18px">${MAIN.map((k) => st(k)).join('')}</div>
+      <span class="more">All stats</span></div></div>`;
+  s += c.html + brBlock(c.right + 34, y + 18, Math.min(420, S.W - c.right - 70));
   return s;
 } };
-V[3] = { name: 'Big cards', cap: 'Big cards: minimal bottom, four large skill cards with their description on the card. Portrait top-left of the cards; tap it for the full stat sheet. Globals as small round buttons.', html() {
-  const W = S.W, sw = 300, sh = 214, gap = 18;
-  const y = 1080 - sh - 14;
-  const sx = W / 2 - (4 * sw + 3 * gap) / 2;
-  let s = scene({ target: true }) + turnBar({ size: 76, gap: 10 }) + topRight();
-  s += `<div class="abs" style="left:0;right:0;top:${y - 70}px;bottom:0;background:linear-gradient(180deg,rgba(7,5,4,0),rgba(7,5,4,.82) 40%,rgba(7,5,4,.95))"></div>`;
-  s += `<div class="abs" style="left:${sx}px;top:${y}px;display:flex;gap:${gap}px">${SKILLS.map((k, i) => skillCard(k, i, sw, sh, { icon: 56, font: 25, desc: true, descSize: 19 })).join('')}</div>`;
-  s += `<div class="abs" style="left:${sx - 250}px;top:${y - 6}px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer" data-pop="sheet">${portrait(120, { on: true })}<span class="n" style="font-size:22px">Gambler</span>${hpmp(210)}<span class="m" style="font-size:17px">Tap for stats</span></div>`;
-  s += `<div class="abs" style="left:${sx + 4 * sw + 3 * gap + 30}px;top:${y + 6}px;display:flex;flex-direction:column;gap:8px">${GLOBALS.map(([ic, l]) => `<div style="display:flex;align-items:center;gap:12px"><div class="glob" style="width:60px;height:60px;border-radius:50%"><img class="ico" src="${I(ic)}" style="width:36px;height:36px"></div><span class="k" style="font-size:16px;color:var(--txt)">${l}</span></div>`).join('')}</div>`;
-  s += `<div class="banner" style="left:${W / 2}px;top:${y - 64}px"><i class="dia h"></i>YOUR TURN · GAMBLER<i class="dia h"></i></div>`;
-  if (S.pop === 'sheet') s += `<div class="popover panel" style="left:${sx - 250}px;top:${y - 470}px">${fullStats()}</div>`;
+V[3] = { name: 'Compact grid', cap: 'A compact two-row grid of all 13 stats (icon + number) beside the portrait. Hover (or tap) the grid and it grows in place into a labelled, grouped grid. Every stat still has its own tooltip.', html() {
+  const H = 186, y = 1080 - H;
+  const c = centre(y + 20);
+  let s = band(H);
+  const all = [...MAIN, ...ATK, ...DEF];
+  const tile = (k) => { const t = ST[k]; return `<div class="tile ${t.p ? 'pri' : ''}" ${tipAttr('s:' + k)}><div class="top"><img class="ico" src="${I('stat_' + k)}">${t.v}</div><span class="l">${t.n}</span></div>`; };
+  s += `<div class="hud" style="left:28px;top:${y + 22}px;display:flex;gap:18px">${portrait(132, 132)}
+    <div style="display:flex;flex-direction:column;gap:9px;padding-top:2px">${nameLine(21)}${hpmpCols(440)}</div></div>`;
+  s += `<div class="cg ${S.open ? 'open' : ''}" data-open="1" style="left:178px;top:${y + 104}px">
+    <div class="big panel corners">${GROUPS.map(([t, ks]) => `<div class="grp"><div class="k" style="font-size:11px">${t}</div>${ks.map(tile).join('')}</div>`).join('')}</div>
+    <div class="compact">${all.map((k) => st(k, { noLabel: true, size: 17 })).join('')}</div></div>`;
+  s += c.html + sideBlock(c.right + 30, y + 24, Math.min(400, S.W - c.right - 80));
   return s;
 } };
-V[4] = { name: 'Portrait centre', cap: 'Portrait centre: the acting hero sits in a medallion in the middle, skills two on each side. A ribbon of primary stats above; ATK / DEF on tap. Globals on the far right, passive on the medallion.', html() {
-  const W = S.W, y = 860, h = 220, sw = 236, sh = 168, gap = 14, med = 196;
-  const cx = W / 2;
-  let s = scene({ target: true }) + turnBar() + topRight() + bandBg(y, h);
-  s += `<div class="abs" style="left:${cx - med / 2}px;top:${y - 86}px;display:flex;flex-direction:column;align-items:center;gap:8px">
-    <div style="position:relative">${portrait(med, { on: true, round: true })}<div class="abs" style="right:-10px;bottom:4px">${passiveBadge(58)}</div></div></div>`;
-  s += `<div class="abs" style="left:${cx - 200}px;top:${y + 132}px;width:400px">${hpmp(400)}</div>`;
-  s += `<div class="abs" style="left:${cx - sw * 2 - gap - med / 2 - 30}px;top:${y + 24}px;display:flex;gap:${gap}px">${SKILLS.slice(0, 2).map((k, i) => skillCard(k, i, sw, sh)).join('')}</div>`;
-  s += `<div class="abs" style="left:${cx + med / 2 + 30}px;top:${y + 24}px;display:flex;gap:${gap}px">${SKILLS.slice(2).map((k, i) => skillCard(k, i + 2, sw, sh)).join('')}</div>`;
-  s += `<div class="abs" style="right:36px;top:${y + 24}px">${globals(52)}</div>`;
-  s += `<div class="abs" style="left:40px;top:${y + 26}px;display:flex;flex-direction:column;gap:12px"><span class="n" style="font-size:28px">Gambler</span><div style="display:grid;grid-template-columns:auto auto;gap:8px 26px">${STATS.main.map(statRow).join('')}</div><div style="display:flex;gap:10px"><span class="chip ${S.pop === 'atk' ? 'on' : ''}" data-pop="atk">ATK</span><span class="chip ${S.pop === 'def' ? 'on' : ''}" data-pop="def">DEF</span></div></div>`;
-  if (S.pop === 'atk' || S.pop === 'def') s += `<div class="popover panel" style="left:40px;top:${y - 260}px"><div class="k" style="margin-bottom:12px">${S.pop === 'atk' ? 'Attack' : 'Defense'}</div><div class="grid2">${STATS[S.pop].map(statRow).join('')}</div></div>`;
-  s += `<div class="banner" style="left:${cx}px;top:${y - 140}px"><i class="dia h"></i>YOUR TURN<i class="dia h"></i></div>`;
-  if (selSkill()) s += tipBox(cx - 280, 150);
+V[4] = { name: 'Left column', cap: 'All stats in a slim column standing on the left edge above the portrait, grouped Main / Attack / Defense. Hovering a row opens a detail card beside the column. The bottom bar keeps only portrait, name and HP/MP.', html() {
+  const H = 160, y = 1080 - H;
+  const c = centre(y + 14);
+  let s = band(H);
+  const sr = (k) => { const t = ST[k]; return `<div class="sr ${t.p ? 'pri' : ''}" ${tipAttr('s:' + k + ':r')}><img class="ico" src="${I('stat_' + k)}"><span class="l">${t.l}</span><span class="v">${t.v}</span></div>`; };
+  s += `<div class="strip" style="left:28px;bottom:${H + 14}px;width:150px"><div class="bgl"></div>${GROUPS.map(([t, ks]) => `<div class="g">${t.toUpperCase()}</div>${ks.map(sr).join('')}`).join('')}</div>`;
+  s += `<div class="hud" style="left:28px;top:${y + 16}px;display:flex;gap:18px">${portrait(150, 128, { pos: '50% 25%' })}
+    <div style="display:flex;flex-direction:column;gap:10px;padding-top:2px">${nameLine(21)}${hpmpCols(330)}
+    <span class="m" style="font-size:16px;color:var(--dim)">Hover a stat on the left for details</span></div></div>`;
+  s += c.html + sideBlock(c.right + 30, y + 20, Math.min(400, S.W - c.right - 80));
   return s;
 } };
-V[5] = { name: 'Floating cards', cap: 'Floating cards: every unit carries its own small card (name, HP, MP, shield); the acting hero\'s card grows and shows its primary stats. The bottom keeps only skills and globals. The turn order becomes a slim column on the left.', html() {
-  const W = S.W, y = 900, h = 180, sw = 270, sh = 150, gap = 16;
-  const sx = W / 2 - (4 * sw + 3 * gap) / 2;
-  let s = scene({ target: true, plate: 'card' }) + topRight() + bandBg(y, h);
-  // dikey sıra
-  const all = [...QUEUE.past.map((c) => cell(c, 'past')), cell(QUEUE.now, 'now'), ...QUEUE.next.map((c) => cell(c))];
-  s += `<div class="abs" style="left:28px;top:24px;display:flex;flex-direction:column;gap:8px">${all.join('').replaceAll('class="cell', 'style="width:72px;height:72px" class="cell')}</div>`;
-  s += `<div class="abs" style="left:112px;top:${24 + 3 * 80 + 30}px"><i class="dia"></i></div>`;
-  s += `<div class="abs" style="left:${sx}px;top:${y + 15}px;display:flex;gap:${gap}px">${SKILLS.map((k, i) => skillCard(k, i, sw, sh)).join('')}</div>`;
-  s += `<div class="abs" style="left:${sx + 4 * sw + 3 * gap + 24}px;top:${y + 24}px">${globals(62, 'row', 12)}</div>`;
-  s += `<div class="abs" style="left:${sx - 150}px;top:${y + 30}px" data-pop="sheet">${passiveBadge(96)}<div class="m" style="font-size:17px;text-align:center;margin-top:4px">Passive</div></div>`;
-  s += `<div class="banner" style="left:${W / 2}px;top:${y - 52}px"><i class="dia h"></i>YOUR TURN<i class="dia h"></i></div>`;
-  if (S.pop === 'sheet') s += `<div class="popover panel" style="left:${sx - 150}px;top:${y - 420}px">${fullStats()}</div>`;
-  else if (selSkill()) s += tipBox(W / 2 - 280, 150);
+V[5] = { name: 'Medallion', cap: 'A round portrait medallion rising from the bar, HP and MP drawn as arcs around it, the four main stats as chips on its rim. Click / tap the medallion: the full stat set unfolds from it as grouped chips (circular reveal).', html() {
+  const H = 150, y = 1080 - H;
+  const c = centre(y + 8);
+  const cx = 128, cy = 1080 - 112, r = 82;
+  let s = band(H);
+  const arc = (from, to, rr) => { const a0 = (from * Math.PI) / 180, a1 = (to * Math.PI) / 180; const large = Math.abs(to - from) > 180 ? 1 : 0; return `M ${rr * Math.cos(a0)} ${rr * Math.sin(a0)} A ${rr} ${rr} 0 ${large} ${to > from ? 1 : 0} ${rr * Math.cos(a1)} ${rr * Math.sin(a1)}`; };
+  const hpF = ACTIVE.hp / G.hp, mpF = ACTIVE.mp / G.mp, R = r + 9;
+  // HP: alttan sola, yukarı (sol yarım); MP: alttan sağa, yukarı (sağ yarım)
+  const svg = `<svg width="${2 * r}" height="${2 * r}" viewBox="${-r} ${-r} ${2 * r} ${2 * r}" style="left:0;top:0">
+    <path d="${arc(100, 260, R)}" stroke="rgba(0,0,0,.7)" stroke-width="7" fill="none"/><path d="${arc(100, 100 + 160 * hpF, R)}" stroke="#5cc06c" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="${arc(80, -80, R)}" stroke="rgba(0,0,0,.7)" stroke-width="7" fill="none"/><path d="${arc(80, 80 - 160 * mpF, R)}" stroke="#5a8ff0" stroke-width="5" fill="none" stroke-linecap="round"/></svg>`;
+  const orbit = r + 50;
+  const chip = (k, ang) => { const t = ST[k], a = (ang * Math.PI) / 180; return `<div class="chipr ${t.p ? 'pri' : ''}" ${tipAttr('s:' + k)} style="left:${r + orbit * Math.cos(a)}px;top:${r + orbit * Math.sin(a)}px"><img class="ico" src="${I('stat_' + k)}">${t.v}<span class="cl">${t.l}</span></div>`; };
+  s += `<div class="mdl ${S.open ? 'open' : ''}" style="left:${cx - r}px;top:${cy - r}px;width:${2 * r}px;height:${2 * r}px">${svg}
+    <div class="face" data-open="1" style="left:0;top:0;width:${2 * r}px;height:${2 * r}px"><img src="battle-hud/img/av-gambler.webp"></div>
+    ${[['str', -125], ['dex', -86], ['int', -47], ['luck', -8]].map(([k, a]) => chip(k, a)).join('')}</div>`;
+  const ch = (k) => { const t = ST[k]; return `<div class="chipr ${t.p ? 'pri' : ''}" ${tipAttr('s:' + k)}><img class="ico" src="${I('stat_' + k)}">${t.v}<span class="cl">${t.l}</span></div>`; };
+  s += `<div class="reveal panel corners" style="left:24px;bottom:${1080 - (cy - r - 70)}px;--ox:${cx - 24}px;--oy:calc(100% + ${cy - (cy - r - 70)}px)">
+    <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:14px"><span class="n" style="font-size:20px">Gambler</span><span class="m">Risk Taker · Luck primary</span></div>
+    ${GROUPS.map(([t, ks]) => `<div class="rg"><span class="k">${t}</span><div class="chips">${ks.map(ch).join('')}</div></div>`).join('')}</div>`;
+  s += `<div class="hud" style="left:${cx + r + 96}px;top:${y + 26}px;display:flex;flex-direction:column;gap:10px">${nameLine(21)}
+    <div style="display:flex;gap:22px">${['hp', 'mp'].map((k) => `<div class="num" ${tipAttr('s:' + k)} style="display:flex;align-items:center;gap:6px;${k === 'mp' ? 'color:#9cc4ff' : ''}"><img class="ico" src="${I('stat_' + k)}" style="width:18px;height:18px">${k === 'hp' ? ACTIVE.hp : ACTIVE.mp}<span style="color:var(--muted);font-size:14px">/ ${k === 'hp' ? G.hp : G.mp}</span></div>`).join('')}</div>
+    <span class="more" data-open="1" style="cursor:pointer">All stats</span></div>`;
+  s += c.html + sideBlock(c.right + 30, y + 16, Math.min(400, S.W - c.right - 80));
   return s;
 } };
+
+// ---------------------------------------------------------------- birim kartı
+function cardHtml(i) {
+  const u = UNITS[i], c = u.c, d = u.d, en = u.side === 'enemy';
+  const attr = ['str', 'dex', 'int', 'luck'].map((k) => `<div class="st ${c.pri === k ? 'pri' : ''}" style="font-size:17px"><img class="ico" src="${I('stat_' + k)}" style="width:17px;height:17px"><span class="l">${ST[k].l}</span><span>${c.a[k]}</span></div>`).join('');
+  const r = (k, v, sm = '') => `<div class="row"><img class="ico" src="${I('stat_' + k)}"><span class="l">${ST[k].l}</span><span class="v">${v}${sm ? `<small>${sm}</small>` : ''}</span></div>`;
+  const grid = [r('armor', c.armor, `−${Math.round(d.red * 100)}%`), r('evasion', d.eva + '%'), r('spd', d.spd), r('magicArmor', c.mArmor), r('critChance', d.crit + '%'), r('accuracy', d.acc + '%')].join('');
+  const fx = (u.fx || []).map(([k, t]) => `<div class="e" style="--c:${STATUS[k].c}"><i></i><b>${STATUS[k].n}<em>${t}</em></b><span>${STATUS[k].d}</span></div>`).join('');
+  let pv = '';
+  const sk = SKILLS.find((s) => s.id === S.sel);
+  if (en && sk && !sk.cdNow) {
+    const hit = Math.max(0, Math.min(100, G.acc - d.eva));
+    const base = ACTIVE.c.a.luck * sk.power * (1 - d.red) * (u.fx?.some(([k]) => k === 'fortify') ? 0.5 : 1);
+    pv = `<div class="pv"><img class="ico" src="${I('skill_' + sk.id)}"><b>${sk.name.toUpperCase()}</b><span style="margin-left:auto">${hit}%<em> to hit</em></span><span>${Math.round(base * 0.9)}–${Math.round(base * 1.1)}<em> dmg</em></span></div>`;
+  }
+  return `<div class="hdr"><div class="cell ${en ? 'enemy' : ''}"><img src="battle-hud/img/av-${u.cls}.webp"></div>
+      <div><div class="n" style="font-size:21px">${c.name}</div><div class="m" style="font-size:16px">${c.role} · ${ST[c.pri].l} primary</div></div><span class="side-tag">${en ? 'ENEMY' : 'ALLY'}</span></div>
+    <div class="bars"><div><div class="lab"><span><img class="ico" src="${I('stat_hp')}">${u.hp}</span><span style="color:var(--muted);font-size:14px">/ ${d.hp}</span></div>${bar(en ? 'hpE' : 'hp', u.hp, d.hp)}</div>
+      <div><div class="lab"><span style="color:#9cc4ff"><img class="ico" src="${I('stat_mp')}">${u.mp}</span><span style="color:var(--muted);font-size:14px">/ ${d.mp}</span></div>${bar('mp', u.mp, d.mp)}</div></div>
+    <div class="attrs">${attr}</div>
+    <div class="fade" style="margin:10px 0 8px"></div><div class="grid">${grid}</div>
+    ${fx ? `<div class="sec"><div class="hd"><i class="dia h s"></i>Effects</div><div class="eff">${fx}</div></div>` : ''}
+    <div class="sec"><div class="hd"><i class="dia h s"></i>Passive</div><div style="font:600 14px var(--cin);letter-spacing:.06em;color:var(--on);text-transform:uppercase">${c.passive[0]}</div><div style="font:italic 16px/1.2 var(--gar);color:var(--note)">${c.passive[1]}</div></div>
+    ${pv}${pinOf(u.side) === i ? '<div class="hint">Pinned · click the unit again or press Esc</div>' : ''}`;
+}
+const pinOf = (side) => (side === 'party' ? S.pinL : S.pinR);
+function setPin(side, i) { if (side === 'party') S.pinL = i; else S.pinR = i; }
+/** İki kart: dost solda, düşman sağda. Her tarafta bir sabit kart; hover kendi tarafında önizler, öbür tarafın sabitine dokunmaz. */
+function updateCard() {
+  const lit = new Set([S.hov, S.pinL, S.pinR].filter((i) => i >= 0));
+  stage.querySelectorAll('[data-u]').forEach((e) => e.classList.toggle('hov', lit.has(Number(e.dataset.u))));
+  for (const side of ['party', 'enemy']) {
+    const card = document.getElementById(side === 'party' ? 'ucardL' : 'ucardR');
+    const hv = S.hov >= 0 && UNITS[S.hov].side === side ? S.hov : -1;
+    const pin = pinOf(side);
+    const i = hv >= 0 ? hv : pin;
+    if (i < 0) { card.classList.remove('on', 'pin'); continue; }
+    card.className = `ucard panel corners on ${side} ${pin === i ? 'pin' : ''}`;
+    const key = `${i}|${S.sel}|${pin === i}`;
+    if (card.dataset.k !== key) { card.innerHTML = cardHtml(i); card.dataset.k = key; }
+    card.style.left = (side === 'enemy' ? S.W - 384 - 40 : S.v === 4 ? 200 : 28) + 'px';
+  }
+}
+
+// ---------------------------------------------------------------- kayan tooltip
+function tipHtml(key) {
+  const [kind, id, extra] = key.split(':');
+  if (kind === 's') {
+    const s = ST[id];
+    const grp = GROUPS.find(([, ks]) => ks.includes(id));
+    return `<div class="tt"><img class="ico" src="${I('stat_' + id)}">${s.n}<span class="v ${s.p ? 'pri' : ''}">${s.v}</span></div><ul>${s.d.map((l) => `<li>${l}</li>`).join('')}</ul>${s.bn ? `<div class="bn">${s.bn}</div>` : ''}${extra === 'r' && grp ? `<div class="fx">${grp[0]} stat · see Codex › Stats</div>` : ''}`;
+  }
+  if (kind === 'p') {
+    const p = CLS.gambler.passive;
+    if (id === 'passive') return `<div class="tt"><img class="ico" src="${I('passive_gambler')}">${p[0]}<span class="v" style="font:italic 15px var(--gar);color:var(--muted)">passive</span></div><ul><li>${p[1]}</li></ul>`;
+    return `<div class="tt"><i class="dia" style="background:var(--pri);margin:0 6px"></i>Lucky Escape<span class="v" style="font:600 11px var(--cin);letter-spacing:.16em;color:var(--pri)">READY</span></div><ul><li>Once per battle, a killing blow has a 30% chance to be ignored completely</li><li>Luck primary bonus: active while Luck is your highest stat</li></ul>`;
+  }
+  if (kind === 'g') {
+    const g = GLOBALS.find((x) => x.id === id);
+    return `<div class="tt"><img class="ico" src="${I(g.ic)}">${g.n === 'Skip' ? 'Skip turn' : g.n}<span class="v" style="font:italic 15px var(--gar);color:var(--muted)">global action</span></div><ul>${g.d.map((l) => `<li>${l}</li>`).join('')}</ul>`;
+  }
+  if (kind === 'q') {
+    const u = UNITS[Number(id)];
+    const when = extra === 'past' ? 'Already acted this round' : extra === 'now' ? 'Acting now' : `Acts in ${extra.slice(1)} turn${extra === 'n1' ? '' : 's'}`;
+    return `<div class="tt" style="font-size:16px">${u.c.name}<span class="v" style="font:600 11px var(--cin);letter-spacing:.16em;color:${u.side === 'enemy' ? '#ffb0a0' : '#b8d8ff'}">${u.side === 'enemy' ? 'ENEMY' : 'ALLY'}</span></div><div class="fx" style="margin-top:3px">${when}</div>`;
+  }
+  return '';
+}
+let tipEl = null, tipPinned = false;
+function showTip(el) {
+  const ft = document.getElementById('ftip');
+  ft.innerHTML = tipHtml(el.dataset.tip);
+  ft.classList.add('on');
+  const sr = stage.getBoundingClientRect(), r = el.getBoundingClientRect();
+  const ex = (r.left - sr.left) / S.sc, ey = (r.top - sr.top) / S.sc, ew = r.width / S.sc, eh = r.height / S.sc;
+  const tw = ft.offsetWidth, th = ft.offsetHeight;
+  let x, y;
+  if (el.dataset.tip.endsWith(':r')) { x = ex + ew + 18; y = ey + eh / 2 - th / 2; }
+  else { x = ex + ew / 2 - tw / 2; y = ey - th - 12; if (y < 10) y = ey + eh + 12; }
+  ft.style.left = Math.max(12, Math.min(S.W - tw - 12, x)) + 'px';
+  ft.style.top = Math.max(10, Math.min(1080 - th - 10, y)) + 'px';
+  tipEl = el;
+}
+function hideTip() { document.getElementById('ftip')?.classList.remove('on'); tipEl = null; tipPinned = false; S.demoTip = ''; }
 
 // ---------------------------------------------------------------- çizim, olaylar, ölçek
 const stage = document.getElementById('stage');
 function render() {
   document.getElementById('pick').innerHTML = [1, 2, 3, 4, 5].map((i) => `<button class="${S.v === i ? 'on' : ''}" data-v="${i}" title="${V[i].name}">${i}</button>`).join('') + '<button class="tog" data-tog="1" title="Hide / show">◐</button>';
-  document.getElementById('cap').textContent = `${S.v} · ${V[S.v].name}: ${V[S.v].cap.split(': ').slice(1).join(': ')}`;
-  stage.innerHTML = V[S.v].html();
+  document.getElementById('cap').innerHTML = `<b>${S.v} · ${V[S.v].name}</b>${V[S.v].cap}`;
+  if (S.v === 2) document.getElementById('pick').innerHTML += '<div class="sep"></div>' + ['a', 'b', 'c', 'd'].map((b) => `<button class="br ${S.br === b ? 'on' : ''}" data-br="${b}" title="${BR[b].name}">${b}</button>`).join('');
+  if (S.v === 2) document.getElementById('cap').innerHTML += `<b style="margin-top:8px">Bottom right ${S.br} · ${BR[S.br].name}</b>${BR[S.br].cap}`;
+  stage.innerHTML = scene() + turnBar() + topRight() + V[S.v].html() + '<div id="ucardL" class="ucard panel corners"></div><div id="ucardR" class="ucard panel corners"></div><div id="ftip" class="panel"></div>';
+  tipEl = null; tipPinned = false;
+  stage.classList.toggle('is-open', S.open);
+  updateCard();
+  if (S.demoTip) { const el = stage.querySelector(`[data-tip="${S.demoTip}"]`); if (el) requestAnimationFrame(() => { showTip(el); tipPinned = true; }); }
 }
 document.getElementById('pick').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.tog) { document.getElementById('pick').classList.toggle('min'); return; }
-  S.v = Number(b.dataset.v); S.pop = '';
-  history.replaceState(null, '', `?v=${S.v}`);
+  if (b.dataset.br) S.br = b.dataset.br; else S.v = Number(b.dataset.v);
+  S.open = false; S.log = false; S.hov = -1;
+  history.replaceState(null, '', `?v=${S.v}${S.v === 2 ? `&br=${S.br}` : ''}`);
   render();
 });
+function setOpen(v) {
+  S.open = v;
+  stage.classList.toggle('is-open', v);
+  stage.querySelectorAll('.opener, .cg, .mdl').forEach((e) => e.classList.toggle('open', v));
+  stage.querySelectorAll('.reveal').forEach((e) => e.classList.toggle('open', v));
+}
+stage.addEventListener('pointerover', (e) => {
+  if (e.pointerType === 'touch') return;
+  const t = e.target.closest('[data-tip]');
+  if (t && t !== tipEl) showTip(t);
+  const u = e.target.closest('[data-u]');
+  const i = u ? Number(u.dataset.u) : -1;
+  if (i !== S.hov) { S.hov = i; updateCard(); }
+});
+stage.addEventListener('pointerout', (e) => {
+  if (e.pointerType === 'touch' || tipPinned) return;
+  const t = e.target.closest('[data-tip]');
+  if (t && !t.contains(e.relatedTarget)) hideTip();
+  const u = e.target.closest('[data-u]');
+  if (u && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('[data-u]'))) { S.hov = -1; updateCard(); }
+});
 stage.addEventListener('click', (e) => {
-  const sk = e.target.closest('[data-skill]'), pop = e.target.closest('[data-pop]'), dr = e.target.closest('[data-drawer]');
-  if (sk) S.sel = S.sel === sk.dataset.skill ? '' : sk.dataset.skill;
-  else if (pop) S.pop = S.pop === pop.dataset.pop ? '' : pop.dataset.pop;
-  else if (dr) S.drawer = !S.drawer;
-  else if (S.pop) S.pop = '';
-  else return;
-  render();
+  const tp = e.target.closest('[data-tip]');
+  const sk = e.target.closest('[data-skill]'), op = e.target.closest('[data-open]'), u = e.target.closest('[data-u]');
+  if (e.target.closest('.sk .tip, .ucard.pin, .logp')) return;
+  // dokunmatik: stat'a dokununca tooltip açılır / kapanır
+  if (tp && !sk && !u) { if (tipEl === tp && tipPinned) hideTip(); else { showTip(tp); tipPinned = true; } if (!op || tp.dataset.solo) return; }
+  else if (tipPinned) hideTip();
+  if (sk) {
+    S.sel = S.sel === sk.dataset.skill ? '' : sk.dataset.skill;
+    stage.querySelectorAll('.sk').forEach((x) => x.classList.toggle('sel', x.dataset.skill === S.sel));
+    updateCard(); return;
+  }
+  if (u) { const i = Number(u.dataset.u), side = UNITS[i].side; setPin(side, pinOf(side) === i ? -1 : i); updateCard(); return; }
+  const lg = e.target.closest('[data-log]');
+  if (lg) { setLog(!S.log); return; }
+  if (op) { if (!e.target.closest('.sheet, .big')) setOpen(!S.open); return; }
+  if (e.target.closest('.sheet, .big, .reveal')) return;
+  if (S.open) setOpen(false);
+  if (S.log) setLog(false);
+});
+function setLog(v) { S.log = v; stage.querySelectorAll('.loglink, .logp').forEach((x) => x.classList.toggle('open', v)); }
+// Esc: sabit kartlar, sayfa, günlük ve tooltip kapanır
+addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  S.pinL = S.pinR = -1; S.hov = -1; updateCard(); hideTip();
+  if (S.open) setOpen(false);
+  if (S.log) setLog(false);
 });
 function fit() {
   const vw = innerWidth, vh = innerHeight;
   const W = Math.round(Math.min(2580, Math.max(1920, (vw / vh) * 1080)));
   const sc = Math.min(vw / W, vh / 1080);
+  S.sc = sc;
   stage.style.width = W + 'px';
   stage.style.transform = `translate(${(vw - W * sc) / 2}px, ${(vh - 1080 * sc) / 2}px) scale(${sc})`;
   if (W !== S.W) { S.W = W; render(); }
 }
 addEventListener('resize', fit);
+// kısa ekranda (telefon) taslak açıklaması kapalı başlar; ◐ ile açılır
+if (innerHeight <= 500) document.getElementById('pick').classList.add('min');
 fit();
 render();
-document.fonts.load('600 32px Cinzel').finally(render);
+// önizleme için adres seçenekleri: &br=a|b|c|d (v2 sağ alt), &log=1 (br=c günlüğü), &card=6,2 (iki taraf sabit kart), &open=1 (stat sayfası açık), &card=6 (birim kartı sabit), &tip=s:luck (tooltip), &sel=card_trick
+function demo() {
+  const q = new URLSearchParams(location.search);
+  if (q.get('sel') !== null) { S.sel = q.get('sel'); render(); }
+  if (q.get('open')) setOpen(true);
+  if (q.get('card')) { q.get('card').split(',').map(Number).forEach((i) => setPin(UNITS[i].side, i)); updateCard(); }
+  if (q.get('log')) setLog(true);
+  if (q.get('tip')) { S.demoTip = q.get('tip'); render(); }
+}
+document.fonts.load('600 32px Cinzel').finally(() => { render(); demo(); });
 </script>
 </body>
 </html>

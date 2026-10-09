@@ -43,6 +43,9 @@ Varsayımlar ve sorular: `open-questions.md` madde 268.
 - Worker: `cloudflare/` (ayrı paket; oyunun derlemesine ve CI'ya girmez). Saf lobi kuralları `cloudflare/src/lobby-logic.ts`
   (oyunun testleri Node'da sınar), Worker + Durable Object `cloudflare/src/index.ts`.
 - Worker adresi tek bir yapılandırma değerinde: `data/multiplayer.json > signalingUrl` (boşsa menü "Server not configured" der).
+  Yayında `wss://eov.backinn.com.tr/lobby`: oyun ve lobi TEK Worker'da, tek alan adında (Ömer 2026-10-09). Oyun `/` altında
+  (Workers Static Assets, `../dist`), lobi `/lobby` altında; istemci adrese `/<KOD>` ekler (`config.ts > lobbySocketUrl`; adres
+  `/lobby` ile bitmiyorsa, ör. yerel `ws://127.0.0.1:8787`, `/lobby/<KOD>`). GitHub Pages'teki oyun da aynı lobiye bağlanır.
 
 ## 3. Mesaj şeması (DataChannel, JSON, en çok 16 KB)
 
@@ -191,9 +194,10 @@ açılamaz; ücretsiz planda para çekilmez.
 
 ## 10. Kurulum adımları (özet; ayrıntı `cloudflare/README.md`)
 
-1. Cloudflare hesabı aç (ücretsiz). 2. `cd cloudflare && npm install`. 3. `npx wrangler login`. 4. `npx wrangler deploy`.
-5. Çıkan adresi (`https://protomedi-lobby.<hesap>.workers.dev`) `wss://` ile `data/multiplayer.json > signalingUrl` alanına yaz
-   (ya da Claude'a ver), `main`'e gönder. Yerel test: `cd cloudflare && npm run dev` + oyunda `?mpserver=ws://localhost:8787`.
+1. Cloudflare hesabı (ücretsiz), `backinn.com.tr` Cloudflare'de. 2. `cd cloudflare && npm install`. 3. `npx wrangler login`.
+4. Oyun klasöründe `npm run deploy:cf` (build + oyun dosyaları + lobi tek seferde; `eov.backinn.com.tr` alan adı ve sertifikası
+   otomatik kurulur). Adres `data/multiplayer.json`'da hazır: `wss://eov.backinn.com.tr/lobby`.
+   Yerel test: `cd cloudflare && npm run dev` + oyunda `?mpserver=ws://127.0.0.1:8787`.
 
 ## 11. Debug (Debug > Setup > Multiplayer)
 

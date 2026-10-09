@@ -1,5 +1,5 @@
 {
-  "_not": "Multiplayer ayarları (docs/design/multiplayer.md). signalingUrl: Ömer'in Cloudflare Worker adresi, wss:// ile (ör. wss://protomedi-lobby.HESAP.workers.dev). Boşsa Multiplayer menüsü 'Server not configured' der. iceServers: WebRTC'nin dış adres bulma (STUN) sunucuları; Cloudflare'in herkese açık STUN'u, hesap gerekmez. TURN yok (Ömer onayı bekliyor).",
-  "signalingUrl": "",
+  "_not": "Multiplayer ayarları (docs/design/multiplayer.md). signalingUrl: lobi sunucusunun adresi, wss:// ile. Oyun ve lobi tek Cloudflare Worker'da, tek alan adında: oyun https://eov.backinn.com.tr, lobi /lobby altında (cloudflare/wrangler.toml). GitHub Pages'teki oyun da aynı lobiye bağlanır. Boşsa Multiplayer menüsü 'Server not configured' der; sunucuya ulaşılamazsa 'Cannot reach the multiplayer server'. iceServers: WebRTC'nin dış adres bulma (STUN) sunucuları; Cloudflare'in herkese açık STUN'u, hesap gerekmez. TURN yok (Ömer onayı bekliyor).",
+  "signalingUrl": "wss://eov.backinn.com.tr/lobby",
   "iceServers": [{ "urls": "stun:stun.cloudflare.com:3478" }]
 }

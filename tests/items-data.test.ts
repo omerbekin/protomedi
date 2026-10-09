@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { content } from '../src/engine';
-import { BAG_SIZE, ITEMS, RARITY_IDS, SLOT_IDS, canEquip, classWeaponFamilies, itemDef, itemIP, itemValue, targetIP, validateItems, type ItemsData } from '../src/progression';
+import { content, Rng } from '../src/engine';
+import { BAG_SIZE, ITEMS, RARITY_IDS, SLOT_IDS, canEquip, rollLoot, classWeaponFamilies, itemDef, itemIP, itemValue, targetIP, validateItems, type ItemsData } from '../src/progression';
 
 // data/items.json şeması (docs/design/progression/items.md 5.3; Ömer kararları bölüm 7). Aşama 0: şema + 3 örnek item.
 
@@ -51,4 +51,20 @@ describe('items.json şeması', () => {
     expect(errs).toMatch(/item d: IP .* outside budget/);
     expect(errs).toMatch(/item e: unknown slot cape/);
   });
+
+  it('Might yalnızca silahta (Ömer 2026-10-09, madde 286): katalogda silah dışı Might yok, doğrulayıcı yakalar, loot ve Endless katalogdan seçtiği için asla düşmez', () => {
+    expect(ITEMS.stats.might.slots).toEqual(['weapon']);
+    for (const d of ITEMS.items) if (d.slot !== 'weapon') expect(d.stats.might, d.id).toBeUndefined();
+    const d = copy();
+    d.items = [{ id: 'g', name: 'G', slot: 'gloves', rarity: 'common', ilvl: 2, stats: { might: 1, crit: 1 } }];
+    expect(validateItems(d).join(' | ')).toMatch(/item g: stat might is only allowed on weapon/);
+    const party = ['warrior', 'mage', 'archer', 'gambler'].map((c) => ({ class: c }));
+    for (let i = 0; i < 300; i++)
+      for (const kind of ['battle', 'elite', 'boss', 'treasure'] as const)
+        for (const id of rollLoot({ rng: new Rng(i), kind, chapter: 1, ilvl: 10, party }).items) {
+          const it = itemDef(id)!;
+          if (it.slot !== 'weapon') expect(it.stats.might, id).toBeUndefined();
+        }
+  });
 });
+

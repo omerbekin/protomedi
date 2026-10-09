@@ -37,6 +37,8 @@ export interface StatDef {
   engine: boolean;
   integer?: boolean;
   percent?: boolean;
+  /** Yalnızca bu yuvalarda olabilir (yoksa her yuvada). Might: yalnızca silah (Ömer 2026-10-09, madde 286). */
+  slots?: SlotId[];
 }
 
 export interface WeaponFamilyDef {
@@ -55,6 +57,8 @@ export interface ItemDef {
   rarity: RarityId;
   ilvl: number;
   stats: ItemStats;
+  /** İsteğe bağlı ikon adı (src/game/item-icons.ts > ITEM_ICONS); yoksa silah ailesinin / yuvanın ikonu. */
+  icon?: string;
 }
 
 export interface ItemsData {
@@ -137,6 +141,12 @@ export const itemIP = (d: ItemDef): number => statsIP(d.stats);
 /** Altın değeri = goldPerIP x IP (yuvarlanır, en az minValue). Aynı sayı: tüccar fiyatı, ileride endless Gear Score (items.md 2.1). */
 export const itemValue = (d: ItemDef): number => Math.max(ITEMS.budget.minValue, Math.round(ITEMS.budget.goldPerIP * itemIP(d)));
 
+/**
+ * Satış değeri = değer x sellRatio (items.json > budget.sellRatio; Ömer 2026-10-09: 0,5), yuvarlanır, en az 1. TEK KAYNAK: tüccarda satış,
+ * Endless torba doluyken otomatik satış, ödül kartındaki "Sell: N" ve (ileride) seferin satışı hep bunu kullanır.
+ */
+export const sellValue = (d: ItemDef): number => Math.max(1, Math.round(itemValue(d) * ITEMS.budget.sellRatio));
+
 /** Sınıfın kullanabildiği silah aileleri (karar 2). */
 export const classWeaponFamilies = (classId: string): string[] => ITEMS.weaponFamilies.filter((f) => f.classes.includes(classId)).map((f) => f.id);
 
@@ -187,6 +197,7 @@ export function validateItems(data: ItemsData = ITEMS): string[] {
       if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) errors.push(`${at}: stat ${k} must be positive`);
       if (sd.integer && !Number.isInteger(v)) errors.push(`${at}: stat ${k} must be an integer`);
       if (!sd.engine) errors.push(`${at}: stat ${k} is not supported by the engine yet (needs a UnitModifiers field, engine-dev)`);
+      if (sd.slots && !sd.slots.includes(d.slot)) errors.push(`${at}: stat ${k} is only allowed on ${sd.slots.join(', ')}`);
     }
     if ((d.stats.spd ?? 0) > data.caps.spdPerItem) errors.push(`${at}: speed above the per-item cap`);
     // IP bütçesi (Legendary/Set Aşama 3'te trait/set payıyla ayrıca)

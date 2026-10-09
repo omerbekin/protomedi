@@ -107,7 +107,7 @@ describe('Abyssal Fury: yük, menzil, bonus STR', () => {
     expect(fury(b)?.turns).toBe(def.attackCharges);
   });
 
-  it('menzil +1: yakın dövüş ön sıranın arkasındaki sıraya da ulaşır (hedefleme, neden, önizleme); Whirlwind iki sırayı vurur', () => {
+  it('menzil +1: yakın dövüş ön sıranın arkasındaki sıraya da ulaşır (hedefleme, neden, önizleme); Whirlwind üzerinde işlemez (madde 284), yalnızca ön sırayı vurur', () => {
     const b = mk({ 0: 'warrior' }, TWO_ROWS);
     const mage = b.combatants.find((c) => c.side === 'enemy' && c.slot === 3)!;
     expect(b.validTargets('party-0', 'melee_attack').map((c) => c.uid)).toEqual(['enemy-0']);
@@ -118,7 +118,7 @@ describe('Abyssal Fury: yük, menzil, bonus STR', () => {
     expect(b.validTargets('party-0', 'melee_attack').map((c) => c.uid).sort()).toEqual(['enemy-0', 'enemy-1', 'enemy-2']);
     expect(b.targetProblem('party-0', 'melee_attack', mage.uid)).toBeNull();
     expect(previewSkill(b, 'party-0', 'melee_attack', mage.uid)[0]?.damage).toBeDefined();
-    expect([...new Set(ofType(act(b, 'party-0', 'whirlwind'), 'damage').map((e) => e.target))].sort()).toEqual(['enemy-0', 'enemy-1', 'enemy-2']);
+    expect([...new Set(ofType(act(b, 'party-0', 'whirlwind'), 'damage').map((e) => e.target))].sort()).toEqual(['enemy-0']);
   });
 
   it('menzil +1 kendi sırası için de geçerli: önünde dost varken (2. sıra) yakın dövüş yapabilir; yük bitince yine yapamaz', () => {

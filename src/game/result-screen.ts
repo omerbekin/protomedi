@@ -57,6 +57,8 @@ export interface ResultScreenOptions {
   avatar: (unit: Combatant, cx: number, cy: number, size: number) => Phaser.GameObjects.Image;
   onNewGame: () => void;
   onTeamSelect: () => void;
+  /** Ekran kapanınca (önizleme Close, destroy): savaş arayüzünü geri getirmek için. */
+  onClose?: () => void;
   /** Maç kaydı (Copy match data bağlantısı); yoksa bağlantı gösterilmez. */
   matchData?: () => { text: string; moves: number } | null;
   /** Debug önizlemesi: gerçek savaş bitmedi; "Close" düğmesi + Esc ile kapanır. */
@@ -109,13 +111,16 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
 
   // --- Vinyet: sahne hafifçe kararır; altındaki tıklamaları yutar ---
   // geniş ekran: örtüler görünen alanın tamamını kaplar (FULL_X0..)
+  // Savaş arayüzü arkada söner (BattleScene.setBattleHudHidden); arena yalnızca yumuşak bir atmosfer olarak kalır: koyu örtü + dört kenar vinyeti
   const dim = scene.add.rectangle(FULL_X0, 0, FULL_W, H, 0x050302, 0).setOrigin(0, 0).setInteractive();
   const edge = scene.add.graphics();
-  edge.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.5, 0.5, 0, 0).fillRect(FULL_X0, 0, FULL_W, 200);
-  edge.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.55, 0.55).fillRect(FULL_X0, H - 260, FULL_W, 260);
+  edge.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.7, 0.7, 0, 0).fillRect(FULL_X0, 0, FULL_W, 260);
+  edge.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.8, 0.8).fillRect(FULL_X0, H - 320, FULL_W, 320);
+  edge.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.6, 0, 0.6, 0).fillRect(FULL_X0, 0, 360, H);
+  edge.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0.6, 0, 0.6).fillRect(FULL_X0 + FULL_W - 360, 0, 360, H);
   edge.setAlpha(0);
   root.add([dim, edge]);
-  scene.tweens.add({ targets: dim, fillAlpha: victory ? 0.5 : 0.62, duration: 360 });
+  scene.tweens.add({ targets: dim, fillAlpha: victory ? 0.66 : 0.74, duration: 360 });
   scene.tweens.add({ targets: edge, alpha: 1, duration: 360 });
 
   // --- Plaket ---
@@ -277,11 +282,15 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
     buttons.add(kitButton('Team Select', teamSelect, W / 2 + 220, bw, false));
   }
   const hintText = actions ? `Enter: ${actions[0]!.label}` : o.preview ? 'Preview  -  Enter or Esc closes' : 'Enter: New Game     Esc: Team Select';
-  const hint = elBody(scene, W / 2, by + bh / 2 + 28, hintText, 18, EL.DIM).setOrigin(0.5);
+  // Alt bilgi satırı: ekranın en altında, ortalı, küçük ("Enter: …  ·  Copy match data"); düğmelerle ya da başka bir şeyle çakışmaz
+  const footY = Math.max(by + bh / 2 + 34, H - 30);
+  const hint = elBody(scene, W / 2, footY, hintText, 18, EL.DIM).setOrigin(o.matchData ? 1 : 0.5, 0.5);
+  if (o.matchData) hint.setX(W / 2 - 18);
   buttons.add(hint);
   if (o.matchData) {
     const matchData = o.matchData;
-    const link = elBody(scene, W / 2, Math.min(by + bh / 2 + 62, H - 18), 'Copy match data', 20, EL.MUTED).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    buttons.add(elText(scene, W / 2, footY, '◆', 10, 'rgba(217,178,106,0.45)', { em: 0 }).setOrigin(0.5));
+    const link = elBody(scene, W / 2 + 18, footY, 'Copy match data', 18, EL.MUTED).setOrigin(0, 0.5).setInteractive({ useHandCursor: true });
     link.on('pointerover', () => link.setColor(EL.ON));
     link.on('pointerout', () => link.setColor(EL.MUTED));
     link.on('pointerdown', () => {
@@ -315,6 +324,7 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
     window.removeEventListener('keydown', onKey);
     scene.tweens.killTweensOf(root.list);
     root.destroy(true);
+    o.onClose?.();
   }
   scene.events.once('shutdown', destroy);
   return { destroy };

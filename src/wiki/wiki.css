@@ -852,8 +852,29 @@
 }
 
 .cx-stat b {
+  flex: none;
+  white-space: nowrap;
   font: 600 max(12px, calc(17 * var(--u))) var(--el-display);
   color: var(--el-txt);
+}
+
+/* Çok hâlli değer (ceset tüketen çağrı): üstte "105 / 70", altında küçük "empowered / unfed" */
+.cx-stat b.multi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: max(3px, calc(4 * var(--u))) 0;
+  line-height: 1.1;
+}
+
+.cx-stat b.multi i {
+  font-style: normal;
+}
+
+.cx-stat b.multi small {
+  font: italic max(10px, calc(14 * var(--u))) var(--el-body);
+  letter-spacing: 0;
+  color: var(--el-dim);
 }
 
 .cx-passive {
@@ -1046,6 +1067,14 @@
 .cx-slot-svg {
   width: 70%;
   height: 70%;
+}
+
+/* Piksel art item ikonları (src/game/item-icons.ts) */
+.cx-px {
+  width: 82%;
+  height: 82%;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 1px 1px #000);
 }
 
 /* AOE şekil şeması (savaştaki hücre plakası diliyle): boyalı hücreler vurulur, beyaz çerçeve imlecin gösterdiği (anchor) hücre */

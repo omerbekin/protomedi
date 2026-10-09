@@ -30,6 +30,7 @@ import {
 import { pickBackground } from './battle-background';
 import type { ResultAction } from './result-screen';
 import type { BattleSceneData } from './scenes/BattleScene';
+import { endlessEffects } from './battle-effects';
 import { newSeed } from './seed';
 
 /**
@@ -67,8 +68,9 @@ export function savedRun(): EndlessRun | null {
   return loadRun(storage());
 }
 
-export function startRun(classIds: string[]): EndlessRun {
-  endless.run = newRun(newSeed(), classIds);
+/** Yeni koşu; `slots` = koşu başı dizilimi (class'larla aynı sırada hücre; verilmezse otomatik). */
+export function startRun(classIds: string[], slots?: number[]): EndlessRun {
+  endless.run = newRun(newSeed(), classIds, undefined, undefined, slots);
   endless.last = null;
   saveRun(storage(), endless.run);
   return endless.run;
@@ -187,6 +189,7 @@ export function startWave(scene: Phaser.Scene, resume = false): WavePlan | null 
       },
       resultActions: (victory, battle) => resultActions(game, plan, victory, battle),
       retreatLabel: 'Retreat to Camp',
+      battleEffects: () => endlessEffects(run),
       retreat: () => {
         stopRecording();
         dropSuspended();

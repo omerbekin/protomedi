@@ -252,7 +252,7 @@ export interface CombatantDef {
 
 /**
  * Savaş kurulumunda birime verilen güçlendirme/zayıflatma (sefer: tutorial zayıf düşmanları, elitler, boss). Hepsi opsiyonel; verilmeyen alan etkisizdir.
- * Uygulama sırası (src/engine/stats.ts > applyUnitModifiers): temel statlar (str/int/dex/luck) x statMult x attrMult[stat] + attrAdd[stat] (0,1'e yuvarlanır,
+ * Uygulama sırası (src/engine/stats.ts > applyUnitModifiers): temel statlar (str/int/dex/luck) x statMult x attrMult[stat] + attrAdd[stat] (tam sayıya yuvarlanır,
  * negatif olmaz) -> TÜM türev değerler formüllerle yeniden hesaplanır (can, MP, hız, yenilenmeler, kritik, isabet, kaçınma, primary bonusu; veri
  * dosyasındaki `overrides` sabit kalır) -> maks can x hpMult (yuvarlanır, en az 1) -> zırh + armorAdd, büyü zırhı + magicArmorAdd (en az 0) -> skill gücü
  * x powerMult. Hasar ölçekleme kuralı korunur: hasar hâlâ skill statının yüzdesidir; stat çarpanı statı, powerMult statın gücünü (hasar, şifa, kalkan,
@@ -493,7 +493,12 @@ export type SkillEffectKind =
        */
       critBonus?: number;
     }
-  | { type: 'heal'; scale: Attribute; power: number }
+  /**
+   * Anlık şifa. `missingHpBonus` (isteğe bağlı, generic; Radiance 0,5): şifa HEDEF BAŞINA x (1 + missingHpBonus x hedefin eksik can oranı) çarpılır;
+   * oran şifadan hemen önceki (maxHp - hp) / maxHp. Canı dolu dosta +%0, ölmek üzere olana ~+%(bonus x 100). Zar ve kritik değişmez (aynı RNG sırası),
+   * çarpan kritikten sonra, alınan şifa çarpanından (Wound) önce uygulanır. Bkz. formulas.ts > missingHpHealMult.
+   */
+  | { type: 'heal'; scale: Attribute; power: number; missingHpBonus?: number }
   /**
    * Düşmüş bir dostu diriltir: maks canının/manasının bu oranlarıyla (hedef 'dead_ally'). Madde 257: iki adım: önce ölü dost, sonra kendi tarafında
    * BOŞ bir hücre (battle.reviveSlots; useSkill'in `slot` parametresi; verilmezse reviveSlotFor: kendi hücresi boşsa o, değilse en yakın boş hücre).
@@ -692,6 +697,11 @@ export interface SkillDef {
   advanceToFront?: boolean;
   /** Yakın dövüş menzili bonusu (satır): kullanıcı ön sıranın bu kadar gerisinden de vurabilir ve düşmanın bu kadar fazla ön sırasına ulaşır. */
   reach?: number;
+  /**
+   * true (Whirlwind; madde 284, Ömer 2026-10-09): durumlardan gelen menzil eki (`statuses.json > reachBonus`, Abyssal Fury) bu skill'e UYGULANMAZ:
+   * skill kendi normal menziliyle (yalnızca `reach`) vurur ve kullanılır. Durumun diğer etkileri (attackCharges yükü, attackAttrPct STR eki) aynen işler.
+   */
+  ignoreReachBonus?: boolean;
   /** Animasyonun çaldığı ses efektleri (data/audio.json adları); vfx yalnızca bu listedekileri çalar. */
   sfx?: string[];
   /** Skill efekti (animasyon) adı: src/ui/vfx-kinds.ts; yoksa `motion`/`skyFx` genel animasyonu oynar. */

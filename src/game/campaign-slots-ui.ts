@@ -80,7 +80,7 @@ export function openSlotBrowser(scene: Phaser.Scene, layer: Phaser.GameObjects.C
   let closed = false;
 
   // --- zemin: tüm alanı kaplayan örtü (alttaki tıklamaları yutar) + soldan gölge ---
-  const dim = scene.add.rectangle(FULL_X0, 0, FULL_W, H, 0x050302, 0.86).setOrigin(0, 0).setInteractive();
+  const dim = scene.add.rectangle(FULL_X0, 0, FULL_W, H, 0x050302, 0.95).setOrigin(0, 0).setInteractive();
   const shade = scene.add.graphics();
   const drawShade = () => {
     shade.clear();

@@ -76,6 +76,12 @@ export function rollHeal(caster: Stats, scale: Attribute, power: number, formula
   return Math.max(minHeal, Math.round(raw * (1 + (rng.next() * 2 - 1) * variance)));
 }
 
+/** Eksik cana göre şifa çarpanı (heal.missingHpBonus): 1 + bonus x (maxHp - hp) / maxHp, oran [0, 1]. bonus yoksa/0 ise tam 1. */
+export function missingHpHealMult(bonus: number | undefined, hp: number, maxHp: number): number {
+  if (!bonus || maxHp <= 0) return 1;
+  return 1 + bonus * Math.min(1, Math.max(0, (maxHp - hp) / maxHp));
+}
+
 /** Kalkan miktarı: sabit (sapma ve kritik YOK). */
 export function shieldAmount(caster: Stats, scale: Attribute, power: number, formulas: Formulas): number {
   return Math.round(attributePower(caster, scale, formulas) * power);

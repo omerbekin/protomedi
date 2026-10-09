@@ -290,8 +290,19 @@
 }
 
 .gr-item .gr-svg {
-  width: 72%;
-  height: 72%;
+  width: 84%;
+  height: 84%;
+}
+
+/* Piksel art item ikonu (src/game/item-icons.ts): nadirlik rengi yumuşak bir parıltı olarak arkada */
+.gr-px {
+  image-rendering: pixelated;
+  filter: drop-shadow(0 1px 1px #000) drop-shadow(0 0 calc(5 * var(--u, 1px)) color-mix(in srgb, var(--glow, transparent) 55%, transparent));
+}
+
+.gr-px.dim {
+  opacity: 0.28;
+  filter: grayscale(1) brightness(0.8);
 }
 
 .gr-item.empty {
@@ -477,12 +488,407 @@
   color: var(--g-gold);
 }
 
-/* Kısa ekran (yatay telefon): sütunlar sıkışır, torba 5'li */
+
+/* --- Sağlam yerleşim (2026-10-09): 16:9'dan 21:9'a ve yatay telefonda taşma yok ---
+   Sütunların alt / üst genişliği var; içerik sütunu genişletmez (min-width: 0), uzun yazılar sarılır ya da "…" ile kesilir;
+   her sütun kendi içinde kayar (torba yuvaların altına girmez). Gövde panelin kalan yüksekliğini doldurur. */
+.gr-panel {
+  height: 100%;
+  max-height: calc(1000 * var(--u));
+}
+
+/* Spoils / teslim kartları içerik kadar yüksek kalır */
+.gr-panel.gr-mini {
+  height: auto;
+}
+
+.gr-body {
+  flex: 1 1 auto;
+  grid-template-columns: minmax(150px, 0.85fr) minmax(260px, 1.5fr) minmax(240px, 1.55fr);
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.gr-heroes,
+.gr-mid,
+.gr-right {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(217, 178, 106, 0.4) transparent;
+  padding-right: 2px;
+}
+
+.gr-right {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Torba: kendi içinde kayar; seçili item kartı altta sabit kalır */
+.gr-bag {
+  flex: 1 1 auto;
+  min-height: max(96px, calc(140 * var(--u)));
+  overflow-y: auto;
+  align-content: start;
+  padding: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(217, 178, 106, 0.4) transparent;
+}
+
+.gr-card {
+  flex: none;
+  max-height: 50%;
+  overflow-y: auto;
+}
+
+.gr-sec,
+.gr-hero-name,
+.gr-hero-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gr-hero-meta {
+  min-width: 0;
+}
+
+.gr-slots {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.gr-slot {
+  min-width: 0;
+}
+
+/* Statlar: sığdığı kadar sütun (en az ~110 px), değer kesilmez, uzun etiket "…" */
+.gr-stats {
+  grid-template-columns: repeat(auto-fill, minmax(max(104px, calc(150 * var(--u))), 1fr));
+}
+
+.gr-stat {
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
+.gr-stat-k {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gr-stat-v,
+.gr-stat-d {
+  white-space: nowrap;
+}
+
+.gr-card-name,
+.gr-card-lines,
+.gr-card-warn,
+.gr-card-note,
+.gr-card-sub {
+  overflow-wrap: anywhere;
+}
+
+.gr-card-actions {
+  flex-wrap: wrap;
+}
+
+.gr-foot {
+  flex: none;
+}
+
+/* Yatay telefon: dar kahraman sütunu (portre + kısa ad), yuvalar tek sütun */
 html.short .gr-body {
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) minmax(0, 1.6fr);
-  gap: 10px;
+  grid-template-columns: minmax(96px, 0.62fr) minmax(0, 1.35fr) minmax(0, 1.45fr);
+  gap: 8px;
+}
+
+html.short .gr-slots {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 html.short .gr-stats {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+}
+
+html.short .gr-hero-sub {
+  display: none;
+}
+
+/* --- stat açıklaması (savaş HUD'ıyla aynı metin; kit tooltip'i): stat paneli satırları ve item kartı stat satırları --- */
+.gr-stat[data-stat],
+.gr-card-line[data-stat] {
+  cursor: help;
+}
+
+.gr-stat[data-stat]:hover .gr-stat-k,
+.gr-card-line[data-stat]:hover {
+  color: var(--g-gold);
+}
+
+.gr-tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  max-width: min(420px, 80%);
+  font-size: max(13px, calc(19 * var(--u)));
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.14s, visibility 0s 0.14s;
+}
+
+.gr-tip.on {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.14s;
+}
+
+.gr-tip b {
+  font-size: max(13px, calc(19 * var(--u)));
+}
+
+.gr-tip-l {
+  color: var(--el-note, #cdb88d);
+  font-style: italic;
+}
+
+/* --- Sabit boyut (Ömer 2026-10-09): item'e / filtreye tıklamak paneli, torba ızgarasını ya da kartı yeniden boyutlandırmaz ---
+   Panel görünür alana göre sabit yükseklikte; torba sabit sütun sayısıyla (hep tüm yuvalar) kendi içinde kayar; item kartının
+   yüksekliği ayrılmıştır, uzun içerik kartın içinde kayar. */
+.gr-panel {
+  flex: none;
+  height: min(100%, calc(1000 * var(--u)));
+}
+
+.gr-bag {
+  flex: 1 1 0;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-auto-rows: max-content;
+}
+
+.gr-item {
+  min-height: 0;
+  min-width: 0;
+}
+
+.gr-card {
+  flex: none;
+  height: max(150px, calc(300 * var(--u)));
+  max-height: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(217, 178, 106, 0.4) transparent;
+}
+
+html.short .gr-bag {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+html.short .gr-card {
+  height: 132px;
+}
+
+/* Filtre ("Usable by ..."): kullanılamayan item yerinde söner, yerleşim aynı kalır */
+.gr-item.filtered {
+  opacity: 0.16;
+  filter: grayscale(1);
+}
+
+/* Seçili item: NADİRLİK rengiyle parlar (isimle aynı kaynak: data/items.json > rarities[].color); boş yuva altın kalır */
+.gr-slot.on,
+.gr-item.on {
+  border-color: var(--rc, var(--g-gold));
+  box-shadow: inset 0 0 0 1px var(--rc, var(--g-gold)), 0 0 calc(16 * var(--u)) color-mix(in srgb, var(--rc, #f08c28) 70%, transparent);
+}
+
+.gr-slot.empty.on {
+  --rc: var(--g-gold);
+}
+
+.gr-slot:hover,
+.gr-item:hover {
+  border-color: color-mix(in srgb, var(--rc, var(--g-gold)) 85%, white);
+}
+
+/* Kuşanılmış yuvalar sabit: iki eşit sütun, sabit yükseklik; uzun stat satırı en çok iki satır, sonu "…" (tam metin title'da).
+   Yuva alanı kendi sütununu asla aşmaz (torbanın üstüne binmez). */
+.gr-mid {
+  overflow-x: hidden;
+  contain: inline-size;
+}
+
+.gr-slots {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: max(52px, calc(84 * var(--u)));
+}
+
+.gr-slot {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.gr-slot-text {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.gr-slot-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gr-slot-sub {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+  overflow: hidden;
+  line-height: 1.15;
+}
+
+.gr-right {
+  contain: inline-size;
+}
+
+html.short .gr-slots {
+  grid-auto-rows: 48px;
+}
+
+html.short .gr-slot-sub {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+
+/* --- Stat ikonları (savaş HUD'ı ile aynı kaynak: src/ui/stat-tips.ts > statIconUrl): ikon + etiket + değer (+ fark) --- */
+.gr-sico {
+  flex: none;
+  width: max(14px, calc(24 * var(--u)));
+  height: max(14px, calc(24 * var(--u)));
+  image-rendering: pixelated;
+  align-self: center;
+}
+
+.gr-stat {
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: calc(6 * var(--u));
+}
+
+.gr-stat-k {
+  flex: 0 1 auto;
+}
+
+/* fark sütunu yer ayrılmış: item seçilince satır kaymaz */
+.gr-stat-d {
+  min-width: 2.6em;
+}
+
+.gr-line {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+}
+
+.gr-line.inline {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 10px;
+}
+
+.gr-line.inline .gr-sico {
+  width: max(12px, calc(18 * var(--u)));
+  height: max(12px, calc(18 * var(--u)));
+}
+
+.gr-mini-subt {
+  margin-right: 10px;
+}
+
+.gr-tip-d {
+  font-family: var(--el-body, 'EB Garamond', serif);
+  letter-spacing: 0;
+}
+
+.gr-tip-d.up {
+  color: #8fe39a;
+}
+
+.gr-tip-d.down {
+  color: #ff8a7a;
+}
+
+/* --- sürükle-bırak: hayalet ikon imleci izler; geçerli hedefler parlar, geçersizler söner (yerleşim değişmez) --- */
+.gr-ghost {
+  position: absolute;
+  z-index: 6;
+  width: max(44px, calc(72 * var(--u)));
+  height: max(44px, calc(72 * var(--u)));
+  transform: translate(-50%, -60%);
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--rc);
+  background: rgba(8, 6, 4, 0.85);
+  box-shadow: 0 0 calc(18 * var(--u)) color-mix(in srgb, var(--rc) 70%, transparent);
+}
+
+.gr-ghost .gr-svg {
+  width: 84%;
+  height: 84%;
+}
+
+.gr-dragging .gr-slot.drop-ok,
+.gr-dragging .gr-hero.drop-ok,
+.gr-dragging .gr-bag.drop-ok {
+  border-color: var(--drag-rc, var(--g-gold));
+  box-shadow: inset 0 0 0 1px var(--drag-rc, var(--g-gold)), 0 0 calc(14 * var(--u)) color-mix(in srgb, var(--drag-rc, #f08c28) 60%, transparent);
+}
+
+.gr-dragging .gr-slot.drop-no,
+.gr-dragging .gr-hero.drop-no {
+  opacity: 0.4;
+}
+
+.gr-dragging,
+.gr-dragging * {
+  cursor: grabbing !important;
+}
+
+.gr-item[data-drag],
+.gr-slot[data-drag] {
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+}
+
+/* kuşanılamayan item'e çift tıklama / bırakma: kısa sallanma */
+.gr-item.shake {
+  animation: gr-shake 0.36s;
+}
+
+@keyframes gr-shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
 }

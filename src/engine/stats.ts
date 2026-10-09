@@ -128,11 +128,12 @@ export function hasUnitModifiers(mods: UnitModifiers | undefined): boolean {
  */
 export function applyUnitModifiers(def: CombatantDef, mods: UnitModifiers | undefined, formulas: Formulas): CombatantDef {
   if (!mods || !hasUnitModifiers(mods)) return def;
-  const r1 = (v: number) => Math.round(v * 10) / 10;
   const attributes = { ...def.attributes };
+  // Temel statlar TAM SAYIYA yuvarlanır (Ömer kararı 2026-10-09: "STR 5.5" gibi kesirli stat yok; standart yuvarlama, Math.round).
+  // Türev değerler (can, MP, kritik...) aşağıda bu tam sayı statlardan formüllerle türetilir.
   for (const k of ATTRS) {
     const v = def.attributes[k] * (mods.statMult ?? 1) * (mods.attrMult?.[k] ?? 1) + (mods.attrAdd?.[k] ?? 0);
-    attributes[k] = Math.max(0, r1(v));
+    attributes[k] = Math.max(0, Math.round(v));
   }
   const derived = deriveStats(
     {

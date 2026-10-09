@@ -5,23 +5,30 @@ import type { CombatantDef } from '../../engine/types';
 import {
   ENDLESS,
   UI_TEXT as T,
+  bestHeroFor,
   buyItem,
+  buybackItem,
   chooseRelic,
+  equippedFor,
+  goldShort,
+  heroOf,
+  rerollShop,
+  sellItem,
+  statDelta,
+  usableHeroes,
   relicDef,
   cardText,
-  cardTitle,
   chooseReward,
   className,
   endlessBack,
   endlessView,
   gearScore,
-  heroOf,
-  itemKindLine,
-  itemStatLines,
   leaveShop,
   rarityColor,
-  replacedItem,
   resumeLabel,
+  bagOf,
+  endlessBagSize,
+  gearLockReason,
   suspendedOf,
   togglePick,
   waveKind,
@@ -31,11 +38,26 @@ import {
   type EndlessView,
   type RewardCard,
   type ScoreEntry,
+  type StatDelta,
+  autoDraft,
+  heroSlots,
+  moveInDraft,
+  newDraft,
+  type FormationDraft,
 } from '../../endless';
-import { ITEMS, SLOT_IDS, itemDef, itemValue, primaryBonusLost, slotDef, type ItemDef } from '../../progression';
+import { ITEMS, SLOT_IDS, STAT_IDS, canEquip, heroStats, itemDef, itemSubtitle, sellValue, slotDef, statLine, type ItemDef, type ItemStatId } from '../../progression';
+import type { Stats } from '../../engine/types';
+import { statIcon, statTip } from '../../ui/stat-tips';
 import { backgroundKey, hasBackground, preloadAssets } from '../assets';
 import { classAvatar, fitText } from '../menu-ui';
-import { EL, elBody, elButton, elConfirm, elConfirmOpen, elHeading, elIconButton, elLink, elPanel, elText, elTip, placeElTip, type ElButton } from '../elegant-ui';
+import { EL, diamondPts, elBody, elButton, elConfirm, elConfirmOpen, elHeading, elIconButton, elLink, elPanel, elText, elTip, elToast, fadeLine, placeElTip, type ElButton } from '../elegant-ui';
+import { merchantAvatar, merchantFigure } from '../merchant-art';
+import { openFormation, type FormationState } from '../campaign-panels';
+import type { Modal } from '../campaign-ui';
+import { worldXY } from '../stage';
+import { ensureGlow } from '../menu-ui';
+import { feastEmblem, healEmblem, hexNum, itemEmblem, medallion, purseEmblem } from '../endless-emblems';
+import { openEndlessGear } from '../endless-gear';
 import { ensureIcon } from '../icons';
 import { onStageResize, stageView } from '../stage';
 import { FULL_W, FULL_X0 } from '../../ui/viewport';
@@ -61,9 +83,45 @@ const LOOK = {
   headingY: 118,
   subY: 204,
   buttonY: 920,
-  card: { top: 290, h: 560, maxW: 440, gap: 40 },
+  /** Seçim kartları (ödül + kalıntı): kart yüksekliği içinde alttaki `cta` bandı içeriğe AYRILMIŞTIR (içerik asla Take'e taşmaz). */
+  card: { top: 262, h: 630, maxW: 440, gap: 40, cta: 86, medal: 54 },
 } as const;
 const C = LOOK.color;
+/** Olumlu stat farkı (yeşil). */
+const GOOD = '#8cc76a';
+
+/** Tüccar ekranı yerleşimi (taslak v1 "Travelling cart"; 1920x1080 birimi; yazılar telefonda okunur olsun diye en az ~20). */
+const SHOP = {
+  left: 70,
+  right: 1880,
+  bubbleTop: 150,
+  figureBottom: 1040,
+  gridX: 660,
+  gridTop: 140,
+  buy: { cols: 3, cell: 172, gapX: 22, gapY: 14, priceH: 44 },
+  rerollY: 864,
+  sell: { cols: 4, rows: 3, perPage: 12, cell: 124, gapX: 18, gapY: 10, priceH: 38 },
+  pagerY: 706,
+  buybackTop: 762,
+  sellHintY: 986,
+  detail: { x: 1250, w: 630, top: 140, bottom: 920 },
+} as const;
+
+/** Seçim kartının çizim bağlamı: `add` kart içine, `addTop` kartın dokunma alanının üstüne (ipucu alanları). */
+interface CardCtx {
+  cx: number;
+  w: number;
+  top: number;
+  bottom: number;
+  x0: number;
+  x1: number;
+  add: (obj: Phaser.GameObjects.GameObject) => void;
+  addTop: (obj: Phaser.GameObjects.GameObject) => void;
+}
+
+/** Tüccar ekranında seçili öğe: tezgâhtaki mal (sıra), torbadaki item (uid) ya da geri alım satırı (sıra). */
+type ShopSel = { kind: 'ware'; index: number } | { kind: 'bag'; uid: string } | { kind: 'buyback'; index: number };
+type MerchantLine = keyof typeof T.merchantLines;
 
 /**
  * Endless Lite ekranı (roadmap.md bölüm 3; open-questions madde 281). Görünümler: başlık (Continue / Resume / New Run / en iyi koşular), takım seçimi,
@@ -86,6 +144,24 @@ export class EndlessScene extends Phaser.Scene {
   private infoText: Phaser.GameObjects.Text | null = null;
   /** Açık tooltip (kalıntı ikonu). */
   private tip: Phaser.GameObjects.Container | null = null;
+  /** İpucunu açan stat satırı alanı (dokunmatikte ikinci dokunuş kapatır). */
+  private tipOwner: Phaser.GameObjects.Zone | null = null;
+  /** Seçim kartları: seçili kart (dokunmatik: ilk dokunuş seçer, ikinci dokunuş / Take alır) ve kartların görünüm güncelleyicileri. */
+  private cardSel = -1;
+  private cards: Array<{ setState(hover: boolean, selected: boolean): void; take(): void }> = [];
+  /** Gear ekranı (DOM) açık mı. */
+  private gearOpen = false;
+  /** Tüccar: sekme, seçili öğe, karşılaştırılan kahraman, torba sayfası, tüccarın sözü, kese animasyonu için son altın, bildirim. */
+  private shopTab: 'buy' | 'sell' = 'buy';
+  private shopSel: ShopSel | null = null;
+  private cmpHero: string | null = null;
+  private sellPage = 0;
+  private merchantLine: MerchantLine = 'idle';
+  private lastGold: number | null = null;
+  private toast: ((msg: string) => void) | null = null;
+  /** Koşu başı dizilim penceresi (takım seçiminden sonra; tek seferlik) ve taslağı; pencere katmanı ekran yeniden çizilince silinmez. */
+  private formation: { modal: Modal; draft: FormationDraft } | null = null;
+  private modalLayer!: Phaser.GameObjects.Container;
 
   constructor() {
     super(ENDLESS_SCENE);
@@ -100,6 +176,19 @@ export class EndlessScene extends Phaser.Scene {
     this.bg = null;
     this.pending = false;
     this.infoText = null;
+    this.toast = null;
+    this.formation = null;
+    this.resetShopState();
+  }
+
+  /** Tüccar ekranına her girişte: Buy sekmesi, ilk mal, varsayılan söz. */
+  private resetShopState(): void {
+    this.shopTab = 'buy';
+    this.shopSel = null;
+    this.cmpHero = null;
+    this.sellPage = 0;
+    this.merchantLine = 'idle';
+    this.lastGold = null;
   }
 
   preload(): void {
@@ -118,6 +207,8 @@ export class EndlessScene extends Phaser.Scene {
     if (hasBackground(this, LOOK.bg)) this.bg = this.add.image(CX, H / 2, backgroundKey(LOOK.bg)).setDepth(0);
     this.add.rectangle(FULL_X0, 0, FULL_W, H, 0x080604, LOOK.shade).setOrigin(0, 0).setDepth(1);
     this.root = this.add.container(0, 0).setDepth(10);
+    this.modalLayer = this.add.container(0, 0).setDepth(30);
+    this.toast = elToast(this, 1046); // alt orta: tüccarın sekmeleri ve torba başlığıyla çakışmasın
     // Bellekte koşu yoksa kayıtlıyı yükle (sayfa yenilendi / ana menüden geldi); bitmiş koşu bellekte yalnızca skor ekranı için durur
     if (!endless.run) continueRun();
     this.view = endlessView(endless.run, this.requested);
@@ -182,9 +273,39 @@ export class EndlessScene extends Phaser.Scene {
     this.render();
   }
 
+  /** Start Run: önce tek seferlik dizilim penceresi (seferin Formation penceresi; öneri = otomatik dizilim), Start Run ile koşu başlar. */
   private actBeginRun(): void {
-    startRun(this.picked);
-    this.go('camp');
+    if (this.picked.length !== ENDLESS.partySize || this.formation) return;
+    const draft = newDraft(this.picked);
+    const view = (): FormationState => {
+      const d = this.formation?.draft ?? draft;
+      const active = Array.from({ length: 12 }, () => '');
+      d.slots.forEach((c, i) => (active[c] = `f${i}`));
+      return { active, roster: d.classes.map((c, i) => ({ id: `f${i}`, class: c, hpRatio: 1 })) };
+    };
+    const set = (d: FormationDraft) => this.formation && (this.formation.draft = d);
+    const modal = openFormation(this, this.modalLayer, {
+      get: view,
+      move: (id, cell) => set(moveInDraft(this.formation!.draft, Number(id.slice(1)), cell)),
+      auto: () => set(autoDraft(this.formation!.draft)),
+      done: () => {
+        const d = this.formation?.draft ?? draft;
+        this.closeFormation();
+        startRun(d.classes, d.slots);
+        this.go('camp');
+      },
+      back: () => this.closeFormation(),
+      toUi: (p) => worldXY(this, p),
+      doneLabel: T.formationStart,
+      subtitle: T.formationSub,
+    });
+    this.formation = { modal, draft };
+  }
+
+  private closeFormation(): void {
+    const f = this.formation;
+    this.formation = null;
+    f?.modal.close();
   }
 
   private actTakeReward(run: EndlessRun, index: number): void {
@@ -205,6 +326,9 @@ export class EndlessScene extends Phaser.Scene {
     const next = buyItem(run, index);
     if (next === run) return;
     commit(next);
+    const d = itemDef(run.shop?.[index]?.itemId ?? '');
+    this.merchantLine = 'buy';
+    if (d) this.toast?.(T.toastBought(d.name));
     this.render();
   }
 
@@ -230,7 +354,35 @@ export class EndlessScene extends Phaser.Scene {
   }
 
   private onKey(e: KeyboardEvent): void {
-    if (e.key === 'Escape' && !elConfirmOpen(this)) this.back();
+    if (this.gearOpen || elConfirmOpen(this)) return;
+    if (this.formation) {
+      if (e.key === 'Escape') this.closeFormation();
+      return;
+    }
+    if (e.key === 'Escape') return this.back();
+    // Seçim kartları: 1-4 seçer, Enter alır, ←/→ dolaşır
+    if (!this.cards.length) return;
+    const n = Number(e.key);
+    if (n >= 1 && n <= this.cards.length) this.selectCard(n - 1);
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') this.selectCard(Math.max(0, Math.min(this.cards.length - 1, (this.cardSel < 0 ? 0 : this.cardSel) + (e.key === 'ArrowLeft' ? -1 : 1))));
+    else if (e.key === 'Enter' && this.cardSel >= 0) this.cards[this.cardSel]?.take();
+  }
+
+  private selectCard(i: number): void {
+    this.cardSel = i;
+    this.cards.forEach((c, k) => c.setState(false, k === i));
+  }
+
+  /** Kamp > Gear: seferin Gear ekranı, endless kaynağıyla (torba + kuşanma). */
+  private actGear(hero?: string): void {
+    const run = endless.run;
+    const root = document.getElementById('ui-root');
+    if (!run || !root || this.gearOpen) return;
+    this.gearOpen = true;
+    openEndlessGear(root, () => endless.run!, (r) => commit(r), () => {
+      this.gearOpen = false;
+      this.render();
+    }, hero);
   }
 
   // ============================================================ görünüm döngüsü
@@ -244,6 +396,8 @@ export class EndlessScene extends Phaser.Scene {
   }
 
   private go(view: EndlessView): void {
+    if (view !== this.view) this.cardSel = -1;
+    if (view === 'shop' && this.view !== 'shop') this.resetShopState();
     this.view = view;
     this.render();
   }
@@ -260,6 +414,7 @@ export class EndlessScene extends Phaser.Scene {
 
   private renderNow(): void {
     this.infoText = null;
+    this.cards = [];
     this.hideTip();
     this.closeConfirm();
     this.root.removeAll(true);
@@ -363,10 +518,14 @@ export class EndlessScene extends Phaser.Scene {
       this.add2(this.note(CX, 806, endless.notice, 22, C.accent, true).setOrigin(0.5));
       endless.notice = '';
     }
-    this.button(CX - 420, LOOK.buttonY, 320, T.abandonRun, () => this.actAbandon());
+    this.button(CX - 560, LOOK.buttonY, 280, T.abandonRun, () => this.actAbandon());
+    // Gear: torbadaki item'leri istenen kahramana tak (seferin Gear ekranı); yarım savaş varken kilitli (kurulumu değişmesin)
+    const lock = gearLockReason(run);
+    this.button(CX - 230, LOOK.buttonY, 300, `${T.gear} · ${T.campBag(bagOf(run).length, endlessBagSize())}`, () => this.actGear(), { enabled: !lock });
+    if (lock) this.add2(this.note(CX - 230, LOOK.buttonY + 50, T.gearLocked, 18, C.dim, true).setOrigin(0.5, 0));
     // Yarım kalan savaş varsa yalnızca ona dönülür (aynı dalgayı baştan başlatmak yok: yeniden deneme hilesi olmasın)
-    if (susp) this.button(CX + 300, LOOK.buttonY, 520, resumeLabel(susp.wave, susp.turn), () => this.actResume(), { primary: true });
-    else this.button(CX + 300, LOOK.buttonY, 420, kind === 'boss' ? T.faceBoss : T.fightWave(run.wave), () => this.actFight(), { primary: true });
+    if (susp) this.button(CX + 330, LOOK.buttonY, 500, resumeLabel(susp.wave, susp.turn), () => this.actResume(), { primary: true });
+    else this.button(CX + 330, LOOK.buttonY, 420, kind === 'boss' ? T.faceBoss : T.fightWave(run.wave), () => this.actFight(), { primary: true });
   }
 
   /** Sahip olunan kalıntılar: ikon sırası (kit ikon düğmesi), üstüne gelince / dokununca ad + etki tooltip'i. */
@@ -398,29 +557,33 @@ export class EndlessScene extends Phaser.Scene {
   private hideTip(): void {
     this.tip?.destroy();
     this.tip = null;
+    this.tipOwner = null;
   }
 
-  /** Boss sonrası kalıntı seçimi: teklif edilen kalıntılar kart olarak; biri alınır. */
+  /** Boss sonrası kalıntı seçimi: teklif edilen kalıntılar seçim kartı olarak (zengin çerçeve, piksel ikon madalyonda); biri alınır. */
   private drawRelic(): void {
     const run = endless.run;
     if (!run?.relicOffer?.length) return this.go(endlessView(run));
     this.heading(T.relicTitle, T.relicSub);
-    const n = run.relicOffer.length;
+    const offer = run.relicOffer;
+    const n = offer.length;
     const w = 420;
     const gap = 60;
-    run.relicOffer.forEach((id, i) => {
+    offer.forEach((id, i) => {
       const d = relicDef(id);
       if (!d) return;
-      const cx = CX + (i - (n - 1) / 2) * (w + gap);
-      const top = 300;
-      const h = 500;
-      this.panel(cx - w / 2, top, w, h, 0.9);
-      this.add2(this.add.image(cx, top + 110, ensureIcon(this, d.icon, d.color, false)).setDisplaySize(112, 112));
-      this.add2(fitText(this.label(cx, top + 190, d.name.toUpperCase(), 28).setOrigin(0.5, 0), w - 40));
-      this.add2(this.note(cx, top + 250, d.text, 24, C.text).setOrigin(0.5, 0).setWordWrapWidth(w - 60).setAlign('center'));
-      this.button(cx, top + h - 58, 220, T.relicTake, () => this.actChooseRelic(run, id), { primary: true, h: 68 });
+      this.choiceCard({ index: i, cx: CX + (i - (n - 1) / 2) * (w + gap), w, rich: true, accent: hexNum(d.color), tint: EndlessScene.TINT.relic, kicker: T.relicKicker, take: () => this.actChooseRelic(run, id) }, (k) => {
+        const m = medallion(this, ensureIcon(this, d.icon, d.color, false), hexNum(d.color), LOOK.card.medal, { rich: true, iconScale: 0.8 });
+        m.setPosition(k.cx, k.top + LOOK.card.medal + 22);
+        k.add(m);
+        let y = k.top + LOOK.card.medal * 2 + 58;
+        k.add(fitText(this.label(k.cx, y, d.name.toUpperCase(), 26).setOrigin(0.5, 0), k.w - 40));
+        y += 50;
+        k.add(this.note(k.cx, y, d.text, 22, C.text).setOrigin(0.5, 0).setWordWrapWidth(k.w - 60).setAlign('center'));
+      });
     });
-    if (run.relics?.length) this.relicRow(run.relics, CX, 900);
+    this.add2(this.note(CX, LOOK.card.top + LOOK.card.h + 26, T.cardHint, 19, C.dim, true).setOrigin(0.5, 0));
+    if (run.relics?.length) this.relicRow(run.relics, CX, 1010);
   }
 
   private heroPanel(h: EndlessHero, cx: number, top: number): void {
@@ -428,10 +591,15 @@ export class EndlessScene extends Phaser.Scene {
     if (!def) return;
     const w = 390;
     this.panel(cx - w / 2, top, w, 480, 0.85);
+    // Kampta kahraman paneline dokunmak Gear'ı o kahramanla açar (kilitli değilse)
+    const run = endless.run;
+    if (this.view === 'camp' && run && !gearLockReason(run)) this.tapZone(cx, top + 240, w, 480, () => this.actGear(h.id));
     this.avatar(def, cx, top + 78, 108);
     this.add2(this.label(cx, top + 142, def.name.toUpperCase(), 26).setOrigin(0.5, 0));
     this.hpBar(cx - 140, top + 186, 280, 16, h.hpRatio);
-    this.add2(this.note(cx, top + 206, T.heroHealth(h.hpRatio), 20, C.dim).setOrigin(0.5, 0));
+    // Dizilim (koşu başında seçildi, dalgadan dalgaya taşınır; düzenlenmez): sırası
+    const cell = run ? heroSlots(run.heroes)[run.heroes.filter((x) => content.classes[x.class]).indexOf(h)] : undefined;
+    this.add2(this.note(cx, top + 206, cell !== undefined ? `${T.heroHealth(h.hpRatio)}  ·  ${T.heroRow(cell)}` : T.heroHealth(h.hpRatio), 20, C.dim).setOrigin(0.5, 0));
     SLOT_IDS.forEach((slot, k) => {
       const y = top + 250 + k * 36;
       const inst = h.equipment[slot];
@@ -445,76 +613,714 @@ export class EndlessScene extends Phaser.Scene {
     const run = endless.run;
     if (!run?.offer) return this.go('title');
     const kind = waveKind(run.stats.cleared);
-    this.heading(T.rewardTitle, T.rewardSub(run.stats.cleared, kind === 'normal' ? null : kind));
+    const special = kind === 'normal' ? null : kind;
+    this.heading(T.rewardTitle, T.rewardSub(run.stats.cleared, special));
     // Kart genişliği kart sayısına uyar (normal 3, elit/boss 4)
     const n = run.offer.length;
     const w = Math.min(LOOK.card.maxW, (1760 - (n - 1) * LOOK.card.gap) / n);
-    run.offer.forEach((card, i) => this.rewardCard(run, card, i, CX + (i - (n - 1) / 2) * (w + LOOK.card.gap), w));
+    run.offer.forEach((card, i) => this.rewardCard(run, card, i, CX + (i - (n - 1) / 2) * (w + LOOK.card.gap), w, special));
+    this.add2(this.note(CX, LOOK.card.top + LOOK.card.h + 26, T.cardHint, 19, C.dim, true).setOrigin(0.5, 0));
   }
 
-  private rewardCard(run: EndlessRun, card: RewardCard, index: number, cx: number, w: number): void {
+  /**
+   * Seçim kartı (ödül / kalıntı; tasarım kiti): BÜTÜN KART düğmedir, ayrı Take yok (Ömer 2026-10-09). Fare: üstüne gelince yükselir + çerçeve
+   * ve parıltı açılır, basınca hafifçe küçülür, tık = al. Dokunmatik: dokunuş = al (basma geri bildirimi aynı). Klavye: 1-4 / ←→ seçer, Enter alır.
+   * `tint`: kart türünün çok hafif zemin rengi (item çelik, altın sıcak altın, şifa koyu kırmızı ...). İçerik `draw` ile `k.top .. k.bottom` arasına,
+   * sağ üst köşe (ör. "Sell: 55") `corner` ile çizilir.
+   */
+  private choiceCard(
+    o: { index: number; cx: number; w: number; rich: boolean; accent: number; tint: number; kicker: string; take: () => void; rarity?: boolean },
+    draw: (k: CardCtx) => void,
+  ): void {
     const { top, h } = LOOK.card;
-    this.panel(cx - w / 2, top, w, h, 0.9);
-    this.add2(fitText(this.label(cx, top + 34, cardTitle(card).toUpperCase(), 28).setOrigin(0.5, 0), w - 40));
-    const y = top + 100;
-    if (card.kind === 'item') {
-      const d = itemDef(card.itemId);
-      const hero = heroOf(run, card.heroId);
-      if (d && hero) this.itemBlock(run, d, hero, cx, y, w - 50);
-    } else {
-      const big = card.kind === 'gold' ? `+${card.amount}` : card.kind === 'heal' ? `+${Math.round(card.ratio * 100)}%` : '100%';
-      this.add2(elText(this, cx, y + 40, big, 64, EL.ON, { em: 0.04, weight: '700' }).setOrigin(0.5));
-      this.add2(this.note(cx, y + 120, cardText(card), 24, C.text).setOrigin(0.5, 0).setWordWrapWidth(w - 60).setAlign('center'));
-      if (card.kind === 'heal' || card.kind === 'feast')
-        run.heroes.forEach((hh, k) => {
-          const ry = y + 250 + k * 34;
-          const to = card.kind === 'heal' ? Math.min(1, hh.hpRatio + card.ratio) : 1;
-          this.add2(this.note(cx - w / 2 + 40, ry, className(hh.class), 20, C.dim));
-          this.add2(this.note(cx + w / 2 - 40, ry, T.healPreview(hh.hpRatio, to), 20, C.text).setOrigin(1, 0));
-        });
-      else this.add2(this.note(cx, y + 250, T.youHaveGold(run.gold), 22, C.dim).setOrigin(0.5, 0));
-    }
-    this.button(cx, top + h - 58, 220, T.take, () => this.actTakeReward(run, index), { primary: true, h: 68 });
+    const c = this.add2(this.add.container(o.cx, top + h / 2));
+    // Kart kabı kartın ortasında: basma / kalkma ölçeği ortadan; çizimler dünya koordinatından kaba göre kaydırılır
+    const ox = -o.cx;
+    const oy = -(top + h / 2);
+    const at = <G extends Phaser.GameObjects.Components.Transform & Phaser.GameObjects.GameObject>(obj: G): G => {
+      obj.x += ox;
+      obj.y += oy;
+      c.add(obj);
+      return obj;
+    };
+    const x0 = o.cx - o.w / 2;
+    const glow = at(this.add.image(o.cx, top + h / 2, ensureGlow(this)).setTint(o.accent).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setDisplaySize(o.w * 1.5, h * 1.25));
+    at(elPanel(this, x0, top, o.w, h, { alpha: 0.92, corners: o.rich, border: o.rich ? 0.6 : 0.42 }));
+    // Tür rengi: üstten aşağı sönen çok hafif dolgu (kit paleti içinde)
+    const tint = at(this.add.graphics());
+    tint.fillGradientStyle(o.tint, o.tint, o.tint, o.tint, 0.1, 0.1, 0.02, 0.02).fillRect(x0 + 1, top + 1, o.w - 2, h - 2);
+    const hl = at(this.add.graphics());
+    // Üst satır: küçük Cinzel başlık (elit / boss / kalıntı kartında kor rengi) + iki yanda sönen çizgi
+    const kick = at(elText(this, o.cx, top + 26, o.kicker, 16, o.rich ? '#f0a860' : C.dim, { em: 0.22 }).setOrigin(0.5));
+    const orn = at(this.add.graphics());
+    const half = kick.width / 2 + 14;
+    fadeLine(orn, o.cx - half - 60, o.cx - half, top + 26, EL.GOLD, 0.5, 'in');
+    fadeLine(orn, o.cx + half, o.cx + half + 60, top + 26, EL.GOLD, 0.5, 'out');
+    // `addTop`: kartın dokunma alanının ÜSTÜNE (stat satırlarının ipucu alanları); kart alanından önce eklenirse ipucu çalışmaz
+    const late: Phaser.GameObjects.GameObject[] = [];
+    draw({ cx: o.cx, w: o.w, top: top + 48, bottom: top + h - 22, x0, x1: x0 + o.w, add: (obj) => at(obj as Phaser.GameObjects.Image), addTop: (obj) => late.push(obj) });
+    // Bütün kart: dokunma alanı (en üstte)
+    const zone = at(this.add.zone(o.cx, top + h / 2, o.w, h).setInteractive({ useHandCursor: true }));
+    for (const obj of late) at(obj as Phaser.GameObjects.Zone);
+    let hover = false;
+    const setState = (hv: boolean, sel: boolean, pressed = false) => {
+      hover = hv;
+      const on = hv || sel;
+      hl.clear();
+      // Item kartı: seçili / üstüne gelinen çerçeve item'in NADİRLİK rengindedir (Ömer 2026-10-09); diğer kartlarda seçili = açık altın
+      const selCol = o.rarity ? Phaser.Display.Color.ValueToColor(o.accent).lighten(20).color : EL.ON_N;
+      if (on) hl.lineStyle(sel ? 2 : 1.5, sel ? selCol : o.accent, sel ? 1 : 0.9).strokeRect(x0 + 0.5, top + 0.5, o.w - 1, h - 1);
+      this.tweens.killTweensOf([c, glow]);
+      this.tweens.add({ targets: c, y: top + h / 2 + (on ? -10 : 0), scale: pressed ? 0.975 : on ? 1.012 : 1, duration: pressed ? 90 : 200, ease: EL.EASE });
+      this.tweens.add({ targets: glow, alpha: pressed ? 0.2 : sel ? 0.16 : hv ? 0.12 : 0, duration: 200, ease: EL.EASE });
+    };
+    zone.on('pointerover', () => setState(true, this.cardSel === o.index));
+    zone.on('pointerout', () => setState(false, this.cardSel === o.index));
+    zone.on('pointerdown', () => !this.confirm && setState(true, this.cardSel === o.index, true));
+    zone.on('pointerup', () => {
+      if (this.confirm) return;
+      setState(true, true);
+      o.take();
+    });
+    this.cards[o.index] = { setState: (hv, sel) => setState(hv && hover, sel), take: o.take };
+    if (this.cardSel === o.index) setState(false, true);
   }
 
-  /** Item ayrıntısı (ad, tür, statlar, kime, neyin yerine, primary uyarısı). */
-  private itemBlock(run: EndlessRun, d: ItemDef, hero: EndlessHero, cx: number, y: number, maxW: number): void {
-    this.add2(fitText(this.label(cx, y, d.name, 28, rarityColor(d)).setOrigin(0.5, 0), maxW));
-    this.add2(this.note(cx, y + 42, itemKindLine(d), 20, C.dim).setOrigin(0.5, 0));
-    let ly = y + 84;
-    for (const line of itemStatLines(d)) {
-      this.add2(this.note(cx, ly, line, 24, C.stat).setOrigin(0.5, 0));
-      ly += 32;
-    }
-    ly += 14;
-    this.add2(this.note(cx, ly, T.forHero(className(hero.class)), 22, C.accent).setOrigin(0.5, 0));
-    const old = replacedItem(run, hero.id, d.id);
-    this.add2(fitText(this.note(cx, ly + 32, old ? T.replacesSold(old.name, Math.round(itemValue(old) * ITEMS.budget.sellRatio)) : T.fillsEmpty, 20, C.dim).setOrigin(0.5, 0), maxW));
-    if (primaryBonusLost(hero, { equip: { uid: 'preview', id: d.id } })) this.add2(fitText(this.note(cx, ly + 64, T.primaryWarning, 20, C.warn).setOrigin(0.5, 0), maxW));
+  /** Item'in stat satırları (veri sırasıyla). */
+  private itemStats(d: ItemDef): Array<[ItemStatId, number]> {
+    return STAT_IDS.filter((sk) => d.stats[sk]).map((sk) => [sk, d.stats[sk]!] as [ItemStatId, number]);
   }
 
+  /** Kahramanın şimdiki statları ve item takılırsa statları (ipucunda önce -> sonra; takamıyorsa yalnızca şimdiki). */
+  private tipStats(hero: EndlessHero | undefined, d: ItemDef): { now: Stats; after: Stats | null } | null {
+    const now = hero ? heroStats(hero) : null;
+    if (!hero || !now) return null;
+    const after = canEquip(hero.class, d) ? heroStats({ ...hero, equipment: { ...hero.equipment, [d.slot]: { uid: '_preview', id: d.id } } }) : null;
+    return { now, after };
+  }
+
+  /**
+   * Stat satırı: stat ikonu (savaş HUD'ı / Gear ile aynı kaynak: ui/stat-tips > statIcon) + "+3% Might". `align` center: x orta; left: x sol.
+   * Dikey orta `cy`. Üstüne gelince / dokununca açıklama ipucu (describeStat; `stats` önce -> sonra). Dönen: genişlik.
+   */
+  private statChip(
+    sk: ItemStatId,
+    v: number,
+    x: number,
+    cy: number,
+    size: number,
+    align: 'center' | 'left',
+    add: (o: Phaser.GameObjects.GameObject) => void,
+    addTop: (o: Phaser.GameObjects.GameObject) => void,
+    stats: () => { now: Stats; after: Stats | null } | null,
+  ): number {
+    const t = this.note(0, cy, statLine(sk, v), size, C.stat, false).setOrigin(0, 0.5);
+    const ic = statIcon(sk);
+    const isz = Math.round(size * 1.05);
+    const gap = ic ? 8 : 0;
+    const w = (ic ? isz + gap : 0) + t.width;
+    const x0 = align === 'center' ? x - w / 2 : x;
+    if (ic) add(this.add.image(x0 + isz / 2, cy, ensureIcon(this, ic.kind, ic.color, false)).setDisplaySize(isz, isz));
+    t.setX(x0 + (ic ? isz + gap : 0));
+    add(t);
+    addTop(this.tipZoneFor(sk, x0 + w / 2, cy, w + 12, size + 14, stats));
+    return w;
+  }
+
+  /** Tüccar karşılaştırma tablosu: stat adının ipucu alanı (sol kenar x, dikey orta cy). */
+  private statTipZone(sk: ItemStatId, x: number, cy: number, w: number, h: number, stats: () => { now: Stats; after: Stats | null } | null): void {
+    this.add2(this.tipZoneFor(sk, x + w / 2, cy, w + 8, h, stats));
+  }
+
+  /** Stat ipucu alanı: üstüne gelince / dokununca describeStat açıklaması (önce -> sonra); ikinci dokunuş kapatır. */
+  private tipZoneFor(sk: ItemStatId, cx: number, cy: number, w: number, h: number, stats: () => { now: Stats; after: Stats | null } | null): Phaser.GameObjects.Zone {
+    const ic = statIcon(sk);
+    const z = this.add.zone(cx, cy, w, h).setInteractive();
+    const show = () => {
+      const st = stats();
+      const info = st ? statTip(sk, st.now, st.after) : null;
+      if (!info) return;
+      this.hideTip();
+      const tip = elTip(this, { icon: ic ? ensureIcon(this, ic.kind, ic.color, false) : undefined, iconSize: 40, title: info.title, lines: info.lines.map((l) => [l] as [string]), width: 440 });
+      const m = z.getWorldTransformMatrix();
+      placeElTip(this, tip, { x: m.tx - z.width / 2, y: m.ty - z.height / 2, w: z.width, h: z.height }, 'above');
+      this.tip = tip.container;
+      this.tipOwner = z;
+    };
+    z.on('pointerover', show);
+    z.on('pointerout', () => this.tipOwner === z && this.hideTip());
+    z.on('pointerup', () => (this.tipOwner === z && this.tip ? this.hideTip() : show()));
+    return z;
+  }
+
+  /** Kart türlerinin hafif zemin renkleri (kit paleti içinde; çok düşük alfa). */
+  private static readonly TINT = { item: 0x6f8aa8, gold: 0xd9b24a, heal: 0x9a3a32, feast: 0xc0782a, relic: 0x8a6ab0 } as const;
+
+  private rewardCard(run: EndlessRun, card: RewardCard, index: number, cx: number, w: number, special: 'elite' | 'boss' | null): void {
+    const rich = !!special;
+    const R = LOOK.card.medal;
+    const kicker = card.kind === 'item' ? T.kickerItem(special) : card.kind === 'gold' ? T.kickerGold(special) : card.kind === 'feast' ? T.kickerFeast : T.kickerHeal(special);
+    const d = card.kind === 'item' ? itemDef(card.itemId) : undefined;
+    const accent = d ? hexNum(rarityColor(d)) : card.kind === 'gold' ? 0xecc878 : card.kind === 'feast' ? 0xf0b860 : 0xd96a5a;
+    const tint = EndlessScene.TINT[card.kind];
+    this.choiceCard({ index, cx, w, rich, accent, tint, kicker, take: () => this.actTakeReward(run, index), rarity: !!d }, (k) => {
+      const emblem = d ? itemEmblem(this, d, rarityColor(d)) : card.kind === 'gold' ? purseEmblem(this) : card.kind === 'feast' ? feastEmblem(this) : healEmblem(this);
+      const m = medallion(this, emblem, accent, R, { rich });
+      m.setPosition(k.cx, k.top + R + 18);
+      k.add(m);
+      const y = k.top + R * 2 + 52;
+      if (card.kind === 'item' && d) this.itemCardBody(run, d, k, y, card.heroId);
+      else if (card.kind === 'gold') {
+        k.add(elText(this, k.cx, y + 12, `+${card.amount}`, 52, EL.ON, { em: 0.04, weight: '700' }).setOrigin(0.5));
+        k.add(this.label(k.cx, y + 52, 'GOLD', 18, C.dim).setOrigin(0.5, 0));
+        k.add(this.note(k.cx, y + 96, cardText(card), 21, C.text).setOrigin(0.5, 0).setWordWrapWidth(k.w - 60).setAlign('center'));
+        k.add(this.note(k.cx, k.bottom - 30, T.purse(run.gold, run.gold + card.amount), 20, C.accent).setOrigin(0.5, 0));
+      } else if (card.kind === 'heal' || card.kind === 'feast') {
+        const big = card.kind === 'heal' ? `+${Math.round(card.ratio * 100)}%` : T.fullHealth;
+        k.add(elText(this, k.cx, y + 12, big, card.kind === 'heal' ? 48 : 34, EL.ON, { em: 0.04, weight: '700' }).setOrigin(0.5));
+        const text = this.note(k.cx, y + 48, cardText(card), 20, C.text).setOrigin(0.5, 0).setWordWrapWidth(k.w - 56).setAlign('center');
+        k.add(text);
+        this.healRows(run, card.kind === 'heal' ? card.ratio : 1, k, y + 48 + text.height + 16);
+      }
+      // Item kartı: sağ üst köşede satış değeri + küçük piksel sikke
+      if (d) this.sellTag(sellValue(d), k.x1 - 18, k.top + 6, k.add);
+    });
+  }
+
+  /** "Sell: 55" + küçük piksel sikke (sağa yaslı; `right` = sağ kenar, `y` = dikey orta). */
+  private sellTag(gold: number, right: number, y: number, add: (o: Phaser.GameObjects.GameObject) => void): void {
+    const coin = this.add.image(right - 11, y, purseEmblem(this)).setDisplaySize(24, 24);
+    add(coin);
+    add(this.note(right - 28, y, T.sell(gold), 18, C.accent).setOrigin(1, 0.5));
+  }
+
+  /**
+   * "Usable by" satırı (Ömer 2026-10-09, taslak v2): silahsa yalnızca takabilen takım üyelerinin küçük avatarları (ad yok); kimse
+   * takamıyorsa kısa bir uyarı (class adı yok); silah değilse (herkes takar) "Any hero". Kural `canEquip` (silah aileleri).
+   */
+  private usableRow(run: EndlessRun, d: ItemDef, cx: number, y: number, add: (o: Phaser.GameObjects.GameObject) => void, o: { label?: boolean; av?: number; maxW?: number } = {}): void {
+    const av = o.av ?? 40;
+    if (o.label !== false) {
+      add(elText(this, cx, y, T.usableBy, 14, C.dim, { em: 0.22 }).setOrigin(0.5));
+      y += 22 + av / 2;
+    }
+    if (d.slot !== 'weapon') {
+      add(this.note(cx, y, T.anyHero, 20, C.sub, true).setOrigin(0.5));
+      return;
+    }
+    const ok = run.heroes.filter((h) => canEquip(h.class, d));
+    if (!ok.length) {
+      add(fitText(this.note(cx, y, T.noOneCanWield, 20, C.warn, true).setOrigin(0.5), o.maxW ?? 400));
+      return;
+    }
+    const gap = 10;
+    const x0 = cx - ((ok.length - 1) * (av + gap)) / 2;
+    ok.forEach((h, i) => {
+      const def = content.classes[h.class];
+      if (!def) return;
+      const x = x0 + i * (av + gap);
+      add(this.add.rectangle(x, y, av + 4, av + 4, EL.INK, 0.9).setStrokeStyle(1, EL.GOLD, EL.LINE.a3));
+      add(classAvatar(this, def, x, y, av));
+    });
+  }
+
+  /** Item kartı gövdesi: ad (nadirlik rengi), tür, statlar; altta "Usable by" satırı. */
+  private itemCardBody(run: EndlessRun, d: ItemDef, k: CardCtx, y: number, heroId?: string): void {
+    k.add(fitText(this.label(k.cx, y - 8, d.name, 26, rarityColor(d)).setOrigin(0.5, 0), k.w - 40));
+    k.add(fitText(this.note(k.cx, y + 30, itemSubtitle(d), 19, C.dim, true).setOrigin(0.5, 0), k.w - 40));
+    // Stat satırları: ikon + yazı (Gear kartı gibi); üstüne gelince / dokununca açıklama, kartın önerdiği kahraman için önce -> sonra
+    const hero = heroId ? heroOf(run, heroId) : undefined;
+    let ly = y + 70 + 15;
+    for (const [sk, v] of this.itemStats(d).slice(0, 4)) {
+      this.statChip(sk, v, k.cx, ly, 23, 'center', k.add, k.addTop, () => this.tipStats(hero, d));
+      ly += 31;
+    }
+    this.usableRow(run, d, k.cx, k.bottom - 78, k.add, { maxW: k.w - 40 });
+  }
+
+  /** İyileştirme kartındaki kahraman satırları: avatar + ad + ince can çubuğu + "80% → 100%". Kalan yüksekliğe sığar (4 ve üstü kahraman). */
+  private healRows(run: EndlessRun, ratio: number, k: { cx: number; w: number; bottom: number; x0: number; add: (o: Phaser.GameObjects.GameObject) => void }, y0: number): void {
+    const n = run.heroes.length;
+    if (!n) return;
+    const rowH = Math.max(24, Math.min(46, (k.bottom - y0) / n));
+    const av = Math.max(20, rowH - 10);
+    const left = k.x0 + 30;
+    const right = k.x0 + k.w - 30;
+    run.heroes.forEach((hh, i) => {
+      const cy = y0 + rowH * i + rowH / 2;
+      const def = content.classes[hh.class];
+      const to = Math.min(1, hh.hpRatio + ratio);
+      if (def) {
+        k.add(this.add.rectangle(left + av / 2, cy, av + 4, av + 4, EL.INK, 0.9).setStrokeStyle(1, EL.GOLD, EL.LINE.a2));
+        k.add(classAvatar(this, def, left + av / 2, cy, av));
+      }
+      const nameX = left + av + 12;
+      k.add(fitText(this.note(nameX, cy - 2, className(hh.class), Math.min(19, rowH * 0.5), C.dim).setOrigin(0, 1), right - nameX - 120));
+      // ince çubuk: şimdiki can + iyileşecek kısım (açık)
+      const bw = right - nameX - 118;
+      const g = this.add.graphics();
+      g.fillStyle(EL.INK, 0.85).fillRect(nameX, cy + 3, bw, 5);
+      g.fillStyle(0x7fb85a, 0.35).fillRect(nameX, cy + 3, bw * to, 5);
+      g.fillStyle(0x7fb85a, 0.95).fillRect(nameX, cy + 3, bw * Math.max(0, hh.hpRatio), 5);
+      k.add(g);
+      k.add(this.note(right, cy, T.healPreview(hh.hpRatio, to), Math.min(19, rowH * 0.5), to > hh.hpRatio ? C.text : C.dim).setOrigin(1, 0.5));
+    });
+  }
+
+  // ============================================================ tüccar (Odo the Peddler; taslak v1 "Travelling cart")
+
+  /**
+   * Tüccar ekranı (Ömer 2026-10-09, taslak v1): solda tüccar figürü + konuşma balonu + kese; sağda Buy / Sell sekmeleri. Buy: 3x3 tezgâh
+   * (nadirlik çerçeveli ikonlar, altta fiyat; alınamayan soluk + kırmızı fiyat; silahta köşede kullanabilenlerin avatarları), Sell: torba
+   * (sayfalı 4x3) + bu ziyaretin geri alım satırı. En sağda seçilenin detay paneli: statlar, "Usable by" (yalnızca takabilenler, fark satırları,
+   * BEST), takılıyla karşılaştırma (avatara dokununca kahraman değişir) ve tek eylem düğmesi. Kor elmas yalnızca seçili malda.
+   */
   private drawShop(): void {
     const run = endless.run;
     if (!run?.shop) return this.go('title');
-    this.heading(T.shopTitle, T.shopSub(run.gold));
-    run.shop.forEach((e, i) => {
-      const d = itemDef(e.itemId);
-      const hero = heroOf(run, e.heroId);
-      if (!d || !hero) return;
-      const top = 280 + i * 190;
-      const x0 = CX - 640;
-      this.panel(x0, top, 1280, 170, 0.88);
-      this.add2(fitText(this.label(x0 + 40, top + 26, d.name, 28, rarityColor(d)), 520));
-      this.add2(this.note(x0 + 40, top + 70, itemKindLine(d), 20, C.dim));
-      this.add2(fitText(this.note(x0 + 40, top + 104, itemStatLines(d).join('   ·   '), 22, C.stat), 540));
-      const old = replacedItem(run, hero.id, d.id);
-      this.add2(this.note(x0 + 640, top + 40, T.forHero(className(hero.class)), 22, C.accent));
-      this.add2(fitText(this.note(x0 + 640, top + 76, old ? T.replaces(old.name) : T.fillsEmpty, 20, C.dim), 330));
-      if (primaryBonusLost(hero, { equip: { uid: 'preview', id: d.id } })) this.add2(this.note(x0 + 640, top + 108, T.primaryWarningShort, 20, C.warn));
-      if (e.sold) this.add2(this.label(x0 + 1150, top + 85, T.sold, 28, C.dim).setOrigin(0.5));
-      else this.button(x0 + 1150, top + 85, 210, T.buy(e.price), () => this.actBuy(run, i), { enabled: run.gold >= e.price, h: 68 });
+    const S = SHOP;
+    this.shopSel = this.validShopSel(run);
+    // --- sol: tüccar ---
+    this.add2(this.label(S.left, 58, T.merchantName.toUpperCase(), 38, C.bright).setOrigin(0, 0.5));
+    this.add2(this.note(S.left, 104, T.merchantSub, 24, C.dim, true).setOrigin(0, 0.5));
+    const av = merchantAvatar(this);
+    const bx = S.left;
+    const bw = 540;
+    const tx = bx + (av ? 112 : 30);
+    const line = this.note(tx, S.bubbleTop + 22, T.merchantLines[this.merchantLine], 27, C.sub, true).setWordWrapWidth(bx + bw - 30 - tx);
+    const bh = Math.max(av ? 110 : 0, line.height + 44);
+    this.add2(elPanel(this, bx, S.bubbleTop, bw, bh, { alpha: 0.9 }));
+    // balonun kuyruğu (figüre doğru)
+    const tail = this.add2(this.add.graphics());
+    tail.fillStyle(0x0e0a07, 1).fillTriangle(bx + 136, S.bubbleTop + bh - 1, bx + 164, S.bubbleTop + bh - 1, bx + 150, S.bubbleTop + bh + 14);
+    tail.lineStyle(1, EL.GOLD, 0.42).strokePoints([{ x: bx + 136, y: S.bubbleTop + bh }, { x: bx + 150, y: S.bubbleTop + bh + 14 }, { x: bx + 164, y: S.bubbleTop + bh }], false);
+    if (av) {
+      this.add2(this.add.rectangle(bx + 60, S.bubbleTop + bh / 2, 82, 82, EL.INK, 1).setStrokeStyle(1, EL.GOLD, EL.LINE.a3));
+      const head = this.add2(this.add.image(bx + 60, S.bubbleTop + bh / 2, av));
+      head.setScale(78 / head.width);
+    }
+    this.add2(line);
+    const figTop = S.bubbleTop + bh + 30;
+    this.add2(merchantFigure(this, S.left + 200, S.figureBottom, Math.min(760, S.figureBottom - figTop), 440));
+    // kese
+    this.add2(this.add.image(S.left + 330, 990, purseEmblem(this)).setDisplaySize(72, 72));
+    this.add2(this.label(S.left + 376, 966, T.yourPurse, 20, C.dim).setOrigin(0, 0.5));
+    const purse = this.add2(elText(this, S.left + 376, 1010, String(run.gold), 46, EL.ON, { em: 0.04, upper: false }).setOrigin(0, 0.5));
+    if (this.lastGold !== null && this.lastGold !== run.gold) this.tweens.add({ targets: purse, scale: { from: 1.2, to: 1 }, duration: 420, ease: EL.EASE });
+    this.lastGold = run.gold;
+    // --- sağ: sekmeler + torba ---
+    this.shopTabs();
+    const bagFull = bagOf(run).length >= endlessBagSize();
+    this.add2(this.note(S.right, 64, T.bagCount(bagOf(run).length, endlessBagSize()), 26, bagFull ? C.warn : C.dim, true).setOrigin(1, 0.5));
+    if (this.shopTab === 'buy') this.shopBuyGrid(run);
+    else this.shopSellGrid(run);
+    this.shopDetail(run);
+    this.button(S.right - 160, 1000, 300, T.moveOn, () => this.actLeaveShop(run), { h: 64, size: 22 });
+  }
+
+  /** Seçim geçerli değilse (satıldı / sayfa değişti) aynı sekmede ilk uygun öğe. */
+  private validShopSel(run: EndlessRun): ShopSel | null {
+    const sel = this.shopSel;
+    if (this.shopTab === 'buy') {
+      const shop = run.shop ?? [];
+      if (sel?.kind === 'ware' && shop[sel.index]) return sel;
+      return shop.length ? { kind: 'ware', index: Math.max(0, shop.findIndex((e) => !e.sold)) } : null;
+    }
+    if (sel?.kind === 'bag' && bagOf(run).some((i) => i.uid === sel.uid)) return sel;
+    if (sel?.kind === 'buyback' && run.buyback?.[sel.index]) return sel;
+    const first = bagOf(run)[this.sellPage * SHOP.sell.perPage] ?? bagOf(run)[0];
+    if (first) return { kind: 'bag', uid: first.uid };
+    return run.buyback?.length ? { kind: 'buyback', index: run.buyback.length - 1 } : null;
+  }
+
+  /** Buy / Sell sekmeleri: etkin olan açık altın + altında ince altın çizgi (elmas yok). */
+  private shopTabs(): void {
+    let x = SHOP.gridX;
+    for (const [tab, label] of [['buy', T.tabBuy], ['sell', T.tabSell]] as const) {
+      const on = this.shopTab === tab;
+      const t = this.add2(elText(this, x, 64, label, 30, on ? EL.ON : EL.DIM, { em: 0.18 }).setOrigin(0, 0.5));
+      const tw = t.width - 30 * 0.18;
+      if (on) this.add2(this.add.rectangle(x, 92, tw, 2, EL.GOLD, 0.9).setOrigin(0, 0.5));
+      this.tapZone(x + tw / 2, 64, tw + 40, 72, () => {
+        if (this.shopTab === tab) return;
+        this.shopTab = tab;
+        this.shopSel = null;
+        this.sellPage = 0;
+        this.cmpHero = null;
+        this.merchantLine = tab === 'sell' ? 'sell' : 'idle';
+        this.render();
+      });
+      x += tw + 56;
+    }
+    const g = this.add2(this.add.graphics());
+    fadeLine(g, SHOP.gridX, SHOP.right, 108, EL.GOLD, 0.4, 'out');
+  }
+
+  /** Buy: 3x3 tezgâh + (altında) malları yenileme. */
+  private shopBuyGrid(run: EndlessRun): void {
+    const S = SHOP.buy;
+    const shop = run.shop ?? [];
+    for (let i = 0; i < ENDLESS.shop.size; i++) {
+      const x = SHOP.gridX + (i % S.cols) * (S.cell + S.gapX);
+      const y = SHOP.gridTop + Math.floor(i / S.cols) * (S.cell + S.priceH + S.gapY);
+      const e = shop[i];
+      const d = e ? itemDef(e.itemId) : undefined;
+      if (!e || !d) {
+        this.emptyCell(x, y, S.cell);
+        continue;
+      }
+      const sel = this.shopSel?.kind === 'ware' && this.shopSel.index === i;
+      const poor = !e.sold && run.gold < e.price;
+      this.itemCell(run, d, x, y, S.cell, { selected: sel, dim: poor, gone: !!e.sold, fits: true }, () => this.selectShop({ kind: 'ware', index: i }, poor ? 'poor' : 'idle'));
+      this.priceTag(x + S.cell / 2, y + S.cell + S.priceH / 2 + 4, e.sold ? null : e.price, !poor);
+    }
+    // Malları yenile (altın; seed'li)
+    const cost = ENDLESS.shop.rerollCost;
+    const can = run.gold >= cost;
+    const link = elLink(this, T.reroll(cost), () => this.actReroll(run), { size: 22, enabled: can });
+    link.root.setPosition(SHOP.gridX - 8, SHOP.rerollY);
+    if (!can) link.text.setColor(EL.DIM);
+    this.add2(link.root);
+    this.add2(this.add.image(SHOP.gridX - 8 + link.width + 8, SHOP.rerollY, purseEmblem(this)).setDisplaySize(30, 30).setAlpha(can ? 1 : 0.45));
+  }
+
+  /** Sell: torba (sayfalı) + geri alım satırı. */
+  private shopSellGrid(run: EndlessRun): void {
+    const S = SHOP.sell;
+    const bag = bagOf(run);
+    const pages = Math.max(1, Math.ceil(bag.length / S.perPage));
+    this.sellPage = Math.min(this.sellPage, pages - 1);
+    this.add2(elText(this, SHOP.gridX, SHOP.gridTop, T.yourBag, 20, C.dim, { em: 0.2 }).setOrigin(0, 0.5));
+    const top = SHOP.gridTop + 26;
+    if (!bag.length) this.add2(this.note(SHOP.gridX, top + 30, T.bagEmpty, 24, C.dim, true));
+    bag.slice(this.sellPage * S.perPage, (this.sellPage + 1) * S.perPage).forEach((inst, k) => {
+      const d = itemDef(inst.id);
+      const x = SHOP.gridX + (k % S.cols) * (S.cell + S.gapX);
+      const y = top + Math.floor(k / S.cols) * (S.cell + S.priceH + S.gapY);
+      if (!d) return this.emptyCell(x, y, S.cell);
+      const sel = this.shopSel?.kind === 'bag' && this.shopSel.uid === inst.uid;
+      this.itemCell(run, d, x, y, S.cell, { selected: sel }, () => this.selectShop({ kind: 'bag', uid: inst.uid }, 'sell'));
+      this.priceTag(x + S.cell / 2, y + S.cell + S.priceH / 2 + 2, sellValue(d), true, 24);
     });
-    this.button(CX, 930, 340, T.moveOn, () => this.actLeaveShop(run), { primary: true });
+    // sayfa düğmeleri
+    if (pages > 1) {
+      const py = SHOP.pagerY;
+      const cx = SHOP.gridX + (S.cols * (S.cell + S.gapX) - S.gapX) / 2;
+      const prev = elIconButton(this, { label: '‹' }, () => this.actSellPage(-1), { size: 60 });
+      prev.root.setPosition(cx - 110, py);
+      const next = elIconButton(this, { label: '›' }, () => this.actSellPage(1), { size: 60 });
+      next.root.setPosition(cx + 110, py);
+      this.add2(prev.root);
+      this.add2(next.root);
+      this.add2(this.note(cx, py, T.page(this.sellPage + 1, pages), 24, C.text, false).setOrigin(0.5));
+    }
+    // geri alım (bu ziyaret)
+    const by = SHOP.buybackTop;
+    this.add2(elText(this, SHOP.gridX, by, T.buybackHeading, 20, C.dim, { em: 0.2 }).setOrigin(0, 0.5));
+    const list = run.buyback ?? [];
+    if (!list.length) this.add2(this.note(SHOP.gridX, by + 26, T.buybackEmpty, 23, C.dim, true).setWordWrapWidth(560));
+    list.forEach((e, i) => {
+      const d = itemDef(e.item.id);
+      if (!d) return;
+      const x = SHOP.gridX + i * (S.cell + S.gapX);
+      const y = by + 26;
+      const sel = this.shopSel?.kind === 'buyback' && this.shopSel.index === i;
+      const poor = run.gold < e.price;
+      this.itemCell(run, d, x, y, S.cell, { selected: sel, dim: poor }, () => this.selectShop({ kind: 'buyback', index: i }, poor ? 'poor' : 'buyback'));
+      this.priceTag(x + S.cell / 2, y + S.cell + S.priceH / 2 + 2, e.price, !poor, 24);
+    });
+    this.add2(this.note(SHOP.gridX, SHOP.sellHintY, T.sellHint, 22, C.dim, true).setOrigin(0, 0.5));
+  }
+
+  private selectShop(sel: ShopSel, line: MerchantLine): void {
+    this.shopSel = sel;
+    this.cmpHero = null;
+    this.merchantLine = line;
+    this.render();
+  }
+
+  /** Boş tezgâh yuvası (soluk ince çerçeve). */
+  private emptyCell(x: number, y: number, size: number): void {
+    const g = this.add2(this.add.graphics());
+    g.fillStyle(EL.INK, 0.35).fillRect(x, y, size, size);
+    g.lineStyle(1, EL.GOLD, 0.14).strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+  }
+
+  /**
+   * Nadirlik çerçeveli item yuvası: koyu zemin + nadirlik renginde hafif parıltı ve ince çerçeve, iki köşede açık renkli köşebent.
+   * `selected`: açık altın çerçeve + üstte TEK kor elmas (ekrandaki tek elmas); `dim`: alınamıyor (soluk); `gone`: satıldı; `fits`: silahta
+   * sağ üstte kullanabilenlerin küçük avatarları.
+   */
+  private itemCell(run: EndlessRun, d: ItemDef, x: number, y: number, size: number, o: { selected?: boolean; dim?: boolean; gone?: boolean; fits?: boolean }, tap: () => void): void {
+    const col = hexNum(rarityColor(d));
+    const c = this.add2(this.add.container(0, o.selected ? -6 : 0));
+    const light = Phaser.Display.Color.ValueToColor(col).lighten(25).color;
+    const baseGlow = o.gone ? 0.06 : o.selected ? 0.42 : 0.22;
+    const gs = size * (o.selected ? 1.35 : 1.1);
+    const glow = this.add.image(x + size / 2, y + size / 2, ensureGlow(this)).setTint(col).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(gs, gs).setAlpha(baseGlow);
+    const g = this.add.graphics();
+    g.fillStyle(0x0c0906, 0.92).fillRect(x, y, size, size);
+    const k = Math.round(size * 0.1);
+    g.lineStyle(1, col, o.gone ? 0.25 : 0.6).strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+    g.lineStyle(2, light, o.gone ? 0.3 : 0.95);
+    g.strokePoints([{ x, y: y + k }, { x, y }, { x: x + k, y }], false);
+    g.strokePoints([{ x: x + size - k, y: y + size }, { x: x + size, y: y + size }, { x: x + size, y: y + size - k }], false);
+    const isz = size * 0.72;
+    const icon = this.add.image(x + size / 2, y + size / 2, itemEmblem(this, d, rarityColor(d))).setDisplaySize(isz, isz);
+    if (o.gone) icon.setAlpha(0.18).setTint(0x8a8a8a);
+    else if (o.dim) icon.setAlpha(0.42).setTint(0x9a9a9a);
+    c.add([glow, g, icon]);
+    // Seçili: çerçeve ve üstteki elmas item'in NADİRLİK renginde (Ömer 2026-10-09; altın / kor değil)
+    if (o.selected) {
+      const h = this.add.graphics();
+      h.lineStyle(2, light, 1).strokeRect(x - 1, y - 1, size + 2, size + 2);
+      h.fillStyle(col, 0.3).fillPoints(diamondPts(x + size / 2, y - 1, 10), true);
+      h.fillStyle(light, 1).fillPoints(diamondPts(x + size / 2, y - 1, 6), true);
+      h.lineStyle(1, 0xffffff, 0.5).strokePoints(diamondPts(x + size / 2, y - 1, 6), true);
+      c.add(h);
+    }
+    if (o.gone) c.add(elText(this, x + size / 2, y + size / 2, T.sold, 24, C.dim, { em: 0.2 }).setOrigin(0.5));
+    // silah: kullanabilenlerin küçük avatarları (sağ üst)
+    if (o.fits && d.slot === 'weapon' && !o.gone) {
+      const a = 32;
+      usableHeroes(run, d).forEach((h, i) => {
+        const def = content.classes[h.class];
+        if (!def) return;
+        const ax = x + size - 6 - a / 2 - i * (a + 4);
+        c.add(this.add.rectangle(ax, y + 6 + a / 2, a + 2, a + 2, EL.INK, 1).setStrokeStyle(1, EL.GOLD, EL.LINE.a3));
+        c.add(classAvatar(this, def, ax, y + 6 + a / 2, a));
+      });
+    }
+    const z = this.tapZone(x + size / 2, y + size / 2, size + 10, size + 10, tap);
+    // Üstüne gelince: ikon hafifçe büyür, nadirlik renginde parıltı artar
+    const base = icon.scale;
+    z.on('pointerover', () => {
+      this.tweens.add({ targets: icon, scale: base * 1.07, duration: 160, ease: EL.EASE });
+      if (!o.gone) this.tweens.add({ targets: glow, alpha: Math.max(baseGlow, 0.38), duration: 160, ease: EL.EASE });
+    });
+    z.on('pointerout', () => {
+      this.tweens.add({ targets: icon, scale: base, duration: 160, ease: EL.EASE });
+      this.tweens.add({ targets: glow, alpha: baseGlow, duration: 160, ease: EL.EASE });
+    });
+  }
+
+  /** Fiyat: sikke + sayı (alınamıyorsa kırmızı); null = SOLD. */
+  private priceTag(cx: number, cy: number, price: number | null, ok: boolean, size = 28): void {
+    if (price === null) {
+      this.add2(elText(this, cx, cy, T.sold, size - 6, C.dim, { em: 0.2 }).setOrigin(0.5));
+      return;
+    }
+    const t = elText(this, 0, cy, String(price), size, ok ? EL.ON : EL.BAD, { em: 0.04, upper: false }).setOrigin(0, 0.5);
+    const coin = size + 2;
+    const w = coin + 8 + t.width;
+    const x0 = cx - w / 2;
+    this.add2(this.add.image(x0 + coin / 2, cy, purseEmblem(this)).setDisplaySize(coin, coin).setAlpha(ok ? 1 : 0.6));
+    t.setX(x0 + coin + 8);
+    this.add2(t);
+  }
+
+  /** Detay paneli: seçilen mal / torba item'i / geri alım. */
+  private shopDetail(run: EndlessRun): void {
+    const P = SHOP.detail;
+    const sel = this.shopSel;
+    this.add2(elPanel(this, P.x, P.top, P.w, P.bottom - P.top, { alpha: 0.9, corners: true }));
+    let d: ItemDef | undefined;
+    let action: { label: string; enabled: boolean; run: () => void } | null = null;
+    const full = bagOf(run).length >= endlessBagSize();
+    const buyAction = (price: number, label: string, go: () => void) => {
+      const short = goldShort(run, price);
+      if (short > 0) return { label: T.needMore(short), enabled: false, run: () => this.merchantSays('poor') };
+      if (full) return { label: T.bagFullShort, enabled: false, run: () => this.merchantSays('bagFull') };
+      return { label, enabled: true, run: go };
+    };
+    if (sel?.kind === 'ware') {
+      const e = run.shop?.[sel.index];
+      d = e ? itemDef(e.itemId) : undefined;
+      if (e && d) action = e.sold ? { label: T.soldOut, enabled: false, run: () => {} } : buyAction(e.price, T.buy(e.price), () => this.actBuy(run, sel.index));
+    } else if (sel?.kind === 'bag') {
+      const inst = bagOf(run).find((i) => i.uid === sel.uid);
+      d = inst ? itemDef(inst.id) : undefined;
+      if (d) action = { label: T.sellFor(sellValue(d)), enabled: true, run: () => this.actSell(run, sel.uid) };
+    } else if (sel?.kind === 'buyback') {
+      const e = run.buyback?.[sel.index];
+      d = e ? itemDef(e.item.id) : undefined;
+      if (e && d) action = buyAction(e.price, T.buyBack(e.price), () => this.actBuyback(run, sel.index));
+    }
+    if (!d) {
+      const msg = this.shopTab === 'buy' ? T.merchantLines.empty : T.bagEmpty;
+      this.add2(this.note(P.x + P.w / 2, (P.top + P.bottom) / 2, msg, 24, C.dim, true).setOrigin(0.5).setWordWrapWidth(P.w - 80).setAlign('center'));
+      return;
+    }
+    const item = d;
+    const x0 = P.x + 30;
+    const inner = P.w - 60;
+    let y = P.top + 28;
+    // başlık: ikon çerçevesi + ad + alt başlık
+    const fr = 100;
+    const col = hexNum(rarityColor(item));
+    const g = this.add2(this.add.graphics());
+    g.fillStyle(0x0c0906, 1).fillRect(x0, y, fr, fr);
+    g.lineStyle(1, col, 0.7).strokeRect(x0 + 0.5, y + 0.5, fr - 1, fr - 1);
+    this.add2(this.add.image(x0 + fr / 2, y + fr / 2, ensureGlow(this)).setTint(col).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(fr, fr).setAlpha(0.25));
+    this.add2(this.add.image(x0 + fr / 2, y + fr / 2, itemEmblem(this, item, rarityColor(item))).setDisplaySize(fr * 0.8, fr * 0.8));
+    this.add2(fitText(this.label(x0 + fr + 20, y + 26, item.name, 32, rarityColor(item)).setOrigin(0, 0.5), inner - fr - 20));
+    this.add2(fitText(this.note(x0 + fr + 20, y + 70, itemSubtitle(item), 24, C.dim, true).setOrigin(0, 0.5), inner - fr - 20));
+    y += fr + 18;
+    // Karşılaştırılan kahraman (stat ipuçları da onun için önce -> sonra gösterir)
+    const who = usableHeroes(run, item);
+    const best = bestHeroFor(run, item);
+    if (who.length && (!this.cmpHero || !who.some((h) => h.id === this.cmpHero))) this.cmpHero = best ?? who[0]!.id;
+    const cmp = who.find((h) => h.id === this.cmpHero);
+    // Stat satırları: ikon + yazı yan yana (sığmazsa alt satıra); üstüne gelince / dokununca açıklama (Gear kartı gibi)
+    const tipFor = () => this.tipStats(cmp ?? run.heroes[0], item);
+    const chipH = 38;
+    let cxp = x0;
+    let rows = 1;
+    for (const [sk, v] of this.itemStats(item)) {
+      const probe = this.note(0, 0, statLine(sk, v), 28, C.stat, false);
+      const wNeed = probe.width + 38;
+      probe.destroy();
+      if (cxp > x0 && cxp + wNeed > x0 + inner) {
+        cxp = x0;
+        rows++;
+      }
+      cxp += this.statChip(sk, v, cxp, y + (rows - 1) * chipH + chipH / 2, 28, 'left', (o) => this.add2(o), (o) => this.add2(o), tipFor) + 30;
+    }
+    y += rows * chipH + 16;
+    // Usable by: yalnızca takabilenler (ödül kartlarıyla aynı kural); fark satırları + BEST; dokununca karşılaştırma o kahramana geçer
+    y = this.detailHeading(T.usableBy, x0, y, inner);
+    if (!who.length) {
+      this.add2(this.note(x0, y + 10, T.noOneCanWield, 23, C.warn, true));
+      y += 56;
+    } else {
+      const cw = Math.min(142, inner / who.length);
+      const cx0 = x0 + inner / 2 - (who.length * cw) / 2 + cw / 2;
+      who.forEach((h, i) => this.heroCompareCard(run, item, h, cx0 + i * cw, y + 8, cw, h.id === best, h.id === this.cmpHero));
+      y += 214;
+    }
+    // Takılıyla karşılaştırma (seçili kahraman)
+    const btnY = P.bottom - 50;
+    if (cmp) this.compareTable(run, item, cmp, x0, y, inner, btnY - 42);
+    if (action) {
+      const a = action;
+      this.button(P.x + P.w / 2, btnY, 400, a.label, a.run, { enabled: a.enabled, h: 66, size: 23 });
+    }
+  }
+
+  /** Küçük Cinzel bölüm başlığı + sağa sönen ince çizgi; dönen = altındaki ilk satırın y'si. */
+  private detailHeading(text: string, x: number, y: number, w: number): number {
+    const t = this.add2(elText(this, x, y + 10, text, 20, C.dim, { em: 0.2 }).setOrigin(0, 0.5));
+    const g = this.add2(this.add.graphics());
+    fadeLine(g, x + t.width + 6, x + w, y + 10, EL.GOLD, 0.4, 'out');
+    return y + 34;
+  }
+
+  /** "Usable by" kartı: avatar (karşılaştırılan: altın çerçeve), ad, en büyük iki stat farkı (yeşil / kırmızı), en büyük yükseltmede BEST. */
+  private heroCompareCard(run: EndlessRun, d: ItemDef, h: EndlessHero, cx: number, top: number, w: number, best: boolean, on: boolean): void {
+    const def = content.classes[h.class];
+    if (!def) return;
+    const a = 84;
+    const ay = top + a / 2;
+    this.add2(this.add.rectangle(cx, ay, a + 4, a + 4, EL.INK, 1).setStrokeStyle(on ? 2 : 1, on ? EL.ON_N : EL.GOLD, on ? 1 : EL.LINE.a2));
+    this.add2(classAvatar(this, def, cx, ay, a));
+    if (best) {
+      const tag = elText(this, 0, top - 4, T.best, 16, '#1a0f06', { em: 0.14 }).setOrigin(0.5);
+      const tw = tag.width - 16 * 0.14 + 12;
+      tag.setX(cx + a / 2 - tw / 2 + (16 * 0.14) / 2);
+      this.add2(this.add.rectangle(cx + a / 2 - tw / 2, top - 4, tw, 22, EL.EMBER2, 1));
+      this.add2(tag);
+    }
+    this.add2(fitText(this.label(cx, ay + a / 2 + 20, className(h.class).toUpperCase(), 22, on ? C.bright : C.text).setOrigin(0.5), w - 6));
+    const diffs = statDelta(run, h.id, d)
+      .filter((x) => x.diff !== 0)
+      .sort((p, q) => Math.abs(q.diff) - Math.abs(p.diff))
+      .slice(0, 2);
+    if (!diffs.length) this.add2(this.note(cx, ay + a / 2 + 50, T.noChange, 23, C.dim, true).setOrigin(0.5));
+    diffs.forEach((x, i) => this.add2(fitText(this.note(cx, ay + a / 2 + 52 + i * 28, statLine(x.stat, x.diff), 24, x.diff > 0 ? GOOD : C.warn, false).setOrigin(0.5), w - 4)));
+    this.tapZone(cx, top + 92, w, 196, () => {
+      if (this.cmpHero === h.id) return;
+      this.cmpHero = h.id;
+      this.render();
+    });
+  }
+
+  /** Takılı item'le stat tablosu (Now / New / fark); `maxY`'ye sığan satırlar. */
+  private compareTable(run: EndlessRun, d: ItemDef, h: EndlessHero, x0: number, y: number, w: number, maxY: number): void {
+    y = this.detailHeading(T.comparedWith(className(h.class)), x0, y, w);
+    const cur = equippedFor(run, h.id, d);
+    this.add2(fitText(this.note(x0, y + 12, cur ? T.nowEquipped(cur.name) : T.slotEmpty(slotDef(d.slot).name), 24, cur ? C.sub : C.dim, true).setOrigin(0, 0.5), w));
+    y += 40;
+    const cNow = x0 + w - 230;
+    const cNew = x0 + w - 120;
+    const cDiff = x0 + w;
+    this.add2(elText(this, cNow, y, T.colNow, 17, C.dim, { em: 0.18 }).setOrigin(1, 0.5));
+    this.add2(elText(this, cNew, y, T.colNew, 17, C.dim, { em: 0.18 }).setOrigin(1, 0.5));
+    y += 22;
+    const rows = statDelta(run, h.id, d);
+    const fit = Math.max(0, Math.floor((maxY - y) / 36));
+    const num = (k: StatDelta['stat'], v: number) => (v ? statLine(k, v).split(' ')[0]!.replace(/^\+/, '') : '—');
+    rows.slice(0, fit).forEach((r, i) => {
+      const ry = y + i * 36 + 17;
+      const ic = statIcon(r.stat);
+      if (ic) this.add2(this.add.image(x0 + 13, ry, ensureIcon(this, ic.kind, ic.color, false)).setDisplaySize(26, 26));
+      const nm = this.add2(fitText(this.note(x0 + (ic ? 36 : 0), ry, ITEMS.stats[r.stat]?.name ?? r.stat, 25, C.text, false).setOrigin(0, 0.5), cNow - x0 - 116));
+      this.statTipZone(r.stat, x0, ry, (ic ? 36 : 0) + nm.displayWidth, 34, () => this.tipStats(h, d));
+      this.add2(this.note(cNow, ry, num(r.stat, r.now), 25, C.stat, false).setOrigin(1, 0.5));
+      this.add2(this.note(cNew, ry, num(r.stat, r.next), 25, C.stat, false).setOrigin(1, 0.5));
+      this.add2(this.note(cDiff, ry, r.diff ? statLine(r.stat, r.diff).split(' ')[0]! : '=', 25, r.diff > 0 ? GOOD : r.diff < 0 ? C.warn : C.dim, false).setOrigin(1, 0.5));
+      const gl = this.add2(this.add.graphics());
+      gl.lineStyle(1, EL.GOLD, 0.1).lineBetween(x0, ry + 18, x0 + w, ry + 18);
+    });
+  }
+
+  private merchantSays(line: MerchantLine): void {
+    this.merchantLine = line;
+    this.render();
+  }
+
+  private actSellPage(dir: number): void {
+    const run = endless.run;
+    if (!run) return;
+    const pages = Math.max(1, Math.ceil(bagOf(run).length / SHOP.sell.perPage));
+    this.sellPage = (this.sellPage + dir + pages) % pages;
+    this.shopSel = null;
+    this.render();
+  }
+
+  private actSell(run: EndlessRun, uid: string): void {
+    const idx = bagOf(run).findIndex((i) => i.uid === uid);
+    const d = idx >= 0 ? itemDef(bagOf(run)[idx]!.id) : undefined;
+    const next = sellItem(run, uid);
+    if (next === run || !d) return;
+    commit(next);
+    // seçim: torbada aynı sıradaki item (yoksa bir önceki)
+    const after = bagOf(next)[Math.min(idx, bagOf(next).length - 1)];
+    this.shopSel = after ? { kind: 'bag', uid: after.uid } : null;
+    this.merchantLine = 'sold';
+    this.toast?.(T.toastSold(d.name, sellValue(d)));
+    this.render();
+  }
+
+  private actBuyback(run: EndlessRun, index: number): void {
+    const e = run.buyback?.[index];
+    const d = e ? itemDef(e.item.id) : undefined;
+    const next = buybackItem(run, index);
+    if (next === run || !e || !d) return;
+    commit(next);
+    this.shopSel = { kind: 'bag', uid: e.item.uid };
+    this.merchantLine = 'buyback';
+    this.toast?.(T.toastBoughtBack(d.name));
+    this.render();
+  }
+
+  private actReroll(run: EndlessRun): void {
+    const next = rerollShop(run);
+    if (next === run) return;
+    commit(next);
+    this.shopSel = null;
+    this.cmpHero = null;
+    this.merchantLine = 'reroll';
+    this.render();
   }
 
   private drawOver(): void {
@@ -589,7 +1395,7 @@ export class EndlessScene extends Phaser.Scene {
   }
 
   /** Kit düğmesi: primary (START dili) / secondary; pasifken soluk, dokununca sallanır. Merkez (cx, cy). */
-  private button(cx: number, cy: number, w: number, label: string, run: () => void, o: { primary?: boolean; enabled?: boolean; h?: number } = {}): ElButton {
+  private button(cx: number, cy: number, w: number, label: string, run: () => void, o: { primary?: boolean; enabled?: boolean; h?: number; size?: number } = {}): ElButton {
     const enabled = o.enabled ?? true;
     const b = elButton(
       this,
@@ -599,7 +1405,7 @@ export class EndlessScene extends Phaser.Scene {
         if (!enabled) return b.shake();
         run();
       },
-      { kind: o.primary ? 'primary' : 'secondary', w, h: o.h ?? (o.primary ? 76 : 60), size: o.primary ? 24 : 19, ready: enabled },
+      { kind: o.primary ? 'primary' : 'secondary', w, h: o.h ?? (o.primary ? 76 : 60), size: o.size ?? (o.primary ? 24 : 19), ready: enabled },
     );
     b.root.setPosition(cx, cy);
     this.add2(b.root);

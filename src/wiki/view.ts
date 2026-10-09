@@ -22,7 +22,7 @@ import { WIKI_ALIASES } from './assets/nav';
 import { assetSections, setNavigator, skillArt, unitArt } from './assets/sections';
 import type { AssetSection } from './assets/sections';
 import { wikiFiles } from './files';
-import { slotGlyph } from './slot-glyphs';
+import { familyGlyph, slotGlyph } from './slot-glyphs';
 import { applyVariantFiles } from '../game/sprite-variants';
 import './wiki.css';
 
@@ -469,6 +469,9 @@ export class WikiPanel {
       ? h('div', { class: 'cx-gear' },
           heading('Slots'),
           h('div', { class: 'cx-slots' }, ...a.gear.slots.map((s) => h('div', { class: 'cx-slot' }, h('span', { class: 'cx-slotbox' }, slotGlyph(s.id, '#d9b26a')), h('span', { text: s.name })))),
+          ...(a.gear.families?.length
+            ? [heading('Weapon families'), h('div', { class: 'cx-slots' }, ...a.gear.families.map((f) => h('div', { class: 'cx-slot' }, h('span', { class: 'cx-slotbox' }, familyGlyph(f.id, '#d9b26a')), h('span', { text: f.name }))))]
+            : []),
           heading('Rarity'),
           h('div', { class: 'cx-rarities' }, ...a.gear.rarities.map((r) => h('div', { class: 'cx-rarity', style: { '--c': r.color } }, h('span', { class: 'cx-slotbox' }, slotGlyph('trinket', r.color)), h('span', { text: r.name })))))
       : null;
@@ -506,7 +509,7 @@ export class WikiPanel {
     const bonus = u.primary && u.primaryBonus
       ? h('div', { class: 'cx-bonus' }, pic(STAT_ICON[u.primary], STAT_COLOR[u.primary], 'cx-ico small'), h('div', {}, h('b', { text: `${u.primaryBonus.name}` }), h('span', { class: 'cx-dim', text: ` ${u.primaryBonus.detail}` }), h('div', { class: 'cx-note', text: u.primaryBonus.text })))
       : null;
-    const stats = h('div', { class: 'cx-stats' }, ...u.derived.map((d) => h('div', { class: 'cx-stat' }, pic(d.icon, d.color, 'cx-ico tiny'), h('span', { text: d.label }), h('b', { text: d.value }))));
+    const stats = h('div', { class: 'cx-stats' }, ...u.derived.map((d) => h('div', { class: 'cx-stat' }, pic(d.icon, d.color, 'cx-ico tiny'), h('span', { text: d.label }), d.sub ? h('b', { class: 'multi' }, h('i', { text: d.value }), h('small', { text: d.sub })) : h('b', { text: d.value }))));
     const passive = u.passive
       ? h('div', { class: 'cx-passive' }, pic(u.passive.icon, u.color, 'cx-ico big', ownerOfUnit(u.id), true), h('div', {}, h('b', { text: u.passive.name }), h('div', { class: 'cx-note', text: u.passive.text })))
       : h('div', { class: 'cx-dim', text: 'No passive.' });

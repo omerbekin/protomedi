@@ -263,4 +263,16 @@ export const ICONS: Record<string, V2SpriteEntry> = {
   },
 };
 
-export const SPRITES: Record<string, V2SpriteEntry> = {};
+export const SPRITES: Record<string, V2SpriteEntry> = {
+  /**
+   * Might (item'lerin skill gücü eki; Gear stat paneli ve item satırları, `v2:shared:might`): yükselen kalın ok + iki yanında güç
+   * kıvılcımları, vurgu rengiyle (`'a'`). v1'de karşılığı yok (yeni ad; v1 dosyaları donduruldu).
+   */
+  might: (g) => {
+    g.poly([16, 2, 27, 14, 20.5, 14, 20.5, 29, 11.5, 29, 11.5, 14, 5, 14], 'a');
+    g.poly([16, 6.5, 22.5, 12.5, 18, 12.5, 18, 26.5, 14, 26.5, 14, 12.5, 9.5, 12.5], 'y');
+    g.rect(14.5, 13, 1.6, 12, 'w');
+    sparkle(g, 5.5, 22, 3.2, 'w');
+    sparkle(g, 26.5, 22, 3.2, 'w');
+  },
+};

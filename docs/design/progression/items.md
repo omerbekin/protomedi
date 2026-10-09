@@ -34,10 +34,12 @@ Her kahramanın **6 yuvası** var (Weapon, Helm, Armor, Gloves, Boots, Trinket).
 | **Weapon** | Might (skill gücü %), ana stat | **1,5** | Karakterin "aracı"; en büyük tek parça. Arketipe bağlı (1.2). |
 | **Armor** (gövde) | zırh, büyü zırhı, can | **1,3** | Savunmanın ana parçası. |
 | **Helm** | can, zırh, isabet | 0,8 | |
-| **Gloves** | Might, kritik, isabet | 0,8 | Saldırı ikincil yuvası. |
+| **Gloves** | kritik, isabet, zırh (Might YOK: yalnızca silahta) | 0,8 | Saldırı ikincil yuvası. |
 | **Boots** | kaçınma, zırh, (Epic+) hız | 0,8 | Hız yalnızca burada ve sınırlı (1.6). |
 | **Trinket** (yüzük/muska/tılsım) | ne olursa (MP, yenilenme, LUCK, büyü zırhı) | 0,8 | "Joker" yuva; Legendary trait'lerin çoğu burada. |
 | | | **toplam 6,0** | |
+
+> **Ömer 2026-10-09: Might yalnızca silahta; yeni stat/kaynak/kural önerileri Ömer'e ayrıca sorulur** (madde 286). Diğer yuvalar Might taşımaz (`data/items.json > stats.might.slots = ["weapon"]`, `validateItems` hata verir).
 
 **Neden 6 (4 ya da 8 değil):**
 - Ömer'in saydığı klasik yuvalar (silah, zırh, ayakkabı, eldiven) + kafa + takı = tanıdık medieval RPG düzeni; her yuvanın ayrı bir "tadı" var (yukarıdaki sütun), bu yüzden loot çeşitli hisseder.
@@ -91,7 +93,7 @@ Neden 5: oyuncuların okuduğu evrensel dil (gri-yeşil-mavi-mor-turuncu); 4 kad
 | **Max HP** | `hpAdd` (YENİ) | 0,4 IP / can (10 can = 4) | her yuva | Defender'ın sabit canına (`overrides.hp`) da eklenir. |
 | **Armor** | `armorAdd` (var) | 0,8 IP / puan | Armor, Helm, Boots, Gloves | |
 | **Magic Armor** | `magicArmorAdd` (var) | 0,5 IP / puan | Armor, Helm, Trinket | |
-| **Might** (+% skill gücü) | `powerMult` (var; toplanarak) | 0,5 IP / %1 | Weapon (taban stat), Gloves | Hasar, şifa, kalkan, zemin, DoT, Doom hepsi; **hasar ölçekleme kuralıyla uyumlu**: hâlâ skill statının yüzdesi, yalnızca yüzde büyür. |
+| **Might** (+% skill gücü) | `powerMult` (var; toplanarak) | 0,5 IP / %1 | **YALNIZCA Weapon** (taban stat) | **Ömer 2026-10-09: Might yalnızca silahta; yeni stat/kaynak/kural önerileri Ömer'e ayrıca sorulur** (madde 286). Hasar, şifa, kalkan, zemin, DoT, Doom hepsi; **hasar ölçekleme kuralıyla uyumlu**: hâlâ skill statının yüzdesi, yalnızca yüzde büyür. |
 | **Crit** (kritik şansı) | `critAdd` (YENİ) | 0,25 IP / %1 | Gloves, Trinket | Tavan: item'lerden toplam +%15. |
 | **Crit Damage** | `critMultAdd` (YENİ) | 0,5 IP / +%10 | Epic+ Gloves/Weapon | |
 | **Accuracy** | `accuracyAdd` (YENİ) | 0,6 IP / %1 | Helm, Gloves | Tavan +%10. |
@@ -162,8 +164,8 @@ Hepsi stat/kural ölçeklidir; düz hasar yok (Second Wind / Opening Ward maks c
 
 **3) Conclave of Embers** (büyücü, INT; Mage / Druid / Undead / Paladin / Anti-Mage) - 4 parça: *Ember Staff* (Staves), *Ember Circlet* (Helm), *Ember Robe* (Armor), *Ember Signet* (Trinket). Kaynak: St. Brann's Abbey (Relic Vault), Black Cathedral, Dragon's Spine.
 - 2 parça: +12 Max MP, +1 MP Regen (3,2 IP)
-- 3 parça: +6% Might (3 IP)
-- 4 parça: **Kindled**: Mana Echo şansı +%10 (yalnızca INT primary'lerde; diğerlerinde +%3 Might) (3 IP)
+- 3 parça: +6% Might (3 IP; Ömer 2026-10-09: Might item'lerde yalnızca silahta, ama set bonuslarında olabilir)
+- 4 parça: **Kindled**: Mana Echo şansı +%10 (yalnızca INT primary'lerde; diğerlerinde +3% Might) (3 IP)
 - Tema: lanete karşı ateşi koruyan büyücüler meclisi; kızıl-altın işleme, kor taşı.
 
 ### 1.9 Örnek item listesi (her yuvadan, her nadirlikten)
@@ -187,7 +189,7 @@ IP kontrolü: `slotWeight x B(ilvl) x rarityMult` (±%10). Stat IP'leri 1.5 tabl
 | Nasal Helm | Helm | Uncommon | 9 | +1 Armor, +3 Max HP | 2,2 / 2,0 | 20 |
 | Hounskull of the Hawk | Helm | Rare | 16 | +2 Armor, +4% Accuracy | 4,4 / 4,0 | 40 |
 | Work Gloves | Gloves | Common | 2 | +3% Crit | 0,8 / 0,75 | 8 |
-| Studded Gauntlets | Gloves | Uncommon | 12 | +4% Might, +1 Armor | 2,7 / 2,8 | 28 |
+| Studded Gauntlets | Gloves | Uncommon | 12 | +8% Crit, +1 Armor | 2,7 / 2,8 | 28 |
 | Bracers of the Fox | Gloves | Rare | 20 | +1 DEX | 5,2 / 5,0 | 50 |
 | Turnshoes | Boots | Common | 2 | +1 Armor | 0,8 / 0,8 | 8 |
 | Riding Boots | Boots | Uncommon | 10 | +3% Evasion, +1 Armor | 2,4 / 2,6 | 26 |
@@ -208,7 +210,7 @@ IP kontrolü: `slotWeight x B(ilvl) x rarityMult` (±%10). Stat IP'leri 1.5 tabl
 ### 1.10 İsimlendirme ve medieval tema
 
 - **Tabanlar gerçek ortaçağ terimleri:** gambeson, brigandine, hauberk, hounskull, sabaton, coif, turnshoes, misericorde, rondel, Dane axe, morning star, warbow. Fantezi abartısı yok ("Ultra Mega Sword" değil).
-- **Önekler (sıfat):** Sturdy (zırh), Hale (can), Keen (kritik), Swift (hız), Steady (isabet), Warded (büyü zırhı), Mighty (Might), Fleet (kaçınma).
+- **Önekler (sıfat):** Sturdy (zırh), Hale (can), Keen (kritik), Swift (hız), Steady (isabet), Warded (büyü zırhı), Mighty (Might; yalnızca silah adlarında), Fleet (kaçınma).
 - **Sonekler (hayvan/simge):** of the Bear (STR), of the Fox (DEX), of the Owl (INT), of the Crow (LUCK), of the Hawk (isabet), of the Shadows (kaçınma), of Warding (büyü zırhı), of the Pilgrim (yenilenme).
 - **Legendary/Set adları Valdoria'nın yerlerinden:** Brann, Morvane, Ashford, King's Bridge, Ravenwood. Hikâye satırı (flavor) tek cümle, İngilizce, italik.
 - Oyun içi metinler İngilizce; bu belgedeki açıklamalar Türkçe.
@@ -234,7 +236,7 @@ IP kontrolü: `slotWeight x B(ilvl) x rarityMult` (±%10). Stat IP'leri 1.5 tabl
 ### 2.2 Tüccar, satma, satın alma
 
 - **Tüccar (Merchant)** kasaba/şehirlerde (Ashford, Valdren Keep ve yeni bölümlerin kasabaları; town paneli zaten "Merchant devre dışı" yer tutucusunu taşıyor). Stok: 6 item, düğümün ilvl'sinde, nadirlik eğrisi bölümün normal loot eğrisi +1 kademe kayık, **en az 2'si aktif takımın kullanabileceği silah**; seed'li (aynı kayıtta aynı stok). Bölüm başına 1 kez yenilenir.
-- **Satın alma = value**, **satma = value x 0,25**. (Ezberlenebilir oran; "çöp" item'ler altına dönüşür.)
+- **Satın alma = value**, **satma = value x 0,5** (Ömer 2026-10-09; `items.json > budget.sellRatio`, kod `sellValue`). (Ezberlenebilir oran; "çöp" item'ler altına dönüşür.)
 - **Altın kaynakları:** her zafer `goldPerBattle = 4 x ilvl` (elit x2, boss x4), korunan hazine sandığı `25 x ilvl`, satış. Mercenary Camp ("Battle · Gold") altın odaklı düğüm: x3 altın, item şansı düşük. Ölçek: bölüm 1 boyunca ~300-400 altın = 2-3 Uncommon/Rare, tüccar "tamamlayıcı" kalır, loot ana kaynak.
 - Altın kayıtta (`gold`), sefer başına; bölümden bölüme taşınır.
 
@@ -386,7 +388,7 @@ Görünür sayılar küçük kalır (ör. bölüm 3 sonu bir Warrior: +3 STR, +1
     { "id": "legendary", "name": "Legendary", "mult": 2.0, "affixes": 0, "color": "#d9741c" }
   ],
   "setColor": "#3f8f84",
-  "budget": { "base": 1, "perIlvl": 0.2, "endlessPerIlvl": 0.1, "tolerance": 0.1, "goldPerIP": 10, "sellRatio": 0.25 },
+  "budget": { "base": 1, "perIlvl": 0.2, "endlessPerIlvl": 0.1, "tolerance": 0.1, "goldPerIP": 10, "sellRatio": 0.5 },
   "statIP": { "attr": 5, "hp": 0.4, "armor": 0.8, "magicArmor": 0.5, "might": 0.5, "crit": 0.25, "critDmg": 0.05, "accuracy": 0.6, "evasion": 0.6, "spd": 5.5, "mp": 0.1, "mpRegen": 2, "hpRegen": 4 },
   "caps": { "crit": 15, "accuracy": 10, "evasion": 10, "spd": 1.5, "spdPerItem": 0.5 },
   "weaponFamilies": [

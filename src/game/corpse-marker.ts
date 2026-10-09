@@ -2,9 +2,9 @@ import Phaser from 'phaser';
 import { ensureIcon } from './icons';
 import type { Pt } from './shape-geometry';
 
-/** Ceset işaretinin renkleri: kemik beyazı kuru kafa, soluk altın ankh (parıltısız, sade). */
-const BONE = '#d9d0bb';
-const ANKH = '#c9a853';
+/** Ceset işaretinin renkleri (tasarım kiti): kemik beyazı kuru kafa, kit altını ankh; zeminde ince altın halka. */
+const BONE = '#e3d9c2';
+const ANKH = '#d9b26a';
 
 export interface CorpseMarker {
   readonly container: Phaser.GameObjects.Container;
@@ -29,12 +29,20 @@ export interface CorpseMarkerOptions {
  */
 export function createCorpseMarker(scene: Phaser.Scene, pos: Pt, opts: CorpseMarkerOptions): CorpseMarker {
   const shadow = scene.add.ellipse(0, -2, 72, 15, 0x000000, 0.4);
+  // Zeminde ince altın halka (kitin ince çizgisi); seçilince / ipucunda kor rengine döner ve parlar
+  const ring = scene.add.graphics();
+  const drawRing = (hot: boolean) => {
+    ring.clear();
+    if (hot) ring.lineStyle(7, 0xe0702a, 0.16).strokeEllipse(0, -2, 92, 22);
+    ring.lineStyle(hot ? 1.8 : 1, hot ? 0xffb35a : 0xd9b26a, hot ? 0.95 : 0.45).strokeEllipse(0, -2, 84, 19);
+  };
+  drawRing(false);
   const ankh = scene.add.image(18, -36, ensureIcon(scene, 'ankh', ANKH, false)).setDisplaySize(52, 52).setAlpha(0.92);
   const skull = scene.add.image(-9, -17, ensureIcon(scene, 'skull', BONE, false)).setDisplaySize(46, 40).setAngle(-9);
   const hit = scene.add.zone(0, -26, 84, 66).setInteractive();
   if (opts.onOver) hit.on('pointerover', opts.onOver);
   if (opts.onOut) hit.on('pointerout', opts.onOut);
-  const container = scene.add.container(pos.x, pos.y, [shadow, ankh, skull, hit]).setDepth(pos.y - 1); // birimin (aynı y) altında kalır
+  const container = scene.add.container(pos.x, pos.y, [shadow, ring, ankh, skull, hit]).setDepth(pos.y - 1); // birimin (aynı y) altında kalır
   let gone = false;
   if (opts.fadeIn) {
     container.setAlpha(0).setY(pos.y - 6);
@@ -60,6 +68,7 @@ export function createCorpseMarker(scene: Phaser.Scene, pos: Pt, opts: CorpseMar
       pulse = undefined;
       scene.tweens.killTweensOf(container);
       container.setAlpha(1).setScale(1);
+      drawRing(on);
       if (on) pulse = scene.tweens.add({ targets: container, alpha: 0.55, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     },
     setSelected: (on) => {
@@ -68,6 +77,7 @@ export function createCorpseMarker(scene: Phaser.Scene, pos: Pt, opts: CorpseMar
       pulse = undefined;
       scene.tweens.killTweensOf(container);
       container.setAlpha(1).setScale(1);
+      drawRing(on);
       if (on) {
         container.setScale(1.3);
         pulse = scene.tweens.add({ targets: container, scale: 1.45, duration: 480, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });

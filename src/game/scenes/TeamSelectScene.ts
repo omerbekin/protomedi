@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import layout from '../../../data/battle-layout.json';
+import { skillTags } from '../../ui/skill-tags';
 import { content, describePassive, describeSkill, describeStat, primaryBonusInfo } from '../../engine';
 import type { CombatantDef, Teams } from '../../engine';
 import { backgroundKey, hasBackground, preloadAssets } from '../assets';
@@ -1177,7 +1178,9 @@ export class TeamSelectScene extends Phaser.Scene {
     const lines: Array<[string, string?]> = info.lines.map((l, i) => [l, kc(info.kinds[i])]);
     if (info.initialCooldown) lines.push([info.initialCooldown, MUTED]);
     const shape = skillMiniGrid(skill, content.formulas.formation);
-    return { icon: ensureSkillIcon(this, skill), title: info.name, badge: info.targetBadge, meta: `Cost ${info.cost}   ·   Cooldown ${info.cooldown}`, shape, lines };
+    // Hedef türü · element · Melee / Ranged (ortak kaynak src/ui/skill-tags.ts; savaş HUD'ı ve Codex ile aynı)
+    const tags = skillTags(skill).map((g) => ({ text: g.text, ...(g.color ? { color: g.color } : {}), ...(g.icon ? { icon: ensureIcon(this, g.icon, g.color ?? '#e8e2d0', false) } : {}) }));
+    return { icon: ensureSkillIcon(this, skill), title: info.name, tags, meta: `Cost ${info.cost}   ·   Cooldown ${info.cooldown}`, shape, lines };
   }
 
   private classTip(def: CombatantDef): TipSpec {

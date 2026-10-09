@@ -1,17 +1,22 @@
 import Phaser from 'phaser';
 import layout from '../../../data/battle-layout.json';
-import { Battle, MatchLog, chooseAction, isRatioCost, skillCostAmount, skillCostLabel, content, explainChoice, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, previewSkill, armorReduction } from '../../engine';
+import { Battle, MatchLog, chooseAction, isRatioCost, skillCostAmount, skillCostLabel, content, explainChoice, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, primaryBonusInfo, previewSkill, armorReduction } from '../../engine';
 import type { AreaStage, BattleEvent, BattleMode, Combatant, SkillDef, StatKind, Teams, TargetPreview } from '../../engine';
 import { type DamageTags } from '../float-text';
-import { ATTACK_STATS, DEFENSE_STATS, MAIN_STATS, rowCenters, statBlockMetrics, statRowText } from '../stat-columns';
+import { ATTACK_STATS, DEFENSE_STATS, MAIN_STATS, statRowText } from '../stat-columns';
 import { PRIMARY_GOLD, RAGE_COLOR, RAGE_ICON, STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON } from '../../ui/stat-icons';
 import { avatarTexture, backgroundKey, characterTexture, hasBackground, preloadAssets } from '../assets';
 import { CombatantView, color, slow, textStyle } from '../combatant-view';
 import { ensureIcon, ensureSkillIcon } from '../icons';
 import { initialSeed, initialSizes, newSeed } from '../seed';
 import { clampSize } from '../team-select-model';
-import { EL, elDiamond, elPanel, elText, fadeLine, diamondPts } from '../elegant-ui';
-import { HUD_NUM_FONT, hudNum, kitBadge, kitBand, kitCellFill, kitCellFrame, kitDivider, kitPlate, kitTag, kitTextBand } from '../hud-kit';
+import { EL, elText } from '../elegant-ui';
+import { formatHit } from '../hit-format';
+import { kitTextBand } from '../hud-kit';
+import type { BattleEffect } from '../battle-effects';
+import { CombatLog } from '../combat-log';
+import { skillTags } from '../../ui/skill-tags';
+import { BattleHud, type HudActor, type HudGlobal, type HudModel, type HudQueueCell, type HudSkill, type HudStat, type TipContent, type UnitCard } from '../../ui/battle-hud';
 import { playSfx } from '../audio';
 import { BattleStats, showResultScreen } from '../result-screen';
 import type { ResultAction, ResultScreen } from '../result-screen';
@@ -28,7 +33,7 @@ import type { VfxCtx } from '../vfx';
 import { unitName, tierStyle } from '../unit-label';
 import { skillMiniGrid } from '../../ui/shape-diagram';
 import type { MiniShape } from '../../ui/shape-diagram';
-import { drawCellTiles, drawMiniShape, miniShapeSize } from '../shape-draw';
+import { drawCellTiles } from '../shape-draw';
 import type { CellTileSpec } from '../shape-draw';
 import { stageMap } from '../cell-style';
 import type { CellTone } from '../cell-style';
@@ -46,9 +51,8 @@ import { areaBoards, areaHoverSpecs, areaTone, blockedTargets } from '../target-
 import type { MpBattleHooks, MpResultInfo } from '../mp-hooks';
 import { isGameMenuOpen, toggleGameMenu } from '../../ui/game-menu';
 import { isSettingsOpen } from '../../ui/settings';
-import { stageView, worldXY } from '../stage';
+import { onStageResize, stageView, worldXY } from '../stage';
 import { backgroundOffsetY, battleBackground } from '../battle-background';
-import { FULL_W, FULL_X0 } from '../../ui/viewport';
 
 export interface BattleSceneData {
   seed: number;
@@ -82,10 +86,12 @@ export interface CampaignBattleHooks {
   prepareBattle?(battle: Battle): void;
   /** Menüdeki geri çekilme yazısı (yoksa 'Retreat to Map'); endless 'Retreat to Camp' verir (src/game/endless-session.ts). */
   retreatLabel?: string;
+  /** Koşu boyu etkiler (HUD > Battle info > Effects): Endless kalıntıları, sefer zorluk / bölüm ölçeği; ileride başka sistemler (src/game/battle-effects.ts). */
+  battleEffects?(): BattleEffect[];
 }
 
-/** Üç küçük global eylem düğmesinin (Rest / Skip Turn / Move) sütunu: 4 skill düğmesinin hemen sağında, tooltip plaketinin solunda. */
-const GLOBAL_BTN = { w: 64, h: 44, gap: 2 };
+/** Sonuç ekranında söndürülen savaş arayüzü öğesi (container, graphics, text...). */
+type HudFadeable = Phaser.GameObjects.GameObject & { visible: boolean; alpha: number; setVisible(v: boolean): unknown; setAlpha(a: number): unknown };
 /** Kalkan kancası tetiklenince çalan kilit sesi (yalnızca sahibinin v2 ses dosyasında tanımlıysa çalar: Anti-Mage / Mage v2). */
 const SHIELD_LOCK_SFX: Record<string, string> = { spell_ward: 'wardLock', mana_barrier: 'domeLock' };
 /** Global eylem düğmelerinin ikon rengi. */
@@ -100,11 +106,8 @@ interface InfoMeta {
   hex: string;
 }
 
-interface Tip {
-  container: Phaser.GameObjects.Container;
-  width: number;
-  height: number;
-}
+/** Bilgi kutusu içeriği: DOM HUD'ın bağlam ipucu (src/ui/battle-hud.ts > showContextTip). */
+type Tip = TipContent;
 
 /**
  * Battle screen. It knows no rules: it sends actions to the engine and plays back the engine's events.
@@ -146,14 +149,21 @@ export class BattleScene extends Phaser.Scene {
 
   private views = new Map<string, CombatantView>();
   private slotLayer?: Phaser.GameObjects.Container;
-  private turnBarLayer?: Phaser.GameObjects.Container;
   /** Units that already played (oldest first), shown faded on the left of the turn bar. UI-side list built from turnStart events. */
   private playedUids: string[] = [];
-  private commandLayer?: Phaser.GameObjects.Container;
+  /** DOM savaş HUD'ı (src/ui/battle-hud.ts): alt çubuk, karakter sayfası, sıra çubuğu, birim kartları, ipuçları. */
+  private hud?: BattleHud;
+  /** Phaser dokusu -> DOM resim adresi önbelleği (sürüm değişince temizlenir). */
+  private texUrlCache = new Map<string, string>();
+  /** Fareyle üstüne gelinen birimin tarafı (kart önizlemesini kapatmak için). */
+  private hudHoverSide?: 'party' | 'enemy';
+  /** Açık kartları birkaç karede bir yenilemek için sayaç. */
+  private cardTick = 0;
+  /** Savaş günlüğü + tur sayacı (HUD > Battle info; src/game/combat-log.ts): olaylar ekranda oynatıldıkça beslenir. */
+  private combatLog?: CombatLog;
+  /** Sonuç ekranı açıkken gizlenen savaş arayüzü öğeleri ve önceki görünürlükleri. */
+  private hudHidden: Array<{ o: HudFadeable; visible: boolean; alpha: number; named?: boolean }> | null = null;
   private announceLayer?: Phaser.GameObjects.Container;
-  /** Skill ve stat tooltip'leri: alt barın sağındaki boşlukta. */
-  private infoTip?: Tip;
-  private statHitsOn = true;
   private areaMarker?: Phaser.GameObjects.Container;
   /** Hover plate parts that must sit above the units (the reason plaque of an invalid cell). */
   private areaTop?: Phaser.GameObjects.Container;
@@ -195,11 +205,8 @@ export class BattleScene extends Phaser.Scene {
   private resultScreen?: ResultScreen;
   /** Move Tile seçimi açık mı (altın hücre vurguları gösteriliyor)? */
   private moveMode: { actor: string } | null = null;
-  /** Global düğmelerin nesneleri (birim tooltip'i açıkken gizlenir). */
-  private globalItems: Phaser.GameObjects.GameObject[] = [];
   /** Rage barının ekranda gösterilen değeri (olaylar oynatıldıkça animasyonla güncellenir; motor değerinin gerisinde kalabilir). */
   private rageShown = new Map<string, number>();
-  private rageBar?: { uid: string; redraw: () => void };
   /** Ceset işaretleri (madde 222): ekrandaki ankh + kuru kafa işaretleri (uid -> işaret). */
   private corpseMarkers = new Map<string, CorpseMarker>();
   /** Ekranın bildiği ceset durumları (olaylar oynatıldıkça güncellenir; motor durumunun gerisinde kalabilir): uid -> revivable | consumed. */
@@ -228,9 +235,9 @@ export class BattleScene extends Phaser.Scene {
     if (data.partySize !== undefined) this.partySize = clampSize(data.partySize);
     if (data.enemySize !== undefined) this.enemySize = clampSize(data.enemySize);
     this.moveMode = null;
-    this.globalItems = [];
     this.rageShown = new Map();
-    this.rageBar = undefined;
+    this.texUrlCache = new Map();
+    this.cardTick = 0;
     this.corpseMarkers = new Map();
     this.uiCorpses = new Map();
     this.uiOccupied = new Set();
@@ -245,7 +252,6 @@ export class BattleScene extends Phaser.Scene {
     this.unitSel = new UnitSelection();
     this.pressTimer = undefined;
     this.longPressFired = false;
-    this.infoTip = undefined;
     this.slotMarkers = undefined;
     this.areaMarker = undefined;
     this.areaTop = undefined;
@@ -305,6 +311,7 @@ export class BattleScene extends Phaser.Scene {
     this.syncCorpsesNow();
     this.syncLoadedEffects();
     this.uiActor = this.battle.currentUid;
+    this.mountHud();
     this.renderTurnBar(this.battle.turnQueue());
     this.stats = new BattleStats(this.battle);
     this.matchLog?.stop();
@@ -320,12 +327,14 @@ export class BattleScene extends Phaser.Scene {
         })
       : undefined;
     this.resultScreen = undefined;
+    this.hudHidden = null;
     this.battle.on((e) => {
       this.stats.record(e);
       this.enqueue(e);
     });
 
-    this.hint = this.add.text(W / 2, layout.commandPanel.y - 60, '', textStyle(38, colors.selected)).setOrigin(0.5).setDepth(4400).setVisible(false);
+    this.hint = elText(this, W / 2, layout.commandPanel.y - 60, '', 30, EL.ON, { em: 0.04, upper: false }).setOrigin(0.5).setDepth(4400).setVisible(false);
+    this.hint.setStroke('#120a05', 4);
 
     this.drawCommandPanel();
     if (this.mp) this.bindMultiplayer(this.mp);
@@ -411,6 +420,7 @@ export class BattleScene extends Phaser.Scene {
   private onVersionsChanged(): void {
     if (!this.battle || !this.scene.isActive()) return;
     this.badgeKeys.clear();
+    this.texUrlCache.clear();
     if (this.lastQueue.length || this.battle.mode === 'test') this.renderTurnBar(this.lastQueue);
     this.refreshCommands();
   }
@@ -469,8 +479,8 @@ export class BattleScene extends Phaser.Scene {
   update(): void {
     this.refreshBadges();
     this.refreshSpeedBars();
-    // The unit tooltip shows live values: re-render it when what it shows changes (damage, regen, ...)
-    if (this.hoverView && this.unitTipKey !== this.unitTipLines(this.hoverView.combatant).join('|')) this.showUnitTip(this.hoverView);
+    // Açık birim kartları canlı değer gösterir (hasar, yenilenme, durumlar, seçili skill önizlemesi): birkaç karede bir yenilenir
+    if (this.hud && ++this.cardTick % 12 === 0) this.hud.refreshCards((uid) => this.buildCard(uid));
   }
 
   /** Keys 1-4 pick the acting unit's skills (the same as clicking the button; pressing it again confirms a no-target skill). */
@@ -486,6 +496,12 @@ export class BattleScene extends Phaser.Scene {
         this.raiseBack();
         return;
       }
+      if (e.key === 'Escape' && this.hud?.closePanels()) return;
+      if (e.key === 'Escape' && this.hud?.isSheetOpen()) {
+        this.hud.setOpen(false);
+        return;
+      }
+      if (e.key === 'Escape' && this.hud?.unpinAll()) return;
       if (e.key === 'Escape' && this.clearUnitSelection()) return;
       if (e.key === 'Escape') {
         // Esc'in savaşta başka işi yoksa sağ üstteki Menu açılır (Resume / Settings / ... ; src/ui/game-menu.ts)
@@ -724,7 +740,25 @@ export class BattleScene extends Phaser.Scene {
     if (this.galleryCell !== null && (b.isAreaSkill(skillId) || b.needsSlotChoice(skillId))) slot = this.galleryCell;
     if (b.needsSlotChoice(skillId) && slot !== undefined && !b.freeSlots(b.summonBoard(caster.uid, skillId)).includes(slot)) slot = undefined;
     const aimUid = b.isAreaSkill(skillId) && !at && slot !== undefined ? undefined : target?.uid; // empty chosen cell: aim at the cell itself
-    const result = b.debugCast(caster.uid, skillId, aimUid, slot);
+    // Çağrı skill'i (galeri önizlemesi; tahtada tüm class'lar olduğundan hücre kalmıyor): yer yoksa çağıranın en öndeki dostu düşer (ceset
+    // hücresine çağrı gelebilir, madde 257); ceset tüketen çağrıda (Raise Dead) ceset yoksa en arkadaki düşman düşer ve TAM (beslenmiş) hâl oynar.
+    let corpseUid: string | undefined;
+    if (b.needsSlotChoice(skillId)) {
+      const board = b.summonBoard(caster.uid, skillId);
+      if (b.freeSlots(board).length === 0) {
+        const ally = b.living(board).filter((c) => c.uid !== caster.uid && !c.summoned).sort((x, y) => x.slot - y.slot)[0];
+        if (ally) b.debugKill(ally.uid, false);
+      }
+      if (b.consumesCorpse(skillId)) {
+        const foeSide = caster.side === 'party' ? 'enemy' : 'party';
+        if (b.corpseChoices(caster.uid, skillId).length === 0) {
+          const foes = b.livingByDepth(foeSide).filter((c) => !c.summoned);
+          if (foes.length > 1) b.debugKill(foes[foes.length - 1]!.uid, false);
+        }
+        corpseUid = b.corpseChoices(caster.uid, skillId)[0]?.uid;
+      }
+    }
+    const result = b.debugCast(caster.uid, skillId, aimUid, slot, corpseUid);
     if (!result.ok) return result.reason;
     if (debugState.galleryReset) {
       this.eventQueue = this.eventQueue.then(() => this.wait(700)).then(() => {
@@ -935,7 +969,13 @@ export class BattleScene extends Phaser.Scene {
         const cell = at(p);
         if (cell === null) return;
         if (p.wasTouch && h.twoTap && !downWasHover) return; // touch: the first tap only previews
-        if (!h.canPick(board, cell)) return;
+        if (!h.canPick(board, cell)) {
+          // Hedef olmayan birime tıklamak: kartı kendi tarafında sabitlenir / kaldırılır (hedefleme sürerken de)
+          const unit = [...this.battle.living('party'), ...this.battle.living('enemy')].find((c) => c.board === board && c.slot === cell);
+          const card = unit ? this.buildCard(unit.uid) : null;
+          if (card) this.hud?.togglePin(card);
+          return;
+        }
         h.onPick(board, cell);
       });
       zone.on('pointerout', (p: Phaser.Input.Pointer) => {
@@ -1505,12 +1545,13 @@ export class BattleScene extends Phaser.Scene {
 
   /** A small dark plaque with a line of text (reason / hint) above the board. */
   private shapeLabel(x: number, y: number, text: string, hex: number): Phaser.GameObjects.Container {
-    const t = this.add.text(0, 0, text, { fontFamily: layout.fontFamily, fontSize: '22px', fontStyle: 'bold', color: `#${hex.toString(16).padStart(6, '0')}`, stroke: '#0c0805', strokeThickness: 3 }).setOrigin(0.5);
-    const w = t.width + 24;
-    const h = t.height + 10;
+    // Tasarım kiti etiketi: koyu zemin, ince renkli çerçeve, Cinzel yazı (köşesiz)
+    const t = elText(this, 0, 0, text, 19, `#${hex.toString(16).padStart(6, '0')}`, { em: 0.04, upper: false }).setOrigin(0.5);
+    const w = t.width + 28;
+    const h = t.height + 12;
     const bg = this.add.graphics();
-    bg.fillStyle(0x0c0805, 0.9).fillRoundedRect(-w / 2, -h / 2, w, h, 8);
-    bg.lineStyle(2, hex, 0.9).strokeRoundedRect(-w / 2, -h / 2, w, h, 8);
+    bg.fillStyle(0x0c0806, 0.92).fillRect(-w / 2, -h / 2, w, h);
+    bg.lineStyle(1, hex, 0.85).strokeRect(-w / 2 + 0.5, -h / 2 + 0.5, w - 1, h - 1);
     const px = Math.max(w / 2 + 8, Math.min(W - w / 2 - 8, x));
     return this.add.container(px, y, [bg, t]);
   }
@@ -1694,10 +1735,9 @@ export class BattleScene extends Phaser.Scene {
     this.placeInfoTip(this.makeInfo(warn ? 'Reserved cell' : 'Move here', warn ? colors.lethal : colors.selected, ensureIcon(this, warn ? 'skull' : 'boot', warn ? colors.lethal : colors.selected, true), rows, warn ? 'Reserved' : 'Empty cell'));
   }
 
-  private showGlobalTip(actor: Combatant, id: string): void {
-    const def = this.battle.globalDef(id);
-    if (!def) return;
-    this.hideInfoTip();
+  /** Global eylem (Rest / Skip / Move) açıklaması: sütundaki öğenin hemen üstünde açılır. */
+  private globalTip(actor: Combatant, id: string): TipContent {
+    const def = this.battle.globalDef(id)!;
     const info = describeGlobalSkill(def, content.formulas);
     const detail = info.lines.filter((l) => !(def.kind === 'skip' && l.includes('speed meter')) && !(def.kind === 'move' && l.startsWith('Move to an empty')));
     const rows: Array<[string, string?]> = [[info.summary, colors.text], ...(def.kind === 'skip' ? [['Next turn arrives in half the time', colors.heal] as [string, string]] : []), ...detail.map((l): [string, string?] => [l, colors.muted])];
@@ -1705,50 +1745,7 @@ export class BattleScene extends Phaser.Scene {
     const reason = !can.ok ? can.reason : !this.playerCanAct ? 'Not your turn' : '';
     if (reason) rows.push([reason, colors.lethal]);
     else if (def.kind === 'move') rows.push(['Click, then pick an empty cell (Esc cancels)', colors.targetHighlight]);
-    this.placeInfoTip(this.makeInfo(info.name, colors.text, ensureIcon(this, def.icon, GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e', true, SHARED_KEY), rows, info.targetBadge, [{ text: info.cost, hex: colors.muted }]));
-  }
-
-  /** The three small global buttons: a column at the right end of the command panel (they never touch the 4 skill buttons). */
-  private globalButtons(actor: Combatant): Phaser.GameObjects.GameObject[] {
-    const p = layout.commandPanel;
-    const { w, h, gap } = GLOBAL_BTN;
-    const x = this.globalX();
-    const out: Phaser.GameObjects.GameObject[] = [];
-    this.battle.globalSkillIds().forEach((id, i) => {
-      const def = this.battle.globalDef(id)!;
-      const can = this.battle.canUseGlobal(actor.uid, id);
-      const enabled = this.playerCanAct && can.ok;
-      const active = def.kind === 'move' && this.moveMode?.actor === actor.uid;
-      const y = p.y + 12 + i * (h + gap);
-      const frame = this.add.graphics();
-      const paint = (pressed: boolean): void => {
-        frame.clear();
-        kitPlate(frame, x, y, w, h, { state: active ? 'chosen' : pressed ? 'hot' : 'idle', alpha: enabled ? 1 : 0.5 });
-      };
-      paint(false);
-      const accent = GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e';
-      const icon = this.add.image(x + w / 2, y + h / 2, ensureIcon(this, def.icon, accent, false, SHARED_KEY)).setDisplaySize(34, 34).setAlpha(enabled ? 1 : 0.35);
-      const bg = this.add.rectangle(x, y, w, h, 0x000000, 0.001).setOrigin(0, 0).setInteractive({ useHandCursor: enabled });
-      bg.on('pointerover', () => this.showGlobalTip(actor, id));
-      bg.on('pointerout', () => {
-        this.hideInfoTip();
-        paint(false);
-      });
-      if (enabled) {
-        bg.on('pointerdown', () => paint(true));
-        bg.on('pointerup', () => {
-          paint(false);
-          this.onGlobalClick(id);
-        });
-      }
-      out.push(frame, icon, bg);
-    });
-    this.globalItems = out;
-    return out;
-  }
-
-  private setGlobalVisible(on: boolean): void {
-    for (const o of this.globalItems) if (o.active) (o as Phaser.GameObjects.GameObject & { setVisible(v: boolean): unknown }).setVisible(on);
+    return this.makeInfo(info.name, colors.text, ensureIcon(this, def.icon, GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e', true, SHARED_KEY), rows, info.targetBadge, [{ text: info.cost, hex: colors.muted }]);
   }
 
   /** Çok vuruşlu skill'in sıradaki vuruş animasyonu (VfxCtx.gate): ilgili hasar olayından hemen önce oynar. */
@@ -1831,7 +1828,13 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
     }
-    if (this.battle.mode === 'test' && view.combatant.side === 'party') this.selectActor(view.combatant.uid);
+    if (this.battle.mode === 'test' && view.combatant.side === 'party') {
+      this.selectActor(view.combatant.uid);
+      return;
+    }
+    // Hedef değilse: birimin kartı kendi tarafında sabitlenir (aynı birime yeniden dokunmak ya da Esc kaldırır; her tarafta bir kart)
+    const card = this.buildCard(view.combatant.uid);
+    if (card) this.hud?.togglePin(card);
   }
 
   // --- Hover: unit info, skill/stat info and effect previews ---
@@ -1857,123 +1860,26 @@ export class BattleScene extends Phaser.Scene {
     for (const v of this.views.values()) v.clearPreview();
   }
 
-  /**
-   * Hover info: it fills the free space at the right end of the bottom bar (always the same place, never next
-   * to the mouse). First row: icon + title (+ cost / cooldown chips), the badge sits at the top right. Below it the
-   * description rows: the font shrinks (and long content flows into a second column) until everything fits.
-   */
+  /** Bilgi kutusu içeriği (kit tooltip'i): başlık + ikon + rozet + bedel / cooldown çipleri + satırlar (+ AOE şeması). */
   private makeInfo(title: string, titleColor: string, iconKey: string | undefined, rows: Array<[string, string?]>, badge?: string, meta: InfoMeta[] = [], shape?: MiniShape | null): Tip {
-    const p = layout.commandPanel;
-    const x = this.infoTipX();
-    const width = W - 24 - x;
-    const top = p.y + 12;
-    const maxY = H - 12;
-    const iconSize = 44;
-    const items: Phaser.GameObjects.GameObject[] = [];
-    // Recessed plaque behind the whole info area
-    items.push(elPanel(this, -12, -8, width + 24, maxY - top + 16, { alpha: 0.95 })); // tasarım kiti paneli
-
-    // --- First row ---
-    let left = 0;
-    if (iconKey) {
-      const g = this.add.graphics();
-      kitCellFill(g, 0, 0, iconSize, iconSize);
-      kitCellFrame(g, 0, 0, iconSize);
-      items.push(g, this.add.image(iconSize / 2, iconSize / 2, iconKey).setDisplaySize(iconSize - 8, iconSize - 8));
-      left = iconSize + 12;
-    }
-    const badgeObjs = badge ? kitBadge(this, width, 0, badge) : [];
-    const badgeW = badgeObjs.length ? (badgeObjs[1] as Phaser.GameObjects.Text).width + 24 : 0;
-    // AOE shape diagram (mini grid: covered cells painted, anchor marked) left of the badge
-    const shapeSize = shape ? miniShapeSize(shape) : { w: 0, h: 0 };
-    const shapeW = shape ? shapeSize.w + 10 : 0;
-    if (shape) items.push(drawMiniShape(this, width - badgeW - shapeW, 0, shape));
-    // meta chips (cost, cooldown) right after the title
-    const isz = 18;
-    const metaTexts = meta.map((m) => hudNum(this, 0, 0, m.text, 17, m.hex).setOrigin(0, 0.5));
-    const metaW = meta.reduce((w, m, i) => w + (m.icon ? isz + 4 : 0) + metaTexts[i]!.width + 18, 0);
-    const titleText = elText(this, left, iconSize / 2, title, 23, titleColor, { em: 0.03, upper: false }).setOrigin(0, 0.5);
-    const room = width - left - badgeW - shapeW - metaW - 20;
-    if (titleText.width > room) titleText.setScale(Math.max(0.6, room / titleText.width));
-    items.push(titleText);
-    let mx = left + titleText.displayWidth + 18;
-    meta.forEach((m, i) => {
-      if (m.icon) {
-        items.push(this.add.image(mx + isz / 2, iconSize / 2, m.icon).setDisplaySize(isz, isz));
-        mx += isz + 4;
-      }
-      metaTexts[i]!.setPosition(mx, iconSize / 2);
-      items.push(metaTexts[i]!);
-      mx += metaTexts[i]!.width + 18;
-    });
-    items.push(...badgeObjs);
-    // Fine gold rule under the first row
-    const rule = this.add.graphics();
-    fadeLine(rule, 0, width, iconSize + 5, EL.GOLD, EL.LINE.a3, 'both');
-    rule.fillStyle(0x140e09, 1).fillPoints(diamondPts(width / 2, iconSize + 5, 4), true);
-    rule.lineStyle(1, EL.GOLD, 0.8).strokePoints(diamondPts(width / 2, iconSize + 5, 4), true);
-    items.push(rule);
-
-    // --- Description rows: shrink the font until it fits ---
-    const startY = iconSize + 12;
-    const avail = maxY - top - startY;
-    const build = (size: number, cols: number): { objs: Phaser.GameObjects.Text[]; fits: boolean } => {
-      const objs: Phaser.GameObjects.Text[] = [];
-      const colW = cols === 1 ? width : (width - 28) / 2;
-      let col = 0;
-      let y = 0;
-      let fits = true;
-      for (const [text, hex] of rows) {
-        const row = this.add.text(0, 0, text, { fontFamily: HUD_NUM_FONT, fontSize: `${size}px`, color: hex ?? colors.text, wordWrap: { width: colW }, lineSpacing: 1 }).setOrigin(0, 0).setResolution(2).setShadow(0, 1, EL.SH_DARK, 2, true, true);
-        if (y + row.height > avail && col === 0 && cols === 2) {
-          col = 1;
-          y = 0;
-        }
-        row.setPosition(col * (colW + 28), startY + y);
-        if (y + row.height > avail) fits = false;
-        objs.push(row);
-        y += row.height + 2;
-      }
-      return { objs, fits };
+    return {
+      title,
+      titleColor,
+      ...(iconKey ? { iconUrl: this.texUrl(iconKey) } : {}),
+      ...(badge ? { badge } : {}),
+      meta: meta.map((m) => ({ ...(m.icon ? { iconUrl: this.texUrl(m.icon) } : {}), text: m.text, color: m.hex })),
+      rows: rows.map(([text, color]) => ({ text, ...(color ? { color } : {}) })),
+      ...(shape ? { shape } : {}),
     };
-    let chosen: Phaser.GameObjects.Text[] = [];
-    outer: for (let size = 16; size >= 12; size--) {
-      for (const cols of [1, 2]) {
-        const r = build(size, cols);
-        if (r.fits || (size === 12 && cols === 2)) {
-          chosen = r.objs;
-          break outer;
-        }
-        for (const o of r.objs) o.destroy();
-      }
-    }
-    items.push(...chosen);
-    const container = this.add.container(x, top, items).setDepth(4700);
-    return { container, width, height: maxY - top };
   }
 
+  /** Bağlam ipucu (hücre, ceset, yürüme, diriltme adımları): alt çubuğun hemen üstünde, ortada. */
   private placeInfoTip(tip: Tip): void {
-    this.infoTip = tip;
+    this.hud?.showContextTip(tip);
   }
 
-  /** The 4 skill buttons are centered horizontally on the screen. */
-  private skillsLeft(): number {
-    const p = layout.commandPanel;
-    return (W - (4 * p.buttonWidth + 3 * p.gap)) / 2;
-  }
-
-  private infoTipX(): number {
-    return this.globalX() + GLOBAL_BTN.w + 14; // right after the global action column
-  }
-
-  /** Left edge of the small global action column (right after the 4 skills). */
-  private globalX(): number {
-    const p = layout.commandPanel;
-    return this.skillsLeft() + 4 * (p.buttonWidth + p.gap) + 10;
-  }
-
-  private showSkillTip(actor: Combatant, skill: SkillDef): void {
-    this.hideInfoTip();
+  /** Skill açıklaması (yalnızca skill düğmesinin üstünde gösterilir). */
+  private skillTip(actor: Combatant, skill: SkillDef): TipContent {
     const info = describeSkill(skill, actor.stats, content.formulas, content.summons, { statuses: content.statuses, grounds: content.grounds });
     const kindColor = (k: (typeof info.kinds)[number]): string | undefined =>
       k === 'shield' ? colors.shield : k === 'magicShield' ? colors.magicShield : k ? colors.element[k] : undefined;
@@ -2001,12 +1907,14 @@ export class BattleScene extends Phaser.Scene {
     const summonLine = summonPreviewLine(sp, sp.corpse ? (this.battle.get(sp.corpse.uid)?.name ?? null) : null);
     if (this.battle.needsCorpseChoice(actor.uid, skill.id) && sp.unit) rows.push([`You choose the corpse to consume: empowered ${sp.unit.name} (HP ${sp.unit.stats.hp})`, '#c58bff'], ['Step 1: pick a corpse, step 2: pick the cell (Esc goes back)', colors.muted]);
     else if (summonLine) rows.push([summonLine.text, summonLine.tone === 'empowered' ? '#c58bff' : colors.muted]);
-    this.placeInfoTip(this.makeInfo(info.name, colors.text, ensureSkillIcon(this, skill), rows, info.targetBadge, meta, skillMiniGrid(skill, content.formulas.formation)));
+    const tip = this.makeInfo(info.name, colors.text, ensureSkillIcon(this, skill), rows, undefined, meta, skillMiniGrid(skill, content.formulas.formation));
+    // Hedef türü · element · Melee / Ranged (ortak kaynak: src/ui/skill-tags.ts; Codex ve takım seçimiyle aynı)
+    tip.tags = skillTags(skill).map((g) => ({ text: g.text, ...(g.color ? { color: g.color } : {}), ...(g.icon ? { iconUrl: this.texUrl(ensureIcon(this, g.icon, g.color ?? '#e8e2d0', false)) } : {}) }));
+    return tip;
   }
 
-  private showStatTip(kind: StatKind, actor: Combatant): void {
-    this.hideInfoTip();
-    // Accuracy / evasion show the CURRENT value (Blinded, Shrouded...) and say where the change comes from
+  /** Stat açıklaması (formulas.json / stat-info.ts anlamları); ACC / EVA o anki değer ve kaynağı. */
+  private statTip(kind: StatKind, actor: Combatant): TipContent {
     const stats = isDeltaStat(kind) ? this.battle.effectiveStats(actor) : actor.stats;
     const info = describeStat(kind, stats, content.formulas);
     const rows = info.lines.map((l): [string, string?] => [l]);
@@ -2017,96 +1925,131 @@ export class BattleScene extends Phaser.Scene {
         rows.splice(sources.length, 0, [`Base ${Math.round(actor.stats[kind] * 100)}%`, colors.muted]);
       }
     }
-    this.placeInfoTip(this.makeInfo(info.bonus ? `${info.title} — ${info.bonus.name}` : info.title, info.primary ? PRIMARY_GOLD : STAT_COLOR[kind], ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false), rows));
+    const tip = this.makeInfo(info.bonus ? `${info.title} · ${info.bonus.name}` : info.title, info.primary ? PRIMARY_GOLD : EL.ON, ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false), rows);
+    tip.value = this.statValue(kind, stats);
+    if (info.primary) tip.valueColor = '#ffd76a';
+    return tip;
+  }
+
+  /** Stat değeri (etiketsiz): "8", "11%", "x1.5", "2/t". */
+  private statValue(kind: StatKind, s: Combatant['stats']): string {
+    const text = statRowText(kind, s, STAT_LABEL);
+    const label = STAT_LABEL[kind];
+    return (text.startsWith(label) ? text.slice(label.length) : text.replace(/^[A-Z.]+\+?/, '')).trim();
+  }
+
+  private hudStat(kind: StatKind, actor: Combatant, withTip = true): HudStat {
+    const s = this.battle.effectiveStats(actor);
+    const dir = isDeltaStat(kind) ? statDir(actor.stats[kind], s[kind]) : null;
+    const info = describeStat(kind, actor.stats, content.formulas);
+    const tip = withTip ? this.statTip(kind, actor) : { title: info.title, rows: [] };
+    return {
+      kind,
+      label: STAT_LABEL[kind],
+      name: info.title,
+      value: this.statValue(kind, s),
+      iconUrl: this.texUrl(ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false)),
+      primary: s.primary === kind,
+      ...(dir === 'down' ? { color: '#ff9a8a' } : dir === 'up' ? { color: '#9ee6a8' } : {}),
+      tip,
+    };
   }
 
   private hideInfoTip(): void {
-    this.infoTip?.container.destroy();
-    this.infoTip = undefined;
-    this.setGlobalVisible(true);
+    this.hud?.hideContextTip();
   }
 
-  private unitTipLines(c: Combatant): string[] {
-    const f = content.formulas;
-    const pct = (a: number) => `${Math.round(armorReduction(a, f) * 100)}%`;
-    const lines = [`HP ${c.hp} / ${c.maxHp}`];
-    if (c.maxMp > 0) lines.push(`MP ${c.mp} / ${c.maxMp}`);
-    if (c.maxRage !== undefined) lines.push(`Rage ${c.rage ?? 0} / ${c.maxRage}`);
-    if (c.shield > 0) lines.push(`Shield ${c.shield}`);
-    if (c.magicShield > 0) lines.push(`Magic shield ${c.magicShield}`);
-    if (c.statuses.length > 0) lines.push(`Status: ${c.statuses.map((s) => `${s.kind} ${s.turns}`).join(', ')}`);
-    lines.push(`STR ${c.stats.str}   DEX ${c.stats.dex}   INT ${c.stats.int}   LCK ${c.stats.luck}`);
-    if (c.stats.primary) lines.push(`Primary: ${c.stats.primary.toUpperCase()}${c.stats.primaryActive ? '' : ' (inactive)'}`);
-    const eff = this.battle.effectiveStats(c);
-    lines.push(`SPD ${c.stats.spd}   ACC ${Math.round(eff.accuracy * 100)}%   EVA ${Math.round(eff.evasion * 100)}%`);
-    lines.push(`Regen: +${Math.round(c.stats.hpRegen)} HP${c.stats.mpRegen > 0 ? `, +${c.stats.mpRegen} MP` : ''} per turn`);
-    lines.push(`Armor ${c.stats.armor} (${pct(c.stats.armor)})${c.stats.magicArmor > 0 ? `   Magic armor ${c.stats.magicArmor} (${pct(c.stats.magicArmor)})` : ''}`);
-    if (c.summoned && c.lifespan !== undefined) lines.push(`Leaves after ${c.lifespan} more turn${c.lifespan === 1 ? '' : 's'}`);
-    const cds = Object.entries(c.cooldowns).filter(([, n]) => n > 0);
-    if (this.battle.mode === 'turns' && cds.length > 0) lines.push(`Cooldown: ${cds.map(([id, n]) => `${content.skills[id]?.name ?? id} ${n}`).join(', ')}`);
-    return lines;
-  }
-
+  /** Fareyle üstüne gelinen birim: kendi tarafının kartı (düşman sağda, dost solda); diğer tarafın sabit kartı kapanmaz. */
   private showUnitTip(view: CombatantView): void {
-    this.hideUnitTip();
     const c = view.combatant;
-    const lines = this.unitTipLines(c);
-    this.unitTipKey = lines.join('|');
-    this.hideInfoTip();
-    this.placeInfoTip(this.makeUnitInfo(c));
-    this.setGlobalVisible(false); // the unit info is wider than the plaque: the global buttons step aside while it shows
-  }
-
-  /**
-   * Hover info for any unit: the same layout as the acting unit's block in the bottom bar (class logo, name, HP/MP,
-   * attributes, secondary stats), plus its skills and what is on it (shields, statuses, cooldowns), in the right-hand area.
-   */
-  private makeUnitInfo(c: Combatant): Tip {
-    const p = layout.commandPanel;
-    const x0 = this.globalX() - 12; // the unit info is wide: it covers the global column (the buttons hide while it shows)
-    this.statHitsOn = false;
-    const items = this.drawStatsBlock(c, x0);
-    this.statHitsOn = true;
-
-    // Skills (2 x 2 icons) next to the block
-    const sx = statBlockMetrics(x0).right + 8;
-    c.skills.slice(0, 4).forEach((id, i) => {
-      const skill = content.skills[id];
-      if (!skill) return;
-      const cd = this.battle.mode === 'turns' ? (c.cooldowns[id] ?? 0) : 0;
-      const ix = sx + (i % 2) * 40;
-      const iy = p.y + 10 + Math.floor(i / 2) * 40;
-      items.push(this.add.image(ix + 18, iy + 18, ensureSkillIcon(this, skill)).setDisplaySize(36, 36).setAlpha(cd > 0 ? 0.4 : 1));
-      if (cd > 0) items.push(this.add.text(ix + 18, iy + 18, String(cd), textStyle(22, colors.targetHighlight)).setOrigin(0.5));
-    });
-
-    // The passive next to the skills
-    if (c.passive) {
-      const px = sx + 84;
-      items.push(
-        this.add.circle(px + 20, p.y + 30, 20, color(colors.button)).setStrokeStyle(3, color(colors.tooltipBorder)),
-        this.add.image(px + 20, p.y + 30, ensureIcon(this, c.passive.icon, c.color, false, ownerOfUnit(c.defId))).setDisplaySize(26, 26),
-        this.add.text(px + 20, p.y + 54, c.passive.name, { ...textStyle(13, colors.muted), strokeThickness: 3, wordWrap: { width: 64 }, align: 'center' }).setOrigin(0.5, 0),
-      );
-    }
-
-    // What is on the unit
-    const extra: Array<[string, string]> = [];
-    if (c.shield > 0) extra.push([`Shield ${c.shield}`, colors.shield]);
-    if (c.magicShield > 0) extra.push([`M.Shield ${c.magicShield}`, colors.magicShield]);
-    const fed = empoweredLine(c.empowered); // Raise Dead's Skeleton: fed on a corpse or not
-    if (fed) extra.push([fed.text, fed.tone === 'empowered' ? '#c58bff' : colors.muted]);
-    for (const st of c.statuses) extra.push([`${content.statuses[st.kind]?.name ?? st.kind[0]!.toUpperCase() + st.kind.slice(1)} ${st.turns}`, content.statuses[st.kind]?.color ?? colors.targetHighlight]);
-    for (const tag of c.tags) for (const [el, m] of Object.entries(content.formulas.weaknesses[tag] ?? {})) extra.push([`Weak to ${el} +${Math.round((m - 1) * 100)}%`, colors.element[el as keyof typeof colors.element] ?? colors.muted]);
-    if (c.summoned && c.lifespan !== undefined) extra.push([`Leaves in ${c.lifespan}`, colors.muted]);
-    extra.slice(0, 3).forEach(([text, hex], i) => items.push(this.add.text(sx, p.y + 100 + i * 18, text, textStyle(15, hex)).setOrigin(0, 0)));
-
-    return { container: this.add.container(0, 0, items).setDepth(4700), width: W - x0, height: H - p.y };
+    if (this.unitTipKey.startsWith('corpse:')) this.hideInfoTip();
+    this.unitTipKey = `unit:${c.uid}`;
+    this.hudHoverSide = c.side;
+    const card = this.buildCard(c.uid);
+    if (card) this.hud?.hoverCard(card);
   }
 
   private hideUnitTip(): void {
-    if (this.unitTipKey) this.hideInfoTip();
+    if (this.unitTipKey.startsWith('corpse:')) this.hideInfoTip();
+    if (this.unitTipKey.startsWith('unit:')) this.hud?.hoverCard(null, this.hudHoverSide);
     this.unitTipKey = '';
+  }
+
+  /** Birim kartı verisi (kit kartı: ad, HP/MP/Rage, ana statlar, savunma/saldırı ızgarası, durumlar, pasif, seçili skill'in önizlemesi). */
+  private buildCard(uid: string): UnitCard | null {
+    const c = this.battle.get(uid);
+    if (!c || c.hp <= 0) return null;
+    const f = content.formulas;
+    const eff = this.battle.effectiveStats(c);
+    const def = content.classes[c.defId];
+    const tier = tierStyle(c.tier);
+    const primaryName = c.stats.primary ? describeStat(c.stats.primary, c.stats, f).title : '';
+    const sub = [def?.role ?? (c.summoned ? 'Summon' : ''), primaryName ? `${primaryName} primary` : ''].filter(Boolean).join(' · ');
+    const icon = (k: StatKind) => this.texUrl(ensureIcon(this, STAT_ICON[k], STAT_COLOR[k], false));
+    const pctOf = (a: number) => `−${Math.round(armorReduction(a, f) * 100)}%`;
+    const tint = (k: StatKind): string | undefined => {
+      const d = isDeltaStat(k) ? statDir(c.stats[k], eff[k]) : null;
+      return d === 'down' ? '#ff9a8a' : d === 'up' ? '#9ee6a8' : undefined;
+    };
+    const grid: UnitCard['grid'] = [
+      { iconUrl: icon('armor'), label: 'ARM', value: String(Math.round(eff.armor)), small: pctOf(eff.armor) },
+      { iconUrl: icon('evasion'), label: 'EVA', value: `${Math.round(eff.evasion * 100)}%`, ...(tint('evasion') ? { color: tint('evasion')! } : {}) },
+      { iconUrl: icon('spd'), label: 'SPD', value: String(c.stats.spd) },
+      { iconUrl: icon('magicArmor'), label: 'M.ARM', value: String(Math.round(eff.magicArmor)), ...(eff.magicArmor > 0 ? { small: pctOf(eff.magicArmor) } : {}) },
+      { iconUrl: icon('critChance'), label: 'CRIT', value: this.statValue('critChance', eff) },
+      { iconUrl: icon('accuracy'), label: 'ACC', value: `${Math.round(eff.accuracy * 100)}%`, ...(tint('accuracy') ? { color: tint('accuracy')! } : {}) },
+    ];
+    const effects: UnitCard['effects'] = [];
+    for (const st of c.statuses) {
+      const sd = content.statuses[st.kind];
+      effects.push({ name: sd?.name ?? st.kind, color: sd?.color ?? colors.targetHighlight, turns: `${st.turns} turn${st.turns === 1 ? '' : 's'}`, text: previewStatusText(st.kind, content.statuses).replace(/^[^ ]+ /, '') || (sd as { text?: string } | undefined)?.text || '' });
+    }
+    if (c.shield > 0) effects.push({ name: 'Shield', color: colors.shield, turns: String(c.shield), text: 'Absorbs damage before HP' });
+    if (c.magicShield > 0) effects.push({ name: 'Magic shield', color: colors.magicShield, turns: String(c.magicShield), text: 'Absorbs magic damage before HP' });
+    const fed = empoweredLine(c.empowered);
+    if (fed) effects.push({ name: fed.tone === 'empowered' ? 'Empowered' : 'Unfed', color: fed.tone === 'empowered' ? '#c58bff' : colors.muted, turns: '', text: fed.text });
+    for (const tag of c.tags) for (const [el, m] of Object.entries(f.weaknesses[tag] ?? {})) effects.push({ name: `Weak to ${el}`, color: colors.element[el as keyof typeof colors.element] ?? colors.muted, turns: `+${Math.round((m - 1) * 100)}%`, text: `Takes more ${el} damage` });
+    if (c.summoned && c.lifespan !== undefined) effects.push({ name: 'Summoned', color: colors.muted, turns: `${c.lifespan} left`, text: `Leaves after ${c.lifespan} more turn${c.lifespan === 1 ? '' : 's'}` });
+    const cds = this.battle.mode === 'turns' ? Object.entries(c.cooldowns).filter(([, n]) => n > 0) : [];
+    if (cds.length) effects.push({ name: 'Cooldowns', color: colors.muted, turns: '', text: cds.map(([id, n]) => `${content.skills[id]?.name ?? id} ${n}`).join(', ') });
+    // Seçili skill'in bu birime önizlemesi (motorun previewSkill'i): isabet şansı + hasar / şifa aralığı
+    let preview: UnitCard['preview'] = null;
+    if (this.selected && this.playerCanAct) {
+      const sk = content.skills[this.selected.skill];
+      const valid = sk && this.battle.validTargets(this.selected.actor, sk.id).some((t) => t.uid === uid);
+      if (sk && valid && !this.battle.isAreaSkill(sk.id)) {
+        const pv = previewSkill(this.battle, this.selected.actor, sk.id, uid).find((x) => x.uid === uid);
+        if (pv) {
+          const d = pv.damage;
+          const heal = pv.heal;
+          preview = {
+            iconUrl: this.texUrl(ensureSkillIcon(this, sk)),
+            skill: sk.name,
+            ...(d ? { hit: formatHit(d.hitChance).replace(' hit', ''), amount: d.hpLoss === 0 ? 'blocked' : d.min === d.max ? `${d.min} dmg` : `${d.min}–${d.max} dmg` } : {}),
+            ...(heal && heal.avg > 0 ? { amount: `+${heal.avg} HP` } : {}),
+            ...(pv.shield ? { amount: `+${pv.shield.amount} shield` } : {}),
+            ...(d?.lethal ? { note: d.lethal === 'sure' ? 'Lethal' : 'May be lethal' } : {}),
+          };
+        }
+      }
+    }
+    return {
+      uid,
+      enemy: c.side === 'enemy',
+      name: unitName(c),
+      ...(tier ? { nameColor: tier.hex, tag: { text: tier.label, color: tier.hex } } : {}),
+      sub,
+      portraitUrl: this.avatarUrl(c),
+      flip: c.side === 'enemy',
+      hp: { value: c.hp, max: c.maxHp },
+      mp: c.maxMp > 0 ? { value: c.mp, max: c.maxMp } : null,
+      rage: c.maxRage !== undefined ? { value: Math.round(this.rageShown.get(uid) ?? c.rage ?? 0), max: c.maxRage } : null,
+      attrs: MAIN_STATS.map((k) => this.hudStat(k, c, false)),
+      grid,
+      effects,
+      passive: c.passive ? { name: c.passive.name, text: describePassive(c.passive, c.stats, f) } : null,
+      preview,
+    };
   }
 
   // --- Turn flow: after every action, wait for the animations, then hand control over ---
@@ -2206,6 +2149,7 @@ export class BattleScene extends Phaser.Scene {
     if (!this.scene.isActive()) return;
     // Aşamalı alan skill'i: aşama olayları vfx o aşamayı açana kadar bekler (vfx aşamadan habersizse beklemez)
     if (e.stage !== undefined) await this.awaitStage(e.stage);
+    if (this.combatLog?.push(e)) this.hud?.setLog(this.combatLog.entries());
     switch (e.type) {
       case 'skillUsed': {
         this.abortHitGate();
@@ -2589,7 +2533,7 @@ export class BattleScene extends Phaser.Scene {
   /** Sets the displayed Rage right away (no animation) and redraws the bar if it belongs to the acting unit. */
   private setRageShown(uid: string, value: number): void {
     this.rageShown.set(uid, value);
-    if (this.rageBar?.uid === uid) this.rageBar.redraw();
+    if (this.activeActor?.uid === uid) this.hud?.setRage(value);
   }
 
   /** Animates the Rage bar of a unit to a new value (events are played in order, so the bar follows the log, not the engine). */
@@ -2603,41 +2547,6 @@ export class BattleScene extends Phaser.Scene {
       onUpdate: (t) => this.setRageShown(uid, t.getValue() ?? to),
       onComplete: () => this.setRageShown(uid, to),
     });
-  }
-
-  /**
-   * Thin RAGE bar under the 4th skill button (red-orange, value written on it); only for classes with a Rage resource.
-   * Hover explains the resource. `x`, `y`, `w` follow the skill button above it.
-   */
-  private rageBarItems(actor: Combatant, x: number, y: number, w: number): Phaser.GameObjects.GameObject[] {
-    const max = actor.maxRage ?? 0;
-    const h = 14;
-    const g = this.add.graphics();
-    const label = this.add.text(x + w / 2, y + h / 2 - 1, '', { fontFamily: layout.fontFamily, fontSize: '13px', fontStyle: 'bold', color: '#fff3dc', stroke: '#2a0a02', strokeThickness: 3 }).setOrigin(0.5);
-    const icon = this.add.image(x + 9, y + h / 2, ensureIcon(this, RAGE_ICON, RAGE_COLOR, false)).setDisplaySize(15, 15);
-    const redraw = (): void => {
-      if (!g.active) return;
-      const v = Math.max(0, Math.min(max, this.rageShown.get(actor.uid) ?? actor.rage ?? 0));
-      const frac = max > 0 ? v / max : 0;
-      g.clear();
-      g.fillStyle(0x050302, 1).fillRect(x - 1, y - 1, w + 2, h + 2);
-      g.fillStyle(color(colors.rageDark), 1).fillRect(x, y, w, h);
-      if (frac > 0) {
-        g.fillGradientStyle(0xffa23a, 0xffa23a, 0xd8341c, 0xd8341c, 1).fillRect(x, y, Math.max(2, w * frac), h);
-        g.fillStyle(0xffffff, 0.2).fillRect(x, y, Math.max(2, w * frac), 3);
-      }
-      g.lineStyle(1, EL.GOLD, EL.LINE.a3).strokeRect(x - 1.5, y - 1.5, w + 3, h + 3);
-      label.setText(`${Math.round(v)}/${max}`);
-    };
-    redraw();
-    this.rageBar = { uid: actor.uid, redraw };
-    const hit = this.add.rectangle(x, y, w, h, 0x000000, 0.001).setOrigin(0, 0).setInteractive();
-    hit.on('pointerover', () => {
-      this.hideInfoTip();
-      this.placeInfoTip(this.makeInfo('Rage', RAGE_COLOR, ensureIcon(this, RAGE_ICON, RAGE_COLOR, true), [[`Rage ${Math.round(this.rageShown.get(actor.uid) ?? actor.rage ?? 0)} / ${max}`, colors.text], ...describeRage(content.formulas).map((l): [string, string?] => [l, colors.muted])], 'Resource'));
-    });
-    hit.on('pointerout', () => this.hideInfoTip());
-    return [g, icon, label, hit];
   }
 
   /** The skill's motion: melee = lunge, ranged/cast = wind-up + projectile, sky = falls from above, support = ring. */
@@ -3140,76 +3049,35 @@ export class BattleScene extends Phaser.Scene {
     return img;
   }
 
-  /** Turn order bar: the current unit first, then the next ones (mini portraits). */
+  /** Sıra çubuğu (DOM HUD): şu an oynayan ekranın tam ortasında, bu savaşta sırası geçenler solda (silik), sıradakiler sağda. */
   private renderTurnBar(queue: string[]): void {
     this.lastQueue = queue;
-    this.turnBarLayer?.destroy();
-    const { y, cellSize, gap } = layout.turnBar;
-    const pastCells = layout.turnBar.pastCells;
-    const cells = pastCells + layout.turnBar.cells; // past ones on the left, the current unit in the middle, upcoming ones on the right
-    const total = cells * cellSize + (cells - 1) * gap;
-    const x = (W - total) / 2;
-    const items: Phaser.GameObjects.GameObject[] = [];
-    // Carved plaque behind the whole order bar
-    items.push(elPanel(this, x - 22, y - 12, total + 44, cellSize + 52, { alpha: 0.93 })); // tasarım kiti paneli
-
+    if (!this.hud) return;
     if (this.battle?.mode === 'test') {
-      items.push(
-        this.add.rectangle(W / 2, y + cellSize / 2, total, cellSize, 0x000000, 0.55).setStrokeStyle(4, color(colors.targetHighlight)),
-        this.add
-          .text(W / 2, y + cellSize / 2, 'TEST MODE  -  no turn order, any unit can act', textStyle(34, colors.targetHighlight))
-          .setOrigin(0.5),
-      );
-    } else {
-      const past = this.playedUids.slice(-pastCells);
-      for (let i = 0; i < cells; i++) {
-        const cx = x + i * (cellSize + gap);
-        const isNow = i === pastCells;
-        const isPast = i < pastCells;
-        const uid = isPast ? past[past.length - (pastCells - i)] : queue[i - pastCells];
-        const unit = uid ? this.battle.get(uid) : undefined;
-        const border = isNow ? colors.targetHighlight : unit?.side === 'party' ? colors.partySlot : colors.enemySlot;
-        const cell = this.add.graphics();
-        kitCellFill(cell, cx, y, cellSize, cellSize); // tasarım kiti hücresi
-        items.push(cell);
-        const view = unit ? this.views.get(unit.uid) : undefined;
-        if (view && unit) {
-          // Avatar (head only) of the unit; units that already played this round are faded
-          const head = this.avatarImage(unit, cx + cellSize / 2, y + cellSize / 2, cellSize - 10);
-          const r = 17;
-          const badge = [
-            this.add.circle(cx + cellSize - r + 2, y + cellSize - r + 2, r, 0x000000, 0.8).setStrokeStyle(2, color(unit.color)),
-            this.add.image(cx + cellSize - r + 2, y + cellSize - r + 2, ensureIcon(this, unit.logo, unit.color, false, ownerOfUnit(unit.defId))).setDisplaySize(r * 1.4, r * 1.4),
-          ];
-          if (isPast) {
-            head.setAlpha(0.38).setTint(0x8a8a8a);
-            for (const b of badge) b.setAlpha(0.45);
-          }
-          items.push(head, ...badge);
-        }
-        // Frame on top of the portrait: bronze edge; the inner line shows the side (blue ally, red enemy), gold for the current unit.
-        // Elite / boss (sefer): the inner line is the rank color (gold / crimson) with a small rank tag on the top edge.
-        const tier = tierStyle(unit?.tier);
-        const fr = this.add.graphics();
-        kitCellFrame(fr, cx, y, cellSize, { inner: color(tier ? tier.hex : border), now: isNow, faded: isPast });
-        if (tier && !isPast) fr.lineStyle(2, color(tier.hex), 0.95).strokeRect(cx + 5, y + 5, cellSize - 10, cellSize - 10);
-        items.push(fr);
-        if (unit && tier) items.push(...this.miniTag(cx + cellSize / 2, y + 2, tier.label, tier.hex, isPast));
-        // Tur başına birden çok eylem (actionsPerTurn): sol altta "x2"; şu an ek eylemindeyse ortadaki hücrede "2nd"
-        const actions = unit?.actionsPerTurn ?? 1;
-        if (unit && actions > 1) items.push(...this.miniTag(cx + 18, y + cellSize - 14, isNow && this.extraAction ? '2nd' : `x${actions}`, '#ffe29a', isPast));
-        if (isNow && unit) {
-          // Şu anki birimin altında kor elmas (kit; eski altın ok)
-          items.push(elDiamond(this, 8).setPosition(cx + cellSize / 2, y + cellSize + 20));
-        }
-      }
+      this.hud.setQueue(null, 'Test mode · no turn order, any unit can act');
+      return;
     }
-    this.turnBarLayer = this.add.container(0, 0, items).setDepth(4000);
-  }
-
-  /** Small pill label on the turn bar (rank tag, extra actions). */
-  private miniTag(cx: number, cy: number, text: string, hex: string, faded = false): Phaser.GameObjects.GameObject[] {
-    return kitTag(this, cx, cy, text, hex, { size: 12, faded });
+    const cells: HudQueueCell[] = [];
+    const push = (uid: string | undefined, state: HudQueueCell['state'], n: number) => {
+      const unit = uid ? this.battle.get(uid) : undefined;
+      if (!unit) return;
+      const tier = tierStyle(unit.tier);
+      const actions = unit.actionsPerTurn ?? 1;
+      const tag = tier ? { text: tier.label, color: tier.hex } : actions > 1 ? { text: state === 'now' && this.extraAction ? '2nd' : `x${actions}`, color: '#ffe29a' } : undefined;
+      const when = state === 'past' ? 'Already acted' : state === 'now' ? 'Acting now' : `Acts in ${n} turn${n === 1 ? '' : 's'}`;
+      cells.push({
+        uid: unit.uid,
+        avatarUrl: this.avatarUrl(unit),
+        enemy: unit.side === 'enemy',
+        flip: unit.side === 'enemy',
+        state,
+        ...(tag ? { tag } : {}),
+        tip: { title: unitName(unit), titleColor: tier?.hex ?? (unit.side === 'enemy' ? '#ffb0a0' : '#b8d8ff'), badge: unit.side === 'enemy' ? 'Enemy' : 'Ally', rows: [{ text: when }] },
+      });
+    };
+    for (const uid of this.playedUids.slice(-layout.turnBar.pastCells)) push(uid, 'past', 0);
+    queue.slice(0, layout.turnBar.cells).forEach((uid, i) => push(uid, i === 0 ? 'now' : 'next', i));
+    this.hud.setQueue(cells);
   }
 
   /** A short banner under the turn bar: who used what. */
@@ -3259,16 +3127,8 @@ export class BattleScene extends Phaser.Scene {
     return view;
   }
 
+  /** Alt çubuk artık DOM HUD'ı (src/ui/battle-hud.ts); burada yalnızca içerik yenilenir. */
   private drawCommandPanel(): void {
-    const p = layout.commandPanel;
-    // Tasarım kiti şeridi (Ömer 2026-10-09): koyu degrade, üstte ince altın çizgi + ortada elmas
-    const bg = this.add.graphics().setDepth(4500);
-    // Geniş ekran: şerit görünen alanın tamamına uzar (FULL_X0..), içerik 1920 merkez bölgede kalır
-    const X0 = FULL_X0;
-    const FW = FULL_W;
-    kitBand(bg, X0, p.y, FW, H - p.y, W / 2);
-    // Stat bloğu, skill'ler ve bilgi kutusu arasında uçlara doğru sönen ince ayraçlar
-    for (const dx of [this.skillsLeft() - 104, this.globalX() - 7, this.infoTipX() - 7]) kitDivider(bg, dx, p.y + 14, H - 14);
     this.refreshCommands();
   }
 
@@ -3278,227 +3138,227 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private refreshCommands(): void {
-    this.commandLayer?.destroy();
     this.hideInfoTip();
     this.ensureSelection();
-    const p = layout.commandPanel;
     const actor = this.activeActor;
     for (const v of this.views.values()) v.setActive(v.combatant.uid === actor?.uid && !this.battle.winner);
-
-    const items: Phaser.GameObjects.GameObject[] = [];
-    if (actor) {
-      items.push(...this.drawStatsBlock(actor));
-      const label = elText(this, W / 2, p.y - 22, this.turnLabel(actor), 19, EL.ON, { em: 0.16 }).setOrigin(0.5);
-      const plaque = kitTextBand(this, W / 2, p.y - 22, label.width + 200, 40);
-      const dl = elDiamond(this, 4).setPosition(W / 2 - label.width / 2 - 20, p.y - 22);
-      const dr = elDiamond(this, 4).setPosition(W / 2 + label.width / 2 + 20, p.y - 22);
-      items.push(plaque, dl, dr, label);
-      let x = this.skillsLeft();
-      const hasRage = actor.maxRage !== undefined;
-      const btnY = p.y + (H - p.y - p.buttonHeight) / 2;
-      const btnH = hasRage ? p.buttonHeight - 18 : p.buttonHeight; // Rage classes: the buttons give up 18px so the Rage bar fits under the 4th
-      this.rageBar = undefined;
-      for (const [idx, skillId] of actor.skills.entries()) {
-        const skill = content.skills[skillId];
-        if (!skill) continue;
-        const enabled = this.playerCanAct && this.battle.canUse(actor.uid, skillId).ok;
-        items.push(...this.skillButton(x, btnY, actor, skill, enabled, idx === 3, idx + 1, btnH));
-        if (hasRage && idx === 3) items.push(...this.rageBarItems(actor, x, btnY + btnH + 6, p.buttonWidth));
-        x += p.buttonWidth + p.gap;
-      }
-      if (!actor.summoned) items.push(...this.globalButtons(actor)); // summons never use global actions
-      else this.globalItems = [];
-      if (actor.passive) items.push(...this.passiveBadge(this.skillsLeft() - 92, p.y + (H - p.y) / 2, actor));
-    }
-    this.commandLayer = this.add.container(0, 0, items).setDepth(4600);
+    this.hud?.setModel(this.buildHudModel(actor));
   }
 
-  /** The class passive: a round badge just left of the skill buttons (not clickable; hover explains it). */
-  private passiveBadge(x: number, cy: number, actor: Combatant): Phaser.GameObjects.GameObject[] {
-    const passive = actor.passive!;
-    const r = 36;
-    const bg = this.add.circle(x + r, cy - 8, r, 0x140e09, 0.96).setStrokeStyle(1.5, EL.GOLD, 0.55);
-    const ring = this.add.circle(x + r, cy - 8, r - 5).setStrokeStyle(1, EL.GOLD, EL.LINE.a2);
-    const icon = this.add.image(x + r, cy - 8, ensureIcon(this, passive.icon, actor.color, false, ownerOfUnit(actor.defId))).setDisplaySize(44, 44);
-    const caption = elText(this, x + r, cy + r + 4, 'Passive', 12, 'rgba(217,178,106,0.85)', { em: 0.2 }).setOrigin(0.5, 0);
-    bg.setInteractive();
-    bg.on('pointerover', () => this.showPassiveTip(actor));
-    bg.on('pointerout', () => this.hideInfoTip());
-    return [bg, ring, icon, caption];
-  }
-
-  private showPassiveTip(actor: Combatant): void {
-    this.hideInfoTip();
-    const passive = actor.passive;
-    if (!passive) return;
-    this.placeInfoTip(this.makeInfo(passive.name, colors.targetHighlight, ensureIcon(this, passive.icon, actor.color, false, ownerOfUnit(actor.defId)), [[describePassive(passive, actor.stats, content.formulas)]], 'Passive'));
-  }
-
-  /**
-   * Left part of the bottom bar, three columns. 1: the avatar (1:1 head portrait) with class logo + name, HP and MP written on it.
-   * 2: the 4 primary attributes (the primary one in gold; its bonus name and text show only in the hover tooltip).
-   * 3: derived stats (speed, crit, armor). Every stat explains itself on hover.
-   */
-  private drawStatsBlock(actor: Combatant, x0: number = layout.commandPanel.padding): Phaser.GameObjects.GameObject[] {
-    const p = layout.commandPanel;
-    const items: Phaser.GameObjects.GameObject[] = [];
-    const s = this.battle.effectiveStats(actor); // armor includes auras (Bulwark Aura)
-    const top = p.y;
-    const enemy = actor.side === 'enemy';
-
-    // --- Column 1: the avatar (1:1, the unit's head, same look as the turn bar). Name/logo, HP and MP are written on top of it, no backing plates ---
-    const av = 142;
-    const avX = x0;
-    const avY = top + (H - top - av) / 2;
-    const frame = this.add.graphics();
-    kitCellFill(frame, avX, avY, av, av);
-    items.push(frame);
-    const face = this.avatarImage(actor, avX + av / 2, avY + av / 2, av);
-    items.push(face);
-    // Info layout switch: data/battle-layout.json > commandPanel.avatarInfoStyle ("overlayCompact" = default thin text/bars at the edges, "overlayClassic" = old bigger text + thick bars)
-    const compact = (p as { avatarInfoStyle?: string }).avatarInfoStyle !== 'overlayClassic';
-    if (compact) {
-      const shade = this.add.graphics(); // very thin top/bottom darkening for legibility (gradient, not a plate)
-      shade.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.45, 0.45, 0, 0).fillRect(avX, avY, av, 22);
-      shade.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.5, 0.5).fillRect(avX, avY + av - 26, av, 26);
-      items.push(shade);
-      const frameEdge = this.add.graphics();
-      kitCellFrame(frameEdge, avX, avY, av);
-      items.push(frameEdge);
-
-      const nameY = avY + 11;
-      const logo = this.add.image(avX + 11, nameY, ensureIcon(this, actor.logo, actor.color, false, ownerOfUnit(actor.defId))).setDisplaySize(15, 15);
-      const nameText = elText(this, avX + 22, nameY, unitName(actor), 14, tierStyle(actor.tier)?.hex ?? (enemy ? colors.hpFillEnemy : EL.ON), { em: 0.04, upper: false }).setOrigin(0, 0.5);
-      if (nameText.width > av - 28) nameText.setScale((av - 28) / nameText.width);
-      items.push(logo, nameText);
-
-      // HP bottom-left, MP bottom-right, one text row; thin bars on the very bottom edge (inside the frame bevel)
-      const half = (av - 6) / 2;
-      const yBar = avY + av - 7;
-      const yText = avY + av - 16;
-      const part = (kind: 'hp' | 'mp', x: number, value: number, max: number, fill: string, right: boolean) => {
-        const g = this.add.graphics();
-        g.fillStyle(0x000000, 0.75).fillRect(x, yBar, half - 2, 4);
-        if (max > 0) g.fillStyle(color(fill), 1).fillRect(x, yBar, (half - 2) * Math.max(0, Math.min(1, value / max)), 4);
-        const label = hudNum(this, right ? x + half - 4 : x + 14, yText, `${value}/${max}`, 13, '#f4ede1').setOrigin(right ? 1 : 0, 0.5);
-        const iconX = right ? x + half - 4 - label.width - 8 : x + 6;
-        items.push(g, this.add.image(iconX, yText, ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false)).setDisplaySize(11, 11), label, this.statHit(x - 2, yText - 9, half, 20, kind, actor));
-      };
-      part('hp', avX + 4, actor.hp, actor.maxHp, enemy ? colors.hpFillEnemy : colors.hpFill, false);
-      part('mp', avX + 4 + half + 2, actor.mp, actor.maxMp, colors.mpFill, true);
-    } else {
-      const shade = this.add.graphics(); // soft bottom/top darkening for legibility (gradient, not a plate)
-      shade.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.55, 0.55, 0, 0).fillRect(avX, avY, av, 34);
-      shade.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.6, 0.6).fillRect(avX, avY + av - 62, av, 62);
-      items.push(shade);
-      const frameEdge = this.add.graphics();
-      kitCellFrame(frameEdge, avX, avY, av);
-      items.push(frameEdge);
-
-      const nameY = avY + 17;
-      const logo = this.add.image(avX + 18, nameY, ensureIcon(this, actor.logo, actor.color, false, ownerOfUnit(actor.defId))).setDisplaySize(24, 24);
-      const nameText = elText(this, avX + 34, nameY, unitName(actor), 20, tierStyle(actor.tier)?.hex ?? (enemy ? colors.hpFillEnemy : EL.ON), { em: 0.04, upper: false }).setOrigin(0, 0.5);
-      if (nameText.width > av - 40) nameText.setScale((av - 40) / nameText.width);
-      items.push(logo, nameText);
-
-      const bar = (kind: 'hp' | 'mp', yText: number, value: number, max: number, fill: string) => {
-        const h = 8;
-        const yBar = yText + 11;
-        const g = this.add.graphics();
-        g.fillStyle(0x000000, 0.7).fillRect(avX + 6, yBar - 1, av - 12, h + 2);
-        g.fillStyle(color(colors.hpBack), 0.9).fillRect(avX + 7, yBar, av - 14, h);
-        if (max > 0) g.fillStyle(color(fill), 1).fillRect(avX + 7, yBar, (av - 14) * Math.max(0, Math.min(1, value / max)), h);
-        const label = hudNum(this, avX + 26, yText, `${value}/${max}`, 17, '#f4ede1').setOrigin(0, 0.5);
-        items.push(
-          g,
-          this.add.image(avX + 15, yText, ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false)).setDisplaySize(16, 16),
-          label,
-          this.statHit(avX + 4, yText - 11, av - 8, 25, kind, actor),
-        );
-      };
-      bar('hp', avY + av - 52, actor.hp, actor.maxHp, enemy ? colors.hpFillEnemy : colors.hpFill);
-      bar('mp', avY + av - 24, actor.mp, actor.maxMp, colors.mpFill);
-
-    }
-
-    // --- Columns 2-4: stat rows (2: main attributes, 3: ATTACK stats, 4: DEFENSE stats) ---
-    const column = (kinds: StatKind[], x: number, y0: number, step: number, icon: number, font: number, w: number) =>
-      kinds.forEach((k, i) => {
-        const cy = y0 + i * step;
-        if (i < kinds.length - 1) {
-          const hl = this.add.graphics();
-          fadeLine(hl, x, x + w - 8, cy + step / 2, EL.GOLD, EL.LINE.a2, 'out');
-          items.push(hl);
-        }
-        // ACC / EVA with a status on them (Blinded, Shrouded): reddish when lowered, greenish when raised, with a small arrow
-        const dir = isDeltaStat(k) ? statDir(actor.stats[k], s[k]) : null;
-        const tint = dir === 'down' ? '#ff9a8a' : dir === 'up' ? '#9ee6a8' : undefined;
-        const label = hudNum(this, x + icon + 6, cy, this.statText(k, s), font, tint ?? (s.primary === k ? PRIMARY_GOLD : EL.TXT)).setOrigin(0, 0.5);
-        items.push(this.add.image(x + icon / 2, cy, ensureIcon(this, STAT_ICON[k], STAT_COLOR[k], false)).setDisplaySize(icon, icon), label);
-        if (dir) {
-          const ax = label.x + label.width + 9;
-          const hh = Math.round(font * 0.32);
-          const arrow = this.add.triangle(ax, cy, 0, dir === 'up' ? hh * 2 : 0, hh * 2, dir === 'up' ? hh * 2 : 0, hh, dir === 'up' ? 0 : hh * 2, color(tint!)).setStrokeStyle(2, 0x0c0805).setOrigin(0.5);
-          items.push(arrow);
-        }
-        items.push(this.statHit(x - 2, cy - step / 2, w, step, k, actor));
-      });
-    const m = statBlockMetrics(x0);
-    column(MAIN_STATS, m.mainX, top + 36, 32, 24, 22, m.mainW);
-    // Attack and defense columns share the same top/bottom; rows are spread evenly (4 attack rows, 5 defense rows), at least 16px text
-    const sTop = top + 12;
-    const sH = H - top - 24;
-    const rowsOf = (kinds: StatKind[]) => rowCenters(kinds.length, sTop, sH);
-    const atkRows = rowsOf(ATTACK_STATS);
-    const defRows = rowsOf(DEFENSE_STATS);
-    column(ATTACK_STATS, m.attackX, atkRows[0]!, atkRows[1]! - atkRows[0]!, 20, 17, m.attackW);
-    column(DEFENSE_STATS, m.defenseX, defRows[0]!, defRows[1]! - defRows[0]!, 20, 17, m.defenseW);
-    return items;
-  }
-
-  private statText(k: StatKind, s: Combatant['stats']): string {
-    return statRowText(k, s, STAT_LABEL);
-  }
-
-  /** An invisible hover area that explains a stat in the tooltip space. */
-  private statHit(x: number, y: number, w: number, h: number, kind: StatKind, actor: Combatant): Phaser.GameObjects.Rectangle {
-    const zone = this.add.rectangle(x, y, w, h, 0xffffff, 0.001).setOrigin(0, 0);
-    if (!this.statHitsOn) return zone; // hover info of another unit: not interactive
-    zone.setInteractive();
-    zone.on('pointerover', () => this.showStatTip(kind, actor));
-    zone.on('pointerout', () => this.hideInfoTip());
-    return zone;
-  }
-
-  /** Under the skill name: cost (MP drop / HP heart icon) and cooldown (hourglass), or the remaining wait while cooling down. */
-  private skillSubItems(actor: Combatant, skill: SkillDef, cx: number, cy: number, alpha: number): Phaser.GameObjects.GameObject[] {
-    const turns = this.battle.mode === 'turns';
-    const remaining = turns ? (actor.cooldowns[skill.id] ?? 0) : 0;
-    const parts: Array<{ icon?: string; text: string; hex: string; px?: number }> = [];
-    const hourglass = ensureIcon(this, UI_ICON.hourglass, UI_COLOR, false);
-    if (remaining > 0) parts.push({ icon: hourglass, text: String(remaining), hex: colors.targetHighlight });
-    else {
-      const costNow = skillCostAmount(skill.cost, actor); // proportional costs (Wail of the Dead) show the real amount for the current resource
-      if (costNow > 0 && skill.cost.resource === 'rage') {
-        parts.push({ icon: ensureIcon(this, RAGE_ICON, RAGE_COLOR, false), text: `RAGE ${costNow}`, hex: RAGE_COLOR, px: 15 });
-      } else if (costNow > 0) {
-        const kind = skill.cost.resource === 'mp' ? 'mp' : 'hp';
-        parts.push({ icon: ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false), text: String(costNow), hex: colors.text });
-      }
-      if (turns && (skill.cooldown ?? 0) > 0) parts.push({ icon: hourglass, text: String(skill.cooldown), hex: colors.muted });
-    }
-    const isz = 18;
-    const texts = parts.map((pt) => hudNum(this, 0, cy, pt.text, pt.px ?? 17, pt.hex).setOrigin(0, 0.5));
-    const gapBetween = parts.some((pt) => pt.px) ? 6 : 10; // Rage cost text is long: tighter spacing so it fits the button
-    const total = parts.reduce((w, _pt, i) => w + isz + 3 + texts[i]!.width, 0) + Math.max(0, parts.length - 1) * gapBetween;
-    let x = cx - total / 2;
-    const out: Phaser.GameObjects.GameObject[] = [];
-    parts.forEach((pt, i) => {
-      out.push(this.add.image(x + isz / 2, cy, pt.icon!).setDisplaySize(isz, isz).setAlpha(alpha));
-      texts[i]!.setPosition(x + isz + 3, cy).setAlpha(alpha);
-      out.push(texts[i]!);
-      x += isz + 3 + texts[i]!.width + gapBetween;
+  /** DOM HUD'ı kurar; görünür sahneye hizalar (tuvalin konumu ve ölçeği), sahne kapanınca kaldırır. */
+  private mountHud(): void {
+    this.hud?.destroy();
+    const root = document.getElementById('ui-root');
+    if (!root) return;
+    this.hud = new BattleHud(root, {
+      onSkill: (id) => this.onSkillClick(id),
+      onGlobal: (id) => this.onGlobalClick(id),
+      onPinChange: () => undefined,
     });
+    this.combatLog = new CombatLog(
+      {
+        unit: (uid) => {
+          const c = this.battle.get(uid);
+          return c ? { name: unitName(c), side: c.side } : undefined;
+        },
+        skill: (id) => content.skills[id]?.name ?? id,
+        status: (id) => content.statuses[id]?.name ?? id,
+        ground: (id) => content.grounds[id]?.name ?? id,
+        globalKind: (id) => this.battle.globalDef(id)?.kind ?? id,
+      },
+      this.localSide,
+    );
+    if (this.battle.mode !== 'test') this.combatLog.begin(this.battle.currentUid);
+    this.hud.setLog([]);
+    this.hud.setEffects(
+      (this.campaign?.battleEffects?.() ?? []).map((fx) => ({
+        name: fx.name,
+        text: fx.text,
+        ...(fx.group ? { group: fx.group } : {}),
+        ...(fx.color ? { color: fx.color } : {}),
+        ...(fx.icon ? { iconUrl: this.texUrl(ensureIcon(this, fx.icon, fx.color ?? '#e8c47e', false)) } : {}),
+      })),
+    );
+    const lay = () => this.layoutHud();
+    lay();
+    onStageResize(this, lay);
+    window.addEventListener('resize', lay);
+    const t = window.setTimeout(lay, 50);
+    this.events.once('shutdown', () => {
+      window.clearTimeout(t);
+      window.removeEventListener('resize', lay);
+      this.hud?.destroy();
+      this.hud = undefined;
+    });
+  }
+
+  private layoutHud(): void {
+    const c = this.game.canvas;
+    if (!this.hud || !c) return;
+    const parent = c.parentElement;
+    const left = (parent?.offsetLeft ?? 0) + c.offsetLeft;
+    const top = (parent?.offsetTop ?? 0) + c.offsetTop;
+    const scale = c.offsetHeight / H;
+    if (!(scale > 0)) return;
+    this.hud.layout(left, top, scale, stageView.right - stageView.left);
+  }
+
+  /** Phaser dokusu -> DOM resmi (data URL; önbellekli, sürüm değişince temizlenir). */
+  private texUrl(key: string): string {
+    const hit = this.texUrlCache.get(key);
+    if (hit) return hit;
+    if (!this.textures.exists(key)) return '';
+    const src = this.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+    let url = '';
+    if (src instanceof HTMLImageElement) {
+      // Phaser görselleri blob: adresinden yükler ve sonra bırakır: kalıcı data URL'e çevir
+      if (!src.src.startsWith('blob:')) url = src.src;
+      else {
+        try {
+          const cv = document.createElement('canvas');
+          cv.width = src.naturalWidth;
+          cv.height = src.naturalHeight;
+          cv.getContext('2d')?.drawImage(src, 0, 0);
+          url = cv.toDataURL('image/png');
+        } catch {
+          url = '';
+        }
+      }
+    } else if (src instanceof HTMLCanvasElement) {
+      try {
+        url = src.toDataURL('image/png');
+      } catch {
+        url = '';
+      }
+    }
+    if (url) this.texUrlCache.set(key, url);
+    return url;
+  }
+
+  /** Birimin portresi (kafa avatarı); yoksa class logosu. */
+  private avatarUrl(c: Combatant): string {
+    const key = avatarTexture(this, c.spriteId);
+    return key ? this.texUrl(key) : this.texUrl(ensureIcon(this, c.logo, c.color, false, ownerOfUnit(c.defId)));
+  }
+
+  /** Alt çubuğun içeriği: sıradaki birim, 4 skill, global eylemler, sıra yazısı. */
+  private buildHudModel(actor: Combatant | undefined): HudModel {
+    if (!actor) return { actor: null, skills: [], globals: [], turnLabel: '' };
+    const f = content.formulas;
+    const def = content.classes[actor.defId];
+    const tier = tierStyle(actor.tier);
+    const enemy = actor.side === 'enemy';
+    const primary = actor.stats.primary;
+    const primaryName = primary ? describeStat(primary, actor.stats, f).title : '';
+    const sub = [def?.role ?? (actor.summoned ? 'Summon' : ''), primaryName ? `${primaryName} primary` : ''].filter(Boolean).join(' · ');
+    const statIcon = (k: 'hp' | 'mp') => this.texUrl(ensureIcon(this, STAT_ICON[k], STAT_COLOR[k], false));
+    const barTip = (k: 'hp' | 'mp'): TipContent => {
+      const info = describeStat(k, actor.stats, f);
+      const t = this.makeInfo(info.title, EL.ON, ensureIcon(this, STAT_ICON[k], STAT_COLOR[k], false), info.lines.map((l): [string] => [l]));
+      t.value = k === 'hp' ? `${actor.hp} / ${actor.maxHp}` : `${actor.mp} / ${actor.maxMp}`;
+      return t;
+    };
+    const rageVal = this.rageShown.get(actor.uid) ?? actor.rage ?? 0;
+    const notes: HudActor['notes'] = [];
+    if (primary) {
+      const b = primaryBonusInfo(primary, f, !!actor.stats.primaryActive);
+      const lucky = primary === 'luck' ? (this.battle.luckyEscapeChance(actor.uid) > 0 ? ' · ready' : ' · used this battle') : '';
+      notes.push({ text: `${b.name} (primary bonus): ${b.detail}${b.active ? lucky : ' · inactive'}`, color: b.active ? '#ffd76a' : colors.muted });
+    }
+    if (actor.shield > 0) notes.push({ text: `Shield ${actor.shield}`, color: colors.shield });
+    if (actor.magicShield > 0) notes.push({ text: `Magic shield ${actor.magicShield}`, color: colors.magicShield });
+    const fed = empoweredLine(actor.empowered);
+    if (fed) notes.push({ text: fed.text, color: fed.tone === 'empowered' ? '#c58bff' : colors.muted });
+    const hudActor: HudActor = {
+      uid: actor.uid,
+      name: unitName(actor),
+      sub,
+      portraitUrl: this.avatarUrl(actor),
+      flip: enemy,
+      enemy,
+      ...(tier ? { nameColor: tier.hex } : {}),
+      hp: { value: actor.hp, max: actor.maxHp, tip: barTip('hp'), iconUrl: statIcon('hp') },
+      mp: actor.maxMp > 0 ? { value: actor.mp, max: actor.maxMp, tip: barTip('mp'), iconUrl: statIcon('mp') } : null,
+      rage:
+        actor.maxRage !== undefined
+          ? {
+              value: rageVal,
+              max: actor.maxRage,
+              iconUrl: this.texUrl(ensureIcon(this, RAGE_ICON, RAGE_COLOR, false)),
+              tip: this.makeInfo('Rage', RAGE_COLOR, ensureIcon(this, RAGE_ICON, RAGE_COLOR, true), [[`Rage ${Math.round(rageVal)} / ${actor.maxRage}`, colors.text], ...describeRage(f).map((l): [string, string?] => [l, colors.muted])], 'Resource'),
+            }
+          : null,
+      main: MAIN_STATS.map((k) => this.hudStat(k, actor)),
+      groups: [
+        { title: 'Main', stats: MAIN_STATS.map((k) => this.hudStat(k, actor)) },
+        { title: 'Attack', stats: ATTACK_STATS.map((k) => this.hudStat(k, actor)) },
+        { title: 'Defense', stats: DEFENSE_STATS.map((k) => this.hudStat(k, actor)) },
+      ],
+      passive: actor.passive ? { name: actor.passive.name, text: describePassive(actor.passive, actor.stats, f), iconUrl: this.texUrl(ensureIcon(this, actor.passive.icon, actor.color, false, ownerOfUnit(actor.defId))) } : null,
+      notes,
+    };
+    const turns = this.battle.mode === 'turns';
+    const skills: HudSkill[] = [];
+    actor.skills.forEach((skillId, idx) => {
+      const skill = content.skills[skillId];
+      if (!skill) return;
+      const wait = turns ? (actor.cooldowns[skill.id] ?? 0) : 0;
+      skills.push({
+        id: skill.id,
+        name: skill.name,
+        iconUrl: this.texUrl(ensureSkillIcon(this, skill)),
+        key: idx + 1,
+        cost: this.skillCostChips(actor, skill),
+        wait,
+        enabled: this.playerCanAct && this.battle.canUse(actor.uid, skillId).ok,
+        selected: this.selected?.actor === actor.uid && this.selected.skill === skill.id && this.playerCanAct,
+        ult: idx === 3,
+        tip: this.skillTip(actor, skill),
+      });
+    });
+    const globals: HudGlobal[] = actor.summoned
+      ? [] // summons never use global actions
+      : this.battle.globalSkillIds().map((id) => {
+          const g = this.battle.globalDef(id)!;
+          const accent = GLOBAL_ACCENT[g.kind === 'skip' ? 'skip' : g.kind] ?? '#e8c47e';
+          return {
+            id,
+            name: g.kind === 'skip' ? 'Skip' : describeGlobalSkill(g, f).name,
+            iconUrl: this.texUrl(ensureIcon(this, g.icon, accent, false, SHARED_KEY)),
+            enabled: this.playerCanAct && this.battle.canUseGlobal(actor.uid, id).ok,
+            active: g.kind === 'move' && this.moveMode?.actor === actor.uid,
+            tip: this.globalTip(actor, id),
+          };
+        });
+    const passive: HudModel['passive'] = actor.passive
+      ? {
+          name: actor.passive.name,
+          iconUrl: hudActor.passive!.iconUrl,
+          tip: this.makeInfo(actor.passive.name, EL.ON, ensureIcon(this, actor.passive.icon, actor.color, false, ownerOfUnit(actor.defId)), [[describePassive(actor.passive, actor.stats, f), colors.text]], 'Passive'),
+          lucky: null,
+        }
+      : null;
+    if (primary === 'luck' && actor.stats.primaryActive) {
+      const b = primaryBonusInfo('luck', f, true);
+      const ready = this.battle.luckyEscapeChance(actor.uid) > 0;
+      const tip = this.makeInfo(b.name, PRIMARY_GOLD, undefined, [[b.detail, colors.text], [ready ? 'Ready: once per battle' : 'Already used this battle', ready ? '#ffd76a' : colors.muted]], 'Primary bonus');
+      if (passive) passive.lucky = { ready, tip };
+    }
+    return { actor: hudActor, passive, skills, globals, turnLabel: this.turnLabel(actor) };
+  }
+
+  /** Skill düğmesinin altındaki bedel / cooldown çipleri (ya da cooldown sürerken kalan bekleme). */
+  private skillCostChips(actor: Combatant, skill: SkillDef): HudSkill['cost'] {
+    const turns = this.battle.mode === 'turns';
+    const out: HudSkill['cost'] = [];
+    const hourglass = this.texUrl(ensureIcon(this, UI_ICON.hourglass, UI_COLOR, false));
+    const costNow = skillCostAmount(skill.cost, actor);
+    if (costNow > 0 && skill.cost.resource === 'rage') out.push({ iconUrl: this.texUrl(ensureIcon(this, RAGE_ICON, RAGE_COLOR, false)), text: `RAGE ${costNow}`, color: RAGE_COLOR });
+    else if (costNow > 0) {
+      const kind = skill.cost.resource === 'mp' ? 'mp' : 'hp';
+      out.push({ iconUrl: this.texUrl(ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false)), text: String(costNow) });
+    }
+    if (turns && (skill.cooldown ?? 0) > 0) out.push({ iconUrl: hourglass, text: String(skill.cooldown), color: colors.muted });
     return out;
   }
 
@@ -3509,55 +3369,59 @@ export class BattleScene extends Phaser.Scene {
     return this.autoPlay ? 'Auto (AI)' : 'Your turn';
   }
 
-  /** A compact skill button: icon, name and cost. Hovering shows details; disabled buttons still show them. */
-  private skillButton(x: number, y: number, actor: Combatant, skill: SkillDef, enabled: boolean, ultimate = false, hotkey = 0, height?: number): Phaser.GameObjects.GameObject[] {
-    const { buttonWidth: bw, buttonHeight: bhFull, iconSize } = layout.commandPanel;
-    const bh = height ?? bhFull;
-    const chosen = this.selected?.actor === actor.uid && this.selected.skill === skill.id && this.playerCanAct;
-    const dim = enabled ? 1 : 0.45;
-    // Tasarım kiti plakası: ince altın çizgi; 4. (güçlü) skill köşe elmaslı + üstte kor çizgi; seçili = açık altın 2 px + kor ışıması
-    const frame = this.add.graphics();
-    const paint = (pressed: boolean): void => {
-      frame.clear();
-      kitPlate(frame, x, y, bw, bh, { state: chosen ? 'chosen' : pressed ? 'hot' : 'idle', strong: ultimate, alpha: enabled ? 1 : 0.55 });
-    };
-    paint(false);
-    const bg = this.add.rectangle(x, y, bw, bh, 0x000000, 0.001).setOrigin(0, 0);
-    const shine: Phaser.GameObjects.GameObject[] = [];
-    const icon = this.add.image(x + bw / 2, y + 8 + iconSize / 2, ensureSkillIcon(this, skill)).setDisplaySize(iconSize, iconSize).setAlpha(dim);
-    const name = elText(this, x + bw / 2, y + 8 + iconSize + 16, skill.name, 19, chosen ? EL.ON : '#ece0c4', { em: 0.02, upper: false }).setOrigin(0.5).setAlpha(enabled ? 1 : 0.6);
-    if (chosen) name.setShadow(0, 0, EL.SH_GLOW, 12, false, true);
-    if (name.width > bw - 10) name.setScale((bw - 10) / name.width); // long names must fit the button
-    const sub = this.skillSubItems(actor, skill, x + bw / 2, y + bh - 16, enabled ? 1 : 0.6);
-    bg.setInteractive({ useHandCursor: enabled });
-    bg.on('pointerover', () => {
-      this.showSkillTip(actor, skill);
-      if (enabled && !chosen) paint(true);
-    });
-    bg.on('pointerout', () => {
-      this.hideInfoTip();
-      paint(false);
-    });
-    if (enabled) {
-      bg.on('pointerdown', () => paint(true));
-      bg.on('pointerup', () => {
-        paint(false);
-        this.onSkillClick(skill.id);
-      });
-    }
-    // Hotkey hint in the top-left corner (keys 1-4)
-    const key = hotkey > 0 ? hudNum(this, x + 10, y + 6, String(hotkey), 16, EL.MUTED).setOrigin(0, 0).setAlpha(enabled ? 0.9 : 0.5) : undefined;
-    return [frame, bg, ...shine, icon, name, ...sub, ...(key ? [key] : [])];
-  }
-
   /** Match record text (all moves so far, with AI reasons) and the move count; null if recording is off. Works mid-battle. */
   matchLogData(): { text: string; moves: number } | null {
     return this.matchLog ? { text: this.matchLog.serialize(), moves: this.matchLog.moveCount } : null;
   }
 
   /** End-of-battle screen (src/game/result-screen.ts). `preview` = debug: shows it without ending the battle. */
+  /**
+   * Sonuç ekranı açıkken savaş arayüzü (sıra çubuğu, alt çubuk, sıra / duyuru bantları, ipucu ve adım şeridi, bilgi kutusu, hedef hücreleri,
+   * ceset işaretleri, birimlerin ad plakası ve çubukları) yumuşakça söner; arena yalnızca arka plan olarak kalır. false = geri getirir
+   * (önizleme kapanınca; yeni savaş zaten sahneyi yeniden kurar).
+   */
+  private setBattleHudHidden(hidden: boolean): void {
+    type Fadeable = HudFadeable;
+    if (hidden) {
+      if (this.hudHidden) return;
+      // Adlı katmanlar + sahnenin arayüz derinliğindeki her şey: hedef hücreleri / şekil işaretleri (30-99), seçim alanları, ipucu ve
+      // şeritler, sıra çubuğu, alt çubuk, bilgi kutusu, (3000-4999; yüzen sayılar 5000+ kendi kendine söner). Birimler (derinlik = ayak y'si) ve arka plan kalır.
+      const uiDepth = (d: number) => (d >= 30 && d < 100) || (d >= 3000 && d < 5000);
+      const scanned = this.children.list.filter((o) => uiDepth((o as unknown as { depth: number }).depth)) as unknown as Fadeable[];
+      this.hud?.setHidden(true);
+      const list: Array<Fadeable | undefined> = [this.announceLayer, this.hint, this.flowStrip, this.slotMarkers, this.areaMarker, this.areaTop, this.slotLayer, ...[...this.corpseMarkers.values()].map((m) => m.container), ...scanned];
+      this.hudHidden = [...new Set(list)].filter((o): o is Fadeable => !!o && o.active && typeof o.setVisible === 'function').map((o) => ({ o, visible: o.visible, alpha: o.alpha }));
+      // Adlı katmanlar yumuşakça söner; taranan diğer öğeler (o an oynayan efektler olabilir: tween'leri bozulmasın) hemen gizlenir
+      const named = new Set<unknown>(list.slice(0, list.length - scanned.length));
+      for (const e of this.hudHidden) e.named = named.has(e.o);
+      for (const { o } of this.hudHidden) {
+        if (!named.has(o)) {
+          o.setVisible(false);
+          continue;
+        }
+        this.tweens.killTweensOf(o);
+        this.tweens.add({ targets: o, alpha: 0, duration: 260, onComplete: () => o.active && o.setVisible(false) });
+      }
+      for (const v of this.views.values()) v.setOverlayHidden(true);
+      return;
+    }
+    if (!this.hudHidden) return;
+    for (const { o, visible, alpha, named } of this.hudHidden) {
+      if (!o.active) continue;
+      if (named) {
+        this.tweens.killTweensOf(o); // sönme tween'i sürüyorsa durdur (yoksa bitince yeniden gizlerdi)
+        o.setAlpha(alpha);
+      }
+      o.setVisible(visible);
+    }
+    this.hudHidden = null;
+    this.hud?.setHidden(false);
+    for (const v of this.views.values()) v.setOverlayHidden(false);
+  }
+
   showResult(victory: boolean, preview = false, mpInfo?: MpResultInfo): void {
     this.resultScreen?.destroy();
+    this.setBattleHudHidden(true);
     const mp = this.mp && !preview ? this.mp : undefined;
     const info = mpInfo ?? (mp ? mp.result() : null);
     this.resultScreen = showResultScreen(this, {
@@ -3570,6 +3434,7 @@ export class BattleScene extends Phaser.Scene {
       onTeamSelect: () => this.goToTeamSelect(),
       matchData: () => this.matchLogData(),
       preview,
+      onClose: () => this.sys.isActive() && this.setBattleHudHidden(false),
       ...(mp ? {} : { actions: this.campaign && !preview ? this.campaign.resultActions(victory, this.battle) : undefined }),
     });
   }

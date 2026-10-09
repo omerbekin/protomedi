@@ -3,7 +3,7 @@
  * denemek için), sonraki elit/boss dalgasına atla, altın ver, en iyi koşular listesini sil. Sahne sınıfını içe aktarmaz (Node testinde Phaser yok).
  */
 import type Phaser from 'phaser';
-import { SCORES_KEY, applyOutcome, autoPlayWave, grantRelic, waveKind, wavePlan, type EndlessRun } from '../endless';
+import { SCORES_KEY, applyOutcome, autoPlayWave, giveItem, grantRelic, openShop, waveKind, wavePlan, type EndlessRun } from '../endless';
 import { ENDLESS_SCENE, commit, continueRun, endless, openEndless, recordScore, startRun, storage } from '../game/endless-session';
 import type { DebugMenu } from './debug-menu';
 
@@ -94,6 +94,19 @@ export function registerEndlessDebug(game: Phaser.Game, debug: DebugMenu): void 
     },
   });
   debug.register({
+    id: 'endless.shop',
+    tab: TAB,
+    section: SECTION,
+    icon: 'clipboard',
+    label: 'Open merchant',
+    hint: 'Open the merchant (Odo the Peddler) now with wares for the waiting wave (camp only; not during a suspended battle)',
+    run: () => {
+      const run = readyRun();
+      commit(openShop(run));
+      open(game);
+    },
+  });
+  debug.register({
     id: 'endless.relic',
     tab: TAB,
     section: SECTION,
@@ -103,6 +116,18 @@ export function registerEndlessDebug(game: Phaser.Game, debug: DebugMenu): void 
     run: () => {
       const run = readyRun();
       commit(grantRelic(run));
+      if (game.scene.isActive(ENDLESS_SCENE)) open(game);
+    },
+  });
+  debug.register({
+    id: 'endless.item',
+    tab: TAB,
+    section: SECTION,
+    icon: 'helm',
+    label: 'Give item',
+    hint: 'Put an item into the Endless bag (equip it on the camp screen with Gear)',
+    run: () => {
+      commit(giveItem(readyRun()));
       if (game.scene.isActive(ENDLESS_SCENE)) open(game);
     },
   });

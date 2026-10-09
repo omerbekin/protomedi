@@ -10,7 +10,7 @@
  *   thorn_whip (Thorn Whip) -> 'thornwhip'
  *   natures_wrath (Nature's Wrath) -> 'vines'
  *   rejuvenate (Rejuvenate) -> 'rejuvenate'
- *   summon_treant (Summon Treant) -> 'summonroots'
+ *   summon_treant (Summon Treant) -> 'summonroots' (+ olay efekti 'summon_treant': Treant doğuşu)
  *   root_smash (Root Smash) -> 'rootfall'
  *   vine_snare (Vine Snare) -> 'vinesnare'
  * Phaser'ı ve ../../vfx'i ÇALIŞMA ZAMANINDA içe aktarma (yalnızca import type); her şey k üzerinden gelir.
@@ -510,54 +510,487 @@ const rejuvenate: V2Vfx = async (c, k) => {
 
 // ---------------------------------------------------------------------------------------------------------------- SUMMON TREANT
 
+/*
+ * SUMMON TREANT - YENİ TASARIM DİLİ (2026-10-09): Mage v2 ile aynı gerçekçi, ağır dil; büyü pırıltısı / mühür yok. Toprak, kök, kabuk,
+ * yaprak ve yaşayan yeşil-altın ışık (ADD, düşük, nefes alan). İki parça art arda oynar (olay akışı değişmez):
+ *  1) 'summonroots' (skill, ~0,85 sn): Druid asasını kaldırır (tepesinde yumuşak yeşil-altın ışık, asadan birkaç yaprak kopar), asayı
+ *     toprağa saplar: ayağının dibinde toprak sıçrar, iki kök sırtı toprağın altından Treant'ın doğacağı yuvaya koşar, yuvada toprak
+ *     kabarır (çakıllar zıplar). Verdant Blessing: dostların üstüne birer meşe yaprağı salınarak düşer.
+ *  2) 'summon_treant' (olay, ~2,3 sn): toprak kabarıp çatlar; kalın, kabuklu, yosunlu kökler topraktan fışkırıp burularak yükselir
+ *     (her kökün dibinde toprak püskürür, toz kalkar), kökler içe kıvrılıp gövdeye sarılırken Treant topraktan büyüyerek yükselir
+ *     (koyu kabuk renginden kendi rengine açılır, kabuk kıymıkları savrulur), arkasında yaşayan yeşil-altın ışık nefes alır, polen
+ *     zerreleri ağır ağır yükselir; taç yerine oturunca yapraklar salınarak dökülür; ağır bir adımla yere oturur (gümleme, toz, sarsıntı).
+ */
+
+// --- gürültü (yalnızca doku üretiminde; deterministik)
+function hash2(x: number, y: number, s: number): number {
+  let h = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(s | 0, 982451653);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+function vnoise(x: number, y: number, s: number): number {
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  const xf = x - xi;
+  const yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf);
+  const v = yf * yf * (3 - 2 * yf);
+  const a = hash2(xi, yi, s);
+  const b = hash2(xi + 1, yi, s);
+  const c = hash2(xi, yi + 1, s);
+  const d = hash2(xi + 1, yi + 1, s);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function fbm(x: number, y: number, s: number, oct = 4): number {
+  let t = 0;
+  let amp = 0.5;
+  let f = 1;
+  let n = 0;
+  for (let i = 0; i < oct; i++) {
+    t += vnoise(x * f, y * f, s + i * 17) * amp;
+    n += amp;
+    amp *= 0.5;
+    f *= 2;
+  }
+  return t / n;
+}
+const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+function mixHex(a: number, b: number, t: number): number {
+  const u = clamp01(t);
+  const r = ((a >> 16) & 255) + (((b >> 16) & 255) - ((a >> 16) & 255)) * u;
+  const g = ((a >> 8) & 255) + (((b >> 8) & 255) - ((a >> 8) & 255)) * u;
+  const bl = (a & 255) + ((b & 255) - (a & 255)) * u;
+  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(bl);
+}
+
+type Img = Phaser.GameObjects.Image;
+type Gfx = Phaser.GameObjects.Graphics;
+
+/** Toz topağı: düzensiz kenarlı, içi gürültülü gri (tint ile toprak tozu). 3 varyant. */
+const dustTex = (k: VfxKit, s: Phaser.Scene, v: number): string =>
+  k.softTexture(s, `v2druid:dust${v}`, 40, 40, (x, y) => {
+    const nx = (x + 0.5) / 40;
+    const ny = (y + 0.5) / 40;
+    const r = 0.36 + (fbm(nx * 3.5, ny * 3.5, 501 + v * 9) - 0.5) * 0.3;
+    const d = Math.hypot(nx - 0.5, ny - 0.5) / r;
+    if (d >= 1) return null;
+    const n = fbm(nx * 7, ny * 7, 531 + v * 3);
+    const L = clamp01(0.5 + (n - 0.5) * 0.9 + (0.5 - ny) * 0.35);
+    const c = L > 0.72 ? '#ffffff' : L > 0.56 ? '#d9d9d9' : L > 0.4 ? '#b0b0b0' : '#8a8a8a';
+    return { c, a: Math.min(1, (1 - d) * 2.2) * (0.55 + n * 0.5) };
+  });
+
+/** Kabaran / yarılan toprak lekesi (yere yatık; koyu, nemli toprak). */
+const moundTex = (k: VfxKit, s: Phaser.Scene): string =>
+  k.softTexture(s, 'v2druid:mound', 72, 26, (x, y) => {
+    const nx = (x + 0.5) / 72 - 0.5;
+    const ny = (y + 0.5) / 26 - 0.5;
+    const d = Math.hypot(nx * 2, ny * 2);
+    const n = fbm(x / 5, y / 2.5, 561);
+    const lim = 0.9 + (n - 0.5) * 0.4;
+    if (d >= lim) return null;
+    const q = d / lim;
+    if (ny < -0.1 && q > 0.55 && n > 0.5) return { c: '#7a5a3c', a: 1 };
+    return { c: q < 0.45 ? '#2a1c12' : q < 0.75 ? '#3e2a1a' : '#55392a', a: q > 0.85 ? 0.7 : 1 };
+  });
+
+function fadeOut(c: VfxCtx, k: VfxKit, obj: Phaser.GameObjects.GameObject, delay: number, dur: number, extra: Record<string, unknown> = {}): void {
+  c.scene.tweens.add({ targets: obj, alpha: 0, delay: k.slow(delay), duration: k.slow(dur), ...extra, onComplete: () => obj.destroy() });
+}
+
+/** Yaşayan yeşil-altın ışık (ADD); kendini söndürmez. */
+function lifeLight(c: VfxCtx, k: VfxKit, x: number, y: number, w: number, h: number, tint: number, alpha: number, depth: number): Img {
+  return c.scene.add.image(x, y, greenGlowTex(c, k)).setDisplaySize(w, h).setTint(tint).setAlpha(alpha).setDepth(depth).setBlendMode(k.Phaser.BlendModes.ADD);
+}
+
+/** Kabaran, yavaşça yükselip dağılan toprak tozu (normal karışım). */
+function billow(c: VfxCtx, k: VfxKit, x: number, y: number, o: { n: number; spread: number; size: [number, number]; rise: [number, number]; life: [number, number]; tint?: number | number[]; alpha?: number; drift?: number; delay?: [number, number]; depth?: number; grow?: number }): void {
+  for (let i = 0; i < o.n; i++) {
+    const s = k.rnd(o.size[0], o.size[1]);
+    const p = c.scene.add
+      .image(x + k.rnd(-o.spread, o.spread), y + k.rnd(-o.spread * 0.12, o.spread * 0.12), dustTex(k, c.scene, i % 3))
+      .setDisplaySize(s * 0.5, s * 0.4)
+      .setTint(Array.isArray(o.tint) ? k.pick(o.tint) : (o.tint ?? 0xa88e6c))
+      .setAlpha(0)
+      .setDepth(o.depth ?? k.DEPTH + 22)
+      .setRotation(k.rnd(0, 6))
+      .setFlipX(Math.random() < 0.5);
+    const life = k.rnd(o.life[0], o.life[1]);
+    const dl = o.delay ? k.rnd(o.delay[0], o.delay[1]) : 0;
+    const g = o.grow ?? 1.8;
+    c.scene.tweens.add({ targets: p, alpha: o.alpha ?? 0.6, delay: k.slow(dl), duration: k.slow(life * 0.12) });
+    c.scene.tweens.add({ targets: p, x: p.x + (o.drift ?? 0) * k.rnd(0.5, 1.2) + (p.x - x) * 0.6, y: p.y - k.rnd(o.rise[0], o.rise[1]), displayWidth: s * g, displayHeight: s * g * 0.8, rotation: p.rotation + k.rnd(-0.4, 0.4), delay: k.slow(dl), duration: k.slow(life), ease: 'Cubic.easeOut' });
+    fadeOut(c, k, p, dl + life * 0.4, life * 0.6, { ease: 'Sine.easeIn' });
+  }
+}
+
+/** Fizikli parçacık (toprak topağı, kabuk kıymığı, polen). */
+type Part = { x: number; y: number; vx: number; vy: number; g: number; drag: number; life: number; age: number; size: number; col: number; floor?: number; a?: number; ph?: number };
+
+function particles(c: VfxCtx, k: VfxKit, depth: number, dur: number, init: Part[], o: { add?: boolean; spawn?: (t: number, out: Part[]) => void } = {}): Gfx {
+  const g = c.scene.add.graphics().setDepth(depth);
+  if (o.add) g.setBlendMode(k.Phaser.BlendModes.ADD);
+  const ps = init.slice();
+  let last = 0;
+  void k.counter(c.scene, k.slow(dur), (u) => {
+    const t = u * dur;
+    const dt = Math.min(50, t - last) / 1000;
+    last = t;
+    o.spawn?.(t, ps);
+    g.clear();
+    for (let i = ps.length - 1; i >= 0; i--) {
+      const p = ps[i]!;
+      p.age += dt * 1000;
+      if (p.age >= p.life) {
+        ps.splice(i, 1);
+        continue;
+      }
+      p.vx *= 1 - p.drag * dt;
+      p.vy = p.vy * (1 - p.drag * dt) + p.g * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.floor !== undefined && p.y > p.floor) {
+        p.y = p.floor;
+        p.vy = 0;
+        p.vx *= 0.25;
+        p.g = 0;
+      }
+      const q = p.age / p.life;
+      const al = (p.a ?? 1) * (q > 0.7 ? (1 - q) / 0.3 : 1) * (o.add ? Math.min(1, q * 5) : 1);
+      const sw = p.ph !== undefined ? Math.sin(p.age * 0.006 + p.ph) * 6 : 0;
+      g.fillStyle(p.col, al).fillRect(k.snap(p.x + sw), k.snap(p.y), p.size, p.size);
+      if (!o.add && p.size >= 6) g.fillStyle(0x1a120c, al * 0.8).fillRect(k.snap(p.x + sw), k.snap(p.y) + p.size - 2, p.size, 2);
+    }
+    if (u >= 1) g.destroy();
+  });
+  return g;
+}
+
+/** Topraktan savrulan topaklar (yerçekimi; yere düşüp kalır). */
+function clods(k: VfxKit, x: number, y: number, n: number, o: { speed: [number, number]; spread?: number; size?: [number, number]; floorY: number }): Part[] {
+  const cols = [0x2e2017, 0x4a3524, 0x6b5038, 0x3a2a1e, 0x8a6e52];
+  return Array.from({ length: n }, () => {
+    const a = k.rnd(-Math.PI * 0.9, -Math.PI * 0.1);
+    const sp = k.rnd(o.speed[0], o.speed[1]);
+    return { x: x + k.rnd(-(o.spread ?? 20), o.spread ?? 20), y: y - 4, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 1500, drag: 0.6, life: k.rnd(900, 1500), age: 0, size: k.snap(k.rnd(o.size?.[0] ?? 4, o.size?.[1] ?? 8)) || 4, col: k.pick(cols), floor: o.floorY + k.rnd(-10, 12) };
+  });
+}
+
+/** Kırık çizgili toprak çatlakları (ışıksız; yere yatık). `grow(u)` yayılmayı ilerletir. */
+function soilCracks(c: VfxCtx, k: VfxKit, p: Pt, len: number, n: number): { grow: (u: number) => void; g: Gfx } {
+  const segs: Array<Array<[number, number]>> = [];
+  for (let i = 0; i < n; i++) {
+    const ang0 = (i / n) * Math.PI * 2 + k.rnd(-0.3, 0.3);
+    let a = ang0;
+    let x = p.x;
+    let y = p.y;
+    const pts: Array<[number, number]> = [[x, y]];
+    const steps = Math.round((len * k.rnd(0.6, 1.1)) / 9);
+    for (let j = 0; j < steps; j++) {
+      a += k.rnd(-0.35, 0.35) + (ang0 - a) * 0.25;
+      const st = k.rnd(6, 12);
+      x += Math.cos(a) * st;
+      y += Math.sin(a) * st * 0.32;
+      pts.push([x, y]);
+    }
+    segs.push(pts);
+  }
+  const g = c.scene.add.graphics().setDepth(k.FLOOR_FX + 3);
+  return {
+    g,
+    grow: (u) => {
+      g.clear();
+      for (const pts of segs) {
+        const shown = Math.ceil((pts.length - 1) * u);
+        for (let i = 0; i < shown; i++) {
+          const [x0, y0] = pts[i]!;
+          const [x1, y1] = pts[i + 1]!;
+          const w = Math.max(2, Math.round(5 * (1 - i / pts.length) * 0.5) * 2);
+          const m = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 2));
+          for (let j = 0; j <= m; j++) {
+            const x = k.snap(x0 + ((x1 - x0) * j) / m);
+            const y = k.snap(y0 + ((y1 - y0) * j) / m);
+            g.fillStyle(0x7a5a3c, 0.9).fillRect(x - w / 2, y - w / 2 - 2, w, 2);
+            g.fillStyle(0x140d08, 1).fillRect(x - w / 2, y - w / 2, w, Math.max(2, w * 0.6));
+          }
+        }
+      }
+    },
+  };
+}
+
 /**
- * Summon Treant (kendine; çağrı 3 tur): Druid asasını kaldırır, ayağında meşe mührü döner; avucundan bir palamut kavisle Treant'ın doğacağı
- * yuvaya (skillUsed.slot) uçar ve toprağa gömülür (toz, ilk filiz), oradan zemin altında kök sırtları druid'e doğru uzanır ve yuvada büyük
- * meşe mührü açılır: ağaç orada yükselecek. Verdant Blessing (pasif: çağırınca tüm dostlar iyileşir): dostların üstüne yeşil yaprak süzülür.
- * Ardından oyunun Treant doğuş efekti (kökler, topraktan yükseliş) gelir.
+ * Kalın kök (yan görünüş, piksel art): dipte kalın, uca doğru incelen, burularak yükselen kabuklu gövde; koyu kontur, ışık alan sol kenar,
+ * gölgeli sağ kenar, boyuna kabuk damarları, yosun lekeleri ve iki yan filiz. `grow` görünen boy oranı (0..1), `lean` uca doğru eğim (px),
+ * `twist` burulma fazı (zamanla değişince kök kıvranır). Toprak çizgisinin (by) altı çizilmez.
+ */
+function drawRoot(g: Gfx, k: VfxKit, bx: number, by: number, o: { h: number; w: number; grow: number; lean: number; twist: number; amp: number; seed: number; tint: number }): void {
+  const H = o.h * o.grow;
+  if (H < 2) return;
+  const N = Math.max(4, Math.round(H / 2));
+  const pt = (s: number): Pt => ({ x: bx + o.lean * s * s + Math.sin(s * 3.2 + o.twist + o.seed) * o.amp * s, y: by - s * H });
+  const outline = mixHex(0x1a110a, 0x000000, 0);
+  const body = mixHex(0x6b4423, 0x000000, 1 - o.tint);
+  const lit = mixHex(0xa8743f, 0x000000, 1 - o.tint);
+  const dark = mixHex(0x3e2614, 0x000000, 1 - o.tint);
+  const moss = mixHex(0x6f8c34, 0x000000, 1 - o.tint);
+  const layers: Array<(x: number, y: number, w: number, s: number) => void> = [
+    (x, y, w) => g.fillStyle(outline, 1).fillRect(k.snap(x - w / 2 - 2), k.snap(y), Math.round(w + 4), 3),
+    (x, y, w) => g.fillStyle(body, 1).fillRect(k.snap(x - w / 2), k.snap(y), Math.max(2, Math.round(w)), 3),
+    (x, y, w) => g.fillStyle(lit, 1).fillRect(k.snap(x - w / 2), k.snap(y), Math.max(2, Math.round(w * 0.28)), 3),
+    (x, y, w) => g.fillStyle(dark, 1).fillRect(k.snap(x + w * 0.18), k.snap(y), Math.max(2, Math.round(w * 0.3)), 3),
+    (x, y, w, s) => {
+      // boyuna kabuk damarı ve yosun
+      const grain = Math.sin(s * 40 + o.seed * 3) > 0.6;
+      if (grain && w > 8) g.fillStyle(dark, 1).fillRect(k.snap(x - w * 0.1), k.snap(y), 2, 3);
+      if (hash2(Math.round(s * 30), Math.round(o.seed * 10), 7) > 0.86 && w > 8) g.fillStyle(moss, 1).fillRect(k.snap(x - w / 2), k.snap(y), Math.round(w * 0.45), 4);
+    },
+  ];
+  for (const layer of layers)
+    for (let i = 0; i <= N; i++) {
+      const s = i / N;
+      const p = pt(s);
+      if (p.y > by + 2) continue;
+      const w = o.w * (1 - s) ** 0.6 + 4;
+      layer(p.x, p.y, w, s);
+    }
+  // yan filizler (incecik kök uçları)
+  for (const [s0, dir] of [[0.45, 1], [0.68, -1]] as Array<[number, number]>) {
+    if (o.grow < s0 + 0.1) continue;
+    const p = pt(s0);
+    const w0 = o.w * (1 - s0) ** 0.6 + 4;
+    const len = o.h * 0.16 * Math.min(1, (o.grow - s0) * 3);
+    for (let j = 0; j < len; j += 2) {
+      const x = p.x + dir * (w0 / 2 + j);
+      const y = p.y - j * 0.7 + Math.sin(j * 0.2) * 2;
+      g.fillStyle(outline, 1).fillRect(k.snap(x) - 1, k.snap(y) - 1, 4, 4);
+      g.fillStyle(body, 1).fillRect(k.snap(x), k.snap(y), 2, 2);
+    }
+  }
+}
+
+/** Salınarak düşen meşe yaprakları (ağırlıklı, sarkaç gibi; pırıltısız). */
+function leafFall(c: VfxCtx, k: VfxKit, x: number, y: number, n: number, o: { spread: number; fall: [number, number]; dur: [number, number]; delay?: [number, number]; size?: [number, number]; floor?: number }): void {
+  for (let i = 0; i < n; i++) {
+    const dry = Math.random() < 0.35;
+    const sz = k.rnd(o.size?.[0] ?? 20, o.size?.[1] ?? 28);
+    const x0 = x + k.rnd(-o.spread, o.spread);
+    const y0 = y + k.rnd(-10, 10);
+    const leaf = k.v2Sprite(c, dry ? 'dryleaf' : 'oakleaf', dry ? '#b8862e' : '#62a03b', x0, y0, sz, k.DEPTH + 44).setAlpha(0).setRotation(k.rnd(0, 6));
+    const fall = k.rnd(o.fall[0], o.fall[1]);
+    const dur = k.rnd(o.dur[0], o.dur[1]);
+    const dl = o.delay ? k.rnd(o.delay[0], o.delay[1]) : 0;
+    const sway = k.rnd(18, 34);
+    const ph = k.rnd(0, 6);
+    const drift = k.rnd(-30, 30);
+    void k.wait(c.scene, k.slow(dl)).then(() =>
+      k.counter(c.scene, k.slow(dur), (u) => {
+        const yy = y0 + fall * u;
+        const sw = Math.sin(u * 7 + ph);
+        leaf.setPosition(k.snap(x0 + drift * u + sw * sway), k.snap(Math.min(yy, o.floor ?? yy)));
+        leaf.setRotation(ph + sw * 0.9);
+        leaf.setScale(leaf.scaleX, Math.abs(leaf.scaleX) * (0.55 + 0.45 * Math.abs(Math.cos(u * 7 + ph)))); // yaprak dönerken incelir
+        leaf.setAlpha(u < 0.1 ? u / 0.1 : u > 0.8 ? (1 - u) / 0.2 : 1);
+        if (u >= 1) leaf.destroy();
+      }),
+    );
+  }
+}
+
+/** Treant'ın doğacağı yuva (kullanım özeti ya da skillUsed.slot); yoksa undefined. */
+function grovePlot(c: VfxCtx, k: VfxKit, slot: unknown): Pt | undefined {
+  if (typeof slot !== 'number') return undefined;
+  return k.cellMid(c.actor.combatant.side === 'party' ? 'party' : 'enemy', slot);
+}
+
+/**
+ * Summon Treant (skill): bkz. bölüm başı (1). Druid asasını kaldırır, tepesinde yaşayan yeşil-altın ışık toplanır, birkaç yaprak kopar;
+ * asayı toprağa saplar (gövde çöker), dibinde toprak sıçrar; iki kök sırtı toprağın altından yuvaya koşar ve yuvada toprak kabarır.
+ * Verdant Blessing: dostların üstüne birer yaprak salınarak düşer. ~0,85 sn; doğuş 'summon_treant' olay efektindedir.
  */
 const summonroots: V2Vfx = async (c, k) => {
   const a = c.actor;
   const { used } = useEvents(c);
   c.sfx('woodCreak');
   a.play('cast');
-  const f = k.feet(a);
-  runeAt(c, k, f, 200, '#7ed957', 800);
   const st = staffTop(a);
-  glowAt(c, k, st.x, st.y, 100, 520);
-  k.burst(c.scene, st.x, st.y, { colors: LEAF, n: 8, speed: [30, 140], gravity: -40, life: [400, 800], size: [6, 10] });
-  await k.wait(c.scene, k.slow(200));
-  const slot = used?.['slot'];
-  const side = a.combatant.side === 'party' ? 'party' : 'enemy';
-  const target = typeof slot === 'number' ? k.cellMid(side, slot) : { x: a.container.x + facing(a) * 140, y: a.container.y - 4 };
-  const h = leafHand(a);
-  const acorn = k.v2Sprite(c, 'acorn', '#8c5a2b', h.x, h.y, 34, k.DEPTH + 40);
-  await k.travel(c.scene, acorn, { x: target.x, y: target.y - 6 }, 360, { arc: 120, spin: 1.5, trail: (x, y) => k.burst(c.scene, x, y, { colors: LEAF, n: 1, speed: [5, 40], gravity: -30, life: [260, 460], size: [5, 8] }), trailEvery: 32 });
-  acorn.destroy();
+  const halo = lifeLight(c, k, st.x, st.y, 30, 30, 0xe6e89a, 0, k.DEPTH + 32);
+  c.scene.tweens.add({ targets: halo, alpha: 0.75, displayWidth: 110, displayHeight: 110, duration: k.slow(260), ease: 'Sine.easeIn' });
+  fadeOut(c, k, halo, 300, 400);
+  leafFall(c, k, st.x, st.y, 3, { spread: 20, fall: [90, 160], dur: [700, 1000], size: [18, 24] });
+  await k.wait(c.scene, k.slow(260));
+  // asa toprağa saplanır
   c.sfx('rootsRumble');
-  soilBurst(c, k, target, 0.8);
-  runeAt(c, k, target, 230, '#7ed957', 900);
-  const shoot = erupt(c, k, 'sprout', '#7ed957', target.x, target.y, 36, 46, 0, 700);
-  void shoot;
-  k.shake(c.scene, 160, 0.004);
-  // kök sırtları druid'den yuvaya (iki iplik)
-  const r1 = rootRidge(c, k, { x: f.x + facing(a) * 20, y: f.y }, target, 300, 10);
-  const r2 = rootRidge(c, k, { x: f.x + facing(a) * 10, y: f.y + 8 }, { x: target.x, y: target.y + 10 }, 340, 8);
-  // Verdant Blessing: dostların üstüne yaprak
+  c.scene.tweens.add({ targets: a.container, y: a.container.y + 6, scaleY: 0.97, duration: k.slow(70), yoyo: true, hold: k.slow(90), ease: 'Quad.easeIn' });
+  const f = k.feet(a);
+  const plant = { x: f.x - facing(a) * spriteW(a) * 0.3, y: f.y };
+  k.shake(c.scene, 140, 0.003);
+  particles(c, k, k.DEPTH + 30, 900, clods(k, plant.x, plant.y, 9, { speed: [90, 240], spread: 10, size: [3, 7], floorY: plant.y }));
+  billow(c, k, plant.x, plant.y, { n: 3, spread: 30, size: [40, 70], rise: [10, 40], life: [800, 1200], alpha: 0.5 });
+  const to = grovePlot(c, k, used?.['slot']) ?? { x: f.x + facing(a) * 160, y: f.y };
+  const r1 = rootRidge(c, k, { x: plant.x, y: plant.y }, to, 300, 10);
+  const r2 = rootRidge(c, k, { x: plant.x, y: plant.y + 8 }, { x: to.x, y: to.y + 10 }, 340, 8);
+  // Verdant Blessing: dostların üstüne birer yaprak
   const allies = [...(sceneOf(c).views?.values() ?? [])].filter((v) => v.combatant.side === a.combatant.side && v.combatant.hp > 0 && v !== a);
-  for (const v of [a, ...allies].slice(0, 12)) {
-    for (let i = 0; i < 2; i++) {
-      const lx = v.container.x + k.rnd(-30, 30);
-      const leaf = k.v2Sprite(c, 'oakleaf', '#7dff9b', lx, v.container.y - v.h - 40, 20, k.DEPTH + 42).setAlpha(0).setRotation(k.rnd(0, 6));
-      c.scene.tweens.add({ targets: leaf, alpha: 1, duration: k.slow(120), delay: k.slow(200 + i * 120) });
-      c.scene.tweens.add({ targets: leaf, y: v.container.y - v.h * 0.4, x: lx + k.rnd(-30, 30), rotation: leaf.rotation + k.rnd(-3, 3), delay: k.slow(200 + i * 120), duration: k.slow(800), ease: 'Sine.easeInOut', onComplete: () => c.scene.tweens.add({ targets: leaf, alpha: 0, duration: k.slow(200), onComplete: () => leaf.destroy() }) });
-    }
-  }
+  for (const v of allies.slice(0, 11)) leafFall(c, k, v.container.x, v.container.y - v.h - 30, 1, { spread: 20, fall: [v.h * 0.5, v.h * 0.7], dur: [900, 1200], delay: [100, 400], size: [18, 24] });
   await Promise.all([r1.done, r2.done]);
-  r1.fade(400);
-  r2.fade(400);
-  await k.wait(c.scene, k.slow(160));
+  r1.fade(500);
+  r2.fade(500);
+  // yuvada toprak kabarır
+  const mound = c.scene.add.image(to.x, to.y, moundTex(k, c.scene)).setDisplaySize(40, 14).setDepth(k.FLOOR_FX + 2).setAlpha(0.9);
+  c.scene.tweens.add({ targets: mound, displayWidth: 110, displayHeight: 34, duration: k.slow(200), ease: 'Quad.easeOut' });
+  fadeOut(c, k, mound, 700, 600);
+  particles(c, k, k.FLOOR_FX + 8, 600, clods(k, to.x, to.y, 7, { speed: [40, 120], spread: 30, size: [2, 4], floorY: to.y }));
+  await k.wait(c.scene, k.slow(180));
   a.play('idle');
+};
+
+/**
+ * Treant doğuşu (olay summon): bkz. bölüm başı (2). `c.targets[0]` yeni Treant (görünmez başlar, burada büyüyerek görünür olur).
+ * Promise Treant tam çıkıp yere oturunca çözülür (~2,3 sn); düşen yapraklar, toz ve ışık arkada söner.
+ */
+const summon_treant: V2Vfx = async (c, k) => {
+  const v = c.targets[0];
+  if (!v) return;
+  const home = v.home;
+  const f = { x: home.x, y: home.y - 2 };
+  const cellW = Math.max(140, Math.min(220, v.w * 1.0));
+  v.container.setAlpha(0);
+  // 0) toprak kabarır ve çatlar, yer gürler
+  c.sfx('rootsRumble');
+  k.shake(c.scene, 420, 0.002);
+  const mound = c.scene.add.image(f.x, f.y + 2, moundTex(k, c.scene)).setDisplaySize(cellW * 0.4, cellW * 0.14).setDepth(k.FLOOR_FX + 2);
+  c.scene.tweens.add({ targets: mound, displayWidth: cellW * 1.25, displayHeight: cellW * 0.42, duration: k.slow(420), ease: 'Quad.easeOut' });
+  const cr = soilCracks(c, k, f, cellW * 0.55, 6);
+  void k.counter(c.scene, k.slow(380), (u) => cr.grow(u), 'Quad.easeOut');
+  particles(c, k, k.FLOOR_FX + 8, 500, [], {
+    spawn: (t, out) => {
+      if (t < 380 && Math.random() < 0.4) out.push(...clods(k, f.x + k.rnd(-cellW * 0.4, cellW * 0.4), f.y + k.rnd(-6, 6), 1, { speed: [40, 110], spread: 2, size: [2, 4], floorY: f.y + k.rnd(-6, 8) }));
+    },
+  });
+  await k.wait(c.scene, k.slow(320));
+  // 1) kökler topraktan fışkırır, burularak yükselir
+  c.sfx('woodCreak');
+  k.shake(c.scene, 200, 0.005);
+  const H = v.h;
+  type Root = { x: number; y: number; h: number; w: number; lean: number; amp: number; seed: number; grow: number; twist: number; front: boolean; g: Gfx };
+  const specs: Array<[number, number, number, boolean]> = [
+    [-0.46, 0.62, 26, true],
+    [0.44, 0.7, 28, true],
+    [-0.2, 0.92, 34, false],
+    [0.18, 0.84, 32, false],
+    [-0.62, 0.42, 20, false],
+    [0.62, 0.46, 20, true],
+    [0.02, 0.55, 22, true],
+  ];
+  const roots: Root[] = specs.map(([dx, hh, w, front], i) => ({
+    x: k.snap(f.x + dx * cellW),
+    y: k.snap(f.y + (front ? 8 : -6)),
+    h: H * hh,
+    w: w * (v.w / 150),
+    lean: -dx * cellW * 0.15,
+    amp: H * 0.08 * (i % 2 ? 1 : -1),
+    seed: i * 1.7,
+    grow: 0,
+    twist: 0,
+    front,
+    g: c.scene.add.graphics().setDepth(v.container.depth + (front ? 2 : -2)),
+  }));
+  let tint = 0.8;
+  const redraw = (): void => {
+    for (const r of roots) {
+      r.g.clear();
+      drawRoot(r.g, k, r.x, r.y, { h: r.h, w: r.w, grow: r.grow, lean: r.lean, twist: r.twist, amp: r.amp, seed: r.seed, tint });
+    }
+  };
+  roots.forEach((r, i) => {
+    void k.wait(c.scene, k.slow(i * 45)).then(() => {
+      particles(c, k, v.container.depth + 3, 1300, clods(k, r.x, r.y, 9, { speed: [160, 420], spread: 10, size: [3, 8], floorY: f.y + 8 }));
+      billow(c, k, r.x, r.y, { n: 2, spread: 16, size: [44, 70], rise: [20, 60], life: [900, 1400], tint: [0xa88e6c, 0x96805f], alpha: 0.55, depth: v.container.depth + (r.front ? 3 : -3) });
+      return k.counter(c.scene, k.slow(380), (u) => {
+        r.grow = 1 - (1 - u) ** 3;
+        r.twist = u * 1.6;
+      });
+    });
+  });
+  const tick = (): void => redraw();
+  c.scene.events.on('update', tick);
+  billow(c, k, f.x, f.y - 10, { n: 8, spread: cellW * 0.45, size: [80, 140], rise: [60, 150], life: [1600, 2400], tint: [0x8a7458, 0x9c8464, 0x7a664e], alpha: 0.6, depth: v.container.depth - 4, drift: 14 });
+  await k.wait(c.scene, k.slow(300));
+  // 2) Treant topraktan büyüyerek yükselir; kökler içe kıvrılıp gövdeye sarılır ve onunla birleşir; yaşayan ışık nefes alır
+  const glow = lifeLight(c, k, f.x, f.y - H * 0.45, cellW * 0.7, H * 0.9, 0xd6e27a, 0, v.container.depth - 3);
+  c.scene.tweens.add({ targets: glow, alpha: 0.42, displayWidth: cellW * 1.4, duration: k.slow(700), ease: 'Sine.easeInOut', yoyo: true, hold: k.slow(500) });
+  const pool = lifeLight(c, k, f.x, f.y, cellW * 0.8, cellW * 0.26, 0xe8d880, 0, k.FLOOR_FX + 5);
+  c.scene.tweens.add({ targets: pool, alpha: 0.6, duration: k.slow(500) });
+  particles(c, k, v.container.depth + 4, 2200, [], {
+    add: true,
+    spawn: (t, out) => {
+      if (t < 1600 && Math.random() < 0.3)
+        out.push({ x: f.x + k.rnd(-cellW * 0.45, cellW * 0.45), y: f.y - k.rnd(0, H * 0.6), vx: k.rnd(-8, 8), vy: k.rnd(-40, -16), g: 0, drag: 0.2, life: k.rnd(900, 1500), age: 0, size: 2, col: k.pick([0xf0e8a0, 0xd6e27a, 0xb8d860]), a: 0.8, ph: k.rnd(0, 6) });
+    },
+  });
+  const mask = c.scene.make.graphics({ x: 0, y: 0 }, false);
+  mask.fillStyle(0xffffff).fillRect(home.x - 500, home.y - 1200, 1000, 1204);
+  v.container.setMask(mask.createGeometryMask()).setAlpha(1);
+  const ui = v.container.list.filter((ch) => ch !== v.sprite) as unknown as Array<Phaser.GameObjects.Components.Alpha & Phaser.GameObjects.GameObject>;
+  const uiAlpha = ui.map((ch) => ch.alpha);
+  ui.forEach((ch) => ch.setAlpha(0));
+  const sx = v.container.scaleX;
+  const sy = v.container.scaleY;
+  const start = home.y + H * 0.7;
+  v.container.setY(start).setScale(sx * 0.8, sy * 0.7);
+  v.sprite.setTint(0x4a3826);
+  c.sfx('woodCreak');
+  let leaves = false;
+  let chips = 0;
+  // ahşap gerinmesi: kısa duraklamalarla (gıcırdayan büyüme), sallanmadan
+  const KF: Array<[number, number]> = [[0, 0], [0.3, 0.42], [0.38, 0.45], [0.7, 0.86], [0.78, 0.88], [1, 1]];
+  await k.counter(c.scene, k.slow(1250), (u) => {
+    let i = 0;
+    while (i < KF.length - 2 && u > KF[i + 1]![0]) i++;
+    const [u0, p0] = KF[i]!;
+    const [u1, p1] = KF[i + 1]!;
+    const t = clamp01((u - u0) / Math.max(0.001, u1 - u0));
+    const p = p0 + (p1 - p0) * (1 - (1 - t) ** 2);
+    v.container.setY(start + (home.y - start) * p);
+    v.container.setScale(sx * (0.8 + 0.2 * p), sy * (0.7 + 0.3 * p));
+    v.sprite.setTint(mixHex(0x4a3826, 0xffffff, clamp01((p - 0.2) / 0.8) ** 1.3));
+    // kökler gövdeye kıvrılır, sonra gövdeyle birleşip söner
+    for (const r of roots) {
+      r.lean = (f.x - r.x) * 0.9 * Math.min(1, p * 1.4);
+      r.twist = 1.6 + p * 2.4;
+      r.grow = Math.max(0, 1 - Math.max(0, p - 0.55) * 2.2);
+      r.g.setAlpha(1 - Math.max(0, p - 0.6) * 2.5);
+    }
+    tint = 0.8 + 0.2 * p;
+    if (u * 1250 > chips) {
+      chips += 140;
+      const top = home.y - H * p;
+      particles(c, k, v.container.depth + 3, 900, Array.from({ length: 4 }, () => ({ x: f.x + k.rnd(-v.w * 0.3, v.w * 0.3), y: top + k.rnd(0, H * 0.3), vx: k.rnd(-160, 160), vy: k.rnd(-220, -60), g: 1300, drag: 0.5, life: k.rnd(500, 900), age: 0, size: k.pick([2, 4, 4]), col: k.pick([0x6b4423, 0x8c5a2b, 0x4a2e18, 0x6f8c34]), floor: f.y + k.rnd(-6, 10) })));
+    }
+    if (!leaves && p > 0.62) {
+      leaves = true;
+      c.sfx('leafRustle');
+      leafFall(c, k, f.x, home.y - H * 0.9, 9, { spread: v.w * 0.4, fall: [H * 0.6, H * 0.95], dur: [1400, 2200], delay: [0, 700], floor: f.y + 6 });
+    }
+  });
+  c.scene.events.off('update', tick);
+  for (const r of roots) r.g.destroy();
+  v.container.setPosition(home.x, home.y).setScale(sx, sy).clearMask(true);
+  v.sprite.clearTint();
+  ui.forEach((ch, i) => c.scene.tweens.add({ targets: ch, alpha: uiAlpha[i] ?? 1, duration: k.slow(260) }));
+  // 3) ağır adımla yere oturur
+  c.sfx('thud');
+  k.shake(c.scene, 180, 0.006);
+  c.scene.tweens.add({ targets: v.container, scaleY: sy * 0.96, scaleX: sx * 1.03, duration: k.slow(70), yoyo: true, ease: 'Quad.easeOut' });
+  particles(c, k, v.container.depth + 2, 900, clods(k, f.x, f.y, 10, { speed: [80, 220], spread: cellW * 0.35, size: [2, 6], floorY: f.y + 8 }));
+  billow(c, k, f.x, f.y + 6, { n: 8, spread: cellW * 0.6, size: [70, 120], rise: [10, 40], life: [2000, 2800], tint: [0xa88e6c, 0xb8a07c], alpha: 0.45, depth: v.container.depth + 2, drift: 20, grow: 2.2 });
+  leafFall(c, k, f.x, home.y - H * 0.85, 4, { spread: v.w * 0.35, fall: [H * 0.6, H * 0.9], dur: [1600, 2200], delay: [100, 600], floor: f.y + 6 });
+  fadeOut(c, k, pool, 200, 900);
+  fadeOut(c, k, glow, 600, 700);
+  fadeOut(c, k, mound, 900, 1400);
+  fadeOut(c, k, cr.g, 600, 1200);
+  await k.wait(c.scene, k.slow(160));
 };
 
 // ---------------------------------------------------------------------------------------------------------------- TREANT
@@ -679,6 +1112,8 @@ export const VFX: Record<string, V2Vfx> = {
   vines,
   rejuvenate,
   summonroots,
+  // olay efekti (docs/design/art-v2.md > 3.1): Treant doğuşu
+  summon_treant,
   rootfall,
   vinesnare,
 };

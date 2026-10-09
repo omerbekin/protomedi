@@ -1,35 +1,50 @@
-# Embers of Valdoria lobi sunucusu (Cloudflare Worker)
+# Embers of Valdoria Cloudflare Worker (oyun sitesi + lobi sunucusu)
 
-Bu küçük sunucu yalnızca iki oyuncuyu **buluşturur**: lobi kodunu tutar ve iki tarayıcının birbirini bulması için gereken
-bağlantı bilgisini (WebRTC "teklif/yanıt" ve adres adayları) aktarır. Oyun hamleleri buradan geçmez; iki tarayıcı arasında
-doğrudan akar. Tasarım: `../docs/design/multiplayer.md`.
+Tek Worker, tek adres: **https://eov.backinn.com.tr** (Cloudflare ücretsiz plan; ücretli hiçbir özellik kullanılmaz).
 
-## Ömer için adım adım kurulum (bir kez, ~10 dakika)
+- **Oyun** (`/`): oyunun derlenmiş dosyaları (`../dist`, `npm run build` çıktısı) Workers Static Assets ile sunulur. Bu istekler
+  Worker kodunu çalıştırmaz; ücretsiz ve sınırsızdır.
+- **Lobi** (`/lobby`): yalnızca iki oyuncuyu **buluşturur**: lobi kodunu tutar ve iki tarayıcının birbirini bulması için gereken
+  bağlantı bilgisini (WebRTC "teklif/yanıt" ve adres adayları) aktarır. Oyun hamleleri buradan geçmez; iki tarayıcı arasında doğrudan
+  akar. Oyundaki adres: `wss://eov.backinn.com.tr/lobby` (`../data/multiplayer.json`). Tasarım: `../docs/design/multiplayer.md`.
+- GitHub Pages (https://omerbekin.github.io/protomedi/) aynen sürer ve aynı lobiye bağlanır.
 
-1. **Cloudflare hesabı aç:** https://dash.cloudflare.com/sign-up (ücretsiz plan; kredi kartı gerekmez). E-postanı doğrula.
-2. **Bilgisayarda bu klasörü aç:** komut satırında
-   ```
-   cd C:\Users\Omer\Projects\proto-game-iskelet\game\cloudflare
-   npm install
-   ```
-3. **Giriş yap:** `npx wrangler login` -> tarayıcı açılır, Cloudflare hesabınla "Allow" de.
-4. **Yayınla:** `npx wrangler deploy`
-   - İlk seferde bir `workers.dev` alt alan adı seçmen istenebilir (ör. `omerbekin`). Bunu bir kez seçersin.
-   - Sonunda şuna benzer bir adres yazar: `https://protomedi-lobby.omerbekin.workers.dev`
-5. **Adresi oyuna yaz:** `https` yerine `wss` koyarak `game/data/multiplayer.json` dosyasındaki `signalingUrl` alanına yaz:
-   ```json
-   "signalingUrl": "wss://protomedi-lobby.omerbekin.workers.dev"
-   ```
-   (Ya da adresi Claude'a ver, o yazsın.) Sonra değişikliği `main`'e gönder; GitHub Pages yayınlayınca Multiplayer menüsü çalışır.
-6. **Kontrol:** tarayıcıda `https://protomedi-lobby.<senin-adın>.workers.dev/` adresini aç: "Embers of Valdoria lobby server OK" yazmalı.
+## Kurulum adım adım (Ömer + koordinatör)
 
-Kod güncellenirse yalnızca 4. adım (`npx wrangler deploy`) tekrarlanır. Sunucunun kayıtlarını canlı izlemek: `npx wrangler tail`.
+Ön koşul: `backinn.com.tr` Cloudflare hesabında "Active" (ad sunucuları Cloudflare'i gösteriyor).
+Komutlar komut satırında, oyun klasöründe (`C:\Users\Omer\Projects\proto-game-iskelet\game`) çalıştırılır.
 
-## Maliyet
+1. **Paketleri kur (bir kez):** `npm install` ve `npm --prefix cloudflare install` (wrangler sabit sürüm 4.148.0, zaten listede).
+2. **Giriş (bir kez):** `npm --prefix cloudflare exec -- wrangler login` -> tarayıcı açılır, Cloudflare hesabıyla **Allow**
+   (Ömer onaylar). Kontrol: `npm --prefix cloudflare exec -- wrangler whoami` hesabın adını yazmalı.
+3. **(İsteğe bağlı) Kuru deneme:** `npm --prefix cloudflare run check`: hesaba hiçbir şey göndermeden yapılandırmayı, tipleri ve
+   yüklenecek dosyaların ücretsiz plan sınırlarını denetler (önce `npm run build`).
+4. **Yayınla (tek komut):** `npm run deploy:cf`
+   - Oyunu derler (`npm run build`), dosya sınırlarını denetler, sonra tek `wrangler deploy` ile oyun dosyalarını + lobi kodunu
+     yükler ve `eov.backinn.com.tr` adresini Worker'a bağlar (**Custom Domain**: DNS kaydı ve SSL sertifikası otomatik kurulur;
+     panelde elle alan adı ekleme YOK).
+   - İlk yayında lobi deposu (Durable Object, SQLite) da kendiliğinden kurulur.
+   - Hata "DNS record already exists" gibi bir şey derse: Cloudflare paneli > backinn.com.tr > DNS > Records'ta `eov` adlı eski
+     kaydı sil, komutu tekrarla.
+5. **Kontrol:**
+   - https://eov.backinn.com.tr açılmalı (oyun). İlk yayında sertifika birkaç dakika sürebilir.
+   - https://eov.backinn.com.tr/lobby -> "Embers of Valdoria lobby server OK".
+   - Oyunda Multiplayer > Host lobby: kod çıkmalı; ikinci cihazda/sekmede davet linki ya da kodla katılınca maç başlamalı.
+     GitHub Pages sürümü de aynı lobiye bağlanır.
+   - Sunucuya ulaşılamazsa oyun "Cannot reach the multiplayer server" der (çökmez).
 
-Ücretsiz plan yeterli: Workers günde 100.000 istek, Durable Objects (SQLite) günde 100.000 istek + 13.000 GB-sn. Bir maç kabaca
-50-300 istek eder; günde yüzlerce maç bedava kotada kalır. Kota dolarsa o gün yeni lobi açılamaz; para çekilmez (ücretsiz planda
-kart yok). Rakamlar 2026 itibarıyla; güncel hali: https://developers.cloudflare.com/workers/platform/pricing/
+Güncelleme: oyun ya da lobi kodu değişince yalnızca 4. adım (`npm run deploy:cf`) tekrarlanır.
+Canlı kayıt izlemek: `npm --prefix cloudflare run tail`.
+
+## Ücretsiz plan sınırları (2026; güncel hali: https://developers.cloudflare.com/workers/platform/pricing/)
+
+- **Statik dosyalar (oyun):** istekler ücretsiz ve sınırsız; sürüm başına en çok 20.000 dosya, dosya başına en çok 25 MiB
+  (bugün ~210 dosya, toplam ~19 MiB, en büyüğü ~2,3 MiB; `scripts/check-assets.mjs` her yayından önce denetler).
+- **Worker istekleri (yalnızca /lobby):** günde 100.000; istek başına 10 ms CPU.
+- **Durable Objects (yalnızca SQLite tabanlı; ücretsiz planda tek seçenek):** günde 100.000 istek, 13.000 GB-sn süre, toplam 5 GB
+  depolama. Lobi boşta "uyur" (hibernation), boşta süre sayılmaz; kayıt 2 saat boşta kalınca silinir.
+- Bir maç kabaca 50-300 istek eder; günde binlerce maç bedava kotada kalır. Kota dolarsa o gün yeni lobi açılamaz (oyunun kendisi
+  açılmaya devam eder); **para çekilmez** (ücretsiz planda kart yok, ücretli plana kendiliğinden geçiş yok).
 
 ## Röle yedeği
 
@@ -48,9 +63,9 @@ sunucu bağlantısı kapatılır (maç sunucusuz sürer). Maç başına istek he
 ## Yerel test (internete çıkmadan)
 
 ```
-cd game/cloudflare
-npm install
-npm run dev          # http://127.0.0.1:8787 (wrangler dev, yerel Durable Object)
+npm run build                 # oyun klasöründe (yerel Worker ../dist'i de sunar; dist yoksa açılmaz)
+cd cloudflare
+npm run dev                   # http://127.0.0.1:8787 (oyun + /lobby, yerel Durable Object)
 ```
 Oyunu ayrı bir pencerede `npm run dev` ile aç ve adrese `?mpserver=ws://127.0.0.1:8787` ekle:
 `http://localhost:5173/?mpserver=ws://127.0.0.1:8787`. Bu ek yalnızca oyun localhost'tan açıldığında geçerlidir (yayındaki
@@ -61,5 +76,12 @@ boyut sınırı, röle aktarımı, ayrılma) gerçek WebSocket ile dener.
 
 ## Ayarlar (`wrangler.toml`)
 
-- `ALLOWED_ORIGINS`: oyunun açılabileceği adresler (GitHub Pages + localhost). Oyun başka bir adrese taşınırsa buraya eklenir.
-- Kurallar ve sınırlar: `src/lobby-logic.ts` (mesaj boyutu 24 KB / röle yükü 16 KB, eş başına 10 sn'de 100 mesaj, eş 50 sn sessizse "yok", lobi ömrü 2 saat).
+- `routes`: `eov.backinn.com.tr` Custom Domain. Tek seviye alt alan adı şart (ücretsiz Universal SSL yalnızca `*.backinn.com.tr`'yi
+  kapsar). `workers_dev = false`: workers.dev adresi kapalı, tek adres bu.
+- `[assets]`: oyun dosyaları `../dist`; yalnızca `/lobby` ve `/lobby/*` Worker koduna gider (`run_worker_first`). Önbellek kuralı
+  `../public/_headers` (içerik özetli `/assets/*` dosyaları 1 yıl önbellekte).
+- Durable Object `new_sqlite_classes`: ücretsiz plan şartı, değiştirme.
+- `ALLOWED_ORIGINS`: lobiye bağlanabilen oyun adresleri (eov.backinn.com.tr, GitHub Pages, localhost). Oyun başka bir adrese
+  taşınırsa buraya eklenir.
+- Kurallar ve sınırlar: `src/lobby-logic.ts` (mesaj boyutu 24 KB / röle yükü 16 KB, eş başına 10 sn'de 100 mesaj, eş 50 sn sessizse
+  "yok", lobi ömrü 2 saat).

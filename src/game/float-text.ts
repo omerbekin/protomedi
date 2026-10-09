@@ -48,7 +48,8 @@ export function floatStyle(kind: FloatKind, px: number, hex: string): FloatStyle
     color: hex,
     stroke: '#1b0f08',
     strokeThickness: Math.max(4, Math.round(size / 5)),
-    shadow: { offsetX: 0, offsetY: Math.max(2, Math.round(size / 14)), color: '#000000', blur: 0, stroke: true, fill: true },
+    // Tasarım kiti: sert yerine yumuşak, hafif aşağı düşen koyu gölge (parlak arenada da okunur)
+    shadow: { offsetX: 0, offsetY: Math.max(2, Math.round(size / 14)), color: 'rgba(0,0,0,0.85)', blur: Math.max(4, Math.round(size / 8)), stroke: true, fill: true },
     topLight: lighten(hex, 0.45),
     ...over,
   });
@@ -56,7 +57,8 @@ export function floatStyle(kind: FloatKind, px: number, hex: string): FloatStyle
     case 'damage':
       return base({ stroke: darken(hex, 0.86), strokeThickness: Math.max(5, Math.round(size / 4.2)) });
     case 'crit':
-      return base({ stroke: '#3a1204', strokeThickness: Math.max(6, Math.round(size / 3.8)), topLight: '#fff6c8' });
+      // Kritik: kor rengi yumuşak dış parıltı (combatant-view arkasına ayrıca kor ışıması koyar)
+      return base({ stroke: '#3a1204', strokeThickness: Math.max(6, Math.round(size / 3.8)), topLight: '#fff6c8', shadow: { offsetX: 0, offsetY: 0, color: 'rgba(240,140,40,0.9)', blur: Math.max(10, Math.round(size / 4)), stroke: true, fill: false } });
     case 'heal':
       return base({ stroke: '#0c2a16', topLight: lighten(hex, 0.55) });
     case 'shield':

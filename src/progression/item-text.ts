@@ -1,6 +1,7 @@
 // Item metinleri ve karşılaştırma (saf; kuşanma ekranı, loot kartı, wiki aynı fonksiyonu kullanır). Oyun içi metinler İngilizce.
 import { classes, formulas } from '../engine/content';
 import { applyUnitModifiers } from '../engine/stats';
+import type { Stats } from '../engine/types';
 import { ITEMS, itemDef, rarityDef, slotDef, STAT_IDS, type Equipment, type ItemDef, type ItemInstance, type ItemStatId } from './items';
 import { loadout, type LoadoutSource } from './loadout';
 
@@ -31,11 +32,16 @@ export interface HeroPanelStat {
   fmt: 'int' | 'pct' | 'dec';
 }
 
+/** Kahramanın savaşa gireceği motor statları (temel + item'ler; güç katmanıyla AYNI hesap). Class yoksa null. */
+export function heroStats(src: LoadoutSource): Stats | null {
+  const def = classes[src.class];
+  return def ? applyUnitModifiers(def, loadout(src).modifiers, formulas).stats : null;
+}
+
 /** Kahramanın savaşa gireceği statlar (temel + item'ler; güç katmanıyla AYNI hesap). */
 export function heroPanel(src: LoadoutSource): HeroPanelStat[] {
-  const def = classes[src.class];
-  if (!def) return [];
-  const st = applyUnitModifiers(def, loadout(src).modifiers, formulas).stats;
+  const st = heroStats(src);
+  if (!st) return [];
   return [
     { id: 'hp', label: 'HP', value: st.hp, fmt: 'int' },
     { id: 'mp', label: 'MP', value: st.mp, fmt: 'int' },

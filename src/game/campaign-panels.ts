@@ -118,6 +118,7 @@ export function openHeroPanel(scene: Phaser.Scene, layer: Phaser.GameObjects.Con
       { label: 'Gear', run: () => on.gear(heroId) },
       { label: 'Close', primary: true, run: () => on.close() },
     ],
+    onDismiss: () => on.close(),
   });
   const a = m.area;
   const cx = W / 2;
@@ -211,14 +212,31 @@ function slotRow(scene: Phaser.Scene, hero: Hero, slot: SlotId, x: number, y: nu
 
 // ------------------------------------------------------------ dizilim (formation)
 
+/**
+ * Pencerenin okuduğu dizilim (genel bağdaştırıcı; Ömer 2026-10-09: Endless koşu başı dizilimi de bu pencereyi kullanır). CampaignState buna
+ * doğrudan uyar: `active` = hücre -> kahraman id ('' boş), `roster` = kahramanlar (yalnızca `active`tekiler çizilir).
+ */
+export interface FormationState {
+  active: readonly string[];
+  roster: ReadonlyArray<{ id: string; class: string; hpRatio: number; leader?: boolean }>;
+}
+
+const rosterHero = (s: FormationState, id: string) => (id ? s.roster.find((h) => h.id === id) : undefined);
+
 export interface FormationHooks {
-  get: () => CampaignState;
+  get: () => FormationState;
   move: (heroId: string, cell: number) => void;
   auto: () => void;
   done: () => void;
   /** Arayüz kamerasında işaretçinin dünya noktası (pencere arayüz katmanında). */
   toUi: (p: Phaser.Input.Pointer) => { x: number; y: number };
   heroPanel?: (heroId: string) => void;
+  /** Bitir düğmesinin yazısı (varsayılan 'Done'; Endless: 'Start Run'). */
+  doneLabel?: string;
+  /** Verilirse solda 'Back' düğmesi olur ve zemine dokunmak / pencereyi kapatmak bunu çağırır (Done yerine). Sefer vermez. */
+  back?: () => void;
+  /** Alt başlık (varsayılan seferin açıklaması). */
+  subtitle?: string;
 }
 
 /**
@@ -228,14 +246,16 @@ export interface FormationHooks {
 export function openFormation(scene: Phaser.Scene, layer: Phaser.GameObjects.Container, on: FormationHooks): Modal {
   const m = openModal(scene, layer, {
     title: 'Formation',
-    subtitle: 'Drag a hero onto another cell, or tap a hero and then a cell. The front row faces the enemy.',
+    subtitle: on.subtitle ?? 'Drag a hero onto another cell, or tap a hero and then a cell. The front row faces the enemy.',
     width: 1360,
     height: 820,
     y: 120,
     buttons: [
+      ...(on.back ? [{ label: 'Back', run: () => on.back?.() }] : []),
       { label: 'Auto arrange', run: () => (on.auto(), draw()) },
-      { label: 'Done', primary: true, run: () => on.done() },
+      { label: on.doneLabel ?? 'Done', primary: true, run: () => on.done() },
     ],
+    onDismiss: () => (on.back ? on.back() : on.done()),
   });
   const cell = 128;
   const gap = 10;
@@ -268,7 +288,7 @@ export function openFormation(scene: Phaser.Scene, layer: Phaser.GameObjects.Con
         const x = gx + (3 - row) * (cell + gap);
         const y = gy + lane * (cell + gap);
         const id = s.active[slot] ?? '';
-        const h = id ? heroById(s, id) : undefined;
+        const h = rosterHero(s, id);
         const g = scene.add.graphics();
         const isSel = !!selected && id === selected;
         g.fillStyle(EL.INK, h ? 0.75 : 0.38).fillRect(x, y, cell, cell);
@@ -312,7 +332,7 @@ export function openFormation(scene: Phaser.Scene, layer: Phaser.GameObjects.Con
       }
     // Bilgi (sağ): seçilen ya da lider kahraman
     const team = s.roster.filter((x) => s.active.includes(x.id));
-    const focus = heroById(s, selected) ?? team.find((x) => x.leader) ?? team[0];
+    const focus = rosterHero(s, selected) ?? team.find((x) => x.leader) ?? team[0];
     const ix = gx + gw + 190;
     const iy = gy;
     const iw = W / 2 + 640 - 30 - ix;
@@ -347,7 +367,7 @@ export function openFormation(scene: Phaser.Scene, layer: Phaser.GameObjects.Con
     const q = on.toUi(p);
     if (!drag.moved && Math.hypot(q.x - drag.sx, q.y - drag.sy) > 10) {
       drag.moved = true;
-      const h = heroById(on.get(), drag.id);
+      const h = rosterHero(on.get(), drag.id);
       const def = h ? content.classes[h.class] : undefined;
       if (def) {
         const gg = scene.add.graphics();

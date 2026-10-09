@@ -7,8 +7,9 @@ import { formatHit, hitColor } from './hit-format';
 import { type DamageTags, FLOAT_ICON_TINT, damageIconKind, floatStyle, floatTimes, placeFloat, rowLayout, type FloatKind } from './float-text';
 import { ensureIcon } from './icons';
 import { SHARED_KEY } from './asset-versions';
-import { SERIF } from './ui-frame';
 import { tierStyle, unitName } from './unit-label';
+import { DISPLAY_FONT } from '../ui/menu-style';
+import { ensureGlow } from './menu-ui';
 
 /** floatText seçenekleri: tür (tipografi) ve rakamın solundaki/sağındaki küçük ikon (piksel ikon adı). */
 export interface FloatOpts {
@@ -36,6 +37,22 @@ export const textStyle = (px: number, fill: string = colors.text): Phaser.Types.
   color: fill,
   stroke: colors.textStroke,
   strokeThickness: Math.max(3, Math.round(px / 6)),
+});
+
+/** Tasarım kiti (dünya katmanı, Ömer 2026-10-09): ince altın çizgi, kor vurgu, düz rakamlı serif. */
+const KIT = { gold: 0xd9b26a, on: 0xf3d999, ember: 0xe0702a, ember2: 0xffb35a, ink: 0x0c0806, back: 0x140d08 } as const;
+/** Hedef parıltısı: yardımcı = yumuşak yeşil, zararlı = kor kırmızısı (eski saf yeşil / kırmızı yerine). */
+const GLOW = { good: 0x6fe0a2, bad: 0xff5a32 } as const;
+/** Rozet / önizleme rakamları: düz rakamlı serif, koyu kenar + yumuşak gölge. */
+const NUM_FONT = '"Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif';
+export const numStyle = (px: number, fill: string = colors.text): Phaser.Types.GameObjects.Text.TextStyle => ({
+  fontFamily: NUM_FONT,
+  fontSize: `${px}px`,
+  fontStyle: 'bold',
+  color: fill,
+  stroke: '#140c06',
+  strokeThickness: Math.max(3, Math.round(px / 6)),
+  shadow: { offsetX: 0, offsetY: 2, color: 'rgba(0,0,0,0.8)', blur: 4, stroke: true, fill: true },
 });
 
 /** Şiddete göre hasar rengi: sarı -> turuncu -> kırmızı. */
@@ -70,14 +87,20 @@ export class CombatantView {
   private readonly sealBox: Phaser.GameObjects.Container;
   private glowFx?: Phaser.FX.Glow;
   private glowKey = '';
-  private readonly marker: Phaser.GameObjects.Triangle;
+  /** Sırası gelen birim: adın üstünde küçük kor elmas (eski sarı ok yerine). */
+  private readonly marker: Phaser.GameObjects.Graphics;
+  /** Sırası gelen birimin ayaklarının altında kor / altın halka (yavaşça nabız atar). */
+  private readonly footRing: Phaser.GameObjects.Graphics;
   /** Ctrl+tık seçimi: birimin çevresinde ince çerçeve. */
-  private readonly selFrame: Phaser.GameObjects.Rectangle;
+  private readonly selFrame: Phaser.GameObjects.Graphics;
   private readonly realSprite: boolean;
   private homeX: number;
   private readonly hpY: number;
   private readonly shieldY: number;
   private previewItems: Phaser.GameObjects.GameObject[] = [];
+  /** Ad, can / MP / hız çubukları, durum ikonları, işaretler: sonuç ekranında birlikte söner (`setOverlayHidden`). */
+  private overlayParts: Array<Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Alpha> = [];
+  private overlayAlpha: number[] | null = null;
   /** Yüzen yazı şeritleri: her şeridi tutan yazının punto değeri (float-text.ts > placeFloat). */
   private lanes: Array<number | undefined> = [];
 
@@ -111,16 +134,18 @@ export class CombatantView {
     this.hpY = -this.h - hpBar.offsetY;
     const mpY = this.hpY + hpBar.height / 2 + hpBar.mpHeight / 2 + 3;
     this.shieldY = this.hpY - hpBar.height / 2 - 5;
-    const hpBack = scene.add.rectangle(0, this.hpY, hpBar.width, hpBar.height, color(colors.hpBack)).setStrokeStyle(3, 0x000000);
+    // Tasarım kiti: koyu zemin + ince altın çizgi; dışında yumuşak koyu kenar (parlak arenada çubuk seçilsin)
+    const hpOuter = scene.add.rectangle(0, this.hpY, hpBar.width + 6, hpBar.height + 6, 0x050302, 0.55);
+    const hpBack = scene.add.rectangle(0, this.hpY, hpBar.width, hpBar.height, KIT.back, 0.92).setStrokeStyle(1, KIT.gold, 0.6);
     // Hayalet çubuk: can düşünce bir süre eski seviyede kalıp yavaşça iner (büyük vuruşta daha uzun ve belirgin)
     this.hpGhost = scene.add.rectangle(-hpBar.width / 2, this.hpY, hpBar.width, hpBar.height, color('#ffd6a0')).setOrigin(0, 0.5);
     this.hpFill = scene.add
       .rectangle(-hpBar.width / 2, this.hpY, hpBar.width, hpBar.height, color(combatant.side === 'party' ? colors.hpFill : colors.hpFillEnemy))
       .setOrigin(0, 0.5);
-    this.hpBox = scene.add.container(0, 0, [hpBack, this.hpGhost, this.hpFill]);
+    this.hpBox = scene.add.container(0, 0, [hpOuter, hpBack, this.hpGhost, this.hpFill]);
     const mpBack = scene.add
-      .rectangle(0, mpY, hpBar.width, hpBar.mpHeight, color(colors.hpBack))
-      .setStrokeStyle(2, 0x000000)
+      .rectangle(0, mpY, hpBar.width, hpBar.mpHeight, KIT.back, 0.92)
+      .setStrokeStyle(1, KIT.gold, 0.4)
       .setVisible(combatant.maxMp > 0);
     this.mpFill = scene.add
       .rectangle(-hpBar.width / 2, mpY, hpBar.width, hpBar.mpHeight, color(colors.mpFill))
@@ -128,9 +153,9 @@ export class CombatantView {
       .setVisible(combatant.maxMp > 0);
     // SPEED çubuğu: mana çubuğunun altında ince bir şerit; sayaç dolunca (sıra bu karakterde) parlar
     const spdY = mpY + hpBar.mpHeight / 2 + hpBar.speedHeight / 2 + 3;
-    const speedBack = scene.add.rectangle(0, spdY, hpBar.width, hpBar.speedHeight, color(colors.hpBack)).setStrokeStyle(2, 0x000000);
+    const speedBack = scene.add.rectangle(0, spdY, hpBar.width, hpBar.speedHeight, KIT.back, 0.9).setStrokeStyle(1, KIT.gold, 0.32);
     this.speedFill = scene.add.rectangle(-hpBar.width / 2, spdY, 0, hpBar.speedHeight, color(colors.speedFill)).setOrigin(0, 0.5);
-    this.speedGlow = scene.add.rectangle(0, spdY, hpBar.width + 6, hpBar.speedHeight + 6, 0xffffff, 0).setStrokeStyle(2, color(colors.speedFull)).setVisible(false);
+    this.speedGlow = scene.add.rectangle(0, spdY, hpBar.width + 6, hpBar.speedHeight + 6, 0xffffff, 0).setStrokeStyle(1.5, KIT.ember2).setVisible(false);
     this.speedBox = scene.add.container(0, 0, [speedBack, this.speedFill, this.speedGlow]).setVisible(false);
     // Kalkan çubukları: can çubuğunun hemen üstünde ince çizgiler (genel: açık mavi, büyü: mor)
     this.shieldFill = scene.add.rectangle(-hpBar.width / 2, this.shieldY, 0, 6, color(colors.shield)).setOrigin(0, 0.5);
@@ -138,7 +163,17 @@ export class CombatantView {
     // Ad plakası: sefer özel adı ('Bandit Chief') ya da class adı; elit altın, boss kızıl yazı + üstünde küçük rütbe rozeti
     const tier = tierStyle(combatant.tier);
     const isBoss = tier?.tier === 'boss';
-    const nameStyle: Phaser.Types.GameObjects.Text.TextStyle = { ...textStyle(isBoss ? 36 : 30, tier?.hex), fontFamily: SERIF };
+    // Tasarım kiti: Cinzel 600 (kitin başlık yazısı), koyu kenar + yumuşak gölge (parlak arenada okunur)
+    const nameStyle: Phaser.Types.GameObjects.Text.TextStyle = {
+      fontFamily: DISPLAY_FONT,
+      fontSize: `${isBoss ? 32 : 26}px`,
+      fontStyle: '600',
+      color: tier?.hex ?? '#f4ead2',
+      stroke: '#120a05',
+      strokeThickness: 4,
+      letterSpacing: 0.5,
+      shadow: { offsetX: 0, offsetY: 2, color: 'rgba(0,0,0,0.85)', blur: 5, stroke: true, fill: true },
+    };
     if (isBoss) {
       // Boss: kalın koyu kenar + ince kor/altın parıltı (BOSS rozetiyle uyumlu); tek ve büyük olduğu için geniş alan
       nameStyle.stroke = '#12060a';
@@ -163,20 +198,36 @@ export class CombatantView {
       if (name.width > maxNameW) name.setScale(maxNameW / name.width);
     } else {
       const maxNameW = hpBar.width * 1.7; // uzun özel adlar ('Bandit Chief') komşu hücrenin adına taşmasın
-      if (name.width > maxNameW) name.setScale(maxNameW / name.width, 1);
+      if (name.width > maxNameW) name.setScale(maxNameW / name.width);
     }
     const tierBadge: Phaser.GameObjects.GameObject[] = [];
     if (tier) {
-      const label = scene.add.text(0, name.y - name.height - 2, tier.label, { ...textStyle(16, '#1a0f08'), fontStyle: 'bold', stroke: tier.hex, strokeThickness: 0 }).setOrigin(0.5, 1);
-      const bg = scene.add.rectangle(0, label.y - label.height / 2, label.width + 16, label.height + 2, color(tier.hex)).setStrokeStyle(2, 0x1a0f08);
+      // Rütbe rozeti (kit etiketi): koyu zemin + rütbe renginde ince çerçeve ve Cinzel yazı
+      const label = scene.add.text(0, name.y - name.height * name.scaleY - 2, tier.label.toUpperCase(), { fontFamily: DISPLAY_FONT, fontSize: '14px', fontStyle: '600', color: tier.hex, letterSpacing: 2 }).setOrigin(0.5, 1);
+      const bg = scene.add.rectangle(0, label.y - label.height / 2, label.width + 16, label.height + 2, KIT.ink, 0.92).setStrokeStyle(1, color(tier.hex), 0.9);
       tierBadge.push(bg, label);
     }
-    this.marker = scene.add
-      .triangle(0, this.hpY - hpBar.height - 62, 0, 0, 40, 0, 20, 28, color(colors.targetHighlight))
-      .setStrokeStyle(3, 0x000000)
-      .setVisible(false);
+    // Sırası gelen birim: adın üstünde kor elmas (eski sarı ok) + ayaklarının altında kor / altın halka
+    const my = this.hpY - hpBar.height - 62 + 14;
+    this.marker = scene.add.graphics().setVisible(false);
+    const dpts = (r: number) => [new Phaser.Math.Vector2(0, my - r), new Phaser.Math.Vector2(r, my), new Phaser.Math.Vector2(0, my + r), new Phaser.Math.Vector2(-r, my)];
+    this.marker.fillStyle(KIT.ember, 0.25).fillPoints(dpts(17), true);
+    this.marker.fillStyle(KIT.ember, 1).fillPoints(dpts(11), true);
+    this.marker.lineStyle(1.5, KIT.ember2, 1).strokePoints(dpts(11), true);
+    this.marker.lineStyle(2, 0x1a0c04, 0.8).strokePoints(dpts(13), true);
+    this.footRing = scene.add.graphics().setVisible(false);
+    const rw = Math.max(110, this.w * 0.95);
+    this.footRing.lineStyle(10, KIT.ember, 0.14).strokeEllipse(0, -6, rw + 8, 32);
+    this.footRing.lineStyle(2, KIT.ember2, 0.9).strokeEllipse(0, -6, rw, 26);
+    this.footRing.lineStyle(1, KIT.on, 0.55).strokeEllipse(0, -6, rw - 16, 19);
 
-    this.selFrame = scene.add.rectangle(0, -this.h / 2, this.w + 16, this.h + 16).setStrokeStyle(3, 0x6ec1ff, 0.95).setVisible(false);
+    // Ctrl+tık seçimi (debug birim araçları): ayakların altında ince açık mavi halka + üstte küçük köşe çizgileri (eski kutu yerine)
+    this.selFrame = scene.add.graphics().setVisible(false);
+    this.selFrame.lineStyle(2, 0x8ec9ff, 0.95).strokeEllipse(0, -6, rw + 22, 34);
+    const bw = this.w / 2 + 10;
+    const top = -this.h - 8;
+    this.selFrame.lineStyle(2, 0x8ec9ff, 0.85);
+    for (const sx of [-1, 1]) this.selFrame.beginPath().moveTo(sx * bw, top + 18).lineTo(sx * bw, top).lineTo(sx * (bw - 18), top).strokePath();
 
     // Durum ikonları (taunt, guard, regen) can çubuğunun solunda
     this.statusBox = scene.add.container(0, this.hpY);
@@ -185,6 +236,7 @@ export class CombatantView {
 
     this.container = scene.add.container(x, y, [
       ...(shadow ? [shadow] : []),
+      this.footRing,
       this.sprite,
       this.hpBox,
       mpBack,
@@ -200,6 +252,7 @@ export class CombatantView {
       this.selFrame,
     ]);
     this.container.setDepth(y); // öndeki sıra arkadakinin üstünde çizilir
+    this.overlayParts = [this.hpBox, mpBack, this.mpFill, this.speedBox, this.shieldFill, this.magicShieldFill, this.statusBox, this.sealBox, name, ...tierBadge, this.marker, this.footRing, this.selFrame] as Array<Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Alpha>;
     this.setHp(combatant.hp, false);
     this.setMp(combatant.mp, false);
     this.setShield(combatant.shield, combatant.magicShield, false);
@@ -209,6 +262,19 @@ export class CombatantView {
 
   get alive(): boolean {
     return this.combatant.hp > 0;
+  }
+
+  /** Sonuç ekranı: ad plakası ve çubuklar yumuşakça söner (sprite kalır); false = eski hâline döner. */
+  setOverlayHidden(hidden: boolean): void {
+    const parts = this.overlayParts.filter((o) => o.active);
+    this.scene.tweens.killTweensOf(parts);
+    if (hidden) {
+      if (!this.overlayAlpha) this.overlayAlpha = this.overlayParts.map((o) => o.alpha);
+      this.scene.tweens.add({ targets: parts, alpha: 0, duration: 260 });
+    } else if (this.overlayAlpha) {
+      this.overlayParts.forEach((o, i) => o.active && o.setAlpha(this.overlayAlpha![i] ?? 1));
+      this.overlayAlpha = null;
+    }
   }
 
   /**
@@ -226,7 +292,7 @@ export class CombatantView {
       this.glowFx = undefined;
     }
     if (!kind || !this.sprite.postFX) return;
-    const hex = color(kind === 'good' ? colors.glowGood : colors.glowBad);
+    const hex = kind === 'good' ? GLOW.good : GLOW.bad;
     // Weak: a thin, quiet rim. Strong: the pulsing glow around the unit that will be hit.
     const [lo, hi] = strong ? [5, 11] : [1.2, 2];
     const fx = this.sprite.postFX.addGlow(hex, lo, 0, false, 0.1, strong ? 16 : 8);
@@ -245,7 +311,17 @@ export class CombatantView {
 
   /** Komut verilen (aktif) karakterin üstünde ok işareti. */
   setActive(on: boolean): void {
-    this.marker.setVisible(on && this.alive);
+    const show = on && this.alive;
+    if (show === this.marker.visible) return;
+    this.marker.setVisible(show);
+    this.footRing.setVisible(show);
+    this.scene.tweens.killTweensOf([this.marker, this.footRing]);
+    if (show) {
+      this.footRing.setAlpha(1);
+      this.marker.setY(0);
+      this.scene.tweens.add({ targets: this.footRing, alpha: 0.55, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.scene.tweens.add({ targets: this.marker, y: -6, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
   }
 
   /** Dokunma/tıklama alanı: karakterin tamamı; fare üstüne gelince onOver/onOut çağrılır. */
@@ -346,7 +422,7 @@ export class CombatantView {
           const cx = dir * (hpBar.width / 2 + 8 + size / 2 + (i % 4) * (size + 6));
           const cy = Math.floor(i / 4) * (size + 4);
           const icon = this.scene.add.image(cx, cy, ensureIcon(this.scene, bd.icon, bd.color, false, bd.owner ?? SHARED_KEY)).setDisplaySize(size, size); // durum/zemin rozeti: sahibi (sınıfa özgü durum) ya da Shared sürümü
-          const label = this.scene.add.text(cx + size / 2, cy + size / 2, bd.text, textStyle(18, bd.color)).setOrigin(1, 0.5);
+          const label = this.scene.add.text(cx + size / 2, cy + size / 2, bd.text, numStyle(18, bd.color)).setOrigin(1, 0.5);
           this.statusBox.add([icon, label]);
           if (bd.turns) this.statusBox.add(this.scene.add.image(label.x - label.width - 8, label.y, hourglass).setDisplaySize(15, 15));
         });
@@ -375,7 +451,7 @@ export class CombatantView {
         g.lineStyle(2, 0xb8ad94, 0.8).strokePoints(pts, true);
       }
     }
-    const turns = this.scene.add.text(r + s.max * step - 2, 0, String(s.turns), textStyle(14, '#e9dfc4')).setOrigin(0, 0.5);
+    const turns = this.scene.add.text(r + s.max * step - 2, 0, String(s.turns), numStyle(14, '#e9dfc4')).setOrigin(0, 0.5);
     this.sealBox.add([g, turns]);
   }
 
@@ -790,6 +866,11 @@ export class CombatantView {
     if (right) parts.push(right);
     const { lefts } = rowLayout(parts.map((o) => (o === t ? t.width : sizeOf(o))), -Math.round(px * 0.07));
     parts.forEach((o, i) => (o as Phaser.GameObjects.Image).setX(lefts[i]! + (o === t ? t.width : sizeOf(o)) / 2));
+    if (opts.kind === 'crit') {
+      // Kritik: rakamın arkasında yumuşak kor ışıması (tasarım kiti: kor vurgu)
+      const glow = this.scene.add.image(0, 0, ensureGlow(this.scene)).setTint(KIT.ember).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(px * 3.4, px * 1.9).setAlpha(0.55);
+      parts.unshift(glow);
+    }
     const box = this.scene.add.container(this.container.x, startY, parts).setDepth(5000 + lane);
     const times = floatTimes(timing.damageNumberMs, timing.floatFadeMs);
     if (pop) {
@@ -871,7 +952,7 @@ export class CombatantView {
     // Yazılar ismin üstünde, alttan yukarı dizilir (en önemli satır en altta durur)
     let y = this.hpY - hpBar.height - 44;
     for (const [text, hex, px] of [...lines].reverse()) {
-      const t = this.scene.add.text(0, y, text, textStyle(px, hex)).setOrigin(0.5, 1);
+      const t = this.scene.add.text(0, y, text, numStyle(px, hex)).setOrigin(0.5, 1);
       this.container.add(t);
       this.previewItems.push(t);
       y -= px * 1.05;

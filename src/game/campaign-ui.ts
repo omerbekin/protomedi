@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { content } from '../engine';
 import { classAvatar, classLogoBadge } from './menu-ui';
 import { FULL_W, FULL_X0 } from '../ui/viewport';
-import { EL, elBody, elButton, elHeading, elPanel, elText, fitW } from './elegant-ui';
+import { EL, elBackdropTap, elBody, elButton, elHeading, elPanel, elText, fitW } from './elegant-ui';
 import { BODY_FONT } from '../ui/menu-style';
 
 /**
@@ -40,9 +40,27 @@ export function bodyText(scene: Phaser.Scene, x: number, y: number, text: string
 export function openModal(
   scene: Phaser.Scene,
   layer: Phaser.GameObjects.Container,
-  o: { title: string; subtitle?: string; text?: string; width?: number; height?: number; buttons?: ModalButton[]; dim?: number; y?: number; fit?: boolean },
+  o: {
+    title: string;
+    subtitle?: string;
+    text?: string;
+    width?: number;
+    height?: number;
+    buttons?: ModalButton[];
+    dim?: number;
+    y?: number;
+    fit?: boolean;
+    /**
+     * Zemine (panelin dışına) dokununca çağrılır: pencereyi kapatan işlev (Close / Done / Resume / onayda "No" ile aynı). Verilmezse
+     * zemin dokunuşu hiçbir şey yapmaz: zorunlu seçimler (Choose your hero, Form your company, teslim, olay / hazine) bunu vermez.
+     */
+    onDismiss?: () => void;
+    /** false = onDismiss verilse de zemine dokunmak kapatmaz (varsayılan true). */
+    dismissOnBackdrop?: boolean;
+  },
 ): Modal {
   const w = o.width ?? 980;
+  let closed = false;
   const root = scene.add.container(0, 0);
   layer.add(root);
   const dim = scene.add.rectangle(FULL_X0, 0, FULL_W, H, 0x050302, o.dim ?? 0.62).setOrigin(0, 0).setInteractive(); // geniş ekranda da tüm alan
@@ -56,6 +74,8 @@ export function openModal(
   const x = W / 2 - w / 2;
   const y = o.y ?? H / 2 - h / 2;
   root.add(elPanel(scene, x, y, w, h, { corners: true, alpha: 0.97 }));
+  const onDismiss = o.onDismiss;
+  if (onDismiss && o.dismissOnBackdrop !== false) elBackdropTap(scene, dim, { x, y, w, h }, () => !closed && onDismiss());
   root.add(elHeading(scene, W / 2, y + 54, o.title, 40, { ornament: Math.min(120, w / 2 - 220) }));
   let top = y + 96;
   if (sub) {
@@ -78,7 +98,6 @@ export function openModal(
   });
   root.setAlpha(0);
   scene.tweens.add({ targets: root, alpha: 1, duration: 200, ease: EL.EASE });
-  let closed = false;
   return {
     root,
     area: { x: x + 30, y: top, w: w - 60, h: by - 50 - top },

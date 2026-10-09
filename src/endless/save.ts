@@ -1,6 +1,6 @@
 // Endless kaydı (saf; depo dışarıdan verilir): tek koşu yuvası (her dalga sonrası otomatik, Ironman gibi; yenilgide yükleme yok) + yerel
 // en iyi skor listesi. Sürümlü; bozuk / tanınmayan kayıt oyunu çökertmez (yok sayılır). Anahtarlar `protomedi.*` kalıbında (CLAUDE.md).
-import { classes } from '../engine/content';
+import { CELL_COUNT, classes } from '../engine/content';
 import type { EndlessRun, ScoreEntry } from './data';
 import { validSuspended } from './replay';
 
@@ -27,9 +27,22 @@ export function parseRun(raw: string | null): EndlessRun | null {
     if (!['ready', 'relic', 'reward', 'shop', 'over'].includes(r.phase)) return null;
     if (!Array.isArray(r.heroes) || !r.heroes.length) return null;
     for (const h of r.heroes) if (!h || typeof h.id !== 'string' || !classes[h.class] || !isNum(h.hpRatio) || typeof h.equipment !== 'object' || !h.equipment) return null;
+    // Dizilim (2026-10-09): bozuk hücre atılır (o zaman wavePlan tüm takımı otomatik dizer)
+    for (const h of r.heroes) if (h.slot !== undefined && (!Number.isInteger(h.slot) || h.slot < 0 || h.slot >= CELL_COUNT)) delete h.slot;
     if (!r.stats || !isNum(r.stats.cleared) || !isNum(r.stats.turns) || !isNum(r.stats.kills)) return null;
     if (r.phase === 'reward' && !Array.isArray(r.offer)) return null;
     if (r.phase === 'shop' && !Array.isArray(r.shop)) return null;
+    // Tüccar (2026-10-09): yenileme sayacı ve bu ziyaretin geri alım listesi; eski kayıtta yok; bozuk geri alım satırları atılır
+    if (r.shopRerolls !== undefined && (!isNum(r.shopRerolls) || r.shopRerolls < 0)) delete r.shopRerolls;
+    if (r.buyback !== undefined) {
+      if (!Array.isArray(r.buyback)) delete r.buyback;
+      else r.buyback = r.buyback.filter((e) => e && isNum(e.price) && e.price >= 0 && e.item && typeof e.item.uid === 'string' && typeof e.item.id === 'string');
+    }
+    // Torba (2026-10-09): eski kayıtta yok = boş; bozuk satırlar atılır
+    if (r.bag !== undefined) {
+      if (!Array.isArray(r.bag)) return null;
+      r.bag = r.bag.filter((i) => i && typeof i.uid === 'string' && typeof i.id === 'string');
+    }
     if (r.relics !== undefined && (!Array.isArray(r.relics) || r.relics.some((x) => typeof x !== 'string'))) return null;
     if (r.phase === 'relic' && !Array.isArray(r.relicOffer)) return null;
     if (r.blessing !== undefined && (!isNum(r.blessing.hpMult) || !isNum(r.blessing.waves))) return null;

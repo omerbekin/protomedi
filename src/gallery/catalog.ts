@@ -11,6 +11,8 @@ import type { Attributes, CombatantDef, PassiveDef, SkillDef } from '../engine';
 import type { Layer, SfxDef } from '../game/audio';
 import { SFX } from '../game/audio';
 import { PIXEL_FX } from '../game/pixel-fx';
+import { FAMILY_ICON, ITEM_ICON_LABEL, ITEM_ICON_NAMES, REWARD_ICON, SLOT_ICON, itemIconName } from '../game/item-icons';
+import itemsJson from '../../data/items.json';
 import { ICON_KINDS } from '../ui/icon-kinds';
 import { STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON } from '../ui/stat-icons';
 import { UI_ICONS } from '../ui/dom-icons';
@@ -402,6 +404,29 @@ export function buildPalette(): PaletteGroups {
   return { ui, element, stat, classes };
 }
 
+// ---------------------------------------------------------------- item / ödül ikonları
+
+/** Item ve ödül ikonu (src/game/item-icons.ts): Gear ekranı, Spoils, Endless kartları, Codex. `uses` = onu gösteren item'ler / yerler. */
+export interface ItemIconEntry {
+  name: string;
+  label: string;
+  group: 'reward' | 'item';
+  uses: string[];
+}
+
+/** ITEM_ICONS'taki HER çizim (yeni anahtar kendiliğinden listelenir); kullanım yerleri items.json'dan türetilir. */
+export function buildItemIcons(): ItemIconEntry[] {
+  const rewards = new Set<string>(Object.values(REWARD_ICON));
+  const items = itemsJson.items as Array<{ name: string; slot: string; family?: string; icon?: string }>;
+  return ITEM_ICON_NAMES.map((name) => {
+    const uses = items.filter((d) => itemIconName(d) === name).map((d) => d.name);
+    for (const [slot, n] of Object.entries(SLOT_ICON)) if (n === name) uses.unshift(`${slot} slot`);
+    for (const [fam, n] of Object.entries(FAMILY_ICON)) if (n === name) uses.unshift(`${fam} family`);
+    for (const [kind, n] of Object.entries(REWARD_ICON)) if (n === name) uses.push(`Endless ${kind} card`);
+    return { name, label: ITEM_ICON_LABEL[name] ?? name, group: rewards.has(name) ? 'reward' : 'item', uses };
+  });
+}
+
 // ---------------------------------------------------------------- hepsi
 
 export interface Catalog {
@@ -412,6 +437,7 @@ export interface Catalog {
   characters: CharacterEntry[];
   orphans: ReturnType<typeof orphanAssets>;
   icons: IconEntry[];
+  itemIcons: ItemIconEntry[];
   fxSprites: string[];
   statuses: StatusEntry[];
   grounds: GroundEntry[];
@@ -427,6 +453,7 @@ export function buildCatalog(files: AssetFiles): Catalog {
     characters: buildCharacters(files),
     orphans: orphanAssets(files),
     icons: buildIcons(),
+    itemIcons: buildItemIcons(),
     fxSprites: fxSpriteNames(),
     statuses: buildStatuses(),
     grounds: buildGrounds(),

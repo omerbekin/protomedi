@@ -9,6 +9,7 @@ import { buildLegacy, legacyOfSprite, type LegacyFiles } from '../src/wiki/asset
 import { ICON_KINDS } from '../src/ui/icon-kinds';
 import { BACKUP_VFX, VFX_KINDS } from '../src/ui/vfx-kinds';
 import { buildWiki } from '../src/wiki/catalog';
+import { ITEM_ICON_NAMES, REWARD_ICON } from '../src/game/item-icons';
 
 /** assets/ altındaki .png dosyalarını sayfadaki `import.meta.glob` ile aynı şekle (yol -> yol) çevirir. */
 function scan(dir: string, depth: 1 | 2): Record<string, string> {
@@ -84,6 +85,12 @@ describe('Wiki > Assets: ortak katalog (src/gallery/catalog.ts)', () => {
     }
     for (const def of [...Object.values(content.classes), ...Object.values(content.summons)]) expect(catalog.icons.find((i) => i.name === def.logo)?.uses.some((u) => u.kind === 'logo'), def.id).toBe(true);
     for (const st of Object.values(content.statuses)) expect(catalog.icons.find((i) => i.name === st.icon), st.icon).toBeDefined();
+  });
+
+  it('tüm item / ödül ikonları (src/game/item-icons.ts) Icons bölümünde listelenir; her biri bir yerde kullanılır', () => {
+    expect(catalog.itemIcons.map((i) => i.name)).toEqual([...ITEM_ICON_NAMES]);
+    for (const n of Object.values(REWARD_ICON)) expect(catalog.itemIcons.find((i) => i.name === n)?.group, n).toBe('reward');
+    for (const i of catalog.itemIcons) expect(i.uses.length, `${i.name} kullanılmıyor`).toBeGreaterThan(0);
   });
 
   it('tüm durumlar ve zeminler listelenir (Wiki > Statuses & Grounds ile aynı veri)', () => {

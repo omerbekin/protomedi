@@ -54,7 +54,7 @@ import { isSettingsOpen, setSettingsOpen } from '../../ui/settings';
 import { mountMenuToggle } from '../../ui/game-menu';
 import { openGearScreen, showHandover, showSpoils } from '../../ui/gear-screen';
 import { openWiki } from '../../wiki/view';
-import { EL, diamondPts, elBadge, elBody, elButton, elIconButton, elLink, elPanel, elText, elToast, fadeLine, fitW, hGradient, vGradient } from '../elegant-ui';
+import { EL, diamondPts, elBadge, elBody, elButton, elDiamond, elIconButton, elLink, elPanel, elText, elToast, fadeLine, fitW, hGradient, vGradient } from '../elegant-ui';
 import { MAP_ZOOM, canPan, clampMid, clampZoom, wheelAction, type Bounds } from '../map-view';
 import { drawNodeGlyph, openFormation, openHeroPanel } from '../campaign-panels';
 import { openSlotBrowser, type SlotBrowser } from '../campaign-slots-ui';
@@ -77,7 +77,8 @@ const NODE_R = 24;
 const WALK_SPEED = 320; // px/sn
 const FOLLOW_GAP = 55; // px
 const PAN_STEP = 340;
-const SIDE = { left: 48, top: 150, partyW: 330, cardW: 440 };
+/** Sütun genişlikleri (Ömer 2026-10-09: 16:9'da daralmasın): sol takım sütunu ve sağ düğüm sütunu aynı dilde, aynı genişlikte. */
+const SIDE = { left: 48, top: 150, partyW: 420, cardW: 440 };
 /** Zorunlu seçim pencereleri (Esc ile kapanmaz; Party / Formation bunların üstünde açılmaz). */
 const FORCED: ReadonlyArray<NextStep['kind']> = ['hero', 'recruit', 'volunteer', 'farewell', 'company'];
 
@@ -265,7 +266,7 @@ export class CampaignMapScene extends Phaser.Scene {
       },
     });
     items.push({ label: 'Main Menu', run: () => this.scene.start(MENU_SCENE) });
-    const m = openModal(this, this.ui, { title: 'Menu', width: 620, height: 170 + items.length * 88 });
+    const m = openModal(this, this.ui, { title: 'Menu', width: 620, height: 170 + items.length * 88, onDismiss: () => this.closeMenu() });
     items.forEach((it, i) => {
       const b = elButton(this, it.label, it.run, { kind: it.primary ? 'primary' : 'secondary', w: 440, h: it.primary ? 70 : 60, size: it.primary ? 24 : 19, ready: true });
       b.root.setPosition(W / 2, m.area.y + 40 + i * 88);
@@ -790,12 +791,12 @@ export class CampaignMapScene extends Phaser.Scene {
     const right = stageView.right;
     // Kenar gölgeleri: sütunların altı okunur, orta harita açık (taslaktaki yatay degrade)
     const shade = this.add.graphics();
-    hGradient(shade, left, 0, 520, H, 0x080604, [
+    hGradient(shade, left, 0, 620, H, 0x080604, [
       [0, 0.92],
       [0.7, 0.7],
       [1, 0],
     ]);
-    hGradient(shade, right - 580, 0, 580, H, 0x080604, [
+    hGradient(shade, right - 640, 0, 640, H, 0x080604, [
       [0, 0],
       [0.22, 0.72],
       [1, 0.93],
@@ -900,7 +901,11 @@ export class CampaignMapScene extends Phaser.Scene {
     }
   }
 
-  /** Sağ sütun: seçili düğümün kartı ve eylemleri (March / Fight / Enter + Formation). */
+  /**
+   * Sağ sütun (sol takım sütununun aynası, Ömer 2026-10-09): aynı başlık ("You are here" + ince çizgi), düğüm satırı (92 px glif karosu +
+   * Cinzel ad + Garamond alt yazı, kahraman satırı gibi), düşmanlar, "Then" satırı ve eylemler kutusuz yazı düğmeleri: birincil eylem
+   * (March / Fight / Enter) büyük, kor elmaslı ve açık altın; Formation sol sütundaki gibi küçük yazı düğmesi.
+   */
   private renderNodeCard(x: number, y: number, w: number): void {
     const L = this.hud;
     const s = this.s;
@@ -915,19 +920,26 @@ export class CampaignMapScene extends Phaser.Scene {
     const n = node(this.map, id);
     const vis = nodeVisibility(this.map, s, session.revealFog)[id];
     const option = step.kind === 'move' && step.options.includes(id);
-    let cy = y + 46;
-    const glyph = this.add.graphics();
-    glyph.fillStyle(0x140e09, 0.95).fillCircle(x + 20, cy + 18, 20).lineStyle(1, EL.GOLD, 0.7).strokeCircle(x + 20, cy + 18, 20);
-    drawNodeGlyph(glyph, n.type, EL.ON_N, 0.85, x + 20, cy + 18);
-    L.add(glyph);
-    L.add(fitW(elText(this, x + 52, cy + 4, n.name, 30, EL.ON, { em: 0.06 }).setOrigin(0, 0.5), w - 56));
+    // Düğüm satırı: kahraman satırıyla aynı ölçüler (92 px karo, ad 19, alt yazı 16)
+    let cy = y + 44;
+    const tile = this.add.graphics();
+    tile.fillStyle(0x120c08, 1).fillRect(x, cy, 92, 92).lineStyle(1, EL.GOLD, EL.LINE.a3).strokeRect(x + 0.5, cy + 0.5, 91, 91);
+    tile.fillStyle(0x140e09, 0.95).fillCircle(x + 46, cy + 46, 30).lineStyle(1, EL.GOLD, 0.7).strokeCircle(x + 46, cy + 46, 30);
+    drawNodeGlyph(tile, n.type, EL.ON_N, 1.25, x + 46, cy + 46);
+    L.add(tile);
+    L.add(fitW(elText(this, x + 112, cy + 18, n.name, 19, EL.ON, { em: 0.05 }).setOrigin(0, 0.5), w - 120));
     const state = id === s.at ? 'You are here' : vis === 'cleared' ? 'Cleared' : option ? 'Reachable' : vis === 'closed' ? 'Road closed' : vis === 'goal' ? 'Your goal' : 'Ahead';
-    L.add(fitW(elBody(this, x + 52, cy + 36, `${n.subtitle || TYPE_LABEL[n.type]}  ·  ${state}`, 19, EL.MUTED).setOrigin(0, 0.5), w - 56));
-    cy += 76;
+    L.add(fitW(elBody(this, x + 112, cy + 44, n.subtitle || TYPE_LABEL[n.type], 16, EL.MUTED).setOrigin(0, 0.5), w - 120));
+    L.add(fitW(elBody(this, x + 112, cy + 70, state, 16, id === s.at || option ? EL.NOTE : EL.DIM).setOrigin(0, 0.5), w - 120));
+    cy += 112;
     // Düşmanlar (avatar sırası + adlar)
     if (n.encounter && vis !== 'goal') {
       const p = enemyPreview(n.encounter);
       const faces = p.classes.map((c) => content.classes[c]).filter((d): d is NonNullable<typeof d> => !!d).slice(0, 6);
+      if (faces.length) {
+        L.add(elText(this, x, cy + 4, 'Foes', 13, 'rgba(217,178,106,0.85)', { em: 0.22 }).setOrigin(0, 0.5));
+        cy += 22;
+      }
       faces.forEach((d, i) => {
         const fx = x + i * 62;
         const fr = this.add.graphics();
@@ -937,44 +949,56 @@ export class CampaignMapScene extends Phaser.Scene {
       });
       if (faces.length) cy += 66;
       const leader = p.leader && !p.names.includes(p.leader) ? `  (led by ${p.leader})` : '';
-      const t = elBody(this, x, cy, `${p.names.join(', ')}${leader}`, 18, EL.NOTE, true, w);
+      const t = elBody(this, x, cy, `${p.names.join(', ')}${leader}`, 17, EL.NOTE, true, w);
       L.add(t);
-      cy += t.height + 10;
+      cy += t.height + 12;
     } else if (vis !== 'goal') {
       const blurb = n.type === 'town' ? 'Rest, recruit and trade. Your heroes recover here.' : n.type === 'treasure' ? 'A cache of gear and gold.' : n.type === 'event' ? 'A crossroads encounter.' : '';
       if (blurb) {
-        const t = elBody(this, x, cy, blurb, 19, EL.NOTE, true, w);
+        const t = elBody(this, x, cy, blurb, 17, EL.NOTE, true, w);
         L.add(t);
-        cy += t.height + 10;
+        cy += t.height + 12;
       }
     }
     // Sonraki duraklar
     const after = outgoing(this.map, id).map((a) => node(this.map, a));
     if (after.length && vis !== 'goal') {
       const row = this.add.graphics();
-      row.lineStyle(1, EL.GOLD, EL.LINE.a1).lineBetween(x, cy + 2, x + w, cy + 2);
+      fadeLine(row, x, x + w, cy + 2, EL.GOLD, EL.LINE.a2, 'out');
       L.add(row);
-      L.add(elText(this, x, cy + 22, 'Then', 13, EL.MUTED, { em: 0.14 }).setOrigin(0, 0.5));
+      L.add(elText(this, x, cy + 22, 'Then', 13, 'rgba(217,178,106,0.85)', { em: 0.22 }).setOrigin(0, 0.5));
       const t = elBody(this, x + 70, cy + 12, after.map((a) => `${a.name} (${TYPE_LABEL[a.type]})`).join(' or '), 17, EL.TXT, false, w - 70);
       L.add(t);
-      cy += Math.max(30, t.height) + 18;
+      cy += Math.max(30, t.height) + 22;
     }
-    // Eylemler
+    // Eylemler: kutusuz yazı düğmeleri (sol sütundaki Formation · Gear dili); birincil eylem büyük, kor elmaslı
     const busy = () => !!this.modal || !!this.pauseMenu || !!this.walking || this.drag.moved;
-    const buttons: Array<{ label: string; primary?: boolean; run: () => void }> = [];
-    if (option) buttons.push({ label: 'March', primary: true, run: () => this.chooseRoad(id) });
-    else if (id === s.at && step.kind === 'battle') buttons.push({ label: 'Fight', primary: true, run: () => startCampaignBattle(this) });
-    else if (id === s.at && this.actionHere()) buttons.push({ label: step.kind === 'complete' ? 'Campaign end' : 'Enter', primary: true, run: () => this.advance() });
-    if ((option || (id === s.at && step.kind === 'battle')) && activeHeroes(s).length) buttons.push({ label: 'Formation', run: () => this.openFormationFromHud() });
-    let by = cy + 34;
-    for (const b of buttons) {
-      const btn = elButton(this, b.label, () => !busy() && b.run(), { kind: b.primary ? 'primary' : 'secondary', w: w - 30, h: b.primary ? 70 : 54, size: b.primary ? 24 : 18, ready: true });
-      btn.root.setPosition(x + w / 2, by + (b.primary ? 0 : 0));
-      L.add(btn.root);
-      by += b.primary ? 82 : 66;
+    let primary: { label: string; run: () => void } | null = null;
+    if (option) primary = { label: 'March', run: () => this.chooseRoad(id) };
+    else if (id === s.at && step.kind === 'battle') primary = { label: 'Fight', run: () => startCampaignBattle(this) };
+    else if (id === s.at && this.actionHere()) primary = { label: step.kind === 'complete' ? 'Campaign end' : 'Enter', run: () => this.advance() };
+    const formation = (option || (id === s.at && step.kind === 'battle')) && activeHeroes(s).length > 0;
+    let by = cy + 26;
+    if (primary) {
+      const run = primary.run;
+      const pl = elLink(this, primary.label, () => !busy() && run(), { size: 28, isBusy: busy });
+      pl.root.setPosition(x - 6, by);
+      pl.text.setColor(EL.ON);
+      pl.text.setShadow(0, 0, EL.SH_GLOW, 12, false, true);
+      const dia = elDiamond(this, 7).setPosition(x - 6 + 11, by);
+      const under = this.add.graphics();
+      fadeLine(under, x, x + Math.max(pl.width + 30, 200), by + 28, EL.EMBER2, 0.55, 'out');
+      L.add([under, pl.root, dia]);
+      by += 64;
+    }
+    if (formation) {
+      const f = elLink(this, 'Formation', () => !busy() && this.openFormationFromHud(), { size: 19, isBusy: busy });
+      f.root.setPosition(x - 6, by);
+      L.add(f.root);
+      by += 46;
     }
     if (id === s.at && step.kind === 'battle' && activeHeroes(s).some((h) => h.hpRatio < 1)) {
-      L.add(elBody(this, x, by - 10, 'Your heroes start with the health they carried from the last fight.', 16, EL.DIM, true, w));
+      L.add(elBody(this, x, by - 4, 'Your heroes start with the health they carried from the last fight.', 16, EL.DIM, true, w));
     }
   }
 
@@ -1018,7 +1042,7 @@ export class CampaignMapScene extends Phaser.Scene {
   private renderLegend(): void {
     const L = this.hud;
     const w = 300;
-    const x = stageView.left + SIDE.left; // sol alt (sağ alt DEBUG düğmesiyle çakışmasın)
+    const x = stageView.right - SIDE.left - w; // sağ alt (Ömer 2026-10-09; görünür DEBUG düğmesi yok)
     const open = this.legendOpen;
     const h = open ? 156 : 48;
     const y = H - 24 - h;
@@ -1270,6 +1294,7 @@ export class CampaignMapScene extends Phaser.Scene {
         { label: 'Yes', primary: true, run: () => this.march(id) },
         { label: 'No', run: () => this.closeModal() },
       ],
+      onDismiss: () => this.closeModal(), // onay: zemin = No
     });
   }
 

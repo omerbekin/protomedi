@@ -43,6 +43,7 @@
     },
     "cooldown": 3,
     "motion": "melee",
+    "ignoreReachBonus": true,
     "fx": "#ffe9b0",
     "effects": [
       {
@@ -103,7 +104,8 @@
       {
         "type": "heal",
         "scale": "int",
-        "power": 0.9
+        "power": 0.9,
+        "missingHpBonus": 0.5
       },
       {
         "type": "damage",

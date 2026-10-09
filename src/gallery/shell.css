@@ -1,10 +1,38 @@
 /* gallery.html ince kabuğu: bağımsız açılınca yönlendirme mesajı, embed=1 iken gömülü sahne (wiki iframe'i). */
+/* Tasarım kiti fontları (gömülü sahne ayrı sayfa: wiki ile aynı yazılar) */
+@font-face {
+  font-family: 'Cinzel';
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('../../assets/fonts/Cinzel-normal-latin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'EB Garamond';
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('../../assets/fonts/EBGaramond-normal-latin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: italic;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('../../assets/fonts/EBGaramond-italic-latin.woff2') format('woff2');
+}
+
+html {
+  scrollbar-color: rgba(217, 178, 106, 0.4) #0b0806;
+  scrollbar-width: thin;
+}
+
 html,
 body {
   margin: 0;
   background: #0b0806;
-  color: #f4ede1;
-  font: 15px/1.4 system-ui, sans-serif;
+  color: #d9c8a2;
+  font: 15px/1.4 'EB Garamond', Georgia, serif;
 }
 
 * {
@@ -85,12 +113,6 @@ body.embed {
 .skill-select {
   min-height: 44px;
   max-width: 100%;
-  padding: 4px 8px;
-  color: #f4ede1;
-  font: inherit;
-  background: #120e0a;
-  border: 1px solid #9a7438;
-  border-radius: 5px;
 }
 
 .embed-root .cell {

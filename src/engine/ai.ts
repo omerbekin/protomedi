@@ -1655,7 +1655,7 @@ function meleeIncoming(battle: Battle, actor: Combatant, slot: number): number {
       if (sk.cost.resource === 'mp' && foe.mp < sk.cost.amount) continue;
       if (sk.cost.resource === 'rage' && (foe.rage ?? 0) < sk.cost.amount) continue;
       if (!sk.ignoreFrontRow && !sk.ignoreReach && !battle.canMeleeFrom(foe.uid, foe.slot, battle.reachOf(foe, sk))) continue; // saldıran kendi ön sırasında değil
-      if (!sk.ignoreReach && battle.rowRank(actor.uid, slot) >= meleeRows + battle.reachOf(foe, sk)) continue; // hedef erişim dışında
+      if (!sk.ignoreReach && !battle.inMeleeReach(actor.uid, battle.reachOf(foe, sk), slot)) continue; // hedef erişim dışında (validTargets ile aynı kural)
       const d = previewForTargets(battle, foe, id, [actor]).find((p) => p.uid === actor.uid)?.damage;
       if (!d) continue;
       const share = sk.target === 'single_enemy' && !sk.ignoreReach ? 1 / Math.max(1, exposed) : 1; // tek hedefli: dikkat erişilebilir birimler arasında bölünür
@@ -1734,8 +1734,8 @@ function bestMove(battle: Battle, actor: Combatant, g: AiGlobalConfig, vNow: num
         if (sk.cost.resource === 'mp' && !battle.freeMp && actor.mp < sk.cost.amount) continue;
         if (sk.cost.resource === 'rage' && (actor.rage ?? 0) < sk.cost.amount) continue;
         const home = foes.filter((c) => c.board === c.side);
-        const rows = [...new Set(home.map((c) => battle.rowOf(c.slot)))].slice(0, meleeRows + battle.reachOf(actor, sk));
-        const reachable = foes.filter((c) => c.board !== c.side || rows.includes(battle.rowOf(c.slot)));
+        const limit = battle.meleeRowLimit(home.map((c) => battle.rowOf(c.slot)), battle.reachOf(actor, sk));
+        const reachable = foes.filter((c) => c.board !== c.side || battle.rowOf(c.slot) <= limit);
         const exp = (uid: string) => {
           const p = previewForTargets(battle, actor, sk.id, [reachable.find((c) => c.uid === uid)!])[0];
           return p?.damage ? p.damage.avg * p.damage.hitChance : 0;

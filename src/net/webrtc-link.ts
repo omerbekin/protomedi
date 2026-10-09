@@ -8,7 +8,7 @@
  */
 import type { ServerView } from './reconnect';
 import type { Transport } from './transport';
-import type { IceServer } from './config';
+import { lobbySocketUrl, type IceServer } from './config';
 
 export type LinkError = 'no-lobby' | 'full' | 'taken' | 'bad-request' | 'rate' | 'unreachable';
 
@@ -183,7 +183,7 @@ export class WebRtcLink {
 
   private connectSocket(): void {
     if (this.stopped) return;
-    const u = `${this.url}/lobby/${this.code}?role=${this.role}&id=${this.peerId}`;
+    const u = lobbySocketUrl(this.url, this.code, this.role, this.peerId);
     let ws: WebSocket;
     try {
       ws = new WebSocket(u);

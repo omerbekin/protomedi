@@ -10,7 +10,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sim": "tsx src/sim/cli.ts",
-    "sim:campaign": "tsx src/sim/campaign-cli.ts"
+    "sim:campaign": "tsx src/sim/campaign-cli.ts",
+    "sim:endless": "tsx src/sim/endless-cli.ts",
+    "deploy:cf": "npm run build && node cloudflare/scripts/check-assets.mjs && npm --prefix cloudflare run deploy"
   },
   "dependencies": {
     "phaser": "^3.90.0"

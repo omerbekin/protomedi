@@ -21,47 +21,50 @@ export interface CellStyle {
 
 export const CELL_STATES: readonly CellState[] = ['selectable', 'hover', 'affected', 'anchor', 'invalid', 'ally', 'enemy', 'move'];
 
-/** Ton paleti: base = dolgu/çizgi, hi = parlak çerçeve. Oyunun altın/ui-frame renkleriyle uyumlu. */
+/**
+ * Ton paleti (tasarım kiti, Ömer 2026-10-09): base = dolgu/çizgi, hi = parlak çerçeve. Nötr = kitin altını (EL.GOLD / EL.ON), düşman = kor
+ * kırmızısı, dost = soluk yeşil-mavi. Çizgiler ince, dolgu hafif; vurgu yumuşak ışıma ile (shape-draw.ts).
+ */
 export const CELL_HUE = {
-  neutral: { base: 0xf2b84a, hi: 0xfff2b0 }, // sıcak altın (GOLD ailesi; Phaser'sız kalsın diye ui-frame'den ayrı)
-  ally: { base: 0x5fcfb0, hi: 0xc4fbe8 },
-  enemy: { base: 0xe8664a, hi: 0xffc8b0 },
+  neutral: { base: 0xe2b766, hi: 0xf8e3a8 }, // kit altını (Phaser'sız kalsın diye elegant-ui'den ayrı)
+  ally: { base: 0x63c7ab, hi: 0xc8f4e4 },
+  enemy: { base: 0xe2643e, hi: 0xffc29a },
 } as const;
 
-const INVALID = 0xb85a5a;
-const MOVE = 0xf4dc9a;
+const INVALID = 0xb45a52;
+const MOVE = 0xecd08e;
 
 /** Durum (+ ton) -> çizim stili. Saf: aynı girdi aynı çıktı. */
 export function cellStyle(state: CellState, tone: CellTone = 'neutral'): CellStyle {
   switch (state) {
     case 'selectable': {
       const h = CELL_HUE[tone];
-      return { fill: h.base, fillAlpha: 0.1, line: h.base, lineAlpha: 0.6, lineWidth: 3, corners: false };
+      return { fill: h.base, fillAlpha: 0.08, line: h.base, lineAlpha: 0.55, lineWidth: 1.5, corners: false };
     }
     case 'hover': {
       const h = CELL_HUE[tone];
-      return { fill: h.base, fillAlpha: 0.5, line: h.hi, lineAlpha: 1, lineWidth: 4, corners: false };
+      return { fill: h.base, fillAlpha: 0.3, line: h.hi, lineAlpha: 1, lineWidth: 2.5, corners: false };
     }
     case 'affected': {
       const h = CELL_HUE[tone];
-      return { fill: h.base, fillAlpha: 0.5, line: h.base, lineAlpha: 1, lineWidth: 3, corners: false };
+      return { fill: h.base, fillAlpha: 0.3, line: h.base, lineAlpha: 0.95, lineWidth: 2, corners: false };
     }
     case 'anchor': {
       const h = CELL_HUE[tone];
-      return { fill: h.base, fillAlpha: 0.66, line: h.hi, lineAlpha: 1, lineWidth: 4, corners: true };
+      return { fill: h.base, fillAlpha: 0.42, line: h.hi, lineAlpha: 1, lineWidth: 2.5, corners: true };
     }
     case 'invalid':
-      return { fill: INVALID, fillAlpha: 0.2, line: INVALID, lineAlpha: 0.7, lineWidth: 3, corners: false };
+      return { fill: INVALID, fillAlpha: 0.14, line: INVALID, lineAlpha: 0.65, lineWidth: 1.5, corners: false };
     case 'ally': {
       const h = CELL_HUE.ally;
-      return { fill: h.base, fillAlpha: 0.5, line: h.hi, lineAlpha: 1, lineWidth: 4, corners: false };
+      return { fill: h.base, fillAlpha: 0.3, line: h.hi, lineAlpha: 1, lineWidth: 2.5, corners: false };
     }
     case 'enemy': {
       const h = CELL_HUE.enemy;
-      return { fill: h.base, fillAlpha: 0.5, line: h.hi, lineAlpha: 1, lineWidth: 4, corners: false };
+      return { fill: h.base, fillAlpha: 0.3, line: h.hi, lineAlpha: 1, lineWidth: 2.5, corners: false };
     }
     case 'move':
-      return { fill: MOVE, fillAlpha: 0.28, line: MOVE, lineAlpha: 0.95, lineWidth: 3, corners: false };
+      return { fill: MOVE, fillAlpha: 0.18, line: MOVE, lineAlpha: 0.9, lineWidth: 2, corners: false };
   }
 }
 

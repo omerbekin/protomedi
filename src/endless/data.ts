@@ -1,13 +1,15 @@
 // Endless Lite verisi ve türleri (saf; Phaser/DOM yok). Tasarım: docs/design/progression/roadmap.md bölüm 3, varsayımlar open-questions madde 281.
 import endlessJson from '../../data/endless.json';
 import encountersJson from '../../data/campaign/encounters.json';
-import type { Equipment, RarityId } from '../progression/items';
+import type { Equipment, ItemInstance, RarityId } from '../progression/items';
 import type { SuspendedBattle } from './replay';
 import type { RelicDef } from './relics';
 import type { UnitModifiers, UnitTier } from '../engine/types';
 
 export interface EndlessConfig {
   partySize: number;
+  /** Torba kapasitesi (yoksa seferin items.json > bag değeri). */
+  bagSize?: number;
   enemyCount: Array<{ fromWave: number; count: number }>;
   scaling: { hpPerWave: number; statPerWave: number; powerPerWave: number };
   eliteEvery: number;
@@ -21,7 +23,8 @@ export interface EndlessConfig {
     boss: SpecialRewards & { feastHpMult: number; feastWaves: number };
   };
   items: { ilvlPerWave: number; ilvlAhead: number; window: number };
-  shop: { every: number; size: number };
+  /** Tüccar: her `every` dalgada, `size` mal, malları yenileme bedeli, bu ziyaretin geri alım listesi boyu. */
+  shop: { every: number; size: number; rerollCost: number; buybackSize: number };
   /** Kalıntılar: boss sonrası teklif sayısı + liste (src/endless/relics.ts). */
   relics: { offer: number; list: RelicDef[] };
   difficulty: 'easy' | 'medium' | 'hard';
@@ -67,9 +70,15 @@ export interface EndlessHero {
   /** Taşınan can oranı (0-1); 0 = düştü (sonraki zaferde reviveRatio ile kalkar). */
   hpRatio: number;
   equipment: Partial<Equipment>;
+  /**
+   * Kendi tahtasındaki hücre (0-11; sıra*3+şerit, 0. sıra önde). Koşu başında oyuncu dizer; her zaferde savaş sonundaki hücre yazılır
+   * (src/endless/formation.ts). Eski kayıtta yok = otomatik dizilim.
+   */
+  slot?: number;
 }
 
 export type RewardCard =
+  /** heroId: yalnızca ipucu (bu item'den en çok kim yararlanır); item torbaya girer. */
   | { kind: 'item'; itemId: string; heroId: string }
   | { kind: 'gold'; amount: number }
   | { kind: 'heal'; ratio: number }
@@ -87,6 +96,12 @@ export interface ShopEntry {
   heroId: string;
   price: number;
   sold?: boolean;
+}
+
+/** Tüccarda satılan (bu ziyarette geri alınabilir) item: aynı örnek (uid korunur) + satıldığı fiyat. */
+export interface BuybackEntry {
+  item: ItemInstance;
+  price: number;
 }
 
 export type RunPhase = 'ready' | 'relic' | 'reward' | 'shop' | 'over';
@@ -112,7 +127,13 @@ export interface EndlessRun {
   offer?: RewardCard[];
   /** phase 'shop': dükkân stoğu. */
   shop?: ShopEntry[];
+  /** phase 'shop': bu ziyarette kaç kez mallar yenilendi (yenilemenin seed'i; ayrılınca silinir). */
+  shopRerolls?: number;
+  /** phase 'shop': bu ziyarette satılanlar (en yeni sonda; en çok shop.buybackSize; ayrılınca silinir). */
+  buyback?: BuybackEntry[];
   stats: RunStats;
+  /** Torba (Ömer 2026-10-09: item'ler önce torbaya, Gear ekranında takılır). Eski kayıtta yok = boş. */
+  bag?: ItemInstance[];
   /** Item örneği uid sayacı. */
   nextItem: number;
   startedAt: string;

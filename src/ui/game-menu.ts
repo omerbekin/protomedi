@@ -1,4 +1,5 @@
 import { MENU_LABELS, menuItems, type FlowContext, type MenuItemId } from '../game/session-flow';
+import { dismissOnBackdrop } from './backdrop';
 import { isSettingsOpen, setSettingsOpen } from './settings';
 import { lockInput, unlockInput } from './input-lock';
 import './elegant.css';
@@ -93,10 +94,8 @@ export class GameMenu {
     this.confirmBox.append(this.confirmText, answers);
     box.append(this.list, this.confirmBox);
     this.overlay.append(box);
-    // Boş zemine dokunmak menüyü kapatır (Resume ile aynı)
-    this.overlay.addEventListener('click', (e) => {
-      if (e.target === this.overlay) this.setOpen(false);
-    });
+    // Boş zemine dokunmak menüyü kapatır (Resume ile aynı); onay sorusu açıksa yalnızca soruyu iptal eder (src/ui/backdrop.ts)
+    dismissOnBackdrop(this.overlay, box, () => (this.confirmBox.hidden ? this.setOpen(false) : this.hideConfirm()));
     root.append(this.overlay);
     this.overlay.addEventListener('mouseup', (e) => e.preventDefault()); // bırakma alttaki Phaser düğmelerine gitmesin (+ giriş kilidi)
 

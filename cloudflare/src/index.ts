@@ -3,7 +3,10 @@
  * Yalnızca iki tarayıcıyı buluşturur (WebRTC SDP/ICE aktarımı); oyun hamleleri eşler arasında doğrudan akar.
  * Kurallar saf modülde: ./lobby-logic.ts. Kurulum: ../README.md.
  *
- * Uç nokta: GET /lobby/<KOD>?role=host|guest&id=<16 karakter> (WebSocket yükseltmesi). GET / -> sağlık metni.
+ * Tek Worker, tek adres (https://eov.backinn.com.tr): oyunun statik dosyaları Workers Static Assets ile sunulur (wrangler.toml > [assets];
+ * yalnızca /lobby ve /lobby/* bu koda gelir, run_worker_first), geri kalan istekler doğrudan dosyadır.
+ * Uç nokta: GET /lobby/<KOD>?role=host|guest&id=<16 karakter> (WebSocket yükseltmesi). GET /lobby, /lobby/health -> sağlık metni.
+ * Oyundaki adres: data/multiplayer.json > signalingUrl = wss://eov.backinn.com.tr/lobby (istemci sonuna /<KOD> ekler).
  * Sunucu -> istemci: {t:'welcome', role, peer}, {t:'peer', present}, {t:'signal', data}, {t:'relay', d}, {t:'error', code}, {t:'pong'}.
  * İstemci -> sunucu: {t:'signal', data}, {t:'relay', d} (yalnızca WebRTC kurulamazsa), {t:'probe'}, {t:'leave'}, {t:'ping'} (ping'i Cloudflare DO'yu uyandırmadan yanıtlar).
  */
@@ -13,6 +16,8 @@ import { admit, leave, LOBBY_TTL_MS, originAllowed, parseClientMessage, parseJoi
 interface Env {
   LOBBY: DurableObjectNamespace;
   ALLOWED_ORIGINS: string;
+  /** Oyunun statik dosyaları (../dist). Yerel `wrangler dev` dışında her zaman vardır. */
+  ASSETS?: Fetcher;
 }
 
 /** Bağlantıya iliştirilen durum (hibernation sonrası da korunur; 2 KB sınırı). */
@@ -44,8 +49,10 @@ function refuse(code: string): Response {
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
-    if (url.pathname === '/' || url.pathname === '/health') return new Response('Embers of Valdoria lobby server OK\n', { headers: { 'content-type': 'text/plain' } });
-    if (!url.pathname.startsWith('/lobby/')) return new Response('Not found', { status: 404 });
+    const p = url.pathname;
+    if (p === '/lobby' || p === '/lobby/' || p === '/lobby/health' || p === '/health') return new Response('Embers of Valdoria lobby server OK\n', { headers: { 'content-type': 'text/plain' } });
+    // Lobi dışı istek (yalnızca statik dosya bulunamadığında buraya düşer): dosya sunucusuna bırakılır (404)
+    if (!p.startsWith('/lobby/')) return env.ASSETS ? env.ASSETS.fetch(req) : new Response('Not found', { status: 404 });
     if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('Expected WebSocket', { status: 426 });
     if (!originAllowed(req.headers.get('Origin'), env.ALLOWED_ORIGINS ?? '')) return new Response('Origin not allowed', { status: 403 });
     const join = parseJoin(req.url);

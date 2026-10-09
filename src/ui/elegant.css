@@ -59,7 +59,7 @@
   align-items: center;
   justify-content: center;
   min-height: 48px;
-  padding: 0 34px;
+  padding: 0 34px 0 calc(34px + 0.1em); /* harf aralığı son harften sonra da eklenir: yazı tam ortada dursun */
   font: 600 19px var(--el-display);
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -119,7 +119,7 @@
 
 .el-btn.primary {
   min-height: 60px;
-  padding: 0 46px;
+  padding: 0 46px 0 calc(46px + 0.12em);
   font-size: 23px;
   letter-spacing: 0.12em;
   color: var(--el-on);

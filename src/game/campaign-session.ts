@@ -20,6 +20,7 @@ import {
 } from '../campaign';
 import type { ResultAction } from './result-screen';
 import type { BattleSceneData } from './scenes/BattleScene';
+import { campaignEffects } from './battle-effects';
 import { newSeed } from './seed';
 
 /**
@@ -147,6 +148,7 @@ export function startCampaignBattle(scene: Phaser.Scene): BattlePlan | null {
     ...(plan.background ? { background: plan.background } : {}),
     campaign: {
       resultActions: (victory, battle) => resultActions(game, plan, victory, battle),
+      battleEffects: () => campaignEffects(s),
       retreat: () => {
         retreatToMap();
         goTo(game, MAP_SCENE);
