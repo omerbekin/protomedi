@@ -8,7 +8,7 @@ import { PRIMARY_GOLD, RAGE_COLOR, RAGE_ICON, STAT_COLOR, STAT_ICON, STAT_LABEL,
 import { avatarTexture, backgroundKey, characterTexture, hasBackground, preloadAssets } from '../assets';
 import { CombatantView, color, slow, textStyle } from '../combatant-view';
 import { preloadVfxSheets } from '../vfx-sheets';
-import { ensureIcon, ensureSkillIcon } from '../icons';
+import { ensureIcon, ensureSkillIcon, onIconImagesLoaded } from '../icons';
 import { initialSeed, initialSizes, newSeed } from '../seed';
 import { clampSize } from '../team-select-model';
 import { EL, elText } from '../elegant-ui';
@@ -351,6 +351,9 @@ export class BattleScene extends Phaser.Scene {
     // Sanat sürümü değişince (debug > Versions) ikonlar, logolar ve durum rozetleri hemen yeni sürümle çizilir
     const offVersions = onVersionsChange(() => this.onVersionsChanged());
     this.events.once('shutdown', offVersions);
+    // Görsel v2 ikonu (hazır PNG) geç yüklendiyse: HUD'ın dokudan aldığı resim adresleri yenilensin
+    const offIconImages = onIconImagesLoaded(() => this.onVersionsChanged());
+    this.events.once('shutdown', offIconImages);
   }
 
   /** Multiplayer: rakibin hamlesi gelince olaylar oynatılır ve sıra devredilir; savaş dışı bitiş (kopma, ayrılma, desync) sonuç ekranını açar. */

@@ -22,7 +22,7 @@ export function parseRun(raw: string | null): EndlessRun | null {
   try {
     const data = JSON.parse(raw) as { version?: number; run?: EndlessRun };
     const r = data?.run;
-    if (data?.version !== SAVE_VERSION || !r || r.version !== 1) return null;
+    if (data?.version !== SAVE_VERSION || !r || r.version !== 1 || r.preview) return null;
     if (!isNum(r.seed) || !isNum(r.wave) || r.wave < 1 || !isNum(r.gold) || !isNum(r.nextItem)) return null;
     if (!['ready', 'relic', 'reward', 'shop', 'over'].includes(r.phase)) return null;
     if (!Array.isArray(r.heroes) || !r.heroes.length) return null;
@@ -65,7 +65,8 @@ export function loadRun(kv: KV | null): EndlessRun | null {
 
 /** Koşuyu yazar; bitmiş koşu yuvayı boşaltır. Depo yoksa / doluysa false (oyun sürer). */
 export function saveRun(kv: KV | null, run: EndlessRun): boolean {
-  if (!kv) return false;
+  // Tüccar önizleme koşusu asla yazılmaz: gerçek kaydı ezmesin / silmesin
+  if (!kv || run.preview) return false;
   try {
     if (run.phase === 'over') kv.removeItem(RUN_KEY);
     else kv.setItem(RUN_KEY, JSON.stringify({ version: SAVE_VERSION, run }));

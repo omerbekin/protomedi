@@ -92,6 +92,7 @@ export const UI_TEXT = {
   // Tüccar (Ömer 2026-10-09, taslak v1 "Travelling cart")
   shopTitle: 'Merchant',
   merchantName: 'Odo the Peddler',
+  previewRun: 'Preview run · not saved, not scored',
   merchantSub: 'Travelling merchant · follows the company',
   merchantLines: {
     idle: 'Steel, leather and a lucky charm or two. Honest prices. Well, honest enough.',

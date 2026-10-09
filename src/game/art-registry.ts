@@ -12,7 +12,8 @@
 import { GRID, PxGrid, spriteCells, type Cell } from './pixel-art';
 import { SHARED_KEY, statusOwner, wantsV2 } from './asset-versions';
 import { ICONS_V2 } from './art-v2/icons-index';
-import { V2_DEFAULT_SIZE, type V2Sprite, type V2SpriteEntry } from './art-v2/types';
+import { V2_DEFAULT_SIZE, isV2Image, type V2Sprite, type V2SpriteEntry } from './art-v2/types';
+import { ICON_IMAGE_SIZE, iconImageUrl } from './icon-image-files';
 
 export interface ResolvedSprite {
   /** Doku/önbellek anahtarı parçası: v1'de çıplak ad (eski anahtarlar aynen), v2'de `v2:<sahip>:<ad>`. */
@@ -20,16 +21,18 @@ export interface ResolvedSprite {
   version: 'v1' | 'v2';
   /** Kenar uzunluğu (ince piksel): v1 = 64, v2 = çizimin boyutu (varsayılan 128). */
   size: number;
-  /** Hücreler (ışık seviyeleriyle); bilinmeyen adda null. */
+  /** Hücreler (ışık seviyeleriyle); bilinmeyen adda ve GÖRSEL ikonda null. */
   cells: () => Cell[][] | null;
+  /** GÖRSEL v2 ikonu (hazır PNG, art-v2 `{ image }`): dosyanın URL'si. Varsa çizim yerine bu resim kullanılır (cells null). */
+  image?: string;
 }
 
 /** v2 efekt sprite'ının tam adı: `sprite()` / `ensureIcon` / `iconUrl` bu adı doğrudan çözer. */
 export const v2SpriteName = (owner: string, name: string): string => `v2:${owner}:${name}`;
 
 const spriteMemo = new WeakMap<object, V2Sprite>();
-/** Girdiyi uzun yazıma çevirir (aynı girdi için aynı nesne: çizim önbelleği girdinin kimliğine bağlıdır). */
-const asSprite = (e: V2SpriteEntry): V2Sprite => {
+/** Girdiyi uzun yazıma çevirir (aynı girdi için aynı nesne: çizim önbelleği girdinin kimliğine bağlıdır). Görsel girdi buraya gelmez. */
+const asSprite = (e: Exclude<V2SpriteEntry, { image: string }>): V2Sprite => {
   if (typeof e !== 'function') return e;
   let s = spriteMemo.get(e);
   if (!s) spriteMemo.set(e, (s = { draw: e }));
@@ -39,12 +42,23 @@ const asSprite = (e: V2SpriteEntry): V2Sprite => {
 /** Sahibin v2 ikon dosyasında bu ad var mı (ICONS). */
 export const hasV2Icon = (owner: string | null | undefined, name: string): boolean => !!owner && !!ICONS_V2[owner]?.ICONS[name];
 
-/** Sahibin v2 dosyasındaki girdi: ICONS (v1 adıyla) ya da SPRITES (v2 efekt sprite'ı). */
-function v2Entry(owner: string, name: string, sprites: boolean): V2Sprite | null {
+/** Sahibin v2 dosyasındaki girdi: ICONS (v1 adıyla) ya da SPRITES (v2 efekt sprite'ı). Görsel girdi `{ url }` döner (dosyası yoksa null: v1'e düşer). */
+function v2Entry(owner: string, name: string, sprites: boolean): V2Sprite | { url: string } | null {
   const file = ICONS_V2[owner];
   if (!file) return null;
   const e = sprites ? (file.SPRITES[name] ?? file.ICONS[name]) : file.ICONS[name];
-  return e ? asSprite(e) : null;
+  if (!e) return null;
+  if (isV2Image(e)) {
+    const url = iconImageUrl(e.image);
+    return url ? { url } : null;
+  }
+  return asSprite(e);
+}
+
+/** v2 girdisinden çözüm (çizim ya da görsel). */
+function fromEntry(key: string, e: V2Sprite | { url: string }): ResolvedSprite {
+  if ('url' in e) return { key, version: 'v2', size: ICON_IMAGE_SIZE, cells: () => null, image: e.url };
+  return { key, version: 'v2', size: sizeOf(e), cells: () => drawV2(key, e) };
 }
 
 /** Çizim önbelleği: girdi nesnesine bağlı (dosya değişip girdi yenilenince eski çizim kullanılmaz). */
@@ -75,15 +89,12 @@ export function resolveSprite(name: string, owner?: string | null): ResolvedSpri
   if (name.startsWith('v2:')) {
     const [, o = '', n = ''] = name.split(':');
     const e = v2Entry(o, n, true);
-    if (e) return { key: name, version: 'v2', size: sizeOf(e), cells: () => drawV2(name, e) };
+    if (e) return fromEntry(name, e);
     return { key: name, version: 'v1', size: GRID, cells: () => null };
   }
   if (owner && wantsV2(owner, 'icon')) {
     const e = v2Entry(owner, name, false);
-    if (e) {
-      const key = v2SpriteName(owner, name);
-      return { key, version: 'v2', size: sizeOf(e), cells: () => drawV2(key, e) };
-    }
+    if (e) return fromEntry(v2SpriteName(owner, name), e);
   }
   return { key: name, version: 'v1', size: GRID, cells: () => spriteCells(name) };
 }
@@ -113,7 +124,5 @@ export function statusBadge(statusId: string, icon: string): { name: string; own
 /** Sahibin v2 ikonunu seçimden BAĞIMSIZ çözer (wiki'deki v1 | v2 karşılaştırması); yoksa null. */
 export function v2IconOf(owner: string, name: string): ResolvedSprite | null {
   const e = v2Entry(owner, name, false);
-  if (!e) return null;
-  const key = v2SpriteName(owner, name);
-  return { key, version: 'v2', size: sizeOf(e), cells: () => drawV2(key, e) };
+  return e ? fromEntry(v2SpriteName(owner, name), e) : null;
 }

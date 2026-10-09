@@ -214,6 +214,18 @@ describe('Sprite sheet efektleri (assets/vfx) bağlı; assets/source yalnızca k
     expect(legacyItems.some((i) => /assets\/(source|vfx)\//.test(`${i.id} ${i.label}`)), 'Legacy de assets/source ya da assets/vfx dosyası').toBe(false);
     for (const owner of new Set(onDisk.map((f) => f.owner))) expect(existsSync(join(__dirname, '..', 'assets', 'source', `${owner}-vfx`)), `assets/source/${owner}-vfx yok`).toBe(true);
   });
+
+  it('görsel v2 ikonları (assets/icons-v2/<sahip>) bağlı; asılları assets/source/<sahip>-icons altında kaynak olarak durur (Defender)', () => {
+    const iconsRoot = join(__dirname, '..', 'assets', 'icons-v2');
+    const owners = existsSync(iconsRoot) ? readdirSync(iconsRoot) : [];
+    expect(owners).toContain('defender');
+    for (const owner of owners) {
+      expect(existsSync(join(__dirname, '..', 'assets', 'source', `${owner}-icons`)), `assets/source/${owner}-icons yok`).toBe(true);
+      const src = readFileSync(join(__dirname, '..', 'src/game/art-v2', owner, 'icons.ts'), 'utf8');
+      for (const f of readdirSync(join(iconsRoot, owner)).filter((x) => x.endsWith('.png'))) expect(src.includes(`'${owner}/${f.replace(/\.png$/, '')}'`), `${owner}/${f}: ${owner}/icons.ts bağlamıyor`).toBe(true);
+    }
+    expect(legacyItems.some((i) => /assets\/(icons-v2|source)\//.test(`${i.id} ${i.label}`))).toBe(false);
+  });
 });
 
 describe('Ana menü katmanlı sahnesi (assets/menu)', () => {
@@ -234,5 +246,21 @@ describe('Ana menü katmanlı sahnesi (assets/menu)', () => {
       const [x, y, w, h] = r as number[];
       expect(x! >= 0 && y! >= 0 && x! + w! <= 1024 && y! + h! <= 512, `${k} sayfanın dışında`).toBe(true);
     }
+  });
+});
+
+describe('Item ikon görselleri (assets/items) bağlı; asılları assets/source/item-icons', () => {
+  it('assets/items altındaki her görsel bir item e ait, oyunun listesinde ve Codex > Icons ta; görseli olmayan item piksel ikona düşer', async () => {
+    const { ITEM_IMAGE_FILES, itemImageUrl } = await import('../src/game/item-icon-files');
+    const items = (await import('../data/items.json')).default.items as Array<{ id: string }>;
+    const onDisk = readdirSync('assets/items').filter((f) => /\.(webp|png)$/.test(f)).map((f) => f.replace(/\.[^.]+$/, '')).sort();
+    expect(onDisk.length).toBeGreaterThan(0);
+    expect(Object.keys(ITEM_IMAGE_FILES).sort()).toEqual(onDisk);
+    for (const id of onDisk) expect(items.some((d) => d.id === id), `${id}: items.json da böyle bir item yok`).toBe(true);
+    expect(catalog.itemArt.art.map((a) => a.itemId).sort()).toEqual(onDisk);
+    for (const a of catalog.itemArt.art) expect(a.name, a.itemId).not.toBe('');
+    expect(itemImageUrl({ id: 'no_such_item' })).toBeNull();
+    expect(existsSync('assets/source/item-icons'), 'assets/source/item-icons yok').toBe(true);
+    expect(existsSync('tools/make-item-icons.mjs')).toBe(true);
   });
 });

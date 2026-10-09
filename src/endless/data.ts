@@ -25,6 +25,8 @@ export interface EndlessConfig {
   items: { ilvlPerWave: number; ilvlAhead: number; window: number };
   /** Tüccar: her `every` dalgada, `size` mal, malları yenileme bedeli, bu ziyaretin geri alım listesi boyu. */
   shop: { every: number; size: number; rerollCost: number; buybackSize: number };
+  /** Tüccar önizlemesi (?merchant=1): temizlenmiş dalga, altın, torbadaki item sayısı. */
+  merchantPreview: { wave: number; gold: number; bagItems: number };
   /** Kalıntılar: boss sonrası teklif sayısı + liste (src/endless/relics.ts). */
   relics: { offer: number; list: RelicDef[] };
   difficulty: 'easy' | 'medium' | 'hard';
@@ -145,6 +147,8 @@ export interface EndlessRun {
   relicOffer?: string[];
   /** Hero's Feast etkisi (yoksa yok). */
   blessing?: Blessing;
+  /** Tüccar önizlemesi için atılır koşu (?merchant=1): kaydedilmez, en iyi koşulara yazılmaz (src/endless/merchant.ts > previewRun). */
+  preview?: true;
   /** Yarıda bırakılan savaş (seed + eylem günlüğü; src/endless/replay.ts). Yalnızca 'ready' aşamasında ve aynı dalga için geçerli. */
   suspended?: SuspendedBattle;
 }

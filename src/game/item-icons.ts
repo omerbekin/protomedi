@@ -7,6 +7,9 @@
  * NADİRLİK: nesnenin kendisi yeniden boyanmaz; yalnızca küçük ayrıntılar (mücevher, kenar şeridi, bilezik, kabza taşı) vurgu jetonu
  * `'a'` (+ koyu `'A'`, açık `'z'`) ile çizilir ve çağıran buna nadirlik rengini verir. Çerçeve / parıltı rengi ekranın kendi işidir.
  *
+ * ÖNCELİK: item'in boyalı görseli varsa (assets/items/<id>.webp, src/game/item-icon-files.ts) ekranlar onu gösterir; buradaki çizimler
+ * görseli olmayan item'lerin, boş yuvaların ve ödül kartlarının yedeğidir.
+ *
  * Ad seçimi: item'in `icon` alanı (data/items.json, isteğe bağlı) > silah ailesi (`FAMILY_ICON`) > yuva (`SLOT_ICON`).
  * Yeni ikon = `ITEM_ICONS`'a yeni anahtar; Codex > Assets > Icons onu kendiliğinden listeler (src/gallery/catalog.ts > itemIcons).
  */

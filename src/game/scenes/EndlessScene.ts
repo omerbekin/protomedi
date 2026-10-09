@@ -430,6 +430,8 @@ export class EndlessScene extends Phaser.Scene {
       over: () => this.drawOver(),
     };
     draw[this.view]();
+    // Tüccar önizlemesi (?merchant=1): kaydedilmeyen, skora girmeyen koşu olduğu üstte açıkça yazar
+    if (endless.run?.preview && this.view !== 'title' && this.view !== 'pick') this.add2(elText(this, CX, 22, T.previewRun, 16, C.warn, { em: 0.16 }).setOrigin(0.5));
     if (endlessBack(this.view)) this.drawBack();
     this.layoutStage();
   }

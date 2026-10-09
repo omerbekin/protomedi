@@ -11,6 +11,7 @@ const cache = new Map<string, string>();
 
 export function iconUrl(name: string, accent = '#ffffff', owner?: string | null): string {
   const art = resolveSprite(name, owner);
+  if (art.image) return art.image; // görsel v2 ikonu (hazır PNG): doğrudan dosya; CSS pixelated ile keskin
   const key = `${art.key}:${accent}`;
   const hit = cache.get(key);
   if (hit) return hit;

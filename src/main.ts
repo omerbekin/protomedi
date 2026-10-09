@@ -8,6 +8,7 @@ import { CampaignMapScene } from './game/scenes/CampaignMapScene';
 import { MultiplayerScene, setMultiplayerBoot } from './game/scenes/MultiplayerScene';
 import { EndlessScene } from './game/scenes/EndlessScene';
 import { mp } from './game/mp-client';
+import { prepareMerchant } from './game/endless-session';
 import { lobbyFromSearch } from './net/lobby-code';
 import { DebugMenu } from './ui/debug-menu';
 import { DEBUG_INFO_TAB, DEBUG_TABS, registerDebugTools } from './ui/debug-tools';
@@ -43,7 +44,10 @@ const params = new URLSearchParams(window.location.search);
 const skipSelect = params.has('seed');
 const openCampaign = !skipSelect && params.has('campaign');
 // ?endless=1 doğrudan Endless ekranını açar (Endless Lite; ana menüde kartı yok, debug > Setup > Endless de açar)
-const openEndless = !skipSelect && !openCampaign && params.has('endless');
+// ?merchant=1 doğrudan Endless tüccarını açar (bekleyen gerçek koşuda; yoksa kaydedilmeyen önizleme koşusu: src/game/endless-session.ts > prepareMerchant)
+const openMerchantShortcut = !skipSelect && !openCampaign && params.has('merchant');
+const openEndless = !skipSelect && !openCampaign && (params.has('endless') || openMerchantShortcut);
+if (openMerchantShortcut) prepareMerchant();
 // Multiplayer: davet linki (?lobby=KOD) lobiye katılır; yenilenen sekme yarım kalan lobisine döner (docs/design/multiplayer.md)
 const lobbyCode = skipSelect || openCampaign || openEndless ? null : lobbyFromSearch(window.location.search);
 const rejoin = !skipSelect && !openCampaign && !openEndless && !lobbyCode && !!mp.pendingRejoin();

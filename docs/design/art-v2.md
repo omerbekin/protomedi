@@ -2,8 +2,8 @@
 
 Ömer kararı: tüm karakterlerin **ses, ikon ve skill animasyonları baştan yeniden tasarlanıyor** (iyileştirme değil, yeniden tasarım;
 en yüksek çözünürlük ve kalite). Eskiler (**v1**) DOKUNULMAZ ve korunur; Ömer debug > **Versions** sekmesinden karakter bazında
-v1 / v2 seçip karşılaştırır. Kapsam dışı: **Cutthroat** tamamen; **Defender**'ın skill İKONLARI (yeni ikon görselleri ayrıca gelecek). Defender'ın
-**sesleri ve animasyonları kapsamda** (2026-10-10: animasyonlar hazır sprite sheet paketiyle, bkz. 3.4).
+v1 / v2 seçip karşılaştırır. Kapsam dışı: **Cutthroat** tamamen. **Defender** 2026-10-10'dan beri tam kapsamda: ikonları hazır PNG (bkz. 2.2),
+animasyonları hazır sprite sheet paketiyle (bkz. 3.4), sesleri kodla.
 
 ## 1. Dosya düzeni (her class kendi dosyalarında; başkasınınkine dokunma)
 
@@ -16,7 +16,7 @@ v1 / v2 seçip karşılaştırır. Kapsam dışı: **Cutthroat** tamamen; **Defe
 
 - Her dosyanın başındaki yorum o class'ın v1 adlarını listeler (hangi anahtarı dolduracağın).
 - Kayıt dosyaları (`src/game/art-v2/icons-index.ts`, `vfx-index.ts`, `audio-index.ts`) **şimdiden tüm class'lar için doludur: dokunma.**
-  (Defender'ın `vfx-index.ts` satırı 2026-10-10'da eklendi; ikon kaydı yok.)
+  (Defender'ın `vfx-index.ts` ve `icons-index.ts` satırları 2026-10-10'da eklendi.)
 - Çağrılar sahibine aittir: Skeleton'un skill/ikon/sesleri **undead** dosyalarında, Treant'ınkiler **druid** dosyalarında.
   Çağrı giriş sesleri de (Undead: soulDrain, earthCrack, graveMoan, boneClatter, thud; Druid: woodCreak, thud) sahibin ses dosyasından çözülür.
 - Ortak öğeler (Rest/Skip/Move ikon+sesleri: rest, hourglass, boot, gasp, fistWhoosh, armorRun; durum rozetleri) `shared`
@@ -46,6 +46,18 @@ Codex "Items and gear" (`src/wiki/slot-glyphs.ts`), Codex > Assets > Icons > Ite
 Ad seçimi: `data/items.json` item'inde isteğe bağlı `icon` > silah ailesi (`FAMILY_ICON`) > yuva (`SLOT_ICON`). Ödüller: altın = `gold`
 (kese + sikke yığını, para simgesi yok), Rest/şifa = `draught` (kırmızı iksir), Hero's Feast = `feast`. **Nadirlik nesneyi boyamaz:** yalnızca
 `'a'` jetonlu ayrıntılar (taş, kenar şeridi, bilezik) nadirlik renginde; çerçeve/parıltı rengini ekran verir.
+
+### 2.2 Görsel (hazır PNG) v2 ikonları (2026-10-10; ilk kullanan Defender)
+
+Kodla çizmek yerine hazır resim de kullanılabilir:
+- Asıllar `assets/source/<sahip>-icons/*.png` (oyuna yüklenmez). Oyundaki kopya `assets/icons-v2/<sahip>/<v1 ikon adı>.png` (128x128, pikseller aynen):
+  `node tools/import-v2-icons.mjs assets/source/<sahip>-icons <sahip> <dosya=ad> ...`.
+- Bağlama: sahibin `icons.ts` > `ICONS` içinde `<ad>: { image: '<sahip>/<ad>' }` (`types.ts > V2Image`). Tarama `src/game/icon-image-files.ts`.
+- Çözüm `art-registry.ts > resolveSprite` (`image` = dosya URL'si, `cells` null). Phaser `icons.ts > ensureIcon`: aynı koyu plaka + vurgu çerçevesi,
+  resim NEAREST (yumuşatmasız) çizilir; resim henüz yüklenmediyse yüklenince aynı dokuya çizilir. DOM `dom-icons.ts > iconUrl`: dosyanın kendisi.
+  Böylece savaş HUD'ı, pasif, takım seçimi, tooltip ve Codex (Versions dahil) hiçbir ek kod olmadan görsel ikonu gösterir; dosya yoksa v1'e düşer.
+- Küçük düğmelerde keskin; büyük gösterimde (tooltip, Codex büyüteci) 128'lik kaynaktan büyütüldüğü için biraz yumuşak (kabul edildi).
+- Testler: `tests/asset-versions.test.ts` (her görsel ikon 128x128 ve bir girdiye bağlı; v1/v2 çözümü), `tests/wiki-assets.test.ts` (asıllar `assets/source/<sahip>-icons`).
 
 ## 3. Animasyon (vfx) nasıl yazılır
 

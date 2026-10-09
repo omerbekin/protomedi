@@ -22,7 +22,15 @@ export interface V2Sprite {
   logical?: number;
   outline?: boolean;
 }
-export type V2SpriteEntry = Draw | V2Sprite;
+/**
+ * GÖRSEL v2 ikonu (hazır PNG; kodla çizilmez): `image` = 'assets/icons-v2/<sahip>/<ad>.png' dosyasının kimliği '<sahip>/<ad>'
+ * (src/game/icon-image-files.ts). Oyunda NEAREST ile küçültülür; dosya yoksa v1'e düşer. İlk kullanan Defender (2026-10-10).
+ */
+export interface V2Image {
+  image: string;
+}
+export type V2SpriteEntry = Draw | V2Sprite | V2Image;
+export const isV2Image = (e: V2SpriteEntry | undefined | null): e is V2Image => !!e && typeof e === 'object' && 'image' in e;
 
 /** v2 skill efekti: v1 ile aynı bağlam (`c`), ek olarak v1 efekt yardımcıları ve v1 efektlerinin kendisi (`k`). */
 export type V2Vfx = (c: VfxCtx, k: VfxKit) => Promise<void>;

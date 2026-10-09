@@ -186,7 +186,7 @@ export class MainMenuScene extends Phaser.Scene {
   preload(): void {
     // Açılış hızı: yalnızca menünün ihtiyacı (kart görselleri, harita, logo); avatarlar, sprite'lar ve diğer arka planlar menü
     // görününce arka planda gelir (loadRestInBackground). İlerleme açılış yükleme ekranına bağlıdır (src/ui/boot-loader.ts).
-    preloadAssets(this, { sprites: false, avatars: false, backgrounds: MENU_BACKGROUNDS });
+    preloadAssets(this, { sprites: false, avatars: false, items: false, backgrounds: MENU_BACKGROUNDS });
     // Katmanlı arka plan (assets/menu) varsa geniş harita görseli menüde gerekmez: yalnızca Campaign kartının görseli
     preloadMenuLayers(this);
     preloadCampaignArt(this, ['valdoria-bg']);

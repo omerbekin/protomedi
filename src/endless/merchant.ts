@@ -3,7 +3,9 @@
 // Satın alma run.ts > buyItem, ayrılma run.ts > leaveShop. Ekran: src/game/scenes/EndlessScene.ts > drawShop. Sayılar data/endless.json > shop.
 import { ITEMS, STAT_IDS, canEquip, itemDef, itemIP, sellValue, type ItemDef, type ItemStatId } from '../progression/items';
 import { ENDLESS, type EndlessConfig, type EndlessHero, type EndlessRun } from './data';
-import { bagOf, endlessBagSize, heroOf, shopStock } from './run';
+import { bagOf, endlessBagSize, heroOf, ilvlCap, newRun, shopStock, suspendedOf } from './run';
+import { randomTeam } from '../engine/content';
+import { rngFor } from './waves';
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 const defIn = (catalog: ItemDef[], id: string): ItemDef | undefined => catalog.find((d) => d.id === id) ?? itemDef(id);
@@ -123,3 +125,40 @@ export function bestHeroFor(run: EndlessRun, d: ItemDef, catalog: ItemDef[] = IT
 
 /** Fiyat için eksik altın (yetiyorsa 0). */
 export const goldShort = (run: EndlessRun, price: number): number => Math.max(0, price - run.gold);
+
+// ------------------------------------------------------------ tüccar önizlemesi (?merchant=1, debug > Open merchant)
+
+/**
+ * Atılır önizleme koşusu (Ömer 2026-10-10): seed'li otomatik takım (4 class, otomatik dizilim), `merchantPreview.wave` dalga temizlenmiş,
+ * altın ve torbada birkaç item; tüccar açık. `preview: true`: kaydedilmez (saveRun yazmaz), en iyi koşulara girmez.
+ */
+export function previewRun(seed: number, cfg: EndlessConfig = ENDLESS, catalog: ItemDef[] = ITEMS.items, startedAt = new Date().toISOString()): EndlessRun {
+  const p = cfg.merchantPreview;
+  const base = newRun(seed, randomTeam(seed, cfg.partySize), startedAt, cfg);
+  const run: EndlessRun = { ...base, wave: p.wave + 1, stats: { cleared: p.wave, turns: 0, kills: 0 }, gold: p.gold, preview: true };
+  // torba: seviye tavanının altındaki item'lerden seed'li farklı birkaçı
+  const rng = rngFor(seed, 'merchant-preview');
+  const pool = catalog.filter((d) => d.ilvl <= ilvlCap(p.wave, cfg));
+  const bag = [];
+  for (let i = 0; i < p.bagItems && pool.length; i++) {
+    const [d] = pool.splice(rng.int(0, pool.length - 1), 1);
+    bag.push({ uid: `p${i + 1}`, id: d!.id });
+  }
+  run.bag = bag;
+  run.nextItem = bag.length + 1;
+  const shop = openShop(run, cfg, catalog);
+  return shop.phase === 'shop' ? shop : { ...run, phase: 'shop', shop: [] };
+}
+
+/**
+ * ?merchant=1 / debug "Open merchant" girişi: kayıtlı gerçek koşu tüccardaysa o; kampta bekliyorsa (yarım savaş yoksa) o koşuda tüccar açılır
+ * (`save: true`: yeni hali kaydedilir); başka her durumda (koşu yok, ödül / kalıntı seçimi, yarım savaş) kayda DOKUNMADAN önizleme koşusu.
+ */
+export function merchantEntry(saved: EndlessRun | null, seed: number, cfg: EndlessConfig = ENDLESS, catalog: ItemDef[] = ITEMS.items): { run: EndlessRun; save: boolean } {
+  if (saved && !saved.preview && saved.phase === 'shop') return { run: saved, save: false };
+  if (saved && !saved.preview && saved.phase === 'ready' && !suspendedOf(saved) && !saved.suspended) {
+    const s = openShop(saved, cfg, catalog);
+    if (s !== saved) return { run: s, save: true };
+  }
+  return { run: previewRun(seed, cfg, catalog), save: false };
+}

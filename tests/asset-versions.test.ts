@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import audio from '../data/audio.json';
@@ -7,7 +7,7 @@ import { content } from '../src/engine';
 import { AUDIO_V2 } from '../src/game/art-v2/audio-index';
 import { ICONS_V2 } from '../src/game/art-v2/icons-index';
 import { v2Label, v2Progress } from '../src/game/art-v2/status';
-import { V2_DEFAULT_SIZE } from '../src/game/art-v2/types';
+import { V2_DEFAULT_SIZE, isV2Image } from '../src/game/art-v2/types';
 import { VFX_V2 } from '../src/game/art-v2/vfx-index';
 import { resolveSprite, v2IconOf, v2SpriteName } from '../src/game/art-registry';
 import {
@@ -122,8 +122,8 @@ describe('sürüm kaydı: her class için dosyalar ve tek satırlık kayıt', ()
       expect(AUDIO_V2[key], `${key} ses kaydı`).toBeDefined();
       expect(existsSync(join(ROOT, 'data/audio-v2', `${key}.json`)), `data/audio-v2/${key}.json`).toBe(true);
     }
-    // Defender: animasyon + ses (ikonlar henüz kapsam dışı); Cutthroat hiç yok
-    expect(inScope('defender', 'icon')).toBe(false);
+    // Defender: ikon (hazır PNG) + animasyon + ses; Cutthroat hiç yok
+    expect(inScope('defender', 'icon')).toBe(true);
     expect(inScope('defender', 'vfx')).toBe(true);
     expect(inScope('defender', 'sfx')).toBe(true);
     expect(ICONS_V2['cutthroat']).toBeUndefined();
@@ -163,7 +163,11 @@ describe('sürüm kaydı: her class için dosyalar ve tek satırlık kayıt', ()
 
   it('v2 ikon/sprite çizimleri hatasız üretilir (hata veren çizim null döner, oyun çökmez)', () => {
     for (const [key, file] of Object.entries(ICONS_V2)) {
-      for (const n of Object.keys(file.ICONS)) expect(v2IconOf(key, n)?.cells(), `${key} ikon ${n}`).not.toBeNull();
+      for (const [n, e] of Object.entries(file.ICONS)) {
+        // görsel ikon (hazır PNG): çizim yok, dosyası var
+        if (isV2Image(e)) expect(v2IconOf(key, n)?.image, `${key} görsel ikon ${n}: assets/icons-v2/${e.image}.png`).toBeTruthy();
+        else expect(v2IconOf(key, n)?.cells(), `${key} ikon ${n}`).not.toBeNull();
+      }
       for (const n of Object.keys(file.SPRITES)) expect(resolveSprite(v2SpriteName(key, n)).cells(), `${key} sprite ${n}`).not.toBeNull();
     }
   });
@@ -252,11 +256,11 @@ describe('sürüm çözümleme', () => {
     });
   });
 
-  it('kapsam: Cutthroat seçilemez, Defender ikonu v2 olmaz ama animasyonu ve sesi olur', () => {
+  it('kapsam: Cutthroat seçilemez, Defender ikonu, animasyonu ve sesi v2 olur', () => {
     setVersion('cutthroat', 'v2');
     expect(getVersion('cutthroat')).toBe('v1');
     setVersion('defender', 'v2');
-    expect(wantsV2('defender', 'icon')).toBe(false);
+    expect(wantsV2('defender', 'icon')).toBe(true);
     expect(wantsV2('defender', 'vfx')).toBe(true);
     expect(wantsV2('defender', 'sfx')).toBe(true);
   });
@@ -365,7 +369,10 @@ describe('ilerleme ve wiki karşılaştırması', () => {
       expect(p.sfx.items.find((i) => i.name === ds.sfx![0])?.ready).toBe(true);
       expect(v2Label('warrior')).toMatch(/^v2 · \d+\/\d+$/);
     });
-    expect(v2Progress('defender').icon.total).toBe(0); // kapsam dışı
+    // Defender: dört skill + pasif ikonu hazır PNG; class logosu (bulwark) henüz v1
+    const defIcons = v2Progress('defender').icon.items;
+    expect(defIcons.filter((i) => i.ready).map((i) => i.name).sort()).toEqual(['aura', 'fistcrush2', 'guard2', 'taunt2', 'tremor2']);
+    expect(defIcons.find((i) => i.name === content.classes.defender!.logo)?.ready).toBe(false);
     expect(v2Progress('defender').vfx.ready).toBe(v2Progress('defender').vfx.total); // dört skill animasyonu hazır
     expect(v2Progress('defender').sfx.total).toBeGreaterThan(0);
   });
@@ -394,5 +401,39 @@ describe('ilerleme ve wiki karşılaştırması', () => {
         for (const s of r.sounds.filter((x) => x.hasV2)) expect(legacyIds.has(s.id), s.id).toBe(false);
       }
     });
+  });
+});
+
+describe('görsel v2 ikonları (hazır PNG: assets/icons-v2)', () => {
+  it('Defender ikonları görsel: seçili v2 ile skill ve pasif ikonları PNG URL ine çözülür, v1 seçilince eski çizim', () => {
+    const def = content.classes.defender!;
+    const names = [...def.skills.map((id) => content.skills[id]!.icon), def.passive!.icon];
+    setVersion('defender', 'v2');
+    for (const n of names) {
+      const r = resolveSprite(n, 'defender');
+      expect(r.version, n).toBe('v2');
+      expect(r.image, n).toBeTruthy();
+      expect(r.size, n).toBe(128);
+      expect(r.cells(), n).toBeNull();
+    }
+    setVersion('defender', 'v1');
+    for (const n of names) {
+      const r = resolveSprite(n, 'defender');
+      expect(r.version, n).toBe('v1');
+      expect(r.image, n).toBeUndefined();
+      expect(r.cells(), n).not.toBeNull();
+    }
+    setVersion('defender', 'v2');
+  });
+
+  it('her görsel ikon dosyası 128x128 PNG ve bir v2 ICONS girdisine bağlı (bağlantısız dosya yok)', () => {
+    const root = join(ROOT, 'assets', 'icons-v2');
+    const linked = new Set(Object.values(ICONS_V2).flatMap((f) => Object.values(f.ICONS).filter(isV2Image).map((e) => e.image)));
+    for (const owner of existsSync(root) ? readdirSync(root) : [])
+      for (const f of readdirSync(join(root, owner)).filter((x) => x.endsWith('.png'))) {
+        const buf = readFileSync(join(root, owner, f));
+        expect([buf.readUInt32BE(16), buf.readUInt32BE(20)], `${owner}/${f}`).toEqual([128, 128]);
+        expect(linked.has(`${owner}/${f.replace(/\.png$/, '')}`), `${owner}/${f} bağlantısız`).toBe(true);
+      }
   });
 });

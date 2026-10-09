@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { ensureGlow } from './menu-ui';
 import { EL } from './elegant-ui';
 import { ITEM_ICON_SIZE, REWARD_ICON, itemIconName, paintItemIcon } from './item-icons';
+import { ITEM_IMAGE_FILES, itemImageKey } from './item-icon-files';
 
 /**
  * Endless ödül / dükkân / kalıntı kartlarının amblemleri. İkonlar piksel art (tek ortak kaynak: src/game/item-icons.ts; Gear ekranı,
@@ -21,8 +22,21 @@ function pixelTexture(scene: Phaser.Scene, name: string, accent?: string): strin
   return key;
 }
 
-/** Item ikonu (item'in `icon` alanı > silah ailesi > yuva); nadirlik rengi taş / kenar ayrıntısını boyar. */
-export const itemEmblem = (scene: Phaser.Scene, d: { slot: string; family?: string; icon?: string }, rarityColor: string): string => pixelTexture(scene, itemIconName(d), rarityColor);
+/**
+ * Item ikonu: item'in görseli (assets/items/<id>.webp, src/game/item-icon-files.ts) yüklüyse onun dokusu; yoksa piksel ikon (item'in
+ * `icon` alanı > silah ailesi > yuva; nadirlik rengi taş / kenar ayrıntısını boyar). Görseller arka plan yükleme listesiyle gelir
+ * (src/game/assets.ts); henüz inmemişse bu çağrı piksel ikonu verir ve dosyayı kuyruğa ekler (sonraki çizimde görsel görünür).
+ */
+export const itemEmblem = (scene: Phaser.Scene, d: { id?: string; slot: string; family?: string; icon?: string }, rarityColor: string): string => {
+  const url = d.id ? ITEM_IMAGE_FILES[d.id] : undefined;
+  if (url && d.id) {
+    const key = itemImageKey(d.id);
+    if (scene.textures.exists(key)) return key;
+    scene.load.image(key, url);
+    if (!scene.load.isLoading()) scene.load.start();
+  }
+  return pixelTexture(scene, itemIconName(d), rarityColor);
+};
 
 /** Altın: deri kese ve sikke yığını. */
 export const purseEmblem = (scene: Phaser.Scene): string => pixelTexture(scene, REWARD_ICON.gold);

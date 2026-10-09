@@ -13,6 +13,7 @@ import { SFX } from '../game/audio';
 import { PIXEL_FX } from '../game/pixel-fx';
 import { FAMILY_ICON, ITEM_ICON_LABEL, ITEM_ICON_NAMES, REWARD_ICON, SLOT_ICON, itemIconName } from '../game/item-icons';
 import itemsJson from '../../data/items.json';
+import { ITEM_IMAGE_FILES } from '../game/item-icon-files';
 import { ICON_KINDS } from '../ui/icon-kinds';
 import { STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON } from '../ui/stat-icons';
 import { UI_ICONS } from '../ui/dom-icons';
@@ -427,6 +428,25 @@ export function buildItemIcons(): ItemIconEntry[] {
   });
 }
 
+/** Item görseli (assets/items/<id>.webp; src/game/item-icon-files.ts). `itemId` items.json'da yoksa `name` boş kalır (bağlantısız). */
+export interface ItemArtEntry {
+  itemId: string;
+  name: string;
+  slot: string;
+  url: string;
+}
+
+/** assets/items altındaki HER görsel (yeni dosya kendiliğinden listelenir) + görseli olmayan item'ler (piksel ikona düşenler). */
+export function buildItemArt(): { art: ItemArtEntry[]; missing: string[] } {
+  const items = itemsJson.items as Array<{ id: string; name: string; slot: string }>;
+  const art = Object.entries(ITEM_IMAGE_FILES).map(([itemId, url]) => {
+    const d = items.find((i) => i.id === itemId);
+    return { itemId, name: d?.name ?? '', slot: d?.slot ?? '', url };
+  });
+  const missing = items.filter((i) => !ITEM_IMAGE_FILES[i.id]).map((i) => i.name);
+  return { art, missing };
+}
+
 // ---------------------------------------------------------------- hepsi
 
 export interface Catalog {
@@ -438,6 +458,7 @@ export interface Catalog {
   orphans: ReturnType<typeof orphanAssets>;
   icons: IconEntry[];
   itemIcons: ItemIconEntry[];
+  itemArt: ReturnType<typeof buildItemArt>;
   fxSprites: string[];
   statuses: StatusEntry[];
   grounds: GroundEntry[];
@@ -454,6 +475,7 @@ export function buildCatalog(files: AssetFiles): Catalog {
     orphans: orphanAssets(files),
     icons: buildIcons(),
     itemIcons: buildItemIcons(),
+    itemArt: buildItemArt(),
     fxSprites: fxSpriteNames(),
     statuses: buildStatuses(),
     grounds: buildGrounds(),

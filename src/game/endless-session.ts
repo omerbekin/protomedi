@@ -16,6 +16,7 @@ import {
   type ReplayAction,
   loadRun,
   loadScores,
+  merchantEntry,
   newRun,
   outcomeFromSummary,
   saveRun,
@@ -90,6 +91,7 @@ export function commit(run: EndlessRun): void {
 
 /** Koşu bitti: skoru yerel listeye yaz (bir kez; çağıran koşunun yeni bittiğinden emin olur). */
 export function recordScore(run: EndlessRun): void {
+  if (run.preview) return; // tüccar önizlemesi en iyi koşulara yazılmaz
   const res = addScore(loadScores(storage()), scoreOf(run));
   saveScores(storage(), res.list);
   endless.last = { entry: res.list[res.rank] ?? scoreOf(run), rank: res.rank };
@@ -108,6 +110,27 @@ export function abandon(): void {
 export const scores = (): ScoreEntry[] => loadScores(storage());
 
 const goTo = (game: Phaser.Game, key: string, data?: object) => (game.scene.getScene(BATTLE_SCENE) as Phaser.Scene).scene.start(key, data);
+
+/**
+ * Tüccar kısayolu (?merchant=1, debug > Open merchant): bellekteki / kayıtlı gerçek koşu kampta bekliyorsa onda tüccar açılır (kaydedilir),
+ * tüccardaysa o; yoksa kayda DOKUNMAYAN atılır önizleme koşusu (src/endless/merchant.ts > merchantEntry / previewRun). Dönen: açılan koşu.
+ */
+export function prepareMerchant(): EndlessRun {
+  const mem = endless.run && !endless.run.preview && endless.run.phase !== 'over' ? endless.run : null;
+  const e = merchantEntry(mem ?? savedRun(), newSeed());
+  endless.run = e.run;
+  endless.last = null;
+  if (e.save) saveRun(storage(), e.run);
+  return e.run;
+}
+
+/** Tüccarı aç (debug): etkin sahne ne olursa olsun Endless sahnesi tüccar görünümüyle açılır. */
+export function openMerchant(game: Phaser.Game): void {
+  prepareMerchant();
+  const active = game.scene.getScenes(true)[0];
+  if (active) active.scene.start(ENDLESS_SCENE);
+  else game.scene.start(ENDLESS_SCENE);
+}
 
 /** Ana menü (Play > Endless mode) ve debug için tek giriş: etkin sahne ne olursa olsun Endless başlık ekranını açar. */
 export function openEndless(game: Phaser.Game): void {

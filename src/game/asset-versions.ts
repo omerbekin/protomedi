@@ -25,11 +25,8 @@ export type ArtKind = 'icon' | 'vfx' | 'sfx';
 /** Yeniden tasarım kapsamı dışındaki class'lar (Ömer: Cutthroat tamamen kapsam dışı). Sürüm seçicide görünmez, hep v1. */
 export const VERSION_EXCLUDED: readonly string[] = ['cutthroat'];
 
-/**
- * Kapsamı kısıtlı anahtarlar: yalnızca listelenen türler v2 olabilir. Defender (2026-10-10, Ömer): skill animasyonları ve sesleri kapsamda
- * (animasyonlar hazır sprite sheet'lerle: assets/vfx/defender); ikonları henüz kapsam dışı (yeni ikon görselleri ayrıca gelecek).
- */
-export const V2_SCOPE: Readonly<Record<string, readonly ArtKind[]>> = { defender: ['vfx', 'sfx'], [SHARED_KEY]: ['icon', 'sfx'] };
+/** Kapsamı kısıtlı anahtarlar: yalnızca listelenen türler v2 olabilir (Shared: animasyonu yok). Defender 2026-10-10'dan beri tam kapsamda. */
+export const V2_SCOPE: Readonly<Record<string, readonly ArtKind[]>> = { [SHARED_KEY]: ['icon', 'sfx'] };
 
 /**
  * Skill verisinde görünmeyen ama koddan çalan sesler (sahibine göre). summonFx/corpseDrainFx (src/game/vfx.ts) ve global eylemler

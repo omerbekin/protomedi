@@ -92,6 +92,23 @@ export function mountIcons(cat: Catalog): SectionApi {
       ),
     );
   }
+  // Item görselleri (assets/items/<id>.webp): görseli olan item'de piksel ikonun yerine geçer
+  const art = h('div', { class: 'cards icons' });
+  for (const a of cat.itemArt.art)
+    art.append(
+      searchable(
+        h(
+          'article',
+          { class: 'card icon-card' },
+          h('img', { class: 'bigicon', attrs: { src: a.url, alt: a.itemId, loading: 'lazy' }, title: 'Click to enlarge', on: { click: () => openLightbox(a.url, a.name || a.itemId, false) } }),
+          h('div', { class: 'card-title mono', text: a.itemId }),
+          h('div', { class: 'tags' }, h('span', { class: a.name ? 'badge ok' : 'badge', text: a.name ? 'Item art' : 'Unlinked' })),
+          h('div', { class: 'small muted', text: a.name ? `${a.name} (${a.slot})` : 'no item with this id in data/items.json' }),
+        ),
+        `item art image ${a.itemId} ${a.name} ${a.slot}`,
+      ),
+    );
+
   // Nadirlik: aynı nesne, yalnızca taş / kenar ayrıntısı nadirlik renginde
   const tints = h('div', { class: 'cards icons' });
   for (const name of ['amulet', 'sword', 'mail']) {
@@ -105,6 +122,7 @@ export function mountIcons(cat: Catalog): SectionApi {
     const n = applyFilter(grid, query, group);
     applyFilter(fx, query);
     applyFilter(items, query);
+    applyFilter(art, query);
     applyFilter(tints, query);
     countEl.textContent = `${n} / ${cat.icons.length}`;
     return n;
@@ -118,6 +136,9 @@ export function mountIcons(cat: Catalog): SectionApi {
     h('h3', { class: 'sub', text: `Items and rewards (${cat.itemIcons.length})` }),
     h('p', { class: 'note', text: 'Gear, Spoils, Endless reward cards and the Codex all draw these (src/game/item-icons.ts). Items show with the Rare tint here.' }),
     items,
+    h('h3', { class: 'sub', text: `Item art (${cat.itemArt.art.length})` }),
+    h('p', { class: 'note', text: `Painted item icons (assets/items, cut by tools/make-item-icons.mjs from assets/source/item-icons). An item with art shows it everywhere; the rest fall back to the pixel icons above${cat.itemArt.missing.length ? ` (still pixel: ${cat.itemArt.missing.join(', ')})` : ''}.` }),
+    art,
     h('h3', { class: 'sub', text: 'Rarity tints' }),
     h('p', { class: 'note', text: 'Rarity colours only the gem, trim or band; the object keeps its own materials.' }),
     tints,

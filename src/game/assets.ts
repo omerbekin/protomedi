@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import layout from '../../data/battle-layout.json';
 import { getSpriteVariant } from './sprite-variants';
 import { trackSceneLoad } from '../ui/boot-loader';
+import { ITEM_IMAGE_FILES, itemImageKey } from './item-icon-files';
 
 /**
  * Asset bulucu. Build sırasında assets/ klasörü taranır:
@@ -57,6 +58,8 @@ export interface PreloadOptions {
   avatars?: boolean;
   /** Arka planlar (varsayılan: hepsi). false = hiçbiri; liste = yalnızca bu kimlikler. */
   backgrounds?: boolean | string[];
+  /** Item ikon görselleri (assets/items, src/game/item-icon-files.ts; varsayılan: hepsi). Ana menünün açılış listesi istemez. */
+  items?: boolean;
   /** Kuyruğa dosya girdiyse yükleme ekranı (src/ui/boot-loader.ts) bu yükleyiciyi izlesin mi (varsayılan: evet). */
   track?: boolean;
 }
@@ -94,6 +97,7 @@ function queueAssets(scene: Phaser.Scene, o: PreloadOptions): number {
     const [, id] = fileStem(path);
     if (pick(o.backgrounds, id!)) add(backgroundKey(id!), url);
   }
+  if (o.items !== false) for (const [id, url] of Object.entries(ITEM_IMAGE_FILES)) add(itemImageKey(id), url);
   return n;
 }
 
