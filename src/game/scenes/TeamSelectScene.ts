@@ -98,7 +98,8 @@ const ACTS_CY = GRID_Y + GRID_H + 10 + 30;
 const CENTER_CY = MID_TOP + 270;
 const INFO = { top: 724, h: 92, maxW: 1760 };
 const STRIP_TOP = 846;
-const START = { h: 84, cy: 986, right: 48, pad: 56, size: 30 };
+const START = { h: 84, cy: 990, right: 48, pad: 56, size: 30 };
+const RANDOM_BOTH = { h: 56, gap: 14 };
 const HIT = 72; // dokunma alanı yüksekliği (görünen satırlardan büyük)
 
 const easeOut = 'Cubic.easeOut';
@@ -217,6 +218,7 @@ export class TeamSelectScene extends Phaser.Scene {
   private infoLines?: Phaser.GameObjects.Graphics;
   private menuLink?: Phaser.GameObjects.Container;
   private center?: Phaser.GameObjects.Container;
+  private actions?: Phaser.GameObjects.Container;
   private status?: Phaser.GameObjects.Text;
   private statusTween?: Phaser.Tweens.Tween;
   private startUi?: { root: Phaser.GameObjects.Container; w: number; set: (ready: boolean, label: string) => void; shake: () => void };
@@ -315,6 +317,7 @@ export class TeamSelectScene extends Phaser.Scene {
     for (const side of SIDES) this.buildSide(side);
     this.buildCenter();
     this.buildStart();
+    this.buildActions();
     this.buildInfo();
     this.buildToast();
     this.refresh();
@@ -391,7 +394,11 @@ export class TeamSelectScene extends Phaser.Scene {
   }
 
   private missingText(): string {
-    return missingMessage(this.teams, this.sizes);
+    const msg = missingMessage(this.teams, this.sizes);
+    if (!this.mp) return msg;
+    // Multiplayer: rakibin (gizli) takımı sayılmaz; yalnızca kendi eksiğimiz
+    const own = msg.split(/\s+·\s+/).find((p) => p.startsWith(`${NAME[this.mp!.localSide]} team`));
+    return own ? own.replace(/^\w+ team/, 'Your team') : '';
   }
 
   /** Changes the size of one team (1-12); extra members are dropped from the back cells, missing ones must be picked (or randomized). */
@@ -687,32 +694,74 @@ export class TeamSelectScene extends Phaser.Scene {
     return { root, value, minus, plus };
   }
 
+  /** Ortada yalnızca VS (iki yanında saydamlaşan çizgiler). */
   private buildCenter(): void {
     const c = this.add.container(W / 2, 0).setDepth(14);
-    const mpMode = !!this.mp;
-    // VS (çizgiler iki yanda), durum yazısı, Random both: dikeyde orta bölmenin ortasında
-    const vsH = 65;
-    const stH = 28;
-    const rbH = mpMode ? 0 : 60;
-    const total = vsH + 22 + stH + (mpMode ? 0 : 22 + rbH);
-    const y0 = CENTER_CY - total / 2;
-    const vs = this.cz(0, y0 + vsH / 2, 'VS', 54, 'rgba(243,217,153,0.85)', 0.1).setOrigin(0.5);
+    const vs = this.cz(54 * 0.05, CENTER_CY, 'VS', 54, 'rgba(243,217,153,0.85)', 0.1).setOrigin(0.5);
     const vw = vs.width - 54 * 0.1;
     const lines = this.add.graphics();
-    fadeLine(lines, -vw / 2 - 18 - 70, -vw / 2 - 18, y0 + vsH / 2 + 1, GOLDC, LINE.a3, 'in');
-    fadeLine(lines, vw / 2 + 18 + 70, vw / 2 + 18, y0 + vsH / 2 + 1, GOLDC, LINE.a3, 'in');
-    vs.x = 54 * 0.05;
-    this.status = this.gar(0, y0 + vsH + 22 + stH / 2, '', 21, NOTE).setOrigin(0.5);
-    c.add([lines, vs, this.status]);
-    if (!mpMode) {
-      const rb = this.lnk('Random both', () => {
+    fadeLine(lines, -vw / 2 - 18 - 70, -vw / 2 - 18, CENTER_CY + 1, GOLDC, LINE.a3, 'in');
+    fadeLine(lines, vw / 2 + 18 + 70, vw / 2 + 18, CENTER_CY + 1, GOLDC, LINE.a3, 'in');
+    c.add([lines, vs]);
+    this.center = c;
+  }
+
+  /**
+   * Sağ alttaki eylem bloğu (START'ın üstü): Random both (START'la aynı genişlikte, ikincil stil; multiplayer'da yok) ve onun üstünde
+   * sağa yaslı durum yazısı (hazır / eksik sınıf; her uyarı ayrı satır). Kök x = START'ın ortası.
+   */
+  private buildActions(): void {
+    const w = this.startUi?.w ?? 380;
+    const root = this.add.container(0, 0).setDepth(30);
+    let top = START.cy - START.h / 2;
+    if (!this.mp) {
+      const h = RANDOM_BOTH.h;
+      const cy = top - RANDOM_BOTH.gap - h / 2;
+      const lift = this.add.container(0, cy);
+      const plate = this.add.graphics();
+      const text = this.cz(0, 0, 'Random both', 21, TXT, 0.1, { pad: true }).setOrigin(0.5);
+      lift.add([plate, text]);
+      let hover = false;
+      const draw = () => {
+        plate.clear();
+        plate.lineStyle(3, 0x0c0805, 0.6).strokeRect(-w / 2 - 3.5, -h / 2 - 3.5, w + 7, h + 7);
+        plate.fillGradientStyle(0x1e160e, 0x1e160e, 0x0c0906, 0x0c0906, 0.78).fillRect(-w / 2, -h / 2, w, h);
+        plate.lineStyle(1, hover ? ONC : GOLDC, hover ? 0.9 : LINE.a2).strokeRect(-w / 2 + 0.5, -h / 2 + 0.5, w - 1, h - 1);
+        for (const sx of [-1, 1]) {
+          const dx = sx * (w / 2 + 1);
+          plate.fillStyle(0x1a130c, 1).fillPoints(diamondPts(dx, 0, 6), true);
+          plate.lineStyle(1, hover ? EMBER2 : GOLDC, hover ? 1 : 0.45).strokePoints(diamondPts(dx, 0, 6), true);
+        }
+        text.setColor(hover ? ON : TXT);
+        this.glow(text, hover);
+      };
+      draw();
+      const zone = this.add.zone(0, cy, w + 12, Math.max(h + 8, HIT - 6)).setInteractive({ useHandCursor: true });
+      zone.on('pointerover', () => {
+        if (this.drag?.moved) return;
+        hover = true;
+        draw();
+        this.tweens.add({ targets: lift, y: cy - 2, duration: 220, ease: easeOut });
+      });
+      zone.on('pointerout', () => {
+        hover = false;
+        draw();
+        this.tweens.add({ targets: lift, y: cy, scale: 1, duration: 220, ease: easeOut });
+      });
+      zone.on('pointerdown', () => this.tweens.add({ targets: lift, scale: 0.97, duration: 70 }));
+      zone.on('pointerup', () => {
+        this.tweens.add({ targets: lift, scale: 1, duration: 120, ease: easeOut });
+        if (this.drag?.moved) return;
         this.randomize('party', false);
         this.randomize('enemies');
       });
-      rb.root.setPosition(-rb.width / 2, y0 + vsH + 22 + stH + 22 + rbH / 2);
-      c.add(rb.root);
+      root.add([lift, zone]);
+      top = cy - h / 2;
     }
-    this.center = c;
+    // Durum yazısı: bloğun sağ kenarına yaslı, alttan yukarı büyür (iki uyarı iki satır)
+    this.status = this.gar(w / 2 + 2, top - 12, '', 20, NOTE).setOrigin(1, 1).setAlign('right').setLineSpacing(-2);
+    root.add(this.status);
+    this.actions = root;
   }
 
   /** START BATTLE (multiplayer: READY): ince altın çerçeve, iki yanda elmas; hazırken nefes alan kor parıltısı. Sağ alt köşe. */
@@ -821,7 +870,8 @@ export class TeamSelectScene extends Phaser.Scene {
 
   private setStatus(text: string, hex: string, pulse = false): void {
     if (!this.status) return;
-    this.status.setText(text).setColor(hex);
+    // Her uyarı ayrı satır (dar sağ alt blokta okunur kalsın)
+    this.status.setText(text.split(/\s+·\s+/).join('\n')).setColor(hex);
     if (pulse) {
       this.statusTween?.stop();
       this.status.setScale(1.1);
@@ -995,7 +1045,7 @@ export class TeamSelectScene extends Phaser.Scene {
     // Sahnenin ortasında; START'la çakışırsa sola kayar (ama sol kenardan taşmaz)
     const right = this.startLeft() - 40;
     root.x = Math.max(stageView.left + 48, Math.min(W / 2 - width / 2, right - width));
-    this.updateTiles();
+    this.updateTiles(false);
   }
 
   private buildTile(id: string, x: number, y: number, size: number, groupHex: string): TileView {
@@ -1118,7 +1168,7 @@ export class TeamSelectScene extends Phaser.Scene {
   }
 
   /** Rozet sayıları ve seçili çerçeve takımları izler. */
-  private updateTiles(): void {
+  private updateTiles(animate = true): void {
     for (const tv of this.tiles.values()) {
       const n = classCounts(this.teams, tv.id);
       for (const side of SIDES) {
@@ -1129,7 +1179,7 @@ export class TeamSelectScene extends Phaser.Scene {
         b.n = v;
         b.t.setText(String(v));
         b.c.setVisible(v > 0);
-        if (v > 0) {
+        if (v > 0 && animate) {
           this.tweens.killTweensOf(b.c);
           b.c.setScale(appear ? 0.4 : 1.25);
           this.tweens.add({ targets: b.c, scale: 1, duration: 260, ease: 'Back.easeOut' });
@@ -1332,7 +1382,9 @@ export class TeamSelectScene extends Phaser.Scene {
     this.layoutBackground();
     this.menuLink?.setX(stageView.left + 48);
     for (const side of SIDES) this.sides[side].root.setX(this.sideX(side));
-    this.startUi?.root.setX(stageView.right - START.right - (this.startUi?.w ?? 0) / 2);
+    const ax = stageView.right - START.right - (this.startUi?.w ?? 0) / 2;
+    this.startUi?.root.setX(ax);
+    this.actions?.setX(ax);
     this.renderInfo();
     if (!this.drag) {
       const entering = this.stripGroups.some((g) => g.getData('entering'));
@@ -1359,6 +1411,7 @@ export class TeamSelectScene extends Phaser.Scene {
     fu(this.sides.enemies.root, 250, this.active === 'enemies' ? 1 : 0.78);
     if (this.center) fu(this.center, 300);
     if (this.startUi) fu(this.startUi.root, 300);
+    if (this.actions) fu(this.actions, 300);
     if (this.infoRoot) fi(this.infoRoot, 300);
     if (this.infoLines) fi(this.infoLines, 300);
     this.stripGroups.forEach((g, gi) => fu(g, 350 + gi * 70));
