@@ -413,7 +413,7 @@ export class MainMenuScene extends Phaser.Scene {
   private buildMenuColumn(): void {
     const col = (this.menuCol = this.add.container(0, 0).setDepth(20));
     col.add([this.shadeExtension(), this.columnShade()]);
-    if (hasLogo(this)) col.add(addLogo(this, COL_X + 300, 290, 600, 210)); // assets/branding/logo.png
+    if (hasLogo(this)) col.add(addLogo(this, COL_X + 300, 290, 600, 210)); // assets/branding/logo.webp (kaynak PNG: assets/source/branding)
     else col.add(fitText(this.titleText(COL_X + 300, 290, 'EMBERS OF VALDORIA', 64, 4).setOrigin(0.5), 600));
     MAIN_ITEMS.forEach((it, i) => {
       const row = this.makeRow(ITEM_Y0 + i * ROW_H, it.label, LOOK.mainSize, () => this.pickMain(it.key), { onHover: () => this.selectMain(i) });
