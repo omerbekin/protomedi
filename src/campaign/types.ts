@@ -208,6 +208,22 @@ export interface CampaignState {
    * "eski takım bunları size bıraktı" anı olarak gösterip onaylatır (`acknowledgeHandover`). Yoksa ya da onaylandıysa yok.
    */
   pendingHandover?: Handover;
+  /** Loot sayaçları (items.md 3.3-3.4): Rare pity, düğüm başına zafer sayısı ('<düğüm>:battle' | '<düğüm>:treasure'; tekrar oynamada azalan ödül). */
+  lootState: { rarePity: number; clears: Record<string, number> };
+  /** Son düşüş: haritada "Spoils" kartı olarak gösterilir, onaylanınca silinir (`acknowledgeLoot`). */
+  pendingLoot?: LootDrop;
+}
+
+/**
+ * Bir düğümün düşüşü (kart için): torbaya giren item uid'leri, altın; `left` = torba dolu olduğu için sığmayan item'ler (id). Ömer, madde 280:
+ * sığmayan item altına çevrilmez; kart açıkken oyuncu yer açıp alabilir (`takeLeftover`), kart kapanınca (`acknowledgeLoot`) kaybolur.
+ */
+export interface LootDrop {
+  node: string;
+  kind: 'battle' | 'elite' | 'boss' | 'treasure';
+  items: string[];
+  gold: number;
+  left?: string[];
 }
 
 /** Teslim kaydı: kimden (ayrılan kahramanlar), hangi item'ler (torbadaki uid'ler), hangi düğümde. */

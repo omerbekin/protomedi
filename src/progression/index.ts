@@ -2,3 +2,6 @@
 export * from './items';
 export * from './loadout';
 export * from './primary';
+export * from './loot';
+export * from './equip';
+export * from './item-text';

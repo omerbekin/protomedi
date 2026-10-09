@@ -31,6 +31,7 @@ import { copyMatchData } from './match-copy';
 import { isFullscreen, toggleFullscreen } from './fullscreen';
 import { registerCampaignDebug } from './debug-campaign';
 import { registerMultiplayerDebug } from './debug-mp';
+import { registerEndlessDebug } from './debug-endless';
 import { getRotateMode, setRotateMode } from './viewport';
 import { stageView } from '../game/stage-view';
 import { backgroundPool } from '../game/battle-background';
@@ -81,6 +82,8 @@ export function registerDebugTools({ game, debug }: Ctx): void {
   registerCampaignDebug(game, debug);
   // Multiplayer (multiplayer-dev): Setup > Multiplayer bölümü
   registerMultiplayerDebug(game, debug);
+  // Endless Lite: Setup > Endless bölümü
+  registerEndlessDebug(game, debug);
   /** The battle scene, only while a battle is actually running (not on the team selection screen). */
   const battle = (): BattleScene | null => (game.scene.isActive(BattleScene.KEY) ? (game.scene.getScene(BattleScene.KEY) as BattleScene) : null);
   const applyFlags = (): void => {

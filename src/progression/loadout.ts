@@ -18,7 +18,7 @@ export interface LoadoutResult {
   modifiers?: UnitModifiers;
   /** Toplanmış item statları (tavanlar uygulanmış; arayüz önizlemesi / Gear Score için). */
   stats: ItemStats;
-  /** Motorda henüz karşılığı olmayan, bu yüzden savaşa yansımayan statlar (engine-dev, Aşama 1). */
+  /** Motorda karşılığı olmayan statlar (madde 280'den beri hepsi destekli; liste boş kalır, ileride yeni stat eklenirse dolar). */
   unsupported: ItemStatId[];
   /** Veride bulunamayan item id'leri (kayıt eski/yeni veriyle uyuşmuyorsa; yok sayılır, oyun çökmez). */
   missing: string[];
@@ -26,6 +26,7 @@ export interface LoadoutResult {
 
 const ATTRS: Attribute[] = ['str', 'dex', 'int', 'luck'];
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
+const r4 = (v: number) => Math.round(v * 10000) / 10000;
 
 /** Takılı item'lerin statlarını toplar ve tavanları uygular (items.md 1.5: kritik, isabet, kaçınma, hız). */
 export function sumEquipment(equipment: Partial<Equipment> | undefined): { stats: ItemStats; missing: string[] } {
@@ -51,7 +52,7 @@ export function sumEquipment(equipment: Partial<Equipment> | undefined): { stats
 
 /**
  * Kahramanın savaş gücü -> motor güçlendirmesi. Eşleme: STR/DEX/INT/LUCK -> attrAdd, Armor -> armorAdd, Magic Armor -> magicArmorAdd,
- * Might (%) -> powerMult (toplanarak: +%3 ve +%4 = x1,07). Primary bonusu NORMAL kurala göre işler: item'den gelen stat primary statı geçerse bonus
+ * Might (%) -> powerMult (toplanarak: +%3 ve +%4 = x1,07), Max HP/MP/Speed/Crit/Crit Damage/Accuracy/Evasion/regen -> toplamsal ekler (hpAdd...). Primary bonusu NORMAL kurala göre işler: item'den gelen stat primary statı geçerse bonus
  * kapanır (Ömer, madde 278); kuşanma ekranı bunu önceden `primaryCheck` ile uyarır. Level / ağaç katkıları (Aşama 2-3) aynı toplama eklenecek.
  */
 export function loadout(src: LoadoutSource): LoadoutResult {
@@ -64,6 +65,16 @@ export function loadout(src: LoadoutSource): LoadoutResult {
   if (stats.armor) mods.armorAdd = stats.armor;
   if (stats.magicArmor) mods.magicArmorAdd = stats.magicArmor;
   if (stats.might) mods.powerMult = r3(1 + stats.might / 100);
+  // Toplamsal ekler (motor, madde 280): yüzdeler motorun 0-1 oranına çevrilir
+  if (stats.hp) mods.hpAdd = stats.hp;
+  if (stats.mp) mods.mpAdd = stats.mp;
+  if (stats.spd) mods.spdAdd = stats.spd;
+  if (stats.crit) mods.critAdd = r4(stats.crit / 100);
+  if (stats.critDmg) mods.critMultAdd = r4(stats.critDmg / 100);
+  if (stats.accuracy) mods.accuracyAdd = r4(stats.accuracy / 100);
+  if (stats.evasion) mods.evasionAdd = r4(stats.evasion / 100);
+  if (stats.hpRegen) mods.hpRegenAdd = stats.hpRegen;
+  if (stats.mpRegen) mods.mpRegenAdd = stats.mpRegen;
   if (!Object.keys(mods).length) return { stats, unsupported, missing };
   return { modifiers: mods, stats, unsupported, missing };
 }

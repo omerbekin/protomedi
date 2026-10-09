@@ -74,6 +74,13 @@ export interface CampaignBattleHooks {
   resultActions(victory: boolean, battle: Battle): ResultAction[];
   /** Savaş menüsü > Retreat to Map: savaş sayılmaz, haritaya aynı düğüme dönülür (campaign-session.retreatToMap). */
   retreat?(): void;
+  /**
+   * Savaş kurulur kurulmaz, çizimden önce çağrılır (endless: yarım kalan savaşın eylem günlüğü burada oynatılır ve yeni eylemlerin kaydı başlar).
+   * Sahne, görünümleri savaşın o anki durumundan kurar (düşmüşler, cesetler, zemin etkileri, telgraflar).
+   */
+  prepareBattle?(battle: Battle): void;
+  /** Menüdeki geri çekilme yazısı (yoksa 'Retreat to Map'); endless 'Retreat to Camp' verir (src/game/endless-session.ts). */
+  retreatLabel?: string;
 }
 
 /** Üç küçük global eylem düğmesinin (Rest / Skip Turn / Move) sütunu: 4 skill düğmesinin hemen sağında, tooltip plaketinin solunda. */
@@ -278,6 +285,7 @@ export class BattleScene extends Phaser.Scene {
 
     // Multiplayer: savaş iki istemcide aynı kurulan lockstep savaşıdır (src/net/lockstep.ts)
     this.battle = this.mp ? this.mp.battle : new Battle(content.battleSetup(this.battleId, this.seed, this.mode, this.teams ? { ...this.teams } : { partySize: this.partySize, enemySize: this.enemySize }, false));
+    if (!this.mp) this.campaign?.prepareBattle?.(this.battle);
     // Gerçek boyutlar (takım seçiminden gelen hücre listeleri dahil): "New Game" ve Team Select bunları korur
     this.partySize = this.battle.combatants.filter((c) => c.side === 'party' && !c.summoned).length || this.partySize;
     this.enemySize = this.battle.combatants.filter((c) => c.side === 'enemy' && !c.summoned).length || this.enemySize;
@@ -294,6 +302,7 @@ export class BattleScene extends Phaser.Scene {
     this.bindUnitSelect();
     for (const c of this.battle.combatants) this.addView(c);
     this.syncCorpsesNow();
+    this.syncLoadedEffects();
     this.uiActor = this.battle.currentUid;
     this.renderTurnBar(this.battle.turnQueue());
     this.stats = new BattleStats(this.battle);
@@ -1039,7 +1048,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** At battle start / load: dead units are already gone from the field and their corpse marks stand on the right cells. */
-  private syncCorpsesNow(): void {
+  /** Savaş ortasından açılan savaş (endless devamı): durumdaki zemin etkileri ve bekleyen telgraflar çizilir (yeni savaşta ikisi de boş). */
+  private syncLoadedEffects(): void {
+    for (const g of this.battle.ground) this.addGroundView(g);
+    for (const t of this.battle.telegraphs) this.showTelegraph(t.id, t.skill, t.kind, t.board, t.cells, t.safeCells, t.bound);
+  }
+
+    private syncCorpsesNow(): void {
     for (const side of ['party', 'enemy'] as const) for (const c of this.battle.corpses(side)) this.uiCorpses.set(c.uid, c.state);
     for (const c of this.battle.combatants) {
       if (c.hp <= 0) this.views.get(c.uid)?.markFallen();

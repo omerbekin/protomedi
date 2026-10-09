@@ -1,0 +1,31 @@
+{
+  "_not": "Endless Lite (roadmap.md bölüm 3, aşama 1E; open-questions madde 281). Art arda dalgalar, dalga arası 3 karttan 1 ödül, her 5 dalgada küçük dükkân, skor = ulaşılan dalga. Bütün sayılar PROVİZYON (balance-tester). Mantık: src/endless/ (saf), ekran: src/game/scenes/EndlessScene.ts.",
+  "partySize": 4,
+  "_enemyCount": "Dalga numarasına göre normal dalganın düşman sayısı: fromWave'den itibaren count (roadmap: 1-2. dalga 3 düşman, sonra 4).",
+  "enemyCount": [
+    { "fromWave": 1, "count": 3 },
+    { "fromWave": 3, "count": 4 }
+  ],
+  "_scaling": "Dalga başına düşman güçlenmesi (doğrusal; 1. dalga x1): can ve dört stat +%5, skill gücü +%3. Elit/boss karşılaşmasının kendi çarpanlarıyla çarpılır.",
+  "scaling": { "hpPerWave": 0.05, "statPerWave": 0.05, "powerPerWave": 0.03 },
+  "eliteEvery": 5,
+  "bossEvery": 10,
+  "_encounters": "Özel dalgalar data/campaign/encounters.json karşılaşmalarını kullanır (birimler, yuvalar, özel adlar, rütbe, çarpanlar). Sefer tutorial'ına özgü lockSkills / initialCooldownBonus endless'ta UYGULANMAZ.",
+  "elites": ["watchtower_chief", "black_cathedral", "dragons_spine"],
+  "bosses": ["bridge_warden", "lord_morvane"],
+  "_carry": "Can taşıma seferle aynı (campaign.json > rules): zafer +%20, düşen %20 canla kalkar, boss zaferi tam iyileştirir.",
+  "carry": { "victoryHeal": 0.2, "reviveRatio": 0.2, "bossVictoryHeal": 1 },
+  "_rewards": "Dalga arası 3 kart: item (takımda yükseltme olan bir item, kimin takacağı kartta yazar; uygun item yoksa ikinci altın kartı), altın, takımı iyileştir. Altın = goldBase + goldPerWave x temizlenen dalga.",
+  "rewards": { "healRatio": 0.4, "goldBase": 20, "goldPerWave": 5 },
+  "_special": "Elit ve boss dalgasından sonra ödül daha değerli (Ömer 2026-10-09, madde 281 cevabı): itemCards item kartı (farklı item'ler), item en az minRarity (yoksa mevcut en yüksek nadirlik), item seviyesi tavanına ilvlBonus eklenir, altın x goldMult. Elit: iyileştirme healRatio. Boss: zafer zaten tam iyileştirir; iyileştirme kartı yerine 'Hero's Feast' (tam can + sonraki feastWaves dalga boyunca maks can x feastHpMult).",
+  "special": {
+    "elite": { "itemCards": 2, "minRarity": "rare", "ilvlBonus": 5, "goldMult": 2, "healRatio": 0.6 },
+    "boss": { "itemCards": 2, "minRarity": "epic", "ilvlBonus": 10, "goldMult": 3, "feastHpMult": 1.15, "feastWaves": 3 }
+  },
+  "_items": "Ödül/dükkân item'i: items.json > items içinden ilvl <= dalga x ilvlPerWave + ilvlAhead; önce en yüksek ilvl'li 'window' aralığı. Değiştirilen item otomatik satılır (items.json > budget.sellRatio).",
+  "items": { "ilvlPerWave": 1, "ilvlAhead": 2, "window": 6 },
+  "_shop": "Her 'every' dalgada (elit sonrası) ödülden sonra dükkân: 'size' item, fiyat = item değeri (items.json, 10 x IP).",
+  "shop": { "every": 5, "size": 3 },
+  "difficulty": "medium",
+  "highScores": 10
+}

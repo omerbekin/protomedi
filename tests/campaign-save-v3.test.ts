@@ -3,7 +3,6 @@ import {
   SAVE_KEY,
   SAVE_VERSION,
   addItem,
-  autoResolve,
   battlePlan,
   equipItem,
   latestSave,
@@ -27,11 +26,14 @@ function asV1(s: CampaignState): Record<string, unknown> {
   delete o.inventory;
   delete o.gold;
   delete o.nextItemId;
+  delete o.lootState;
+  delete o.pendingLoot;
   o.roster = (o.roster as Array<Record<string, unknown>>).map(({ level: _l, xp: _x, equipment: _e, ...h }) => h);
   return o;
 }
 
-const played = (seed = 11): CampaignState => autoResolve(autoResolve(pickHero(newCampaign({ mode: 'normal', seed, campaignId: `c${seed}` }), 'mage')));
+// Yalnızca kahraman seçimi (savaş yok => loot yok: v1 kaydı torbasız olduğu için birebir karşılaştırılabilir)
+const played = (seed = 11): CampaignState => pickHero(newCampaign({ mode: 'normal', seed, campaignId: `c${seed}` }), 'mage');
 
 describe('kayıt v3: kahraman kaydı ve geçiş', () => {
   it('yeni sefer: sürüm 2 durum, kahraman level 1 / XP 0 / 6 boş yuva, torba boş, altın 0', () => {

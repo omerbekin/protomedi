@@ -9,7 +9,7 @@ import { W, H } from '../campaign-ui';
 import { buildBackdrop, goldText, makeMenuButton, serif } from '../menu-ui';
 import { mp, MP_SCENE } from '../mp-client';
 import { makePanel } from '../ui-frame';
-import { toggleGameMenu } from '../../ui/game-menu';
+import { elBack } from '../elegant-ui';
 import { debugState } from '../debug-state';
 
 /** Sayfa açılışında bir kez: davet linki (?lobby=KOD) ya da yenilenen sekmenin yarım kalan lobisi. main.ts ayarlar. */
@@ -39,7 +39,9 @@ export class MultiplayerScene extends Phaser.Scene {
     const art = mapArt(this, getMap('valdoria')); // geniş harita görseli varsa o (eski 16:9 bölgesi eski yerinde)
     buildBackdrop(this, W, H, art?.key ?? null, art?.region);
     this.layer = this.add.container(0, 0).setDepth(100);
-    this.input.keyboard?.on('keydown-ESC', () => !debugState.uiPaused && toggleGameMenu()); // Esc: sağ üstteki Menu
+    // Kurulum ekranı: sol üstte ◂ Back / Esc (Menu yok; CLAUDE.md > Geri / Menu kuralı)
+    elBack(this, () => this.back(), { depth: 200 });
+    this.input.keyboard?.on('keydown-ESC', () => !debugState.uiPaused && this.back());
     this.off = mp.onChange(() => this.scene.isActive() && this.draw());
     this.events.once('shutdown', () => {
       this.off?.();
@@ -55,6 +57,19 @@ export class MultiplayerScene extends Phaser.Scene {
       }
     }
     this.draw();
+  }
+
+  /** ◂ Back / Esc: bağlantı hatasından menüye, bağlanırken iptal, lobiden ayrıl, menüden ana menünün Play kartlarına (onaysız). */
+  private back(): void {
+    if (mp.state === 'error') {
+      mp.state = 'idle';
+      mp.error = '';
+      this.draw();
+      return;
+    }
+    if (mp.state === 'connecting') return mp.leave();
+    if (mp.active) mp.leave();
+    this.scene.start('MainMenuScene', { view: 'play' });
   }
 
   private draw(): void {
@@ -86,7 +101,6 @@ export class MultiplayerScene extends Phaser.Scene {
     this.layer.add(serif(this, W / 2, y0 + 62, 'Create a lobby and share its code', 19, '#a8977a', { bold: false, stroke: 2 }).setOrigin(0.5));
     this.button(W / 2, y0 + 160, 560, 'Join lobby', () => void this.askCode(), false, ok);
     this.layer.add(serif(this, W / 2, y0 + 222, "Enter a friend's lobby code", 19, '#a8977a', { bold: false, stroke: 2 }).setOrigin(0.5));
-    this.button(W / 2, y0 + 340, 400, 'Back', () => this.scene.start('MainMenuScene'));
   }
 
   /** "Name: X  [Change name]" satırı (ad isteğe bağlı; yalnızca rakibe gider). */
@@ -117,11 +131,6 @@ export class MultiplayerScene extends Phaser.Scene {
 
   private drawError(): void {
     this.layer.add(serif(this, W / 2, 460, mp.error || 'Something went wrong', 38, '#e08a7a').setOrigin(0.5));
-    this.button(W / 2, 640, 400, 'Back', () => {
-      mp.state = 'idle';
-      mp.error = '';
-      this.draw();
-    });
   }
 
   private drawLobby(): void {

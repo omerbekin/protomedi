@@ -1,5 +1,5 @@
 // Sefer simülatörü raporu (Türkçe). Tasarım ve hedefler: docs/balance.md > Sefer dengesi.
-// Kullanım: npm run sim:campaign -- [sefer sayısı] [ilk seed] [zorluk: easy|medium|hard|all] [oyuncu vekili: medium|easy|both] [--jobs=N] [--attempts=N] [--json=dosya]
+// Kullanım: npm run sim:campaign -- [sefer sayısı] [ilk seed] [zorluk: easy|medium|hard|all] [oyuncu vekili: medium|easy|both] [--jobs=N] [--attempts=N] [--gear=best|none] [--json=dosya]
 //   Varsayılan: 240 sefer (12 rotanın her biri 20 kez), seed 1, tüm zorluklar, oyuncu vekili Medium ("iyi oyuncu") ve Easy ("ortalama oyuncu"),
 //   iş sayısı = çekirdek sayısı - 1 (en fazla 12). Her (zorluk, vekil) çifti ayrı ölçülür.
 import { spawn } from 'node:child_process';
@@ -19,6 +19,7 @@ const firstSeed = Number(pos[1] ?? 1);
 const diffs: Difficulty[] = !pos[2] || pos[2] === 'all' ? ['easy', 'medium', 'hard'] : [pos[2] as Difficulty];
 const players: AiDifficulty[] = !pos[3] || pos[3] === 'both' ? ['medium', 'easy'] : [pos[3] as AiDifficulty];
 const maxAttempts = Number(flag('attempts') ?? 10);
+const gear = (flag('gear') ?? 'best') as 'best' | 'none'; // --gear=best|none (items.md 4.4)
 const part = flag('part'); // iç kullanım: "başlangıç:bitiş" (paralel parça, JSON çıktı)
 const jobs = Math.max(1, Number(flag('jobs') ?? Math.min(12, cpus().length - 1)));
 
@@ -28,7 +29,7 @@ const pct = (a: number, b: number) => (b ? (a / b) * 100 : 0);
 
 function runPart(start: number, end: number): Promise<CampaignSimResult[]> {
   const script = fileURLToPath(import.meta.url);
-  const childArgs = [...process.execArgv, script, String(runs), String(firstSeed), diffs.length === 1 ? diffs[0]! : 'all', players.length === 1 ? players[0]! : 'both', `--attempts=${maxAttempts}`, `--part=${start}:${end}`];
+  const childArgs = [...process.execArgv, script, String(runs), String(firstSeed), diffs.length === 1 ? diffs[0]! : 'all', players.length === 1 ? players[0]! : 'both', `--attempts=${maxAttempts}`, `--gear=${gear}`, `--part=${start}:${end}`];
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, childArgs, { stdio: ['ignore', 'pipe', 'inherit'] });
     let buf = '';
@@ -41,7 +42,7 @@ async function main() {
   const t0 = Date.now();
   let results: CampaignSimResult[];
   if (jobs <= 1 || runs < 24) {
-    results = diffs.flatMap((difficulty) => players.map((player) => simulateCampaign({ difficulty, player, runs, firstSeed, maxAttempts })));
+    results = diffs.flatMap((difficulty) => players.map((player) => simulateCampaign({ difficulty, player, runs, firstSeed, maxAttempts, gear })));
   } else {
     const n = Math.min(jobs, runs);
     const bounds = Array.from({ length: n }, (_, k) => [Math.floor((runs * k) / n), Math.floor((runs * (k + 1)) / n)] as const);
@@ -59,7 +60,7 @@ const target = campaignBalance.targets as unknown as Record<string, Record<NodeC
 function report(results: CampaignSimResult[], secs: number) {
   console.log('Embers of Valdoria sefer simülatörü (Valdoria)');
   console.log('=================================');
-  console.log(`Sefer: ${runs} (12 rota eşit), seed ${firstSeed}.., düğüm başına en fazla ${maxAttempts} deneme. Süre ${fmt(secs, 0)} sn.`);
+  console.log(`Sefer: ${runs} (12 rota eşit), seed ${firstSeed}.., düğüm başına en fazla ${maxAttempts} deneme, ekipman ${gear}. Süre ${fmt(secs, 0)} sn.`);
   console.log('Oyuncu vekili: Medium YZ = "iyi oyuncu", Easy YZ = "ortalama oyuncu". Düşman: zorluğun YZ\'si + zorluğun düşman çarpanları.');
   console.log('');
   console.log('KATEGORİ x ZORLUK: ilk denemede kazanma (%; hedef bant Medium vekil için data/campaign/balance.json)');
@@ -111,7 +112,7 @@ function report(results: CampaignSimResult[], secs: number) {
 if (part) {
   const [start, end] = part.split(':').map(Number) as [number, number];
   const out = diffs.flatMap((difficulty) =>
-    players.map((player) => simulateCampaign({ difficulty, player, runs: end - start, firstSeed: firstSeed + start, routeOffset: start, maxAttempts })),
+    players.map((player) => simulateCampaign({ difficulty, player, runs: end - start, firstSeed: firstSeed + start, routeOffset: start, maxAttempts, gear })),
   );
   process.stdout.write(JSON.stringify(out));
 } else {

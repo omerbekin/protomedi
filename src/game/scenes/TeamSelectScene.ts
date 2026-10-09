@@ -31,14 +31,35 @@ import {
 } from '../team-select-model';
 import type { SideSizes, TeamSide } from '../team-select-model';
 import { skillMiniGrid } from '../../ui/shape-diagram';
-import { drawMiniShape, miniShapeSize } from '../shape-draw';
 import type { MpTeamHooks } from '../mp-hooks';
-import { toggleGameMenu } from '../../ui/game-menu';
 import { debugState } from '../debug-state';
 import { onStageResize, stageView, worldXY } from '../stage';
 import { FULL_W, FULL_X0 } from '../../ui/viewport';
-import { BODY_FONT, DISPLAY_FONT } from '../../ui/menu-style';
 import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
+import { startMainMenu } from '../session-flow';
+import {
+  BADGE_LABEL,
+  EL,
+  diamondPts,
+  elBack,
+  elBadge,
+  elBody,
+  elButton,
+  elConfirm,
+  elConfirmOpen,
+  elDiamond,
+  elGlow,
+  elHeading,
+  elLink,
+  elText,
+  elTip,
+  elToast,
+  fadeLine,
+  placeElTip,
+  vGradient,
+  type ElButton,
+  type ElTipSpec,
+} from '../elegant-ui';
 
 const { width: W, height: H, colors } = layout;
 const { rows: ROWS, lanes: LANES } = content.GRID;
@@ -60,28 +81,8 @@ export interface TeamSelectData {
 }
 
 // --- Taslak paleti (qb-mockups.html taslak 1 'Twin Formations', Ömer 2026-10-09; taslak uygulandıktan sonra silindi) ---
-const TXT = '#d9c8a2';
-const ON = '#f3d999';
-const MUTED = '#a8977a';
-const DIM = '#7d705a';
-const NOTE = '#cdb88d';
-const PRI = '#ffd76a';
+const { TXT, ON, MUTED, DIM, NOTE, PRI, EMBER, GOLD: GOLDC, ON_N: ONC, INK, PAD, LINE, HIT, EASE: easeOut } = EL;
 const PRI_SMALL = '#e9c062';
-const EMBER = 0xe0702a;
-const EMBER2 = 0xffb35a;
-const GOLDC = 0xd9b26a;
-const ONC = 0xf3d999;
-const INK = 0x080604;
-const SH_DARK = 'rgba(12,8,5,0.95)';
-const SH_GLOW = 'rgba(240,140,40,0.85)';
-/** Parıltı (yazı gölgesi) kesilmesin diye yazılara iç boşluk. */
-const PAD = 16;
-const LINE = { a1: 0.16, a2: 0.3, a3: 0.55 };
-/** Takım rozetleri (raf portresinin köşelerinde: o class'tan Player / Enemy takımında kaç tane var). */
-const BADGE: Record<Side, { fill: number; ring: number; text: string; label: string }> = {
-  party: { fill: 0x2b5a92, ring: 0x9cbde6, text: '#f4f8ff', label: '#9cbde6' },
-  enemies: { fill: 0x93382a, ring: 0xe39a88, text: '#fff4f0', label: '#e39a88' },
-};
 
 // --- Yerleşim (1080 mantıksal yükseklik; kenara yaslananlar stageView.left/right'a göre) ---
 const MID_TOP = 146;
@@ -100,15 +101,9 @@ const INFO = { top: 724, h: 92, maxW: 1760 };
 const STRIP_TOP = 846;
 const START = { h: 84, cy: 990, right: 48, pad: 56, size: 30 };
 const RANDOM_BOTH = { h: 56, gap: 14 };
-const HIT = 72; // dokunma alanı yüksekliği (görünen satırlardan büyük)
 
-const easeOut = 'Cubic.easeOut';
 
-interface Lnk {
-  root: Phaser.GameObjects.Container;
-  width: number;
-  text: Phaser.GameObjects.Text;
-}
+type TipSpec = ElTipSpec;
 
 interface CellView {
   side: Side;
@@ -128,7 +123,7 @@ interface TileView {
   shadow: Phaser.GameObjects.Graphics;
   img: Phaser.GameObjects.Image;
   name: Phaser.GameObjects.Text;
-  badges: Record<Side, { c: Phaser.GameObjects.Container; t: Phaser.GameObjects.Text; n: number }>;
+  badges: Record<Side, ReturnType<typeof elBadge>>;
   size: number;
   hover: boolean;
 }
@@ -143,49 +138,6 @@ interface SideView {
   cells: Phaser.GameObjects.Container;
   cover?: Phaser.GameObjects.Container;
 }
-
-interface TipSpec {
-  icon?: string;
-  iconSize?: number;
-  title: string;
-  titleHex?: string;
-  badge?: string;
-  meta?: string;
-  shape?: ReturnType<typeof skillMiniGrid>;
-  lines: Array<[string, string?]>;
-  width?: number;
-}
-
-/** CSS'teki gibi bir yazının üzerinde kalan yatay degrade (koyu bant) için düz dikdörtgen degrade dilimleri. */
-function hGradient(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, color: number, stops: Array<[number, number]>): void {
-  for (let k = 0; k < stops.length - 1; k++) {
-    const [p0, a0] = stops[k]!;
-    const [p1, a1] = stops[k + 1]!;
-    g.fillGradientStyle(color, color, color, color, a0, a1, a0, a1).fillRect(x + p0 * w, y, (p1 - p0) * w + 0.5, h);
-  }
-}
-function vGradient(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, color: number, stops: Array<[number, number]>): void {
-  for (let k = 0; k < stops.length - 1; k++) {
-    const [p0, a0] = stops[k]!;
-    const [p1, a1] = stops[k + 1]!;
-    g.fillGradientStyle(color, color, color, color, a0, a0, a1, a1).fillRect(x, y + p0 * h, w, (p1 - p0) * h + 0.5);
-  }
-}
-/** Yatay ince çizgi: iki uçtan saydamlaşan (CSS linear-gradient(90deg, transparent, renk)). */
-function fadeLine(g: Phaser.GameObjects.Graphics, x0: number, x1: number, y: number, color: number, alpha: number, dir: 'in' | 'out' | 'both'): void {
-  const steps = 24;
-  for (let s = 0; s < steps; s++) {
-    const t = (s + 0.5) / steps;
-    const a = dir === 'in' ? t : dir === 'out' ? 1 - t : 1 - Math.abs(t - 0.5) * 2;
-    g.lineStyle(1, color, alpha * a).lineBetween(x0 + ((x1 - x0) * s) / steps, y, x0 + ((x1 - x0) * (s + 1)) / steps, y);
-  }
-}
-const diamondPts = (cx: number, cy: number, r: number) => [
-  { x: cx, y: cy - r },
-  { x: cx + r, y: cy },
-  { x: cx, y: cy + r },
-  { x: cx - r, y: cy },
-];
 
 /**
  * Hızlı savaş takım seçimi: "Twin Formations" (Ömer 2026-10-09 taslak 1; kutusuz zarif menü dili: Cinzel + EB Garamond, ince altın çizgiler, kor elmas).
@@ -217,13 +169,13 @@ export class TeamSelectScene extends Phaser.Scene {
   private infoRoot?: Phaser.GameObjects.Container;
   private infoLines?: Phaser.GameObjects.Graphics;
   private menuLink?: Phaser.GameObjects.Container;
+  private toastFn?: (msg: string) => void;
   private center?: Phaser.GameObjects.Container;
   private actions?: Phaser.GameObjects.Container;
   private status?: Phaser.GameObjects.Text;
   private statusTween?: Phaser.Tweens.Tween;
-  private startUi?: { root: Phaser.GameObjects.Container; w: number; set: (ready: boolean, label: string) => void; shake: () => void };
+  private startUi?: ElButton;
   private bg?: { img?: Phaser.GameObjects.Image };
-  private toastUi?: { root: Phaser.GameObjects.Container; band: Phaser.GameObjects.Graphics; text: Phaser.GameObjects.Text; timer?: Phaser.Time.TimerEvent };
   private drag?: { kind: 'class' | 'cell'; id: string; side?: Side; from?: number; sx: number; sy: number; moved: boolean; ghost?: Phaser.GameObjects.Container; over: { side: Side; i: number } | null };
   private pop?: { side: Side; cell: number };
   private tip?: { key: string; container: Phaser.GameObjects.Container };
@@ -298,9 +250,9 @@ export class TeamSelectScene extends Phaser.Scene {
     this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => this.onDragMove(worldXY(this, ptr)));
     this.input.on('pointerup', (ptr: Phaser.Input.Pointer) => this.onDragEnd(worldXY(this, ptr), false));
     this.input.on('pointerupoutside', (ptr: Phaser.Input.Pointer) => this.onDragEnd(worldXY(this, ptr), true));
-    this.input.keyboard?.on('keydown-ENTER', () => this.built && this.start());
+    this.input.keyboard?.on('keydown-ENTER', () => this.built && !elConfirmOpen(this) && this.start());
     // Esc: Menu (Resume / Settings / New Game / Back to Main Menu; src/ui/game-menu.ts)
-    this.input.keyboard?.on('keydown-ESC', () => !debugState.uiPaused && toggleGameMenu());
+    this.input.keyboard?.on('keydown-ESC', () => !debugState.uiPaused && !elConfirmOpen(this) && this.built && this.goBack());
     if (this.mp) {
       this.mpOff = this.mp.onChange(() => !this.mpSyncing && this.scene.isActive() && this.built && this.refresh());
       this.events.once('shutdown', () => {
@@ -319,7 +271,6 @@ export class TeamSelectScene extends Phaser.Scene {
     this.buildStart();
     this.buildActions();
     this.buildInfo();
-    this.buildToast();
     this.refresh();
     this.layout(); // class rafı burada kurulur (genişliğe göre)
     onStageResize(this, () => this.layout());
@@ -440,90 +391,38 @@ export class TeamSelectScene extends Phaser.Scene {
 
   // --- Text helpers (taslak tipografisi) ---
 
-  /** Cinzel 600, büyük harf, harf aralığı `em`; koyu yazı gölgesi. */
+  // Kit kısayolları (src/game/elegant-ui.ts)
   private cz(x: number, y: number, text: string, size: number, color: string, em = 0.05, o: { pad?: boolean; weight?: string } = {}): Phaser.GameObjects.Text {
-    const t = this.add
-      .text(x - (o.pad ? PAD : 0), y, text.toUpperCase(), { fontFamily: DISPLAY_FONT, fontSize: `${size}px`, fontStyle: o.weight ?? '600', color, letterSpacing: size * em })
-      .setResolution(2)
-      .setShadow(0, 2, SH_DARK, 4, false, true);
-    if (o.pad) t.setPadding(PAD, PAD, PAD, PAD);
-    return t;
+    return elText(this, x, y, text, size, color, { em, ...o });
   }
 
-  /** EB Garamond (varsayılan italik); hafif koyu gölge. */
   private gar(x: number, y: number, text: string, size: number, color: string, italic = true): Phaser.GameObjects.Text {
-    return this.add
-      .text(x, y, text, { fontFamily: BODY_FONT, fontSize: `${size}px`, fontStyle: italic ? 'italic' : 'normal', color })
-      .setResolution(2)
-      .setShadow(0, 2, SH_DARK, 4, false, true);
+    return elBody(this, x, y, text, size, color, italic);
   }
 
   private glow(t: Phaser.GameObjects.Text, on: boolean): void {
-    if (on) t.setShadow(0, 0, SH_GLOW, 14, false, true);
-    else t.setShadow(0, 2, SH_DARK, 4, false, true);
+    elGlow(t, on);
   }
 
-  /** Kor elmas (dolu) ya da içi boş altın elmas. */
   private diamond(r: number, hollow = false): Phaser.GameObjects.Graphics {
-    const g = this.add.graphics();
-    if (hollow) {
-      g.lineStyle(1, GOLDC, 0.45).strokePoints(diamondPts(0, 0, r), true);
-      return g;
-    }
-    g.fillStyle(EMBER, 0.25).fillPoints(diamondPts(0, 0, r + 4), true);
-    g.fillStyle(EMBER, 1).fillPoints(diamondPts(0, 0, r), true);
-    g.lineStyle(1, EMBER2, 1).strokePoints(diamondPts(0, 0, r), true);
-    return g;
+    return elDiamond(this, r, hollow);
   }
 
-  /**
-   * Kutusuz yazı düğmesi (ana menü satırı dili): hover'da önünde kor elmas belirir, yazı açılır + kor parıltısı + 4 px sağa kayar.
-   * Kök (0, 0) = sol kenar, dikey orta. Dokunma alanı en az HIT yüksekliğinde.
-   */
-  private lnk(label: string, run: () => void, o: { size?: number; small?: string; enabled?: () => boolean; tip?: () => TipSpec } = {}): Lnk {
-    const size = o.size ?? 21;
-    const root = this.add.container(0, 0);
-    const dia = this.diamond(7).setPosition(11, 0).setAlpha(0).setScale(0.4);
-    const text = this.cz(28, 0, label, size, TXT, 0.08, { pad: true }).setOrigin(0, 0.5);
-    const tw = text.width - PAD * 2;
-    let width = 28 + tw + 14;
-    const parts: Phaser.GameObjects.GameObject[] = [dia, text];
-    if (o.small) {
-      const s = this.gar(28 + tw + 16, 1, o.small, 17, DIM).setOrigin(0, 0.5);
-      parts.push(s);
-      width += 16 + s.width;
-    }
-    const zone = this.add.zone(width / 2, 0, width, HIT).setInteractive({ useHandCursor: true });
-    root.add([...parts, zone]);
-    const enabled = () => (o.enabled ? o.enabled() : true);
-    const hover = (v: boolean) => {
-      const on = v && enabled();
-      this.tweens.killTweensOf([dia, text]);
-      this.tweens.add({ targets: dia, alpha: on ? 1 : 0, scale: on ? 1 : 0.4, duration: 180, ease: easeOut });
-      this.tweens.add({ targets: text, x: (on ? 32 : 28) - PAD, duration: 180, ease: easeOut });
-      text.setColor(!enabled() ? DIM : on ? ON : TXT);
-      this.glow(text, on);
-    };
-    zone.on('pointerover', () => {
-      if (this.drag?.moved) return;
-      hover(true);
-      if (o.tip) this.showTip(`lnk:${label}`, o.tip(), this.worldRect(zone, width, HIT));
-    });
-    zone.on('pointerout', () => {
-      hover(false);
-      if (o.tip) this.hideTip();
-    });
-    zone.on('pointerup', () => {
-      if (this.drag?.moved || !enabled()) return;
-      run();
-    });
-    return { root, width, text };
+  private lnk(label: string, run: () => void, o: { size?: number; small?: string } = {}) {
+    return elLink(this, label, run, { ...o, isBusy: () => !!this.drag?.moved });
   }
 
-  /** Bir bölge nesnesinin (kap içinde) dünya dikdörtgeni (tooltip konumu için). */
-  private worldRect(obj: Phaser.GameObjects.Zone, w: number, h: number): { x: number; y: number; w: number; h: number } {
-    const m = obj.getWorldTransformMatrix();
-    return { x: m.tx - (w * m.scaleX) / 2, y: m.ty - (h * m.scaleY) / 2, w: w * m.scaleX, h: h * m.scaleY };
+  /** Sol üst ◂ Back / Esc: kurulum ekranı, onaysız ana menünün Play kartlarına döner. Multiplayer'da lobiden ayrılmak onay ister. */
+  private goBack(): void {
+    if (this.starting) return;
+    if (this.mp) {
+      elConfirm(this, { title: 'Leave the match?', text: 'You will leave the lobby and your opponent will be disconnected.', yes: 'Leave', no: 'Stay', onYes: () => startMainMenu(this.game) });
+      return;
+    }
+    this.starting = true;
+    this.hideTip(true);
+    this.cameras.main.fadeOut(220, 6, 3, 1);
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('MainMenuScene', { view: 'play' }));
   }
 
   // --- Scenery ---
@@ -556,27 +455,8 @@ export class TeamSelectScene extends Phaser.Scene {
   }
 
   private buildHeader(): void {
-    const menu = this.lnk('◂ Menu', () => toggleGameMenu(), { small: 'Esc' });
-    this.menuLink = menu.root.setDepth(30);
-    menu.root.y = 26 + 30;
-    // Başlık: altın degradeli Cinzel + iki yanda süslü çizgi (ince çizgi + içi boş elmas)
-    const title = this.add.container(W / 2, 58).setDepth(20);
-    const t = this.add
-      .text(0, 0, 'QUICK BATTLE', { fontFamily: DISPLAY_FONT, fontSize: '40px', fontStyle: '600', color: '#ffffff', letterSpacing: 40 * 0.14 })
-      .setResolution(2)
-      .setOrigin(0.5)
-      .setShadow(0, 2, 'rgba(0,0,0,0.9)', 3, false, true)
-      .setTint(0xfbe7b0, 0xfbe7b0, 0xc7984f, 0xc7984f);
-    const half = (t.width - 40 * 0.14) / 2;
-    const orn = this.add.graphics();
-    for (const dir of [-1, 1]) {
-      const d0 = half + 22; // yazıya en yakın uç: elmas
-      const dx = dir * (d0 + 4);
-      orn.lineStyle(1, GOLDC, 0.8).strokePoints(diamondPts(dx, 0, 5.6), true);
-      fadeLine(orn, dir * (d0 + 8 + 8 + 120), dir * (d0 + 8 + 8), 0, GOLDC, 0.6, 'in'); // uzak uçta saydam
-    }
-    title.add([orn, t]);
-    this.titleRoot = title;
+    this.menuLink = elBack(this, () => this.goBack(), { isBusy: () => !!this.drag?.moved }).root;
+    this.titleRoot = elHeading(this, W / 2, 58, 'Quick Battle', 40).setDepth(20);
   }
   private titleRoot?: Phaser.GameObjects.Container;
 
@@ -715,48 +595,19 @@ export class TeamSelectScene extends Phaser.Scene {
     const root = this.add.container(0, 0).setDepth(30);
     let top = START.cy - START.h / 2;
     if (!this.mp) {
-      const h = RANDOM_BOTH.h;
-      const cy = top - RANDOM_BOTH.gap - h / 2;
-      const lift = this.add.container(0, cy);
-      const plate = this.add.graphics();
-      const text = this.cz(0, 0, 'Random both', 21, TXT, 0.1, { pad: true }).setOrigin(0.5);
-      lift.add([plate, text]);
-      let hover = false;
-      const draw = () => {
-        plate.clear();
-        plate.lineStyle(3, 0x0c0805, 0.6).strokeRect(-w / 2 - 3.5, -h / 2 - 3.5, w + 7, h + 7);
-        plate.fillGradientStyle(0x1e160e, 0x1e160e, 0x0c0906, 0x0c0906, 0.78).fillRect(-w / 2, -h / 2, w, h);
-        plate.lineStyle(1, hover ? ONC : GOLDC, hover ? 0.9 : LINE.a2).strokeRect(-w / 2 + 0.5, -h / 2 + 0.5, w - 1, h - 1);
-        for (const sx of [-1, 1]) {
-          const dx = sx * (w / 2 + 1);
-          plate.fillStyle(0x1a130c, 1).fillPoints(diamondPts(dx, 0, 6), true);
-          plate.lineStyle(1, hover ? EMBER2 : GOLDC, hover ? 1 : 0.45).strokePoints(diamondPts(dx, 0, 6), true);
-        }
-        text.setColor(hover ? ON : TXT);
-        this.glow(text, hover);
-      };
-      draw();
-      const zone = this.add.zone(0, cy, w + 12, Math.max(h + 8, HIT - 6)).setInteractive({ useHandCursor: true });
-      zone.on('pointerover', () => {
-        if (this.drag?.moved) return;
-        hover = true;
-        draw();
-        this.tweens.add({ targets: lift, y: cy - 2, duration: 220, ease: easeOut });
-      });
-      zone.on('pointerout', () => {
-        hover = false;
-        draw();
-        this.tweens.add({ targets: lift, y: cy, scale: 1, duration: 220, ease: easeOut });
-      });
-      zone.on('pointerdown', () => this.tweens.add({ targets: lift, scale: 0.97, duration: 70 }));
-      zone.on('pointerup', () => {
-        this.tweens.add({ targets: lift, scale: 1, duration: 120, ease: easeOut });
-        if (this.drag?.moved) return;
-        this.randomize('party', false);
-        this.randomize('enemies');
-      });
-      root.add([lift, zone]);
-      top = cy - h / 2;
+      const rb = elButton(
+        this,
+        'Random both',
+        () => {
+          this.randomize('party', false);
+          this.randomize('enemies');
+        },
+        { kind: 'secondary', w, h: RANDOM_BOTH.h, isBusy: () => !!this.drag?.moved },
+      );
+      const cy = top - RANDOM_BOTH.gap - RANDOM_BOTH.h / 2;
+      rb.root.setY(cy);
+      root.add(rb.root);
+      top = cy - RANDOM_BOTH.h / 2;
     }
     // Durum yazısı: bloğun sağ kenarına yaslı, alttan yukarı büyür (iki uyarı iki satır)
     this.status = this.gar(w / 2 + 2, top - 12, '', 20, NOTE).setOrigin(1, 1).setAlign('right').setLineSpacing(-2);
@@ -764,108 +615,17 @@ export class TeamSelectScene extends Phaser.Scene {
     this.actions = root;
   }
 
-  /** START BATTLE (multiplayer: READY): ince altın çerçeve, iki yanda elmas; hazırken nefes alan kor parıltısı. Sağ alt köşe. */
+  /** START BATTLE (multiplayer: READY): kitin primary düğmesi, sağ alt köşe. */
   private buildStart(): void {
-    const label0 = this.mp ? 'Not ready' : 'Start Battle';
-    const probe = this.cz(0, 0, label0, START.size, DIM, 0.12);
-    const w = Math.ceil(probe.width + START.pad * 2);
-    probe.destroy();
-    const h = START.h;
-    const root = this.add.container(0, START.cy).setDepth(30);
-    const breath = this.add.image(0, 0, ensureGlow(this)).setTint(EMBER).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(w * 1.35, h * 2.6).setAlpha(0);
-    const plate = this.add.graphics();
-    const text = this.cz(0, 0, this.mp ? 'Ready' : 'Start Battle', START.size, DIM, 0.12, { pad: true }).setOrigin(0.5);
-    const lift = this.add.container(0, 0, [plate, text]);
-    const zone = this.add.zone(0, 0, w + 16, h + 12).setInteractive({ useHandCursor: true });
-    root.add([breath, lift, zone]);
-    let ready = false;
-    let hover = false;
-    let breathTween: Phaser.Tweens.Tween | undefined;
-    const draw = () => {
-      plate.clear();
-      plate.fillStyle(0x000000, 0.35).fillRect(-w / 2 + 4, -h / 2 + 14, w - 8, h); // alt gölge
-      plate.lineStyle(3, 0x0c0805, 0.8).strokeRect(-w / 2 - 3.5, -h / 2 - 3.5, w + 7, h + 7);
-      vGradient(plate, -w / 2, -h / 2, w, h, 0x261b11, [
-        [0, 0.88],
-        [1, 0.88],
-      ]);
-      plate.fillGradientStyle(0x0c0906, 0x0c0906, 0x0c0906, 0x0c0906, 0, 0, 0.75, 0.75).fillRect(-w / 2, -h / 2, w, h);
-      const border = ready ? (hover ? ONC : GOLDC) : GOLDC;
-      plate.lineStyle(2, border, ready ? 1 : 0.28).strokeRect(-w / 2, -h / 2, w, h);
-      for (const sx of [-1, 1]) {
-        const cx = sx * (w / 2 + 2);
-        if (ready) {
-          plate.fillStyle(EMBER, 0.3).fillPoints(diamondPts(cx, 0, 13), true);
-          plate.fillStyle(EMBER, 1).fillPoints(diamondPts(cx, 0, 8.5), true);
-          plate.lineStyle(1, EMBER2, 1).strokePoints(diamondPts(cx, 0, 8.5), true);
-        } else {
-          plate.fillStyle(0x3a2d20, 1).fillPoints(diamondPts(cx, 0, 8.5), true);
-          plate.lineStyle(1, GOLDC, 0.35).strokePoints(diamondPts(cx, 0, 8.5), true);
-        }
-      }
-      text.setColor(ready ? ON : DIM);
-      this.glow(text, ready && hover);
-    };
-    const set = (r: boolean, label: string) => {
-      if (text.text !== label.toUpperCase()) text.setText(label.toUpperCase());
-      if (r === ready && breathTween) return draw();
-      ready = r;
-      draw();
-      breathTween?.stop();
-      breath.setAlpha(0);
-      breathTween = ready ? this.tweens.add({ targets: breath, alpha: { from: 0, to: 0.32 }, duration: 1300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' }) : undefined;
-      if (!ready) this.tweens.add({ targets: lift, y: 0, duration: 250, ease: easeOut });
-    };
-    zone.on('pointerover', () => {
-      hover = true;
-      draw();
-      if (ready) this.tweens.add({ targets: lift, y: -3, duration: 250, ease: easeOut });
-    });
-    zone.on('pointerout', () => {
-      hover = false;
-      draw();
-      this.tweens.add({ targets: lift, y: 0, duration: 250, ease: easeOut });
-    });
-    zone.on('pointerdown', () => this.tweens.add({ targets: lift, scale: 0.97, duration: 70 }));
-    zone.on('pointerup', () => {
-      this.tweens.add({ targets: lift, scale: 1, duration: 120, ease: easeOut });
-      if (!this.drag?.moved) this.start();
-    });
-    set(false, this.mp ? 'Ready' : 'Start Battle');
-    this.startUi = {
-      root,
-      w,
-      set,
-      shake: () => this.tweens.add({ targets: lift, x: { from: -10, to: 0 }, duration: 260, ease: 'Bounce.easeOut' }),
-    };
+    const b = elButton(this, this.mp ? 'Ready' : 'Start Battle', () => !this.drag?.moved && this.start(), { kind: 'primary', minLabel: this.mp ? 'Not ready' : undefined, h: START.h, size: START.size, isBusy: () => !!this.drag?.moved });
+    b.root.setY(START.cy).setDepth(30);
+    this.startUi = b;
+    this.toastFn = elToast(this);
   }
 
-  private buildToast(): void {
-    const band = this.add.graphics();
-    const text = this.gar(0, 0, '', 23, ON).setOrigin(0.5);
-    const root = this.add.container(W / 2, 120 + 25, [band, text]).setDepth(5500).setAlpha(0);
-    this.toastUi = { root, band, text };
-  }
-
-  /** Kısa bildirim (üst ortada, iki yana saydamlaşan koyu bant): takım dolu, eksik sınıf... */
+  /** Kısa bildirim (üst ortada): takım dolu, eksik sınıf... */
   private toast(msg: string): void {
-    const t = this.toastUi;
-    if (!t || !msg) return;
-    t.text.setText(msg);
-    const w = t.text.width + 68 + 140;
-    const h = 52;
-    t.band.clear();
-    hGradient(t.band, -w / 2, -h / 2, w, h, 0x0a0705, [
-      [0, 0],
-      [0.18, 0.92],
-      [0.82, 0.92],
-      [1, 0],
-    ]);
-    this.tweens.killTweensOf(t.root);
-    t.root.setPosition(W / 2, 145 - 10);
-    this.tweens.add({ targets: t.root, alpha: 1, y: 145, duration: 250, ease: easeOut });
-    t.timer?.remove();
-    t.timer = this.time.delayedCall(1700, () => this.tweens.add({ targets: t.root, alpha: 0, y: 135, duration: 250, ease: easeOut }));
+    this.toastFn?.(msg);
   }
 
   private setStatus(text: string, hex: string, pulse = false): void {
@@ -1072,23 +832,9 @@ export class TeamSelectScene extends Phaser.Scene {
       parts.push(tg, this.cz(size - 24, size - 11, 'Test', 10, '#2a1405', 0.06).setOrigin(0.5).setShadow(0, 0, 'rgba(0,0,0,0)', 0));
     }
     // Takım rozetleri: sol üst mavi (Player), sağ üst kırmızı (Enemy); yalnızca o class takımda varken
-    const badges = {} as TileView['badges'];
-    for (const side of SIDES) {
-      const b = BADGE[side];
-      const bx = side === 'party' ? 17 : size - 17;
-      const g = this.add.graphics();
-      g.fillStyle(0x000000, 0.45).fillCircle(0, 1.5, 13.5);
-      g.fillStyle(b.fill, 1).fillCircle(0, 0, 12);
-      g.lineStyle(1.5, b.ring, 1).strokeCircle(0, 0, 12);
-      // Rakam yazısı: Cinzel'in '1'i 'I' gibi okunur; düz rakamlı serif
-      const t = this.add
-        .text(0, 0.5, '', { fontFamily: "'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif", fontSize: '15px', fontStyle: 'bold', color: b.text })
-        .setResolution(2)
-        .setOrigin(0.5)
-        .setShadow(0, 1, 'rgba(0,0,0,0.6)', 2, false, true);
-      const c = this.add.container(bx, 17, [g, t]).setVisible(false);
-      badges[side] = { c, t, n: 0 };
-    }
+    const badges = { party: elBadge(this, 'party'), enemies: elBadge(this, 'enemies') };
+    badges.party.c.setPosition(17, 17);
+    badges.enemies.c.setPosition(size - 17, 17);
     lift.add([...parts, frame, badges.party.c, badges.enemies.c, name]);
     const zone = this.add.zone(size / 2, (size + 30) / 2, size + 10, size + 34).setInteractive({ useHandCursor: true });
     root.add([lift, zone]);
@@ -1112,7 +858,7 @@ export class TeamSelectScene extends Phaser.Scene {
       for (const side of SIDES) {
         const b = badges[side];
         if (b.n > 0 && Math.hypot(lx - b.c.x, ly - b.c.y) <= 16) {
-          this.showTip(`badge:${id}:${side}`, { title: `${NAME[side]} team`, titleHex: BADGE[side].label, lines: [[`${b.n} ${def.name}${b.n > 1 ? 's' : ''} in the ${NAME[side]} team`]], width: 340 }, { x: m.tx + b.c.x - 14, y: m.ty - 6 + b.c.y - 14, w: 28, h: 28 });
+          this.showTip(`badge:${id}:${side}`, { title: `${NAME[side]} team`, titleHex: BADGE_LABEL[side], lines: [[`${b.n} ${def.name}${b.n > 1 ? 's' : ''} in the ${NAME[side]} team`]], width: 340 }, { x: m.tx + b.c.x - 14, y: m.ty - 6 + b.c.y - 14, w: 28, h: 28 });
           return;
         }
       }
@@ -1174,16 +920,7 @@ export class TeamSelectScene extends Phaser.Scene {
       for (const side of SIDES) {
         const b = tv.badges[side];
         const v = this.mp && !this.editable(side) ? 0 : n[side];
-        if (v === b.n) continue;
-        const appear = b.n === 0 && v > 0;
-        b.n = v;
-        b.t.setText(String(v));
-        b.c.setVisible(v > 0);
-        if (v > 0 && animate) {
-          this.tweens.killTweensOf(b.c);
-          b.c.setScale(appear ? 0.4 : 1.25);
-          this.tweens.add({ targets: b.c, scale: 1, duration: 260, ease: 'Back.easeOut' });
-        }
+        b.set(v, animate);
       }
       this.styleTile(tv);
     }
@@ -1219,12 +956,13 @@ export class TeamSelectScene extends Phaser.Scene {
     if (this.mp) {
       this.refreshMp();
       const me = this.mp.myReady();
-      this.startUi?.set(ok, me ? 'Not ready' : 'Ready');
+      this.startUi?.setLabel(me ? 'Not ready' : 'Ready');
+      this.startUi?.setReady(ok);
       if (!ok) this.setStatus(this.missingText(), colors.lethal);
       else if (me) this.setStatus(this.mp.opponentReady() ? 'Both ready - starting...' : 'Waiting for your opponent to be ready', ON);
       else this.setStatus('Your team is complete - press READY', ON);
     } else {
-      this.startUi?.set(ok, 'Start Battle');
+      this.startUi?.setReady(ok);
       if (ok) this.setStatus('Both teams are ready', ON);
       else this.setStatus(this.missingText(), NOTE);
     }
@@ -1458,72 +1196,12 @@ export class TeamSelectScene extends Phaser.Scene {
   }
 
   /** Zarif tooltip: koyu degrade kutu, ince altın çerçeve, Cinzel başlık + EB Garamond satırlar; yukarı kayarak belirir. */
-  private buildTip(spec: TipSpec): { container: Phaser.GameObjects.Container; width: number; height: number } {
-    const w = spec.width ?? 460;
-    const px = 20;
-    const items: Phaser.GameObjects.GameObject[] = [];
-    let y = 18;
-    const iconS = spec.icon ? (spec.iconSize ?? 52) : 0;
-    let hx = px;
-    if (spec.icon) {
-      items.push(this.add.image(px + iconS / 2, y + iconS / 2, spec.icon).setDisplaySize(iconS, iconS));
-      const b = this.add.graphics();
-      b.lineStyle(1, GOLDC, LINE.a2).strokeRect(px, y, iconS, iconS);
-      items.push(b);
-      hx += iconS + 14;
-    }
-    const shapeSz = spec.shape ? miniShapeSize(spec.shape) : null;
-    const textW = w - hx - px - (shapeSz ? shapeSz.w + 10 : 0);
-    const title = fitWidth(this.cz(hx, 0, spec.title, 24, spec.titleHex ?? ON, 0.05).setOrigin(0, 0), textW);
-    const badge = spec.badge ? this.gar(hx, 0, spec.badge, 18, MUTED).setOrigin(0, 0) : null;
-    const headH = title.displayHeight + (badge ? badge.height : 0);
-    const blockH = Math.max(iconS, headH);
-    title.y = y + (blockH - headH) / 2;
-    if (badge) {
-      badge.y = title.y + title.displayHeight - 2;
-      if (badge.width > textW) badge.setScale(textW / badge.width);
-      items.push(badge);
-    }
-    items.push(title);
-    if (spec.shape && shapeSz) items.push(drawMiniShape(this, w - px - shapeSz.w, y + (blockH - shapeSz.h) / 2, spec.shape));
-    y += Math.max(blockH, shapeSz?.h ?? 0) + 8;
-    const rule = this.add.graphics();
-    items.push(rule);
-    if (spec.meta) {
-      rule.lineStyle(1, GOLDC, LINE.a1).lineBetween(px, y, w - px, y);
-      const m = this.cz(px, y + 6, spec.meta, 14, MUTED, 0.1).setOrigin(0, 0);
-      items.push(m);
-      y += 6 + m.height + 8;
-    } else if (spec.lines.length) {
-      rule.lineStyle(1, GOLDC, LINE.a1).lineBetween(px, y, w - px, y);
-      y += 8;
-    }
-    for (const [text, hex] of spec.lines) {
-      const t = this.add
-        .text(px, y, text, { fontFamily: BODY_FONT, fontSize: '19px', color: hex ?? TXT, wordWrap: { width: w - px * 2, useAdvancedWrap: true }, lineSpacing: 1 })
-        .setResolution(2);
-      items.push(t);
-      y += t.height + 3;
-    }
-    const h = y + 14;
-    const bg = this.add.graphics();
-    bg.fillStyle(0x000000, 0.35).fillRect(4, 14, w, h); // alt gölge
-    bg.lineStyle(3, 0x080604, 0.7).strokeRect(-1.5, -1.5, w + 3, h + 3);
-    bg.fillGradientStyle(0x1e160e, 0x1e160e, 0x0c0906, 0x0c0906, 0.97).fillRect(0, 0, w, h);
-    bg.lineStyle(1, GOLDC, 0.42).strokeRect(0.5, 0.5, w - 1, h - 1);
-    return { container: this.add.container(0, 0, [bg, ...items]).setDepth(5000), width: w, height: h };
-  }
-
   private showTip(key: string, spec: TipSpec, anchor: { x: number; y: number; w: number; h: number }): void {
     this.tipTimer?.remove();
     if (this.tip?.key === key) return;
     this.hideTip(true);
-    const t = this.buildTip(spec);
-    let ty = anchor.y - t.height - 14;
-    if (ty < 50) ty = anchor.y + anchor.h + 14;
-    const tx = Math.max(stageView.left + 16, Math.min(stageView.right - t.width - 16, anchor.x + anchor.w / 2 - t.width / 2));
-    t.container.setPosition(Math.round(tx), Math.round(ty) + 6).setAlpha(0);
-    this.tweens.add({ targets: t.container, alpha: 1, y: Math.round(ty), duration: 160, ease: easeOut });
+    const t = elTip(this, spec);
+    placeElTip(this, t, anchor, 'above');
     this.tip = { key, container: t.container };
   }
 

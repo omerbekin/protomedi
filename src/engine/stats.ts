@@ -101,6 +101,8 @@ export function buildDef(data: CombatantData, formulas: Formulas): CombatantDef 
 }
 
 const ATTRS: Attribute[] = ['str', 'int', 'dex', 'luck'];
+/** UnitModifiers'ın toplamsal ekleri (madde 280). */
+const ADDITIVE = ['hpAdd', 'mpAdd', 'spdAdd', 'critAdd', 'critMultAdd', 'accuracyAdd', 'evasionAdd', 'hpRegenAdd', 'mpRegenAdd'] as const;
 
 /** Güçlendirmenin statları/görseli değiştiren bir alanı var mı (yoksa tanım aynen kullanılır). */
 export function hasUnitModifiers(mods: UnitModifiers | undefined): boolean {
@@ -114,6 +116,7 @@ export function hasUnitModifiers(mods: UnitModifiers | undefined): boolean {
     nonZero(mods.armorAdd) ||
     nonZero(mods.magicArmorAdd) ||
     mods.spriteScale !== undefined ||
+    ADDITIVE.some((k) => nonZero(mods[k])) ||
     ATTRS.some((k) => nonOne(mods.attrMult?.[k]) || nonZero(mods.attrAdd?.[k]))
   );
 }
@@ -149,9 +152,20 @@ export function applyUnitModifiers(def: CombatantDef, mods: UnitModifiers | unde
     },
     formulas,
   );
+  const r4 = (v: number) => Math.round(v * 10000) / 10000;
+  // Toplamsal ek (madde 280): ek yoksa değer türetildiği gibi KALIR (yuvarlama bile yok: bugünkü savaşlar birebir aynı)
+  const plus = (k: (typeof ADDITIVE)[number], base: number, f: (v: number) => number): number => (mods[k] ? f(base + mods[k]!) : base);
   const stats: Stats = {
     ...derived,
-    hp: Math.max(1, Math.round(derived.hp * (mods.hpMult ?? 1))),
+    hp: Math.max(1, Math.round(derived.hp * (mods.hpMult ?? 1)) + Math.round(mods.hpAdd ?? 0)),
+    mp: plus('mpAdd', derived.mp, (v) => Math.max(0, Math.round(v))),
+    spd: plus('spdAdd', derived.spd, (v) => Math.max(1, v)),
+    critChance: plus('critAdd', derived.critChance, (v) => Math.max(0, r4(v))),
+    critMult: plus('critMultAdd', derived.critMult, (v) => Math.max(1, r4(v))),
+    accuracy: plus('accuracyAdd', derived.accuracy, (v) => Math.max(0, r4(v))),
+    evasion: plus('evasionAdd', derived.evasion, (v) => Math.min(formulas.attributes.evasionMax, Math.max(0, r4(v)))),
+    hpRegen: plus('hpRegenAdd', derived.hpRegen, (v) => Math.max(0, v)),
+    mpRegen: plus('mpRegenAdd', derived.mpRegen, (v) => Math.max(0, Math.round(v))),
     armor: Math.max(0, derived.armor + (mods.armorAdd ?? 0)),
     magicArmor: Math.max(0, derived.magicArmor + (mods.magicArmorAdd ?? 0)),
     spellPowerMult: (derived.spellPowerMult ?? 1) * (mods.powerMult ?? 1),

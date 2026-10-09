@@ -14,6 +14,7 @@ import {
   applyBattle,
   battlePlan,
   completeSimple,
+  equipBest,
   farewell,
   formCompany,
   getMap,
@@ -85,6 +86,11 @@ export interface CampaignSimOptions {
    * "bitmedi" sayılır ama sonraki düğümler de ölçülür. Varsayılan true (ölçüm için); false = gerçek sefer gibi orada biter.
    */
   continueOnStuck?: boolean;
+  /**
+   * Oyuncu vekilinin ekipman politikası (items.md 4.4): 'best' = her loot sonrası takım "Equip best" yapar (varsayılan; iyi oyuncu),
+   * 'none' = hiç item takmaz (item'siz referans: düşman ölçeği yine açık, yani zorlaşır).
+   */
+  gear?: 'best' | 'none';
   /** Her düğümün ilk denemesinden önce durum (ayar betikleri için). */
   onBattle?: (nodeId: string, state: CampaignState) => void;
 }
@@ -199,6 +205,7 @@ export function simulateCampaign(o: CampaignSimOptions): CampaignSimResult {
         case 'battle': {
           const agg = nodeAgg(step.node);
           agg.reached++;
+          if ((o.gear ?? 'best') === 'best') s = equipBest(s);
           const party = activeHeroes(s);
           o.onBattle?.(step.node, s);
           agg.hpStartSum += party.reduce((a, h) => a + h.hpRatio, 0) / Math.max(1, party.length);

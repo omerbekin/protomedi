@@ -6,6 +6,7 @@ import { TeamSelectScene } from './game/scenes/TeamSelectScene';
 import { MainMenuScene } from './game/scenes/MainMenuScene';
 import { CampaignMapScene } from './game/scenes/CampaignMapScene';
 import { MultiplayerScene, setMultiplayerBoot } from './game/scenes/MultiplayerScene';
+import { EndlessScene } from './game/scenes/EndlessScene';
 import { mp } from './game/mp-client';
 import { lobbyFromSearch } from './net/lobby-code';
 import { DebugMenu } from './ui/debug-menu';
@@ -37,16 +38,18 @@ if (import.meta.env.DEV) document.title = 'Embers of Valdoria (dev - NOT LIVE)';
 const params = new URLSearchParams(window.location.search);
 const skipSelect = params.has('seed');
 const openCampaign = !skipSelect && params.has('campaign');
+// ?endless=1 doğrudan Endless ekranını açar (Endless Lite; ana menüde kartı yok, debug > Setup > Endless de açar)
+const openEndless = !skipSelect && !openCampaign && params.has('endless');
 // Multiplayer: davet linki (?lobby=KOD) lobiye katılır; yenilenen sekme yarım kalan lobisine döner (docs/design/multiplayer.md)
-const lobbyCode = skipSelect || openCampaign ? null : lobbyFromSearch(window.location.search);
-const rejoin = !skipSelect && !openCampaign && !lobbyCode && !!mp.pendingRejoin();
+const lobbyCode = skipSelect || openCampaign || openEndless ? null : lobbyFromSearch(window.location.search);
+const rejoin = !skipSelect && !openCampaign && !openEndless && !lobbyCode && !!mp.pendingRejoin();
 if (lobbyCode) {
   setMultiplayerBoot({ join: lobbyCode });
   params.delete('lobby'); // yenilemede tekrar katılmaya çalışmasın (yarım kalan lobi sessionStorage'dan döner)
   window.history.replaceState(null, '', `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`);
 } else if (rejoin) setMultiplayerBoot({ rejoin: true });
-const otherScenes = [TeamSelectScene, BattleScene, MainMenuScene, CampaignMapScene, MultiplayerScene];
-const firstScene = skipSelect ? BattleScene : openCampaign ? CampaignMapScene : lobbyCode || rejoin ? MultiplayerScene : MainMenuScene;
+const otherScenes = [TeamSelectScene, BattleScene, MainMenuScene, CampaignMapScene, MultiplayerScene, EndlessScene];
+const firstScene = skipSelect ? BattleScene : openCampaign ? CampaignMapScene : openEndless ? EndlessScene : lobbyCode || rejoin ? MultiplayerScene : MainMenuScene;
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -114,6 +117,7 @@ new GameMenu(document.getElementById('ui-root')!, {
   teamSelect: () => startTeamSelect(game),
   mainMenu: () => startMainMenu(game),
   retreat: () => battleNow()?.campaign?.retreat?.(),
+  retreatLabel: () => battleNow()?.campaign?.retreatLabel,
   onOpen: () => {
     debugState.uiPaused = true;
     battleNow()?.applyDebugTiming();

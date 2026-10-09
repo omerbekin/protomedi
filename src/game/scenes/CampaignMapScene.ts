@@ -4,6 +4,8 @@ import {
   CONFIG,
   EVENTS,
   TREASURES,
+  acknowledgeHandover,
+  acknowledgeLoot,
   activeHeroes,
   autoFormation,
   canSaveManually,
@@ -52,6 +54,7 @@ import { sortByPrimary } from '../class-order';
 import { debugState } from '../debug-state';
 import { isSettingsOpen, setSettingsOpen } from '../../ui/settings';
 import { mountMenuToggle } from '../../ui/game-menu';
+import { openGearScreen, showHandover, showSpoils } from '../../ui/gear-screen';
 
 /**
  * Sefer haritası (campaign.md 6): arka plan görseli, yollar (düz = tek yol, kesik = seçimli) ve altlarında boyalı toprak izi, düğüm rozetleri,
@@ -840,9 +843,66 @@ export class CampaignMapScene extends Phaser.Scene {
     setState(s);
   }
 
+  /** Gear ekranını açar (Party / kasaba / Spoils / teslim kartından). Kapanınca HUD yenilenir, `after` çağrılır. */
+  openGear(hero?: string, tutorial = false, after?: () => void): void {
+    const root = document.getElementById('ui-root');
+    if (!root) return;
+    openGearScreen(root, {
+      get: () => this.s,
+      set: (s) => setState(s),
+      ...(hero ? { hero } : {}),
+      tutorial,
+      onClose: () => {
+        this.renderHud();
+        after?.();
+      },
+    });
+  }
+
+  /**
+   * Bekleyen kartlar (madde 280): önce "Spoils" (zafer / sandık loot'u), sonra Ashford teslimi (yeni bölük kurulduktan sonra; item takma
+   * tutorial'ı). Bir kart açıldıysa true: kart kapanınca advance yeniden çağrılır.
+   */
+  private showPendingCards(): boolean {
+    const root = document.getElementById('ui-root');
+    if (!root) return false;
+    const s = this.s;
+    if (s.pendingLoot) {
+      showSpoils(root, {
+        get: () => this.s,
+        set: (x) => setState(x),
+        // Geride kalan yoksa kart kapanır; varsa Gear'dan dönünce kart yeniden açılır (yer açıp almak için; madde 280)
+        gear: () => {
+          if (!this.s.pendingLoot?.left?.length) setState(acknowledgeLoot(this.s));
+          this.openGear(undefined, false, () => this.advance());
+        },
+        done: () => {
+          setState(acknowledgeLoot(this.s));
+          this.advance();
+        },
+      });
+      return true;
+    }
+    if (s.pendingHandover && !['hero', 'recruit', 'volunteer', 'farewell', 'company'].includes(nextStep(s).kind)) {
+      showHandover(root, s, {
+        equip: () => {
+          setState(acknowledgeHandover(this.s));
+          this.openGear(undefined, true, () => this.advance());
+        },
+        later: () => {
+          setState(acknowledgeHandover(this.s));
+          this.advance();
+        },
+      });
+      return true;
+    }
+    return false;
+  }
+
   /** Sıradaki adıma göre ekranı kurar (pencere ya da alt düğme). */
   advance(): void {
     this.closeModal();
+    if (this.showPendingCards()) return;
     const s = this.s;
     const step = nextStep(s);
     // İpucu kartı yalnızca pencere açılmayan adımlarda (savaş / yol seçimi); diğerlerinde pencere kapanınca gelir
@@ -885,6 +945,7 @@ export class CampaignMapScene extends Phaser.Scene {
           height: 460,
           buttons: [
             { label: 'Party', run: () => this.openParty() },
+            { label: 'Gear', run: () => this.openGear() },
             { label: 'Leave', primary: true, run: () => this.commit(completeSimple(this.s, 'town')) },
           ],
         });
@@ -895,8 +956,8 @@ export class CampaignMapScene extends Phaser.Scene {
         return;
       }
       case 'treasure': {
-        const t = TREASURES[step.treasure] ?? { title: 'Treasure', text: 'You find a chest.', reward: 'Rewards coming soon' };
-        this.modal = openModal(this, this.ui, { title: 'Treasure', subtitle: t.title, text: `${t.text}\n\n${t.reward ?? ''}`, height: 500, buttons: [{ label: 'Continue', primary: true, run: () => this.commit(completeSimple(this.s, 'treasure')) }] });
+        const t = TREASURES[step.treasure] ?? { title: 'Treasure', text: 'You find a chest.', reward: 'Open the chest to claim its gear and gold.' };
+        this.modal = openModal(this, this.ui, { title: 'Treasure', subtitle: t.title, text: `${t.text}\n\n${t.reward ?? ''}`, height: 500, buttons: [{ label: 'Open the chest', primary: true, run: () => this.commit(completeSimple(this.s, 'treasure')) }] });
         return;
       }
       case 'complete':
@@ -1228,6 +1289,7 @@ export class CampaignMapScene extends Phaser.Scene {
       y: 120,
       buttons: [
         { label: 'Auto arrange', run: () => { setState(autoFormation(this.s)); draw(); } },
+        { label: 'Gear', run: () => { back(); this.openGear(selected || undefined); } },
         { label: 'Done', primary: true, run: back },
       ],
     });
@@ -1283,7 +1345,7 @@ export class CampaignMapScene extends Phaser.Scene {
       });
       // Sefer bilgisi (haritadaki kartuştan buraya taşındı): durak + mod + zorluk + yuva
       const diff = CONFIG.difficulties[s.difficulty]?.name ?? s.difficulty;
-      const info = `Stop ${stopNumber(s)} / ${this.map.stopsPerRun}  ·  ${s.mode === 'ironman' ? 'IRONMAN' : 'NORMAL'}  ·  ${diff.toUpperCase()}  ·  SLOT ${s.slot + 1}`;
+      const info = `Stop ${stopNumber(s)} / ${this.map.stopsPerRun}  ·  ${s.mode === 'ironman' ? 'IRONMAN' : 'NORMAL'}  ·  ${diff.toUpperCase()}  ·  SLOT ${s.slot + 1}  ·  ${s.gold} GOLD`;
       layer.add(serif(this, W / 2, gy + 3 * cell + 164, info, 17, s.mode === 'ironman' ? '#e08a7a' : '#c9b27a', { bold: false, spacing: 2, stroke: 3 }).setOrigin(0.5));
     };
     draw();

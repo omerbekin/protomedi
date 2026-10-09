@@ -1,5 +1,5 @@
 {
-  "_not": "Olay ve hazine metinleri (MVP: YER TUTUCU; mekanik etki yok). Oyun içi metin İngilizce. İleride seçenekli olaylar ve gerçek ödüller (docs/design/campaign/campaign.md 6.4).",
+  "_not": "Olay ve hazine metinleri (olaylar YER TUTUCU; hazine sandığı loot verir: items.md 3.1, madde 280). Oyun içi metin İngilizce. İleride seçenekli olaylar ve gerçek ödüller (docs/design/campaign/campaign.md 6.4).",
   "events": {
     "witchs_hut": {
       "title": "Witch's Hut",
@@ -10,12 +10,12 @@
     "dwarven_mine": {
       "title": "Dwarven Mine",
       "text": "The wardens have fallen. Deep in the mine you find a sealed dwarven chest.",
-      "reward": "Recovered: Dwarven ore (rewards coming soon)"
+      "reward": "Open the chest to claim its gear and gold."
     },
     "relic_vault": {
       "title": "St. Brann's Abbey",
       "text": "Beyond the vault keepers lies the abbey's relic vault, untouched for a hundred years.",
-      "reward": "Recovered: A saint's relic (rewards coming soon)"
+      "reward": "Open the vault to claim its gear and gold."
     }
   }
 }

@@ -404,14 +404,18 @@ body {
 .settings-toggle.menu-toggle {
   right: calc(120px + var(--er));
   width: auto;
-  min-width: 84px;
-  padding: 0 16px;
-  font: bold 18px Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
-  letter-spacing: 1px;
-  color: #f3e4c4;
-  background: linear-gradient(180deg, #5c4128, #24170d);
-  border: 2px solid #9a7438;
-  box-shadow: 0 0 0 1px #000, inset 0 1px 0 rgba(255, 226, 154, 0.25);
+  min-width: 96px;
+  padding: 0 18px;
+  font: 600 17px Cinzel, Georgia, 'Palatino Linotype', serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #d9c8a2;
+  text-shadow: 0 2px 4px rgba(12, 8, 5, 0.95);
+  background: linear-gradient(180deg, rgba(30, 22, 14, 0.86), rgba(12, 9, 6, 0.9));
+  border: 1px solid rgba(217, 178, 106, 0.42);
+  border-radius: 0;
+  box-shadow: 0 0 0 3px rgba(12, 8, 5, 0.6);
+  transition: color 0.18s, border-color 0.18s, text-shadow 0.18s;
 }
 
 .settings-toggle.menu-toggle.no-fs {
@@ -419,8 +423,9 @@ body {
 }
 
 .settings-toggle.menu-toggle:hover {
-  color: #ffe29a;
-  border-color: #e8c47e;
+  color: #f3d999;
+  border-color: #f3d999;
+  text-shadow: 0 0 14px rgba(240, 140, 40, 0.85);
 }
 
 /* --- Menü ve ayarlar ekranı: ana menü / sefer menüsüyle aynı görsel dil (koyu deri panel, altın çerçeve, serif, bronz düğmeler).
@@ -454,83 +459,49 @@ body {
 .gm-box {
   display: flex;
   flex-direction: column;
-  max-height: 100%;
-  background: linear-gradient(180deg, #2e2218, #110b07);
-  border: 2px solid var(--g-edge);
-  border-radius: 10px;
-  box-shadow: 0 0 0 1px #000, 0 12px 40px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 226, 154, 0.12);
-}
-
-.gm-box {
   width: min(440px, 100%);
-  padding: 18px 26px 24px;
-  overflow-y: auto;
+  max-height: 100%;
+  padding: 24px 34px 30px;
+  overflow: hidden auto;
 }
 
 .gm-title {
-  font: bold 34px var(--g-serif);
-  letter-spacing: 4px;
-  text-align: center;
-  color: var(--g-bright);
-  text-shadow: 0 2px 0 #000, 0 0 12px rgba(255, 190, 90, 0.35);
+  font-size: 34px;
 }
 
 .gm-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 14px;
+  gap: 16px;
+  margin-top: 22px;
+  padding: 0 10px; /* düğmelerin yan elmasları kesilmesin */
 }
 
 .gm-btn {
+  width: 100%;
   min-height: 56px;
-  padding: 0 18px;
-  font: bold 22px var(--g-serif);
-  letter-spacing: 1px;
-  color: #fff2c0;
-  text-shadow: 0 2px 0 #000;
-  background: linear-gradient(180deg, #5c4128, #24170d);
-  border: 2px solid var(--g-edge);
-  border-radius: 6px;
-  box-shadow: 0 0 0 1px #000, inset 0 1px 0 rgba(255, 226, 154, 0.22);
-  cursor: pointer;
-  transition: transform 0.1s, border-color 0.1s, box-shadow 0.1s;
-}
-
-.gm-btn.primary {
-  background: linear-gradient(180deg, #9a6a28, #3f220c);
-  border-color: var(--g-gold);
-  font-size: 26px;
-}
-
-.gm-btn:hover {
-  border-color: var(--g-bright);
-  box-shadow: 0 0 0 1px #000, 0 0 14px rgba(255, 200, 96, 0.35), inset 0 1px 0 rgba(255, 226, 154, 0.3);
-  transform: scale(1.02);
-}
-
-.gm-btn:active {
-  transform: scale(0.97);
 }
 
 .gm-confirm {
-  margin-top: 16px;
+  margin-top: 18px;
   text-align: center;
 }
 
 .gm-confirm-text {
-  font: bold 20px/1.35 var(--g-serif);
-  color: var(--g-gold);
+  font-size: 22px;
 }
 
 .gm-confirm-row {
   display: flex;
-  gap: 12px;
-  margin-top: 16px;
+  gap: 24px;
+  margin-top: 20px;
+  padding: 0 10px;
 }
 
 .gm-confirm-row .gm-btn {
   flex: 1;
+  min-width: 0;
+  padding: 0 12px;
 }
 
 /* Ayarlar ekranı (oyun içi; Ömer 2026-10-08): ana menünün sol sütun görünümü (MainMenuScene > Settings). Ölçüler oyun birimiyle:
@@ -807,7 +778,7 @@ html.short .gm-title {
 
 html.short .gm-btn {
   min-height: 46px;
-  font-size: 18px;
+  font-size: 17px;
 }
 
 html.short .gm-list {

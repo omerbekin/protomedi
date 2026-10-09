@@ -5,9 +5,9 @@ describe('ayarlar menüsü: New Game / Team Select düğmeleri', () => {
   it('devam eden savaşta ikisi de var ve onay ister', () => {
     expect(flowButtons('battle-live')).toEqual({ newGame: true, teamSelect: true, confirm: true });
   });
-  it('biten savaşta onaysız; takım seçiminde yalnızca New Game (onaysız)', () => {
+  it('biten savaşta onaysız; takım seçiminde Menu yok (◂ Back)', () => {
     expect(flowButtons('battle-over')).toEqual({ newGame: true, teamSelect: true, confirm: false });
-    expect(flowButtons('team-select')).toEqual({ newGame: true, teamSelect: false, confirm: false });
+    expect(flowButtons('team-select')).toEqual({ newGame: false, teamSelect: false, confirm: false });
   });
   it('etkin sahne yoksa düğme yok', () => {
     expect(flowButtons('none')).toEqual({ newGame: false, teamSelect: false, confirm: false });
@@ -25,8 +25,9 @@ describe('oyun içi Menu (sağ üst Menu düğmesi / Esc): içerik bağlama gör
     expect(Object.keys(m.confirm).sort()).toEqual(['mainMenu', 'newGame', 'teamSelect']);
     expect(menuItems('battle-over')!.confirm).toEqual({});
   });
-  it('takım seçimi: Resume / Settings / New Game / Back to Main Menu (onaysız)', () => {
-    expect(menuItems('team-select')).toEqual({ items: ['resume', 'settings', 'newGame', 'mainMenu'], confirm: {} });
+  it('kurulum ekranlarında (takım seçimi, multiplayer lobisi / takım seçimi) Menu yok: sol üstte ◂ Back (Geri / Menu kuralı)', () => {
+    expect(menuItems('team-select')).toBeNull();
+    expect(menuItems('mp-setup')).toBeNull();
   });
   it('sefer savaşı: Resume / Settings / Retreat to Map / Back to Main Menu; ikisi de onaylı; bitmiş savaşta Retreat yok', () => {
     const m = menuItems('campaign-battle-live')!;

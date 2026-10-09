@@ -8,6 +8,7 @@
 import { sortByPrimary } from '../game/class-order';
 import campaignConfig from '../../data/campaign/campaign.json';
 import campaignMap from '../../data/campaign/valdoria.json';
+import itemsJson from '../../data/items.json';
 import layout from '../../data/battle-layout.json';
 import { applySummonVariant, content, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, TARGET_TEXT } from '../engine';
 import { TARGET_BADGE } from '../engine/skill-info';
@@ -682,10 +683,28 @@ export function buildMechanics(): WikiArticle[] {
           `Difficulty: Easy, Medium or Hard, chosen when the journey starts; it cannot be changed later. ${difficultyText()}`,
         ),
       ]),
+      itemsArticle(),
     );
   }
   out.push(...bossArticles());
   return out;
+}
+
+/** Item'ler (madde 280; sayılar data/items.json'dan): yuvalar, nadirlik, silah aileleri, loot, primary uyarısı. */
+function itemsArticle(): WikiArticle {
+  const L = itemsJson.loot;
+  const fams = itemsJson.weaponFamilies.map((x) => `${x.name} (${x.classes.map((c) => content.classes[c]?.name ?? c).join(', ')})`).join('; ');
+  return article('items', 'Campaign', 'Items and gear', 'helm', [
+    p(`Heroes in the campaign wear gear in ${itemsJson.slots.length} slots: ${itemsJson.slots.map((x) => x.name).join(', ')}. Items only raise stats (STR, DEX, INT, LUCK, HP, armor, Might = skill power, crit, accuracy, evasion, speed, MP and regeneration); they never add flat damage. Quick Battle and multiplayer do not use items.`),
+    list(
+      `Rarity: ${itemsJson.rarities.map((x) => x.name).join(', ')}. Rarer items and higher item levels carry more power; an item's gold value follows its power (${itemsJson.budget.goldPerIP} gold per power point).`,
+      `Weapons come in families and each class uses only its own: ${fams}. Every other slot fits everyone.`,
+      `Loot: a victory drops about ${L.perPartyMember.battle} items per hero in the fight (elites ${L.perPartyMember.elite}, bosses ${L.perPartyMember.boss} with at least one Rare), chests at least one Rare. Drops are the same on every difficulty. Winning the same battle again gives less (${L.repeat.map((x) => `${Math.round(x.items * 100)}%`).join(' / ')}).`,
+      `The bag holds ${itemsJson.bag} items. When it is full, loot that does not fit waits on the Spoils card: discard something to make room and take it, or it is left behind when you continue. You can discard items in the Gear screen too (Rare and better ask first). Open Gear from the Party window or in a town; Equip best picks the strongest usable items for you.`,
+      "Primary bonus: if an item would raise another stat above a hero's primary stat, the primary bonus (Resilience, Hunter's Mark, Mana Echo or Lucky Escape) switches off. The Gear screen warns you before you equip it.",
+      'Enemies grow a little stronger the further you travel, to match the gear you are expected to have found.',
+    ),
+  ]);
 }
 
 /**

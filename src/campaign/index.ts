@@ -9,3 +9,4 @@ export * from './encounters';
 export * from './save';
 export * from './power';
 export * from './gear';
+export * from './loot';

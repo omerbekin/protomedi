@@ -99,6 +99,14 @@ function upgradeState(s: CampaignState): void {
   const ho = s.pendingHandover as unknown as Record<string, unknown> | undefined;
   if (ho !== undefined && !(ho && typeof ho.node === 'string' && Array.isArray(ho.items) && ho.items.every((u) => typeof u === 'string') && Array.isArray(ho.from)))
     delete (s as { pendingHandover?: unknown }).pendingHandover;
+  const ls = s.lootState as unknown as Record<string, unknown> | undefined;
+  s.lootState = {
+    rarePity: ls && typeof ls.rarePity === 'number' && ls.rarePity >= 0 ? ls.rarePity : 0,
+    clears: ls && ls.clears && typeof ls.clears === 'object' ? Object.fromEntries(Object.entries(ls.clears as Record<string, unknown>).filter(([, v]) => typeof v === 'number')) as Record<string, number> : {},
+  };
+  const pl = s.pendingLoot as unknown as Record<string, unknown> | undefined;
+  if (pl !== undefined && !(pl && typeof pl.node === 'string' && Array.isArray(pl.items) && typeof pl.gold === 'number' && (pl.left === undefined || (Array.isArray(pl.left) && pl.left.every((x) => typeof x === 'string')))))
+    delete (s as { pendingLoot?: unknown }).pendingLoot;
   s.gold = typeof s.gold === 'number' && Number.isFinite(s.gold) && s.gold >= 0 ? s.gold : 0;
   // uid çakışmasın: sıradaki numara mevcut en büyük 'i<n>'den büyük
   const equipped = Array.isArray(s.roster) ? s.roster.flatMap((h) => (h?.equipment ? SLOT_IDS.map((k) => h.equipment[k]) : [])) : [];
@@ -134,6 +142,7 @@ export function isValidState(x: unknown): x is CampaignState {
   if (!s.roster.every((h) => h && typeof h.id === 'string' && typeof h.class === 'string' && typeof h.hpRatio === 'number')) return false;
   if (!s.roster.every((h) => typeof h.level === 'number' && typeof h.xp === 'number' && !!h.equipment && SLOT_IDS.every((k) => h.equipment[k] === null || isItem(h.equipment[k])))) return false;
   if (!Array.isArray(s.inventory) || !s.inventory.every(isItem) || typeof s.gold !== 'number' || typeof s.nextItemId !== 'number') return false;
+  if (!s.lootState || typeof s.lootState.rarePity !== 'number' || typeof s.lootState.clears !== 'object') return false;
   if (!s.stats || typeof s.stats.victories !== 'number' || typeof s.nextHeroId !== 'number' || typeof s.campaignId !== 'string') return false;
   return true;
 }

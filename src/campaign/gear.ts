@@ -1,6 +1,6 @@
 // Sefer ekipmanı (saf; her işlem YENİ durum döndürür): torba, kuşanma, çıkarma, altın ve kahramanın savaş gücü.
 // Aşama 0 temeli (roadmap 1.4); loot / tüccar / ekranlar Aşama 1. Kurallar: docs/design/progression/items.md.
-import { BAG_SIZE, canEquip, itemDef, loadout, SLOT_IDS, type ItemInstance, type LoadoutResult, type SlotId } from '../progression';
+import { BAG_SIZE, bestMoves, canEquip, itemDef, loadout, RARITY_IDS, SLOT_IDS, type ItemInstance, type LoadoutResult, type SlotId } from '../progression';
 import { clone, heroById } from './state';
 import type { CampaignState, Hero } from './types';
 
@@ -57,6 +57,20 @@ export function unequipItem(s: CampaignState, heroId: string, slot: SlotId): Cam
   return t;
 }
 
+/** Torbadaki item'i atar (kalıcı; Rare ve üstü için arayüz onay ister: `discardNeedsConfirm`). */
+export function discardItem(s: CampaignState, uid: string): CampaignState {
+  if (!s.inventory.some((it) => it.uid === uid)) throw new Error(`Item not in the bag: ${uid}`);
+  const t = clone(s);
+  t.inventory = t.inventory.filter((it) => it.uid !== uid);
+  return t;
+}
+
+/** Atmadan önce onay gerekir mi (Rare ve üstü; Ömer, madde 280)? */
+export function discardNeedsConfirm(item: ItemInstance): boolean {
+  const d = itemDef(item.id);
+  return !!d && RARITY_IDS.indexOf(d.rarity) >= RARITY_IDS.indexOf('rare');
+}
+
 /** Altın ekler/çıkarır (eksiye düşmez). */
 export function addGold(s: CampaignState, amount: number): CampaignState {
   const t = clone(s);
@@ -69,3 +83,18 @@ export const equippedCount = (h: Hero): number => SLOT_IDS.filter((k) => h.equip
 
 /** Kahramanın savaş gücü (güç toplama katmanı; Party ekranı önizlemesi ve battlePlan aynı fonksiyonu kullanır). */
 export const heroLoadout = (h: Hero): LoadoutResult => loadout(h);
+
+/**
+ * "Equip best": verilen kahramanlara (varsayılan: aktif takım, dizilim sırasıyla) torbadan en iyi item'leri takar; çıkan item'ler torbaya döner.
+ * Primary bonusunu kapatacak item seçilmez (madde 278). Kuşanma ekranı ve sim'in `best` politikası kullanır.
+ */
+export function equipBest(s: CampaignState, heroIds?: string[]): CampaignState {
+  let t = s;
+  const ids = heroIds ?? t.active.filter((id) => id && heroById(t, id));
+  for (const id of ids) {
+    const h = heroById(t, id);
+    if (!h) continue;
+    for (const m of bestMoves(h, t.inventory)) t = equipItem(t, id, m.uid);
+  }
+  return t;
+}

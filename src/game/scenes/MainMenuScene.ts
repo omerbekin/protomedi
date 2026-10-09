@@ -23,6 +23,8 @@ import { sanitizeName } from '../../net/protocol';
 import { openWiki } from '../../wiki/view';
 import { BODY_FONT, DISPLAY_FONT, menuStyle } from '../../ui/menu-style';
 import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
+import { EL, elButton, elDiamond, elGlow, elLink, elText, elBody } from '../elegant-ui';
+import { ENDLESS_SCENE } from '../endless-session';
 import { MAIN_ITEMS, backTarget, backdropFor, campaignButtons, initialView, moveSelection, type MenuItemKey, type MenuView } from '../main-menu-flow';
 
 export interface MainMenuData {
@@ -69,6 +71,8 @@ const ITEM_Y0 = LOOK.itemY0;
 /** Zarif stilde satır yazısının iç boşluğu (parıltı gölgesi kesilmesin); yazı x'i bu kadar sola alınır. */
 const TPAD = ELEGANT ? 18 : 0;
 const SHADOW_DARK = 'rgba(12,8,5,0.95)';
+/** Quick Battle kartındaki Endless mode anahtarı (localStorage). */
+const ENDLESS_TOGGLE_KEY = 'proto.qbEndless';
 const SHADOW_GLOW = 'rgba(240,140,40,0.85)';
 const CARD_W = 460;
 const CARD_H = 640;
@@ -260,7 +264,7 @@ export class MainMenuScene extends Phaser.Scene {
     this.colX = menuColumnShift(left); // sütun ekranın soluna yaklaşır ama kenara yapışmaz (16:9'da 0)
     if (!this.tweens.isTweening(this.menuCol)) this.menuCol.setX(this.view === 'menu' ? this.colX : this.hiddenColX());
     if (this.panel && !this.tweens.isTweening(this.panel)) this.panel.setX(this.colX);
-    this.back.setX(left + 58);
+    this.back.setX(left + 48);
     this.applyLook();
   }
 
@@ -481,16 +485,64 @@ export class MainMenuScene extends Phaser.Scene {
     this.tweens.add({ targets: this.back, alpha: shown ? 1 : 0, duration: shown ? 400 : 200, delay: shown ? 500 : 0, onComplete: () => this.back.setVisible(shown) });
   }
 
+  /** Sol üst "◂ Back  Esc" (tasarım kiti: src/game/elegant-ui.ts > elLink; geri / menu kuralı CLAUDE.md). */
   private buildBack(): void {
-    const t = (ELEGANT
-      ? serif(this, 0, 0, '◂ Back', LOOK.backSize, TXT, { font: DISPLAY_FONT, weight: '600', spacing: LOOK.backSize * 0.05, stroke: 0 }).setShadow(0, 2, SHADOW_DARK, 4, false, true)
-      : serif(this, 0, 0, '◂ Back', 36, TXT, { spacing: 2, stroke: 3 })
-    ).setOrigin(0, 0.5);
-    const zone = this.add.zone(t.width / 2, 0, t.width + 60, 100).setInteractive({ useHandCursor: true });
-    this.back = this.add.container(stageView.left + 58, 64, [t, zone]).setDepth(40).setAlpha(0).setVisible(false);
-    zone.on('pointerover', () => t.setColor(TXT_ON));
-    zone.on('pointerout', () => t.setColor(TXT));
-    zone.on('pointerup', () => this.ready() && this.goBack());
+    const l = elLink(this, '◂ Back', () => this.ready() && this.goBack(), { small: 'Esc' });
+    this.back = l.root.setPosition(stageView.left + 48, 56).setDepth(40).setAlpha(0).setVisible(false);
+  }
+
+  /** Quick Battle kartının altındaki "Endless mode" anahtarı (açıkken kart Endless'ı açar); seçim tarayıcıda saklanır. */
+  private endlessOn(): boolean {
+    try {
+      return window.localStorage?.getItem(ENDLESS_TOGGLE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  private setEndlessOn(on: boolean): void {
+    try {
+      window.localStorage?.setItem(ENDLESS_TOGGLE_KEY, on ? '1' : '0');
+    } catch {
+      /* depolama yok: yalnızca bu oturum */
+    }
+  }
+
+  /** Kit dilinde açma / kapama satırı: elmas (açık = kor, kapalı = içi boş) + yazı + italik durum. Kök (0, 0) = satırın ortası. */
+  private makeToggle(label: string, get: () => boolean, set: (on: boolean) => void, onChange: () => void): Phaser.GameObjects.Container {
+    const root = this.add.container(0, 0);
+    const on = elDiamond(this, 7);
+    const off = elDiamond(this, 7, true);
+    const text = elText(this, 0, 0, label, 20, EL.TXT, { em: 0.08, pad: true }).setOrigin(0, 0.5);
+    const state = elBody(this, 0, 1, '', 19, EL.MUTED).setOrigin(0, 0.5);
+    const zone = this.add.zone(0, 0, 10, EL.HIT).setInteractive({ useHandCursor: true });
+    root.add([on, off, text, state, zone]);
+    const draw = (hover: boolean) => {
+      const v = get();
+      on.setVisible(v);
+      off.setVisible(!v);
+      state.setText(v ? 'on' : 'off').setColor(v ? EL.ON : EL.MUTED);
+      text.setColor(hover || v ? EL.ON : EL.TXT);
+      elGlow(text, hover);
+      const tw = text.width - EL.PAD * 2;
+      const total = 14 + 14 + tw + 12 + state.width;
+      const x0 = -total / 2;
+      on.setPosition(x0 + 7, 0);
+      off.setPosition(x0 + 7, 0);
+      text.setX(x0 + 28 - EL.PAD);
+      state.setX(x0 + 28 + tw + 12);
+      zone.setSize(total + 40, EL.HIT);
+    };
+    draw(false);
+    zone.on('pointerover', () => draw(true));
+    zone.on('pointerout', () => draw(false));
+    zone.on('pointerup', () => {
+      if (!this.ready()) return;
+      set(!get());
+      draw(true);
+      onChange();
+    });
+    return root;
   }
 
   // ------------------------------------------------------------ Play: üç kart
@@ -507,9 +559,9 @@ export class MainMenuScene extends Phaser.Scene {
       const id = key?.startsWith('bg:') ? key.slice(3) : null;
       return (id && (layout.backgrounds.cardFocus as unknown as Record<string, [number, number]>)[id]) || null;
     };
-    const specs: Array<{ name: string; art: string | null; line?: string; buttons?: typeof camp; run: () => void }> = [
+    const specs: Array<{ name: string; art: string | null; line?: string; endless?: boolean; buttons?: typeof camp; run: () => void }> = [
       { name: 'Campaign', art: campaignArt, buttons: camp, run: () => runCamp(camp[0]!.id) },
-      { name: 'Quick Battle', art: art('proving-grounds-sunny-afternoon') ?? art('castle-hall'), line: 'Pick two teams', run: () => this.scene.start('TeamSelectScene') },
+      { name: 'Quick Battle', art: art('proving-grounds-sunny-afternoon') ?? art('castle-hall'), line: 'Pick two teams', endless: true, run: () => (this.endlessOn() ? this.scene.start(ENDLESS_SCENE) : this.scene.start('TeamSelectScene')) },
       { name: 'Multiplayer', art: art('duelling-ring-moon') ?? art('kings-bridge'), line: 'Fight a friend online', run: () => this.setView('mp') },
     ];
     specs.forEach((s, i) => {
@@ -551,9 +603,9 @@ export class MainMenuScene extends Phaser.Scene {
       const drawFrame = (on: boolean) => {
         frame.clear();
         if (ELEGANT) {
-          // İnce altın çerçeve (2 px) + içte koyu çizgi
-          frame.lineStyle(3, 0x1b120a, 1).strokeRect(-hw + 3.5, -hh + 3.5, CARD_W - 7, CARD_H - 7);
-          frame.lineStyle(2, on ? GOLD.bright : 0xd9b26a, 1).strokeRect(-hw + 1, -hh + 1, CARD_W - 2, CARD_H - 2);
+          // Tasarım kiti: 1 px ince altın çerçeve (odakta açık altın) + içte ince koyu çizgi
+          frame.lineStyle(1, 0x1b120a, 0.9).strokeRect(-hw + 2.5, -hh + 2.5, CARD_W - 5, CARD_H - 5);
+          frame.lineStyle(1, on ? EL.ON_N : EL.GOLD, on ? 1 : EL.LINE.a3).strokeRect(-hw + 0.5, -hh + 0.5, CARD_W - 1, CARD_H - 1);
           return;
         }
         frame.lineStyle(4, 0x1b120a, 1).strokeRect(-hw + 4, -hh + 4, CARD_W - 8, CARD_H - 8);
@@ -564,21 +616,31 @@ export class MainMenuScene extends Phaser.Scene {
       c.add(this.titleText(0, hh - (s.buttons ? 130 : 112), s.name, LOOK.cardTitle, 2, '700').setOrigin(0.5));
       const zone = this.add.zone(0, 0, CARD_W, CARD_H).setInteractive({ useHandCursor: !s.buttons });
       c.add(zone);
-      if (s.line) c.add((ELEGANT ? this.noteText(0, hh - 52, s.line, LOOK.cardLine - 2, '#cdb88d') : serif(this, 0, hh - 50, s.line, 24, '#cdb88d', { bold: false, stroke: 3 })).setOrigin(0.5));
+      let lineText: Phaser.GameObjects.Text | null = null;
+      if (s.line) c.add((lineText = (ELEGANT ? this.noteText(0, hh - 52, s.line, LOOK.cardLine - 2, '#cdb88d') : serif(this, 0, hh - 50, s.line, 24, '#cdb88d', { bold: false, stroke: 3 })).setOrigin(0.5)));
+      if (s.endless) {
+        // Endless mode anahtarı (kartın altında; açıkken kart Endless dalga koşusunu açar: src/game/endless-session.ts)
+        const lineFor = () => (this.endlessOn() ? 'Endless waves - how far can you go?' : s.line!);
+        lineText?.setText(lineFor());
+        const tg = this.makeToggle('Endless mode', () => this.endlessOn(), (v) => this.setEndlessOn(v), () => lineText?.setText(lineFor()));
+        tg.setY(hh + 46);
+        outer.add(tg);
+      }
       if (s.buttons) {
-        const gap = 10;
-        const widths = s.buttons.map((b) => (b.id === 'continue' ? 172 : s.buttons!.length > 2 ? 116 : 160));
+        const gap = 22; // kit düğmelerinin yan elmasları birbirine değmesin
+        const widths = s.buttons.map((b) => (b.id === 'continue' ? 168 : s.buttons!.length > 2 ? 112 : 160));
         let bx = -(widths.reduce((a, b) => a + b, 0) + gap * (widths.length - 1)) / 2;
         s.buttons.forEach((b, k) => {
           const bw = widths[k]!;
-          const btn = makeMenuButton(this, bx + bw / 2, hh - 56, bw, 76, b.label, () => {
+          // Tasarım kiti düğmesi (primary = Continue / ilk eylem, diğerleri secondary); pasif düğme soluk, dokununca sallanır
+          const btn = elButton(this, b.label, () => {
             if (!this.ready()) return;
             if (!b.enabled) return btn.shake();
             runCamp(b.id);
-          }, ELEGANT ? { primary: b.primary, size: 22, font: DISPLAY_FONT, weight: '600', spacing: 1 } : { primary: b.primary, size: 24 });
+          }, { kind: b.primary ? 'primary' : 'secondary', w: bw - 8, h: b.primary ? 60 : 52, size: b.primary ? 20 : 17, ready: b.enabled });
+          btn.root.setPosition(bx + bw / 2, hh - 58);
           bx += bw + gap;
-          if (!b.enabled) btn.setEnabled(false);
-          c.add(btn.container);
+          c.add(btn.root);
         });
       }
       const look = { lift: 0, zoom: 1 };

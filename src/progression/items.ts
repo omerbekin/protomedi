@@ -67,11 +67,30 @@ export interface ItemsData {
   weaponFamilies: WeaponFamilyDef[];
   bag: number;
   items: ItemDef[];
+  loot: LootConfig;
   bases: unknown[];
   affixes: unknown[];
   uniques: unknown[];
   sets: unknown[];
   traits: Record<string, unknown>;
+}
+
+export type LootKind = 'battle' | 'elite' | 'boss' | 'treasure';
+
+/** Loot ayarları (items.json > loot; items.md 3.1-3.4). */
+export interface LootConfig {
+  perPartyMember: Record<'battle' | 'elite' | 'boss', number>;
+  minItems: Record<LootKind, number>;
+  minRarity: Partial<Record<LootKind, RarityId>>;
+  treasureBase: number;
+  treasurePerMember: number;
+  eliteShift: number;
+  rarityByChapter: Record<string, number[]>;
+  pity: { rareAfter: number };
+  smartSlotChance: number;
+  usableWeaponChance: number;
+  repeat: Array<{ items: number; gold: number; maxRarity: RarityId }>;
+  gold: Record<LootKind, number>;
 }
 
 export const ITEMS: ItemsData = itemsJson as unknown as ItemsData;

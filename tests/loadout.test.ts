@@ -27,7 +27,12 @@ import { fightPlan } from '../src/sim/campaign';
 const f = content.formulas;
 
 /** Valdoria'da savaşlı bir düğüme ışınlanmış sefer (kadro seed'li otomatik). */
-const atBattle = (node = '5A', seed = 42): CampaignState => debugTeleport(pickHero(newCampaign({ mode: 'normal', seed }), 'archer'), node);
+const atBattle = (node = '5A', seed = 42): CampaignState => {
+  // Işınlanırken kazanılan savaşların loot'u torbayı doldurur: bu testler boş torbayla başlar
+  const s = debugTeleport(pickHero(newCampaign({ mode: 'normal', seed }), 'archer'), node);
+  const { pendingLoot: _p, ...rest } = s;
+  return { ...rest, inventory: [], nextItemId: 1 };
+};
 
 describe('güç katmanı: boş yükleme', () => {
   it('hiçbir şey takılı değilse modifiers yok', () => {
@@ -112,7 +117,7 @@ describe('sefer ekipmanı: torba, kuşanma, altın', () => {
     if (mage) expect(() => equipItem(r.state, mage.id, r.item.uid)).toThrow(/cannot use axes/);
     if (warriorish) expect(equipItem(r.state, warriorish.id, r.item.uid).roster.find((x) => x.id === warriorish.id)!.equipment.weapon?.id).toBe('woodcutters_axe');
     expect(() => addItem(s, 'nope')).toThrow();
-    expect(addGold(addGold(s, 50), -80).gold).toBe(0);
+    expect(addGold(addGold({ ...s, gold: 0 }, 50), -80).gold).toBe(0);
   });
 
   it('torba sınırı 30', () => {
@@ -131,16 +136,18 @@ describe('sefer ekipmanı: torba, kuşanma, altın', () => {
       s = st.kind === 'move' ? moveTo(s, st.options[0]!) : autoResolve(s, st);
     }
     expect(nextStep(s).kind).toBe('farewell');
+    const axeUid = r.item.uid;
     s = farewell(s);
     expect(s.roster.some((h) => h.id === hero.id)).toBe(false);
-    expect(s.inventory.map((i) => i.id)).toEqual(['woodcutters_axe']);
-    expect(s.pendingHandover).toEqual({ node: s.at, from: [{ heroId: hero.id, class: 'warrior' }], items: [s.inventory[0]!.uid] });
+    expect(s.inventory.map((i) => i.uid)).toContain(axeUid); // tutorial savaşlarının loot'u da torbada
+    expect(s.pendingHandover!.items).toContain(axeUid);
+    expect(s.pendingHandover!.from[0]).toEqual({ heroId: hero.id, class: 'warrior' });
     expect(acknowledgeHandover(s).pendingHandover).toBeUndefined();
     expect(acknowledgeHandover(s).inventory).toEqual(s.inventory);
     s = formCompany(s, ['warrior', 'mage', 'archer']);
     const w = s.roster.find((h) => h.class === 'warrior')!;
     expect(w.level).toBe(1);
-    s = equipItem(s, w.id, s.inventory[0]!.uid);
-    expect(s.inventory).toEqual([]);
+    s = equipItem(s, w.id, axeUid);
+    expect(s.inventory.map((i) => i.uid)).not.toContain(axeUid);
   });
 });

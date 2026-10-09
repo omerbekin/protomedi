@@ -1,6 +1,6 @@
 # Item (eşya) sistemi: tasarım belgesi (TASLAK / ÖNERİ)
 
-> **Durum: KARARLAR ALINDI (bölüm 7, Ömer 2026-10-09); aşama 0 (ortak temel) uygulandı.** Kodda olan: `data/items.json` şeması + 3 örnek item (`tests/items-data.test.ts`), güç toplama katmanı `src/progression/loadout.ts` (item -> `UnitSetup.modifiers`), primary uyarısı `src/progression/primary.ts` (`primaryCheck` / `primaryBonusLost`), kahraman kaydı (level/XP/6 yuva/torba/altın, kayıt v3), güç bütçesi `data/campaign/power-budget.json`. İçerik (item listesi, loot, ekranlar) aşama 1'de. Tüm sayılar **PROVİZYON**dur: son ayar `balance-tester`'ın `npm run sim:campaign` ölçümüyle yapılır.
+> **Durum: AŞAMA 1 (Item MVP) UYGULANDI (madde 280).** Kodda: 51 Valdoria item'i + loot ayarları (`data/items.json`), saf loot `src/progression/loot.ts`, güç katmanı `loadout.ts` (tüm statlar motorun toplamsal eklerine), Equip best `equip.ts`, primary uyarısı `primary.ts`, seferde loot `src/campaign/loot.ts`, Gear ekranı `src/ui/gear-screen.ts`, Spoils / Ashford teslim kartı, düşman telafisi açık (`power-budget.json`). Bu belgedeki oranlardan sapmalar madde 280'de: loot miktarı (savaş 0,5 x takım) ve ölçülen telafi (+%8). Tüccar, affix üreteci, set/Legendary/trait sonraki aşamalarda. Sayılar PROVİZYON (balance-tester).
 >
 > Hazırlayan: content-designer (Opus). Kaynaklar: `docs/design/future-ideas.md` (Item satırları), `docs/design/campaign/campaign.md` (v5), `docs/balance.md` (bantlar + sefer dengesi), `docs/design/combat.md` (Savaş kurulum seçenekleri, hasar ölçekleme kuralı), `data/classes/*.json`, `data/formulas.json`, `src/engine/stats.ts`.
 >
@@ -300,7 +300,7 @@ IP kontrolü: `slotWeight x B(ilvl) x rarityMult` (±%10). Stat IP'leri 1.5 tabl
 ### 3.5 Envanter
 
 - **Ortak torba (Bag): 30 yuva** (takılı item'ler sayılmaz). Takım genişse de 30: "ne taşıyacağım" kararı küçük bir gerilim.
-- Torba doluyken loot ekranı item'i otomatik almaz: "Bag full: sell or discard" (tek dokunuşla en düşük IP'liyi sat önerisi). Item kaybolmaz; karar verilene kadar loot ekranından çıkılmaz.
+- **Torba dolu (Ömer, madde 280):** sığmayan loot altına çevrilmez; Spoils kartında soluk "Bag full: N items left behind" listesi durur. Kart açıkken oyuncu torbadan item atıp (Rare ve üstü onaylı) "Take" ile alabilir; "Continue (leave N)" ile kapatınca geride kalanlar kaybolur. Gear ekranında her zaman Discard var (Rare+ "Confirm discard").
 - "Junk" işareti + tüccarda **Sell all junk** (Common'ları ve takımdan kimsenin kullanamadığı silahları işaretler).
 - Kadrodan ayrılan kahramanın (tutorial vedası, ileride ölüm/değişim) item'leri torbaya düşer; torba taşarsa geçici "Overflow" listesinde kalır.
 

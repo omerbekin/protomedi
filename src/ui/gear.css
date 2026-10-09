@@ -1,0 +1,488 @@
+/* Sefer Gear ekranı + Spoils / teslim kartları (src/ui/gear-screen.ts). Görünüm: tasarım kiti (src/ui/elegant.css; CLAUDE.md > Tasarım kiti):
+   Cinzel büyük harf başlık/düğme, EB Garamond italik metin, ince altın çizgiler, kor elmaslar, köşesiz kutular.
+   Ölçüler oyun birimiyle (--gu); dokunma hedefleri en az 44px. Burada yalnızca görünüm var; davranış gear-screen.ts içinde. */
+.gr-overlay {
+  --u: var(--gu, 1px);
+  --g-text: #d9c8a2;
+  --g-dim: #a8977a;
+  --g-gold: #f3d999;
+  --g-edge: rgba(217, 178, 106, 0.42);
+  --g-line: rgba(217, 178, 106, 0.16);
+  --g-line2: rgba(217, 178, 106, 0.3);
+  --g-ember: #e0702a;
+  --g-ember2: #ffb35a;
+  --g-disp: Cinzel, Georgia, 'Palatino Linotype', serif;
+  --g-body: 'EB Garamond', Georgia, 'Palatino Linotype', serif;
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* üstte sağ üst simgelere (Menu, tam ekran, wiki; z-index 30) yer: panel onların altında kalmasın */
+  padding: max(44px, calc(84 * var(--u))) max(8px, calc(20 * var(--u))) max(8px, calc(20 * var(--u)));
+  background: rgba(5, 3, 2, 0.72);
+  color: var(--g-text);
+  font-family: var(--g-body);
+}
+
+.gr-panel {
+  display: flex;
+  flex-direction: column;
+  gap: calc(14 * var(--u));
+  width: min(100%, calc(1720 * var(--u)));
+  max-height: 100%;
+  padding: calc(26 * var(--u)) calc(32 * var(--u));
+  background: linear-gradient(180deg, rgba(30, 22, 14, 0.97), rgba(12, 9, 6, 0.97));
+  border: 1px solid var(--g-edge);
+  border-radius: 0;
+  box-shadow: 0 0 0 3px rgba(8, 6, 4, 0.7), 0 calc(18 * var(--u)) calc(40 * var(--u)) rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.gr-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--g-line);
+  padding-bottom: calc(10 * var(--u));
+}
+
+.gr-title {
+  font: 600 max(22px, calc(42 * var(--u))) var(--g-disp);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #fbe7b0 0%, #e6c27a 55%, #b88a42 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.9));
+}
+
+.gr-gold {
+  font: 600 max(15px, calc(24 * var(--u))) var(--g-disp);
+  color: var(--g-gold);
+  letter-spacing: 0.06em;
+  text-shadow: 0 2px 4px rgba(12, 8, 5, 0.95);
+}
+
+.gr-hint {
+  font: italic max(14px, calc(23 * var(--u))) var(--g-body);
+  color: var(--g-gold);
+  padding: calc(6 * var(--u)) 0;
+  text-shadow: 0 2px 4px rgba(12, 8, 5, 0.95);
+}
+
+.gr-body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.5fr) minmax(0, 1.6fr);
+  gap: calc(24 * var(--u));
+  min-height: 0;
+  overflow: auto;
+}
+
+.gr-sec {
+  font: 600 max(12px, calc(17 * var(--u))) var(--g-disp);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(217, 178, 106, 0.85);
+  padding-bottom: calc(6 * var(--u));
+  border-bottom: 1px solid var(--g-line);
+  margin-bottom: calc(10 * var(--u));
+}
+
+.gr-overlay button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Kahramanlar */
+.gr-heroes {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8 * var(--u));
+}
+
+.gr-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--u));
+  min-height: 44px;
+  padding: calc(8 * var(--u));
+  background: rgba(8, 6, 4, 0.45);
+  border: 1px solid var(--g-line2);
+  border-radius: 0;
+  text-align: left;
+  transition: border-color 0.18s, background 0.2s, transform 0.18s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.gr-hero.on {
+  border-color: var(--g-gold);
+  background: linear-gradient(90deg, rgba(224, 112, 42, 0.14), rgba(8, 6, 4, 0.45) 80%);
+}
+
+.gr-face {
+  flex: none;
+  width: max(36px, calc(68 * var(--u)));
+  height: max(36px, calc(68 * var(--u)));
+  background: #120c08 center / cover no-repeat;
+  border: 1px solid rgba(217, 178, 106, 0.55);
+  image-rendering: pixelated;
+}
+
+.gr-hero-name {
+  font: 600 max(13px, calc(21 * var(--u))) var(--g-disp);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.gr-hero-sub {
+  font: italic max(12px, calc(18 * var(--u))) var(--g-body);
+  color: var(--g-dim);
+}
+
+/* Yuvalar */
+.gr-slots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(8 * var(--u));
+}
+
+.gr-slot {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  min-height: 44px;
+  padding: calc(8 * var(--u)) calc(10 * var(--u));
+  background: rgba(8, 6, 4, 0.55);
+  border: 1px solid color-mix(in srgb, var(--rc) 60%, transparent);
+  border-radius: 0;
+  text-align: left;
+  transition: border-color 0.18s, transform 0.18s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.gr-slot.empty {
+  border-color: var(--g-line2);
+  opacity: 0.75;
+}
+
+.gr-slot.on,
+.gr-item.on {
+  border-color: var(--g-gold);
+  box-shadow: inset 0 0 0 1px var(--g-gold), 0 0 calc(14 * var(--u)) rgba(240, 140, 40, 0.35);
+}
+
+.gr-slot:hover,
+.gr-item:hover,
+.gr-hero:hover {
+  border-color: var(--g-gold);
+  transform: translateY(-2px);
+}
+
+.gr-slot-text {
+  min-width: 0;
+}
+
+.gr-slot-name {
+  font: 600 max(12px, calc(18 * var(--u))) var(--g-disp);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gr-slot-sub {
+  font: italic max(11px, calc(17 * var(--u))) var(--g-body);
+  color: var(--g-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gr-svg {
+  flex: none;
+  width: calc(max(22px, 40 * var(--u)) * var(--sz, 1));
+  height: calc(max(22px, 40 * var(--u)) * var(--sz, 1));
+  filter: drop-shadow(0 1px 1px #000);
+}
+
+/* Statlar */
+.gr-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: calc(4 * var(--u)) calc(12 * var(--u));
+  margin-top: calc(14 * var(--u));
+  padding-top: calc(12 * var(--u));
+  border-top: 1px solid var(--g-line);
+}
+
+.gr-stat {
+  display: flex;
+  align-items: baseline;
+  gap: calc(6 * var(--u));
+  font-size: max(12px, calc(20 * var(--u)));
+}
+
+.gr-stat-k {
+  color: var(--g-dim);
+  font-family: var(--g-disp);
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+
+.gr-stat-v {
+  font: 600 1em var(--g-disp);
+}
+
+.gr-stat-d.up {
+  color: #8fd36a;
+}
+
+.gr-stat-d.down {
+  color: #e0785e;
+}
+
+/* Torba */
+.gr-bag-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.gr-chip {
+  min-height: 36px;
+  padding: 0 calc(12 * var(--u));
+  background: rgba(8, 6, 4, 0.55);
+  border: 1px solid var(--g-line2);
+  border-radius: 0;
+  font: 600 max(11px, calc(15 * var(--u))) var(--g-disp) !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: border-color 0.18s, color 0.18s;
+}
+
+.gr-chip.on {
+  border-color: var(--g-gold);
+  color: var(--g-gold);
+}
+
+.gr-bag {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(max(44px, calc(62 * var(--u))), 1fr));
+  gap: calc(5 * var(--u));
+}
+
+.gr-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-height: 44px;
+  background: radial-gradient(circle, rgba(217, 178, 106, 0.06), rgba(8, 6, 4, 0.6));
+  border: 1px solid color-mix(in srgb, var(--rc, #5b4a33) 65%, transparent);
+  border-radius: 0;
+  padding: 0;
+  transition: border-color 0.18s, transform 0.18s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.gr-item .gr-svg {
+  width: 72%;
+  height: 72%;
+}
+
+.gr-item.empty {
+  border: 1px solid var(--g-line);
+  background: rgba(8, 6, 4, 0.3);
+}
+
+.gr-item.no {
+  opacity: 0.45;
+}
+
+/* Seçilen item kartı */
+.gr-card {
+  margin-top: calc(12 * var(--u));
+  padding: calc(14 * var(--u)) calc(16 * var(--u));
+  min-height: calc(160 * var(--u));
+  background: rgba(8, 6, 4, 0.5);
+  border: 1px solid var(--g-line2);
+  border-radius: 0;
+}
+
+.gr-card-name {
+  font: 600 max(15px, calc(26 * var(--u))) var(--g-disp);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 4px rgba(12, 8, 5, 0.95);
+}
+
+.gr-card-sub,
+.gr-card-value,
+.gr-card-note,
+.gr-card-empty {
+  font: italic max(12px, calc(19 * var(--u))) var(--g-body);
+  color: var(--g-dim);
+}
+
+.gr-card-lines {
+  margin: calc(8 * var(--u)) 0;
+  font-size: max(13px, calc(22 * var(--u)));
+  color: #9fd98a;
+}
+
+.gr-card-warn {
+  margin-top: calc(8 * var(--u));
+  font-size: max(12px, calc(20 * var(--u)));
+  color: #f0a060;
+}
+
+.gr-card-actions {
+  display: flex;
+  gap: calc(10 * var(--u));
+  margin-top: calc(10 * var(--u));
+}
+
+/* Düğmeler */
+.gr-foot {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: calc(20 * var(--u));
+  border-top: 1px solid var(--g-line);
+  padding: calc(12 * var(--u)) calc(10 * var(--u)) 0;
+}
+
+.gr-btn {
+  position: relative;
+  min-height: 44px;
+  padding: 0 calc(26 * var(--u));
+  background: linear-gradient(180deg, rgba(30, 22, 14, 0.82), rgba(12, 9, 6, 0.86));
+  border: 1px solid var(--g-line2);
+  border-radius: 0;
+  box-shadow: 0 0 0 3px rgba(12, 8, 5, 0.6);
+  font: 600 max(13px, calc(19 * var(--u))) var(--g-disp) !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--g-text);
+  text-shadow: 0 2px 4px rgba(12, 8, 5, 0.95);
+  transition: border-color 0.18s, color 0.18s, text-shadow 0.18s, transform 0.25s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.gr-btn:hover {
+  border-color: var(--g-gold);
+  color: var(--g-gold);
+  text-shadow: 0 0 14px rgba(240, 140, 40, 0.85);
+  transform: translateY(-2px);
+}
+
+/* Kit düğmesi: iki yanda küçük elmas (primary'de kor) */
+.gr-btn::before,
+.gr-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  transform: rotate(45deg);
+  background: #1a130c;
+  box-shadow: 0 0 0 1px rgba(217, 178, 106, 0.45);
+}
+
+.gr-btn::before {
+  left: -5px;
+}
+
+.gr-btn::after {
+  right: -5px;
+}
+
+.gr-btn.primary::before,
+.gr-btn.primary::after {
+  background: var(--g-ember);
+  box-shadow: 0 0 0 1px var(--g-ember2), 0 0 10px rgba(240, 140, 40, 0.7);
+}
+
+.gr-btn.primary {
+  border: 2px solid #d9b26a;
+  color: var(--g-gold);
+  background: linear-gradient(180deg, rgba(38, 27, 17, 0.9), rgba(12, 9, 6, 0.94));
+  box-shadow: 0 0 0 3px rgba(12, 8, 5, 0.8), 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* Küçük kartlar (Spoils / teslim) */
+.gr-mini {
+  width: min(100%, calc(820 * var(--u)));
+}
+
+.gr-mini-sub {
+  font: italic max(14px, calc(23 * var(--u))) var(--g-body);
+  color: var(--g-dim);
+}
+
+.gr-mini-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8 * var(--u));
+  max-height: calc(520 * var(--u));
+  overflow: auto;
+}
+
+.gr-mini-row {
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--u));
+  padding: calc(6 * var(--u)) calc(14 * var(--u)) calc(6 * var(--u)) calc(10 * var(--u));
+  background: rgba(8, 6, 4, 0.45);
+  border-bottom: 1px solid var(--g-line);
+  border-radius: 0;
+}
+
+.gr-mini-name {
+  font: 600 max(14px, calc(22 * var(--u))) var(--g-disp);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.gr-mini-lines {
+  font: italic max(12px, calc(18 * var(--u))) var(--g-body);
+  color: var(--g-dim);
+}
+
+.gr-mini-row.gone > :not(.gr-btn) {
+  opacity: 0.45;
+}
+
+.gr-mini-row .gr-btn {
+  margin-left: auto;
+}
+
+.gr-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.gr-btn.danger {
+  border-color: rgba(232, 128, 106, 0.6);
+  color: #e8806a;
+}
+
+.gr-mini-extra {
+  font: 600 max(13px, calc(21 * var(--u))) var(--g-disp);
+  letter-spacing: 0.06em;
+  color: var(--g-gold);
+}
+
+/* Kısa ekran (yatay telefon): sütunlar sıkışır, torba 5'li */
+html.short .gr-body {
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) minmax(0, 1.6fr);
+  gap: 10px;
+}
+
+html.short .gr-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}

@@ -13,8 +13,10 @@ export interface ChapterBudget {
   /** Bölümün haritası (henüz yapılmadıysa null). */
   map: string | null;
   ilvl: [number, number];
-  /** Bölüm sonunda sistem başına beklenen güç eki (0,15 = +%15). */
+  /** Bölüm sonunda sistem başına beklenen güç eki: TASARIM HEDEFİ (0,15 = +%15). */
   end: Record<PowerSystem, number>;
+  /** Ölçülen bölüm sonu gücü (sim): varsa düşman telafisi bunu kullanır (item'lerin gerçekten verdiği güç). */
+  measured?: Partial<Record<PowerSystem, number>>;
 }
 
 export interface PowerBudget {
@@ -42,17 +44,20 @@ export function nodeDepth(mapId: string, nodeId: string): number {
   return total > 0 ? Math.min(1, d / total) : 0;
 }
 
+/** Bölüm sonunda beklenen güç: ölçülen varsa o, yoksa tasarım hedefi. */
+const chapterEnd = (ch: ChapterBudget, k: PowerSystem): number => ch.measured?.[k] ?? ch.end[k];
+
 /** Bölümün başlangıç gücü = önceki bölümün sonu (bölüm 1: 0). */
 function chapterStart(ch: ChapterBudget, budget: PowerBudget): Record<PowerSystem, number> {
   const prev = budget.chapters.find((c) => c.chapter === ch.chapter - 1);
-  return Object.fromEntries(budget.systems.map((k) => [k, prev?.end[k] ?? 0])) as Record<PowerSystem, number>;
+  return Object.fromEntries(budget.systems.map((k) => [k, prev ? chapterEnd(prev, k) : 0])) as Record<PowerSystem, number>;
 }
 
 /** Bir noktada (bölüm + derinlik 0-1) sistem başına beklenen oyuncu gücü eki. */
 export function expectedPowerAt(ch: ChapterBudget, depth: number, budget: PowerBudget = POWER_BUDGET): Record<PowerSystem, number> {
   const start = chapterStart(ch, budget);
   const t = Math.max(0, Math.min(1, depth));
-  return Object.fromEntries(budget.systems.map((k) => [k, start[k] + (ch.end[k] - start[k]) * t])) as Record<PowerSystem, number>;
+  return Object.fromEntries(budget.systems.map((k) => [k, start[k] + (chapterEnd(ch, k) - start[k]) * t])) as Record<PowerSystem, number>;
 }
 
 /** Düşman ölçek çarpanı: 1 + compensation x (açık sistemlerin beklenen gücü). `systems` verilmezse veride açık olanlar. */

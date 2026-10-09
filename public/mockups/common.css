@@ -1,0 +1,26 @@
+/* Taslak sayfalarının ortak zemini (oyun kodu DEĞİL): fontlar, 1080 mantıksal yükseklikli sahne (genişlik 1920..2580 esner), üst sekmeler. */
+@font-face { font-family: 'Cinzel'; font-weight: 400 900; font-display: swap; src: url('assets/fonts/Cinzel-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-weight: 400 800; font-display: swap; src: url('assets/fonts/EBGaramond-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400 800; font-display: swap; src: url('assets/fonts/EBGaramond-italic-latin.woff2') format('woff2'); }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #050403; overflow: hidden; color: var(--el-txt); -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; }
+img { -webkit-user-drag: none; user-select: none; }
+#tabs { position: fixed; top: 0; left: 0; right: 0; height: 40px; display: flex; align-items: center; justify-content: center; gap: 4px; background: #0a0806;
+  border-bottom: 1px solid rgba(217,178,106,.18); z-index: 50; font: 600 13px Cinzel, Georgia, serif; letter-spacing: .08em; }
+#tabs .lbl { color: var(--el-dim); margin-right: 14px; text-transform: uppercase; }
+#tabs button { all: unset; cursor: pointer; padding: 0 14px; height: 40px; display: inline-flex; align-items: center; gap: 8px; color: var(--el-muted); text-transform: uppercase; }
+#tabs button b { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--el-line2); color: var(--el-txt); }
+#tabs button:hover, #tabs button.on { color: var(--el-on); }
+#tabs button.on b { border-color: var(--el-ember); background: var(--el-ember); color: #1a0f06; }
+#tabs a { position: absolute; right: 14px; color: var(--el-dim); font: italic 13px 'EB Garamond', Georgia, serif; letter-spacing: 0; text-decoration: none; }
+@media (max-width: 900px) { #tabs .lbl, #tabs a { display: none; } #tabs button { padding: 0 6px; font-size: 11px; } }
+#stage { position: absolute; left: 0; top: 0; height: 1080px; transform-origin: 0 0; overflow: hidden; background: #0d0a07; font-family: var(--el-body); font-size: 22px; user-select: none; }
+.abs { position: absolute; }
+.fu { animation: mk-fu .7s var(--el-ease) both; animation-delay: var(--d, 0s); }
+.fi { animation: mk-fi .9s ease both; animation-delay: var(--d, 0s); }
+@keyframes mk-fu { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@keyframes mk-fi { from { opacity: 0; } to { opacity: 1; } }
+.px { image-rendering: pixelated; }
+.cz { font-family: var(--el-display); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.it { font-style: italic; }

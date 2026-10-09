@@ -3,6 +3,7 @@ import { CONFIG, getMap } from './data';
 import { finalNode, forwardDistances, incoming, node, outgoing } from './graph';
 import { rngFor, shuffle } from './seed';
 import { emptyEquipment, SLOT_IDS } from '../progression/items';
+import { emptyLootState, grantLoot } from './loot';
 import type { BattleOutcome, CampaignMap, CampaignMode, Difficulty, CampaignRules, CampaignState, Hero, MapNode, NextStep, StepKind } from './types';
 
 /**
@@ -36,6 +37,7 @@ export function newCampaign(o: { mode: CampaignMode; seed: number; mapId?: strin
     inventory: [],
     gold: 0,
     nextItemId: 1,
+    lootState: emptyLootState(),
   };
 }
 
@@ -270,6 +272,8 @@ export function formCompany(s: CampaignState, picks: string[], leaderIndex = 0):
 export function completeSimple(s: CampaignState, kind: 'event' | 'treasure' | 'town'): CampaignState {
   expectStep(s, kind);
   const t = clone(s);
+  // Hazine sandığı (saf hazine ya da korunan hazine): loot torbaya (items.md 3.1)
+  if (kind === 'treasure') grantLoot(t, t.at, 'treasure', activeHeroes(t));
   complete(t, kind);
   return t;
 }
@@ -305,6 +309,10 @@ export function applyBattle(s: CampaignState, outcome: BattleOutcome, rules: Cam
     h.alive = true;
   }
   t.stats.victories++;
+  // Zafer loot'u (items.md 3.1; zorluktan bağımsız, karar 6). Savaşa giren takım = bu sonuçtaki kahramanlar
+  const fought = outcome.units.map((u) => heroById(t, u.heroId)).filter((h): h is Hero => !!h);
+  const type = node(mapOf(t), t.at).type;
+  grantLoot(t, t.at, type === 'boss' ? 'boss' : type === 'elite' ? 'elite' : 'battle', fought.length ? fought : activeHeroes(t));
   complete(t, 'battle');
   return t;
 }

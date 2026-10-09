@@ -3,7 +3,8 @@
  * kayıt al / son kayda dön / tüm kayıtları sil, Normal-Ironman değiştir. Sahne sınıflarını içe aktarmaz (Node testinde Phaser yok): anahtarla açar.
  */
 import type Phaser from 'phaser';
-import { debugTeleport, debugWinNode, getMap, latestSave, newCampaign, nextStep, stopNumber, wipeSaves, type CampaignState } from '../campaign';
+import { addGold, addItem, bagHasRoom, debugTeleport, debugWinNode, getMap, latestSave, newCampaign, nextStep, nodeIlvl, rngFor, stopNumber, wipeSaves, type CampaignState } from '../campaign';
+import { BAG_SIZE, ITEMS, RARITY_IDS } from '../progression';
 import { current, loadEntry, startNewCampaign, loadLastSave, save, session, setState, storage, MAP_SCENE } from '../game/campaign-session';
 import { debugButton, debugHeading, type DebugMenu } from './debug-menu';
 import { menuStyle } from './menu-style';
@@ -110,6 +111,78 @@ export function registerCampaignDebug(game: Phaser.Game, debug: DebugMenu): void
       setState(debugTeleport(ensureState(), '4'));
       reload();
     },
+  });
+  // --- Item'ler (madde 280): Gear ekranı, item / altın ver, torbayı doldur
+  const giveItem = (rarity?: string): void => {
+    const s = ensureState();
+    if (!bagHasRoom(s)) return;
+    const cap = Math.max(nodeIlvl(s.mapId, s.at), 2);
+    const pool = ITEMS.items.filter((d) => (rarity ? d.rarity === rarity : true) && d.ilvl <= (rarity ? 99 : cap));
+    if (!pool.length) return;
+    const rng = rngFor(s.seed, 'debug-item', s.nextItemId);
+    setState(addItem(s, pool[rng.int(0, pool.length - 1)]!.id).state);
+  };
+  const openGear = (): void => {
+    const scene = game.scene.isActive(MAP_SCENE) ? (game.scene.getScene(MAP_SCENE) as unknown as { openGear?: () => void }) : undefined;
+    if (scene?.openGear) scene.openGear();
+    else reload();
+  };
+  debug.register({
+    id: 'campaign.gear',
+    tab: CAMPAIGN_TAB,
+    section: 'Items',
+    icon: 'helm',
+    label: 'Open Gear',
+    hint: 'Open the Gear screen (equip items from the bag) for the current campaign; opens the map first if needed',
+    run: openGear,
+  });
+  debug.register({
+    id: 'campaign.give-item',
+    tab: CAMPAIGN_TAB,
+    section: 'Items',
+    icon: 'dice',
+    label: 'Give item',
+    hint: "Put a random item of this stop's item level into the bag",
+    run: () => giveItem(),
+  });
+  for (const r of RARITY_IDS.filter((x) => ITEMS.items.some((d) => d.rarity === x)))
+    debug.register({
+      id: `campaign.give-${r}`,
+      tab: CAMPAIGN_TAB,
+      section: 'Items',
+      icon: r === 'epic' ? 'burst' : r === 'rare' ? 'rune' : 'shield',
+      label: `Give ${r}`,
+      hint: `Put a random ${r} item (any item level) into the bag`,
+      run: () => giveItem(r),
+    });
+  debug.register({
+    id: 'campaign.give-gold',
+    tab: CAMPAIGN_TAB,
+    section: 'Items',
+    icon: 'clover',
+    label: 'Give 100 gold',
+    hint: 'Add 100 gold to the campaign purse',
+    run: () => setState(addGold(ensureState(), 100)),
+  });
+  debug.register({
+    id: 'campaign.fill-bag',
+    tab: CAMPAIGN_TAB,
+    section: 'Items',
+    icon: 'team',
+    label: 'Fill the bag',
+    hint: `Fill the bag up to ${BAG_SIZE} items with random gear (to test a full bag)`,
+    run: () => {
+      for (let i = 0; i < BAG_SIZE && bagHasRoom(ensureState()); i++) giveItem();
+    },
+  });
+  debug.register({
+    id: 'campaign.clear-bag',
+    tab: CAMPAIGN_TAB,
+    section: 'Items',
+    icon: 'flame',
+    label: 'Empty the bag',
+    hint: 'Remove every item in the bag (equipped items stay)',
+    run: () => setState({ ...ensureState(), inventory: [] }),
   });
   debug.register({
     id: 'campaign.save',

@@ -3,11 +3,12 @@
   "_model": "Oyuncunun BEKLENEN gücü (class temeline göre ek, 0,15 = +%15) sistem başına bölüm sonunda verilir; bölümün başı = önceki bölümün sonu (bölüm 1 başı = 0). Bölüm içinde düğümün derinliğine (başlangıçtan en kısa yol / finale en kısa yol) göre doğrusal artar. Düşman ölçeği = 1 + compensation x (yalnızca activeSystems'in beklenen gücü toplamı); karşılaşmanın hpMult ve powerMult'u bununla çarpılır (zorluk ekiyle aynı birleşme kuralı). Ölçek bölüm/düğüm seviyesine bağlıdır, oyuncunun gerçek ekipmanına DEĞİL (iyi loot / farm gerçekten kolaylaştırır).",
   "compensation": 0.8,
   "systems": ["item", "level", "tree"],
-  "_activeSystems": "Oyunda AÇIK olan ilerleme sistemleri: yalnızca bunların beklenen gücü düşmana yansır. Aşama 0'da hiçbiri açık değil => ölçek her düğümde 1 (Valdoria bugünküyle birebir aynı). Item MVP (Aşama 1) loot açılınca 'item' eklenir; level (Aşama 2) 'level', ağaç (Aşama 3) 'tree'.",
-  "activeSystems": [],
+  "_activeSystems": "Oyunda AÇIK olan ilerleme sistemleri: yalnızca bunların beklenen gücü düşmana yansır. Aşama 1'den (item MVP, madde 280) beri 'item' AÇIK: Valdoria'da düşmanlar düğüm derinliğiyle x1,00'dan x1,12'ye (bölüm sonu) büyür; level (Aşama 2) 'level', ağaç (Aşama 3) 'tree'.",
+  "activeSystems": ["item"],
   "enemyScaleFields": ["hpMult", "powerMult"],
+  "_measured": "Telafi, item'lerin GERÇEKTEN verdiği beklenen güce göre (Ömer, madde 278): bölümde 'measured' varsa beklenen güç olarak o kullanılır, yoksa tasarım hedefi 'end'. Valdoria (bugünkü 12 duraklık kısa harita) ölçümü: sim:campaign --gear=best, 48 sefer, final öncesi ortalama Gear Score ~8 => +%8 (hedef +%15'e harita sıklaşınca (aşama 5a) loot sayısıyla yaklaşılır). Kaynak: madde 280.",
   "chapters": [
-    { "chapter": 1, "name": "Valdoria", "map": "valdoria", "ilvl": [1, 10], "end": { "item": 0.15, "level": 0.1, "tree": 0.05 } },
+    { "chapter": 1, "name": "Valdoria", "map": "valdoria", "ilvl": [1, 10], "end": { "item": 0.15, "level": 0.1, "tree": 0.05 }, "measured": { "item": 0.08 } },
     { "chapter": 2, "name": "The Ashlands", "map": null, "ilvl": [11, 20], "end": { "item": 0.3, "level": 0.2, "tree": 0.15 } },
     { "chapter": 3, "name": "The Ember Throne", "map": null, "ilvl": [21, 30], "end": { "item": 0.45, "level": 0.3, "tree": 0.25 } }
   ],

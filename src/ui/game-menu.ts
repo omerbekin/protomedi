@@ -1,6 +1,7 @@
 import { MENU_LABELS, menuItems, type FlowContext, type MenuItemId } from '../game/session-flow';
 import { isSettingsOpen, setSettingsOpen } from './settings';
 import { lockInput, unlockInput } from './input-lock';
+import './elegant.css';
 
 /**
  * Oyun içi Menu (Ömer 2026-10-08): sağ üstte "Menu" düğmesi (tam ekran ve wiki simgelerinin solunda, aynı sıra) + Esc.
@@ -38,6 +39,8 @@ export interface GameMenuHooks {
   mainMenu: () => void;
   /** Sefer savaşından haritaya geri çekil (savaş sayılmaz). */
   retreat: () => void;
+  /** Geri çekilme düğmesinin yazısı (endless: 'Retreat to Camp'); yoksa MENU_LABELS.retreat. */
+  retreatLabel?: () => string | undefined;
   /** Menü (ya da üstündeki ayarlar ekranı) açıldı / kapandı: savaşı durdur / sürdür. */
   onOpen?: () => void;
   onClose?: () => void;
@@ -70,12 +73,12 @@ export class GameMenu {
     this.overlay.hidden = true;
     this.overlay.setAttribute('role', 'dialog');
     this.overlay.setAttribute('aria-label', 'Menu');
-    const box = el('div', 'gm-box');
-    box.append(el('div', 'gm-title', 'Menu'));
+    const box = el('div', 'gm-box el-panel corners');
+    box.append(el('div', 'gm-title el-title', 'Menu'));
     this.list = el('div', 'gm-list');
     this.confirmBox = el('div', 'gm-confirm');
     this.confirmBox.hidden = true;
-    this.confirmText = el('div', 'gm-confirm-text');
+    this.confirmText = el('div', 'gm-confirm-text el-status');
     const answers = el('div', 'gm-confirm-row');
     const yes = this.button('Yes', true);
     const no = this.button('No');
@@ -116,7 +119,8 @@ export class GameMenu {
   }
 
   private button(label: string, primary = false): HTMLButtonElement {
-    const b = el('button', `gm-btn${primary ? ' primary' : ''}`, label);
+    // Tasarım kiti (src/ui/elegant.css): Resume / Yes = primary, diğerleri secondary
+    const b = el('button', `gm-btn el-btn${primary ? ' primary' : ''}`, label);
     b.type = 'button';
     return b;
   }
@@ -161,7 +165,7 @@ export class GameMenu {
   private build(spec: NonNullable<ReturnType<typeof menuItems>>): void {
     this.list.replaceChildren();
     for (const id of spec.items) {
-      const b = this.button(MENU_LABELS[id], id === 'resume');
+      const b = this.button((id === 'retreat' ? this.hooks.retreatLabel?.() : undefined) ?? MENU_LABELS[id], id === 'resume');
       b.dataset.item = id;
       b.addEventListener('click', () => this.pick(id, spec.confirm[id]));
       this.list.append(b);

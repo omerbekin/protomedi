@@ -281,6 +281,28 @@ export interface UnitModifiers {
    * turu bitirir. Yalnızca turns modunda.
    */
   actionsPerTurn?: number;
+  /*
+   * TOPLAMSAL ekler (sefer item'leri, madde 280; docs/design/progression/items.md 1.5). Türetmeden SONRA eklenir: maks can x hpMult + hpAdd (en az 1),
+   * diğerleri türetilmiş değerin üstüne. Kesirli değerler motorun birimleriyle (kritik/isabet/kaçınma 0-1 oran). Quick Battle / multiplayer bunları vermez.
+   */
+  /** Maks cana düz ek (hpMult'tan sonra). */
+  hpAdd?: number;
+  /** Maks MP'ye düz ek. */
+  mpAdd?: number;
+  /** Hıza (spd) düz ek (0,5 adımlı olabilir; sıra hesabı yuvarlar). */
+  spdAdd?: number;
+  /** Kritik şansına ek (0,03 = +%3). */
+  critAdd?: number;
+  /** Kritik çarpanına ek (0,1 = x1,5 -> x1,6). */
+  critMultAdd?: number;
+  /** İsabete ek (0,02 = +%2). */
+  accuracyAdd?: number;
+  /** Kaçınmaya ek (0,02 = +%2; formulas.attributes.evasionMax üst sınırı yine geçerli). */
+  evasionAdd?: number;
+  /** Tur başı can yenilenmesine ek. */
+  hpRegenAdd?: number;
+  /** Tur başı MP yenilenmesine ek. */
+  mpRegenAdd?: number;
 }
 
 /** Birimin sefer rütbesi (arayüz çerçeve/rozet için; kural değiştirmez). */

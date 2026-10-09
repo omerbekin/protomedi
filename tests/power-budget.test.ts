@@ -23,30 +23,34 @@ describe('güç bütçesi', () => {
     for (const m of CONFIG.maps) expect(POWER_BUDGET.chapters.some((c) => c.map === m), m).toBe(true);
   });
 
-  it('aşama 0: açık sistem yok => her Valdoria düğümünde düşman ölçeği 1 (bugünkü savaşlar birebir)', () => {
-    expect(POWER_BUDGET.activeSystems).toEqual([]);
-    for (const n of map.nodes) {
-      expect(enemyScale('valdoria', n.id)).toBe(1);
-      expect(chapterEnemyMods('valdoria', n.id)).toBeUndefined();
-    }
+  it("aşama 1: 'item' açık; Valdoria'da telafi ölçülen item gücüne göre (ölçülen +%8 => final x1,064); başlangıç x1", () => {
+    expect(POWER_BUDGET.activeSystems).toEqual(['item']);
+    const c1 = POWER_BUDGET.chapters[0]!;
+    expect(c1.end.item).toBe(0.15); // tasarım hedefi (Ömer) korunur
+    expect(c1.measured?.item).toBe(0.08);
+    expect(enemyScale('valdoria', map.start)).toBe(1);
+    expect(chapterEnemyMods('valdoria', map.start)).toBeUndefined();
+    expect(enemyScale('valdoria', '12')).toBe(1.064);
+    for (const n of map.nodes) expect(enemyScale('valdoria', n.id)).toBeGreaterThanOrEqual(1);
   });
 
-  it('düşman ölçeği = 1 + 0,8 x beklenen güç; bölüm içinde derinlikle doğrusal', () => {
+  it('düşman ölçeği = 1 + 0,8 x beklenen güç; bölüm içinde derinlikle doğrusal; ölçülen yoksa hedef', () => {
     const [c1, c2, c3] = POWER_BUDGET.chapters;
     expect(enemyScaleAt(c1!, 0, ['item'])).toBe(1);
-    expect(enemyScaleAt(c1!, 1, ['item'])).toBe(1.12);
-    expect(enemyScaleAt(c2!, 0, ['item'])).toBe(1.12); // bölüm başı = önceki bölüm sonu
+    expect(enemyScaleAt(c1!, 1, ['item'])).toBe(1.064);
+    expect(enemyScaleAt(c2!, 0, ['item'])).toBe(1.064); // bölüm başı = önceki bölüm sonu
     expect(enemyScaleAt(c3!, 1, ['item', 'level', 'tree'])).toBe(1.8);
-    expect(expectedPowerAt(c1!, 0.5).item).toBeCloseTo(0.075, 9);
+    expect(expectedPowerAt(c1!, 0.5).item).toBeCloseTo(0.04, 9);
+    expect(enemyScaleAt(c1!, 1, [])).toBe(1);
     expect(nodeDepth('valdoria', map.start)).toBe(0);
     expect(nodeDepth('valdoria', '12')).toBe(1);
     expect(nodeIlvl('valdoria', map.start)).toBe(1);
     expect(nodeIlvl('valdoria', '12')).toBe(10);
   });
 
-  it('kanca: item sistemi açılınca bölüm ölçeği düşman hpMult/powerMult ile çarpılır (zorluk ekiyle aynı kural)', () => {
+  it('kanca: bölüm ölçeği düşman hpMult/powerMult ile çarpılır (zorluk ekiyle aynı kural)', () => {
     const mods = chapterEnemyMods('valdoria', '12', ['item'])!;
-    expect(mods).toEqual({ hpMult: 1.12, powerMult: 1.12 });
-    expect(withDifficulty({ hpMult: 2, statMult: 1.1 }, mods)).toEqual({ hpMult: 2.24, statMult: 1.1, powerMult: 1.12 });
+    expect(mods).toEqual({ hpMult: 1.064, powerMult: 1.064 });
+    expect(withDifficulty({ hpMult: 2, statMult: 1.1 }, mods)).toEqual({ hpMult: 2.128, statMult: 1.1, powerMult: 1.064 });
   });
 });

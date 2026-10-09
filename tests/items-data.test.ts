@@ -35,18 +35,18 @@ describe('items.json şeması', () => {
     expect(itemValue(itemDef('woodcutters_axe')!)).toBe(15); // items.md 1.9 tablosu
   });
 
-  it('doğrulayıcı hataları yakalar: ailesiz silah, motorda olmayan stat, kesirli ana stat, bütçe dışı IP, bilinmeyen yuva', () => {
+  it('doğrulayıcı hataları yakalar: ailesiz silah, bilinmeyen stat, kesirli ana stat, bütçe dışı IP, bilinmeyen yuva', () => {
     const d = copy();
     d.items = [
       { id: 'a', name: 'A', slot: 'weapon', rarity: 'common', ilvl: 2, stats: { might: 3 } },
-      { id: 'b', name: 'B', slot: 'helm', rarity: 'common', ilvl: 3, stats: { hp: 2 } },
+      { id: 'b', name: 'B', slot: 'helm', rarity: 'common', ilvl: 3, stats: { fire: 2 } as never },
       { id: 'c', name: 'C', slot: 'gloves', rarity: 'rare', ilvl: 20, stats: { dex: 1.5 } },
       { id: 'd', name: 'D', slot: 'boots', rarity: 'common', ilvl: 2, stats: { armor: 9 } },
       { id: 'e', name: 'E', slot: 'cape' as never, rarity: 'common', ilvl: 2, stats: { armor: 1 } },
     ];
     const errs = validateItems(d).join('\n');
     expect(errs).toMatch(/item a: weapon needs a known family/);
-    expect(errs).toMatch(/item b: stat hp is not supported by the engine yet/);
+    expect(errs).toMatch(/item b: unknown stat fire/);
     expect(errs).toMatch(/item c: stat dex must be an integer/);
     expect(errs).toMatch(/item d: IP .* outside budget/);
     expect(errs).toMatch(/item e: unknown slot cape/);

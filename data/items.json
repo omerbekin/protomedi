@@ -1,57 +1,908 @@
 {
   "_not": "Item sistemi verisi (docs/design/progression/items.md; Ömer kararları 2026-10-09, items.md bölüm 7). AŞAMA 0: yalnızca şema + test için 3 örnek item (gerçek item listesi Aşama 1'de, content-designer). Sayılar PROVİZYON (balance-tester). Doğrulama: src/progression/items.ts > validateItems, tests/items-data.test.ts.",
-  "_stats": "Item statları. ip = 1 birimin Item Points değeri (1 IP ~ +%1 savaş gücü). engine = motorda bugün karşılığı var mı (src/progression/loadout.ts eşlemesi: str/dex/int/luck -> attrAdd, armor -> armorAdd, magicArmor -> magicArmorAdd, might -> powerMult toplanarak, +%1 = x0,01). engine:false statlar için motorda yeni toplamsal UnitModifiers alanı gerekir (engine-dev, Aşama 1: hpAdd, critAdd ...); o zamana kadar item verisinde kullanılamaz (doğrulama hatası).",
+  "_stats": "Item statları. ip = 1 birimin Item Points değeri (1 IP ~ +%1 savaş gücü). Motor eşlemesi (src/progression/loadout.ts): str/dex/int/luck -> attrAdd, armor -> armorAdd, magicArmor -> magicArmorAdd, might % -> powerMult (toplanarak), hp -> hpAdd, mp -> mpAdd, spd -> spdAdd, crit/accuracy/evasion % -> critAdd/accuracyAdd/evasionAdd (/100), critDmg % -> critMultAdd (/100), hpRegen/mpRegen -> hpRegenAdd/mpRegenAdd (madde 280). engine:false bir stat item verisinde kullanılamaz (doğrulama hatası).",
   "slots": [
-    { "id": "weapon", "name": "Weapon", "weight": 1.5 },
-    { "id": "helm", "name": "Helm", "weight": 0.8 },
-    { "id": "armor", "name": "Armor", "weight": 1.3 },
-    { "id": "gloves", "name": "Gloves", "weight": 0.8 },
-    { "id": "boots", "name": "Boots", "weight": 0.8 },
-    { "id": "trinket", "name": "Trinket", "weight": 0.8 }
+    {
+      "id": "weapon",
+      "name": "Weapon",
+      "weight": 1.5
+    },
+    {
+      "id": "helm",
+      "name": "Helm",
+      "weight": 0.8
+    },
+    {
+      "id": "armor",
+      "name": "Armor",
+      "weight": 1.3
+    },
+    {
+      "id": "gloves",
+      "name": "Gloves",
+      "weight": 0.8
+    },
+    {
+      "id": "boots",
+      "name": "Boots",
+      "weight": 0.8
+    },
+    {
+      "id": "trinket",
+      "name": "Trinket",
+      "weight": 0.8
+    }
   ],
   "rarities": [
-    { "id": "common", "name": "Common", "mult": 0.7, "affixes": 0, "color": "#8a8a84" },
-    { "id": "uncommon", "name": "Uncommon", "mult": 1.0, "affixes": 1, "color": "#5f8f3e" },
-    { "id": "rare", "name": "Rare", "mult": 1.3, "affixes": 2, "color": "#3f6fa8" },
-    { "id": "epic", "name": "Epic", "mult": 1.6, "affixes": 3, "color": "#7a3f9a" },
-    { "id": "legendary", "name": "Legendary", "mult": 2.0, "affixes": 0, "color": "#d9741c" }
+    {
+      "id": "common",
+      "name": "Common",
+      "mult": 0.7,
+      "affixes": 0,
+      "color": "#8a8a84"
+    },
+    {
+      "id": "uncommon",
+      "name": "Uncommon",
+      "mult": 1.0,
+      "affixes": 1,
+      "color": "#5f8f3e"
+    },
+    {
+      "id": "rare",
+      "name": "Rare",
+      "mult": 1.3,
+      "affixes": 2,
+      "color": "#3f6fa8"
+    },
+    {
+      "id": "epic",
+      "name": "Epic",
+      "mult": 1.6,
+      "affixes": 3,
+      "color": "#7a3f9a"
+    },
+    {
+      "id": "legendary",
+      "name": "Legendary",
+      "mult": 2.0,
+      "affixes": 0,
+      "color": "#d9741c"
+    }
   ],
   "setColor": "#3f8f84",
-  "budget": { "base": 1, "perIlvl": 0.2, "endlessPerIlvl": 0.1, "tolerance": 0.1, "goldPerIP": 10, "minValue": 5, "sellRatio": 0.25 },
-  "stats": {
-    "str": { "name": "STR", "ip": 5, "engine": true, "integer": true },
-    "dex": { "name": "DEX", "ip": 5, "engine": true, "integer": true },
-    "int": { "name": "INT", "ip": 5, "engine": true, "integer": true },
-    "luck": { "name": "LUCK", "ip": 5, "engine": true, "integer": true },
-    "armor": { "name": "Armor", "ip": 0.8, "engine": true },
-    "magicArmor": { "name": "Magic Armor", "ip": 0.5, "engine": true },
-    "might": { "name": "Might", "ip": 0.5, "engine": true, "percent": true },
-    "hp": { "name": "Max HP", "ip": 0.4, "engine": false },
-    "crit": { "name": "Crit", "ip": 0.25, "engine": false, "percent": true },
-    "critDmg": { "name": "Crit Damage", "ip": 0.05, "engine": false, "percent": true },
-    "accuracy": { "name": "Accuracy", "ip": 0.6, "engine": false, "percent": true },
-    "evasion": { "name": "Evasion", "ip": 0.6, "engine": false, "percent": true },
-    "spd": { "name": "Speed", "ip": 5.5, "engine": false },
-    "mp": { "name": "Max MP", "ip": 0.1, "engine": false },
-    "mpRegen": { "name": "MP Regen", "ip": 2, "engine": false },
-    "hpRegen": { "name": "HP Regen", "ip": 4, "engine": false }
+  "budget": {
+    "base": 1,
+    "perIlvl": 0.2,
+    "endlessPerIlvl": 0.1,
+    "tolerance": 0.1,
+    "goldPerIP": 10,
+    "minValue": 5,
+    "sellRatio": 0.25
   },
-  "caps": { "crit": 15, "accuracy": 10, "evasion": 10, "spd": 1.5, "spdPerItem": 0.5 },
+  "stats": {
+    "str": {
+      "name": "STR",
+      "ip": 5,
+      "engine": true,
+      "integer": true
+    },
+    "dex": {
+      "name": "DEX",
+      "ip": 5,
+      "engine": true,
+      "integer": true
+    },
+    "int": {
+      "name": "INT",
+      "ip": 5,
+      "engine": true,
+      "integer": true
+    },
+    "luck": {
+      "name": "LUCK",
+      "ip": 5,
+      "engine": true,
+      "integer": true
+    },
+    "armor": {
+      "name": "Armor",
+      "ip": 0.8,
+      "engine": true
+    },
+    "magicArmor": {
+      "name": "Magic Armor",
+      "ip": 0.5,
+      "engine": true
+    },
+    "might": {
+      "name": "Might",
+      "ip": 0.5,
+      "engine": true,
+      "percent": true
+    },
+    "hp": {
+      "name": "Max HP",
+      "ip": 0.4,
+      "engine": true
+    },
+    "crit": {
+      "name": "Crit",
+      "ip": 0.25,
+      "engine": true,
+      "percent": true
+    },
+    "critDmg": {
+      "name": "Crit Damage",
+      "ip": 0.05,
+      "engine": true,
+      "percent": true
+    },
+    "accuracy": {
+      "name": "Accuracy",
+      "ip": 0.6,
+      "engine": true,
+      "percent": true
+    },
+    "evasion": {
+      "name": "Evasion",
+      "ip": 0.6,
+      "engine": true,
+      "percent": true
+    },
+    "spd": {
+      "name": "Speed",
+      "ip": 5.5,
+      "engine": true
+    },
+    "mp": {
+      "name": "Max MP",
+      "ip": 0.1,
+      "engine": true
+    },
+    "mpRegen": {
+      "name": "MP Regen",
+      "ip": 2,
+      "engine": true
+    },
+    "hpRegen": {
+      "name": "HP Regen",
+      "ip": 4,
+      "engine": true
+    }
+  },
+  "caps": {
+    "crit": 15,
+    "accuracy": 10,
+    "evasion": 10,
+    "spd": 1.5,
+    "spdPerItem": 0.5
+  },
   "weaponFamilies": [
-    { "id": "axes", "name": "Axes & Swords", "classes": ["warrior", "antimage"] },
-    { "id": "maces", "name": "Maces & Shields", "classes": ["defender", "paladin", "warrior"] },
-    { "id": "bows", "name": "Bows", "classes": ["archer"] },
-    { "id": "daggers", "name": "Daggers", "classes": ["cutthroat", "antimage"] },
-    { "id": "staves", "name": "Staves", "classes": ["mage", "druid", "undead"] },
-    { "id": "charms", "name": "Charms", "classes": ["gambler", "hexer"] }
+    {
+      "id": "axes",
+      "name": "Axes & Swords",
+      "classes": [
+        "warrior",
+        "antimage"
+      ]
+    },
+    {
+      "id": "maces",
+      "name": "Maces & Shields",
+      "classes": [
+        "defender",
+        "paladin",
+        "warrior"
+      ]
+    },
+    {
+      "id": "bows",
+      "name": "Bows",
+      "classes": [
+        "archer"
+      ]
+    },
+    {
+      "id": "daggers",
+      "name": "Daggers",
+      "classes": [
+        "cutthroat",
+        "antimage"
+      ]
+    },
+    {
+      "id": "staves",
+      "name": "Staves",
+      "classes": [
+        "mage",
+        "druid",
+        "undead"
+      ]
+    },
+    {
+      "id": "charms",
+      "name": "Charms",
+      "classes": [
+        "gambler",
+        "hexer"
+      ]
+    }
   ],
   "bag": 30,
-  "_items": "Sabit (el yapımı) item'ler: MVP kataloğu. Silahta family zorunlu, diğer yuvalarda yok. stats = gerçek değerler (STR/DEX/INT/LUCK tam sayı; might yüzde). IP bütçesi: slot.weight x (budget.base + budget.perIlvl x ilvl) x rarity.mult, ± budget.tolerance (Legendary/Set Aşama 3'te trait/set payıyla).",
+  "_items": "Sabit (el yapımı) item'ler: Valdoria (bölüm 1, ilvl 1-10) MVP kataloğu + 1 bölüm 2 örneği (bracers_of_the_fox). Silahta family zorunlu, diğer yuvalarda yok. stats = gerçek değerler (STR/DEX/INT/LUCK tam sayı; might/crit/accuracy/evasion/critDmg yüzde). IP bütçesi: slot.weight x (budget.base + budget.perIlvl x ilvl) x rarity.mult, ± budget.tolerance. Değerler tools'suz üretildi (bütçeye en yakın tam sayılar); denge balance-tester.",
   "items": [
-    { "id": "woodcutters_axe", "name": "Woodcutter's Axe", "slot": "weapon", "family": "axes", "rarity": "common", "ilvl": 2, "stats": { "might": 3 } },
-    { "id": "turnshoes", "name": "Turnshoes", "slot": "boots", "rarity": "common", "ilvl": 2, "stats": { "armor": 1 } },
-    { "id": "bracers_of_the_fox", "name": "Bracers of the Fox", "slot": "gloves", "rarity": "rare", "ilvl": 20, "stats": { "dex": 1 } }
+    {
+      "id": "woodcutters_axe",
+      "name": "Woodcutter's Axe",
+      "slot": "weapon",
+      "family": "axes",
+      "rarity": "common",
+      "ilvl": 2,
+      "stats": {
+        "might": 3
+      }
+    },
+    {
+      "id": "bearded_axe",
+      "name": "Bearded Axe",
+      "slot": "weapon",
+      "family": "axes",
+      "rarity": "uncommon",
+      "ilvl": 6,
+      "stats": {
+        "might": 5,
+        "hp": 2
+      }
+    },
+    {
+      "id": "arming_sword",
+      "name": "Arming Sword",
+      "slot": "weapon",
+      "family": "axes",
+      "rarity": "rare",
+      "ilvl": 9,
+      "stats": {
+        "str": 1,
+        "might": 1
+      }
+    },
+    {
+      "id": "dane_axe",
+      "name": "Dane Axe of the Bear",
+      "slot": "weapon",
+      "family": "axes",
+      "rarity": "epic",
+      "ilvl": 10,
+      "stats": {
+        "str": 1,
+        "might": 1,
+        "critDmg": 35
+      }
+    },
+    {
+      "id": "flanged_mace",
+      "name": "Flanged Mace",
+      "slot": "weapon",
+      "family": "maces",
+      "rarity": "common",
+      "ilvl": 3,
+      "stats": {
+        "might": 2,
+        "armor": 1
+      }
+    },
+    {
+      "id": "oak_shield",
+      "name": "Oak Tower Shield",
+      "slot": "weapon",
+      "family": "maces",
+      "rarity": "uncommon",
+      "ilvl": 6,
+      "stats": {
+        "armor": 3,
+        "might": 2
+      }
+    },
+    {
+      "id": "morning_star",
+      "name": "Morning Star",
+      "slot": "weapon",
+      "family": "maces",
+      "rarity": "rare",
+      "ilvl": 10,
+      "stats": {
+        "might": 6,
+        "armor": 2,
+        "hp": 3
+      }
+    },
+    {
+      "id": "short_bow",
+      "name": "Short Bow",
+      "slot": "weapon",
+      "family": "bows",
+      "rarity": "common",
+      "ilvl": 2,
+      "stats": {
+        "might": 3
+      }
+    },
+    {
+      "id": "hunting_bow",
+      "name": "Hunting Bow",
+      "slot": "weapon",
+      "family": "bows",
+      "rarity": "uncommon",
+      "ilvl": 6,
+      "stats": {
+        "might": 3,
+        "accuracy": 3
+      }
+    },
+    {
+      "id": "yew_longbow",
+      "name": "Yew Longbow of the Fox",
+      "slot": "weapon",
+      "family": "bows",
+      "rarity": "rare",
+      "ilvl": 10,
+      "stats": {
+        "dex": 1,
+        "might": 2
+      }
+    },
+    {
+      "id": "rondel_dagger",
+      "name": "Rondel Dagger",
+      "slot": "weapon",
+      "family": "daggers",
+      "rarity": "common",
+      "ilvl": 2,
+      "stats": {
+        "might": 3
+      }
+    },
+    {
+      "id": "misericorde",
+      "name": "Keen Misericorde",
+      "slot": "weapon",
+      "family": "daggers",
+      "rarity": "uncommon",
+      "ilvl": 7,
+      "stats": {
+        "might": 3,
+        "crit": 8
+      }
+    },
+    {
+      "id": "twin_stilettos",
+      "name": "Twin Stilettos",
+      "slot": "weapon",
+      "family": "daggers",
+      "rarity": "rare",
+      "ilvl": 10,
+      "stats": {
+        "might": 5,
+        "crit": 11,
+        "accuracy": 1
+      }
+    },
+    {
+      "id": "ash_staff",
+      "name": "Ash Staff",
+      "slot": "weapon",
+      "family": "staves",
+      "rarity": "common",
+      "ilvl": 2,
+      "stats": {
+        "might": 2,
+        "mp": 5
+      }
+    },
+    {
+      "id": "oak_staff",
+      "name": "Pilgrim's Oak Staff",
+      "slot": "weapon",
+      "family": "staves",
+      "rarity": "uncommon",
+      "ilvl": 7,
+      "stats": {
+        "might": 3,
+        "mpRegen": 1
+      }
+    },
+    {
+      "id": "bone_staff",
+      "name": "Bone Staff of the Owl",
+      "slot": "weapon",
+      "family": "staves",
+      "rarity": "rare",
+      "ilvl": 10,
+      "stats": {
+        "int": 1,
+        "might": 2
+      }
+    },
+    {
+      "id": "rune_staff",
+      "name": "Rune Staff",
+      "slot": "weapon",
+      "family": "staves",
+      "rarity": "epic",
+      "ilvl": 10,
+      "stats": {
+        "int": 1,
+        "might": 1,
+        "mpRegen": 1
+      }
+    },
+    {
+      "id": "worn_deck",
+      "name": "Worn Deck",
+      "slot": "weapon",
+      "family": "charms",
+      "rarity": "common",
+      "ilvl": 2,
+      "stats": {
+        "might": 3
+      }
+    },
+    {
+      "id": "loaded_bones",
+      "name": "Loaded Bones",
+      "slot": "weapon",
+      "family": "charms",
+      "rarity": "uncommon",
+      "ilvl": 6,
+      "stats": {
+        "might": 3,
+        "crit": 7
+      }
+    },
+    {
+      "id": "hex_doll",
+      "name": "Hex Doll of the Crow",
+      "slot": "weapon",
+      "family": "charms",
+      "rarity": "rare",
+      "ilvl": 10,
+      "stats": {
+        "luck": 1,
+        "might": 2
+      }
+    },
+    {
+      "id": "padded_gambeson",
+      "name": "Padded Gambeson",
+      "slot": "armor",
+      "rarity": "common",
+      "ilvl": 2,
+      "stats": {
+        "hp": 1,
+        "armor": 1
+      }
+    },
+    {
+      "id": "quilted_jack",
+      "name": "Quilted Jack",
+      "slot": "armor",
+      "rarity": "common",
+      "ilvl": 5,
+      "stats": {
+        "armor": 1,
+        "magicArmor": 2
+      }
+    },
+    {
+      "id": "leather_jerkin",
+      "name": "Leather Jerkin",
+      "slot": "armor",
+      "rarity": "uncommon",
+      "ilvl": 4,
+      "stats": {
+        "armor": 2,
+        "evasion": 1
+      }
+    },
+    {
+      "id": "riveted_mail",
+      "name": "Riveted Mail",
+      "slot": "armor",
+      "rarity": "uncommon",
+      "ilvl": 8,
+      "stats": {
+        "armor": 2,
+        "hp": 4
+      }
+    },
+    {
+      "id": "brigandine",
+      "name": "Brigandine",
+      "slot": "armor",
+      "rarity": "rare",
+      "ilvl": 10,
+      "stats": {
+        "armor": 4,
+        "hp": 5
+      }
+    },
+    {
+      "id": "warded_hauberk",
+      "name": "Warded Hauberk",
+      "slot": "armor",
+      "rarity": "rare",
+      "ilvl": 9,
+      "stats": {
+        "armor": 3,
+        "magicArmor": 3,
+        "hp": 2
+      }
+    },
+    {
+      "id": "coat_of_plates",
+      "name": "Coat of Plates",
+      "slot": "armor",
+      "rarity": "epic",
+      "ilvl": 10,
+      "stats": {
+        "hpRegen": 1,
+        "armor": 1,
+        "magicArmor": 2,
+        "hp": 1
+      }
+    },
+    {
+      "id": "leather_coif",
+      "name": "Leather Coif",
+      "slot": "helm",
+      "rarity": "common",
+      "ilvl": 2,
+      "stats": {
+        "hp": 2
+      }
+    },
+    {
+      "id": "iron_cap",
+      "name": "Iron Cap",
+      "slot": "helm",
+      "rarity": "common",
+      "ilvl": 5,
+      "stats": {
+        "armor": 1,
+        "hp": 1
+      }
+    },
+    {
+      "id": "padded_hood",
+      "name": "Padded Hood",
+      "slot": "helm",
+      "rarity": "uncommon",
+      "ilvl": 5,
+      "stats": {
+        "magicArmor": 2,
+        "mp": 5
+      }
+    },
+    {
+      "id": "nasal_helm",
+      "name": "Nasal Helm",
+      "slot": "helm",
+      "rarity": "uncommon",
+      "ilvl": 8,
+      "stats": {
+        "armor": 1,
+        "hp": 3
+      }
+    },
+    {
+      "id": "kettle_hat",
+      "name": "Kettle Hat of the Hawk",
+      "slot": "helm",
+      "rarity": "rare",
+      "ilvl": 9,
+      "stats": {
+        "armor": 2,
+        "accuracy": 1,
+        "hp": 2
+      }
+    },
+    {
+      "id": "great_helm",
+      "name": "Great Helm",
+      "slot": "helm",
+      "rarity": "epic",
+      "ilvl": 10,
+      "stats": {
+        "armor": 2,
+        "hp": 3,
+        "magicArmor": 1,
+        "accuracy": 1
+      }
+    },
+    {
+      "id": "work_gloves",
+      "name": "Work Gloves",
+      "slot": "gloves",
+      "rarity": "common",
+      "ilvl": 2,
+      "stats": {
+        "crit": 3
+      }
+    },
+    {
+      "id": "leather_gloves",
+      "name": "Leather Gloves",
+      "slot": "gloves",
+      "rarity": "common",
+      "ilvl": 5,
+      "stats": {
+        "accuracy": 2
+      }
+    },
+    {
+      "id": "archers_bracer",
+      "name": "Archer's Bracer",
+      "slot": "gloves",
+      "rarity": "uncommon",
+      "ilvl": 6,
+      "stats": {
+        "accuracy": 2,
+        "crit": 2
+      }
+    },
+    {
+      "id": "studded_gauntlets",
+      "name": "Studded Gauntlets",
+      "slot": "gloves",
+      "rarity": "uncommon",
+      "ilvl": 8,
+      "stats": {
+        "might": 1,
+        "armor": 2
+      }
+    },
+    {
+      "id": "keen_gauntlets",
+      "name": "Keen Gauntlets",
+      "slot": "gloves",
+      "rarity": "rare",
+      "ilvl": 9,
+      "stats": {
+        "might": 3,
+        "crit": 2,
+        "armor": 1
+      }
+    },
+    {
+      "id": "hawkeye_gloves",
+      "name": "Hawkeye Gloves",
+      "slot": "gloves",
+      "rarity": "epic",
+      "ilvl": 10,
+      "stats": {
+        "crit": 7,
+        "accuracy": 1,
+        "critDmg": 30
+      }
+    },
+    {
+      "id": "turnshoes",
+      "name": "Turnshoes",
+      "slot": "boots",
+      "rarity": "common",
+      "ilvl": 2,
+      "stats": {
+        "armor": 1
+      }
+    },
+    {
+      "id": "soft_boots",
+      "name": "Soft Boots",
+      "slot": "boots",
+      "rarity": "common",
+      "ilvl": 5,
+      "stats": {
+        "evasion": 2
+      }
+    },
+    {
+      "id": "hobnailed_boots",
+      "name": "Hobnailed Boots",
+      "slot": "boots",
+      "rarity": "uncommon",
+      "ilvl": 5,
+      "stats": {
+        "armor": 1,
+        "hp": 2
+      }
+    },
+    {
+      "id": "riding_boots",
+      "name": "Riding Boots",
+      "slot": "boots",
+      "rarity": "uncommon",
+      "ilvl": 8,
+      "stats": {
+        "evasion": 2,
+        "armor": 1
+      }
+    },
+    {
+      "id": "ranger_boots",
+      "name": "Ranger Boots of Shadows",
+      "slot": "boots",
+      "rarity": "rare",
+      "ilvl": 9,
+      "stats": {
+        "evasion": 3,
+        "armor": 1,
+        "hp": 1
+      }
+    },
+    {
+      "id": "swift_sabatons",
+      "name": "Swift Sabatons",
+      "slot": "boots",
+      "rarity": "epic",
+      "ilvl": 10,
+      "stats": {
+        "spd": 0.5,
+        "armor": 1
+      }
+    },
+    {
+      "id": "copper_ring",
+      "name": "Copper Ring",
+      "slot": "trinket",
+      "rarity": "common",
+      "ilvl": 4,
+      "stats": {
+        "mp": 10
+      }
+    },
+    {
+      "id": "rabbits_foot",
+      "name": "Rabbit's Foot",
+      "slot": "trinket",
+      "rarity": "common",
+      "ilvl": 4,
+      "stats": {
+        "crit": 4
+      }
+    },
+    {
+      "id": "wolf_tooth",
+      "name": "Wolf-Tooth Charm",
+      "slot": "trinket",
+      "rarity": "uncommon",
+      "ilvl": 5,
+      "stats": {
+        "hp": 2,
+        "crit": 3
+      }
+    },
+    {
+      "id": "pilgrims_token",
+      "name": "Pilgrim's Token",
+      "slot": "trinket",
+      "rarity": "uncommon",
+      "ilvl": 8,
+      "stats": {
+        "mp": 10,
+        "magicArmor": 2
+      }
+    },
+    {
+      "id": "saints_medal",
+      "name": "Saint's Medal",
+      "slot": "trinket",
+      "rarity": "rare",
+      "ilvl": 9,
+      "stats": {
+        "magicArmor": 1,
+        "mpRegen": 1,
+        "hp": 1
+      }
+    },
+    {
+      "id": "ashen_locket",
+      "name": "Ashen Locket",
+      "slot": "trinket",
+      "rarity": "epic",
+      "ilvl": 10,
+      "stats": {
+        "hpRegen": 1
+      }
+    },
+    {
+      "id": "bracers_of_the_fox",
+      "name": "Bracers of the Fox",
+      "slot": "gloves",
+      "rarity": "rare",
+      "ilvl": 20,
+      "stats": {
+        "dex": 1
+      }
+    }
   ],
+  "_loot": "Loot (items.md 3.1-3.4; Ömer kararları: düşen item SAYISI ve nadirlik her zorlukta AYNI (karar 6); boss/hazine düşüşleri otomatik, seçim ekranı yok (karar 8)). perPartyMember: zafer başına beklenen item = değer x aktif takım boyutu (kesir seed'li yuvarlanır). treasure: sandık = treasureBase + treasurePerMember x takım. minRarity: o kaynağın en az bir item'i bu nadirlikte ya da üstünde. eliteShift: elit zarı bu kadar kademe yukarı. rarityByChapter: Common..Legendary yüzdeleri. pity.rareAfter: art arda bu kadar Rare'siz düşüşten sonra garanti Rare+. repeat: aynı düğümün N. kez kazanılışında item/altın çarpanı ve nadirlik tavanı (tekrar oynama, roadmap 2.3 A; bugünkü tek yönlü seferde yalnızca ilk zafer). gold: ilvl başına altın. Torba doluyken sığmayan item'ler Spoils kartında 'geride kalan' olarak bekler; oyuncu kartı kapatmadan yer açıp alabilir, kapatınca kaybolur (Ömer, madde 280).",
+  "loot": {
+    "perPartyMember": {
+      "battle": 0.5,
+      "elite": 0.75,
+      "boss": 1.0
+    },
+    "minItems": {
+      "battle": 0,
+      "elite": 1,
+      "boss": 1,
+      "treasure": 1
+    },
+    "minRarity": {
+      "boss": "rare",
+      "treasure": "rare"
+    },
+    "treasureBase": 2,
+    "treasurePerMember": 0.5,
+    "eliteShift": 1,
+    "rarityByChapter": {
+      "1": [
+        60,
+        32,
+        7,
+        1,
+        0
+      ],
+      "2": [
+        35,
+        40,
+        20,
+        4.5,
+        0.5
+      ],
+      "3": [
+        15,
+        40,
+        32,
+        11,
+        2
+      ]
+    },
+    "pity": {
+      "rareAfter": 6
+    },
+    "smartSlotChance": 0.5,
+    "usableWeaponChance": 0.8,
+    "repeat": [
+      {
+        "items": 1,
+        "gold": 1,
+        "maxRarity": "legendary"
+      },
+      {
+        "items": 0.6,
+        "gold": 0.6,
+        "maxRarity": "epic"
+      },
+      {
+        "items": 0.4,
+        "gold": 0.4,
+        "maxRarity": "rare"
+      },
+      {
+        "items": 0.25,
+        "gold": 0.25,
+        "maxRarity": "rare"
+      }
+    ],
+    "gold": {
+      "battle": 4,
+      "elite": 8,
+      "boss": 16,
+      "treasure": 25
+    }
+  },
   "_later": "Aşama 2-3 için ayrılmış alanlar (items.md 1.6-1.8, 5.3): bases (affix üretecinin tabanları), affixes, uniques (Legendary), sets, traits. Şimdilik boş.",
   "bases": [],
   "affixes": [],
