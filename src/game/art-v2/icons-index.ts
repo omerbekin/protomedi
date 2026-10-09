@@ -1,6 +1,6 @@
 /**
  * v2 İKON KAYDI: her class için TEK satır (şimdiden tümü dolu; content-designer ajanları bu dosyaya DOKUNMAZ, yalnızca kendi
- * <classId>/icons.ts dosyasını doldurur). Defender kapsam dışı (yalnızca sesleri), Cutthroat tamamen kapsam dışı.
+ * <classId>/icons.ts dosyasını doldurur). Defender ikonları kapsam dışı (animasyon + ses v2; yeni ikonlar ayrıca gelecek), Cutthroat tamamen kapsam dışı.
  * tests/asset-versions.test.ts her sürümlü anahtarın burada kaydı olduğunu denetler.
  */
 import type { ClassIconsV2 } from './types';

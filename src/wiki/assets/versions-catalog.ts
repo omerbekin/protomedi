@@ -8,6 +8,7 @@ import { getVersion, inScope, ownedArt, SHARED_KEY, versionKeys, type AssetVersi
 import { v2Progress, type V2Progress } from '../../game/art-v2/status';
 import { AUDIO_V2 } from '../../game/art-v2/audio-index';
 import { ICONS_V2 } from '../../game/art-v2/icons-index';
+import { VFX_SHEET_FILES } from '../../game/vfx-sheet-files';
 
 export interface VersionedIcon {
   name: string;
@@ -35,7 +36,7 @@ export interface VersionRow {
   logo: string;
   selected: AssetVersion;
   progress: V2Progress;
-  /** v2 kapsamı (Defender: yalnızca sesler). */
+  /** v2 kapsamı (Defender: animasyon + ses; ikonlar henüz yok). */
   scope: { icon: boolean; vfx: boolean; sfx: boolean };
   icons: VersionedIcon[];
   vfx: VersionedVfx[];
@@ -43,6 +44,8 @@ export interface VersionRow {
   /** v2'nin v1 karşılığı olmayan yeni öğeleri (efekt sprite'ları, yeni ses adları). */
   extraSprites: string[];
   extraSounds: string[];
+  /** v2 animasyonlarının kullandığı hazır sprite sheet'ler (assets/vfx/<anahtar>/*.png). */
+  sheets: Array<{ id: string; name: string; title: string; url: string; frames: number; fps: number }>;
   search: string;
 }
 
@@ -59,6 +62,7 @@ export function buildVersions(): VersionRow[] {
     const extraSprites = [...Object.keys(ICONS_V2[key]?.SPRITES ?? {}), ...Object.keys(ICONS_V2[key]?.ICONS ?? {}).filter((n) => !known.has(n))];
     const extraSounds = Object.keys(v2Sounds).filter((n) => !known.has(n));
     const name = key === SHARED_KEY ? 'Shared' : (def?.name ?? key);
+    const sheets = VFX_SHEET_FILES.filter((f) => f.owner === key).map((f) => ({ id: f.id, name: f.name, title: f.meta.title ?? f.name, url: f.url, frames: f.meta.frames, fps: f.meta.fps }));
     return {
       key,
       name,
@@ -72,7 +76,8 @@ export function buildVersions(): VersionRow[] {
       sounds,
       extraSprites,
       extraSounds,
-      search: `versions ${key} ${name} ${own.icons.join(' ')} ${own.sfx.join(' ')} ${vfx.map((v) => `${v.skillName} ${v.key}`).join(' ')}`.toLowerCase(),
+      sheets,
+      search: `versions ${key} ${name} ${own.icons.join(' ')} ${own.sfx.join(' ')} ${vfx.map((v) => `${v.skillName} ${v.key}`).join(' ')} ${sheets.map((x) => x.name).join(' ')}`.toLowerCase(),
     };
   });
 }

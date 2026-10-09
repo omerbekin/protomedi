@@ -1,4 +1,5 @@
 import { lockInput, unlockInput } from './input-lock';
+import { onReducedMotionChange, reducedMotion, setReducedMotion } from './motion-pref';
 import { openDebugMenu } from './debug-menu';
 import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from './fullscreen';
 
@@ -99,6 +100,11 @@ export class SettingsScreen {
     minus.addEventListener('click', () => apply(Number(slider.value) - 1, true));
     plus.addEventListener('click', () => apply(Number(slider.value) + 1, true));
     this.addRow(col, 'Sound volume', () => undefined, [minus, slider, plus, value], (d) => apply(Number(slider.value) + d, true));
+
+    // --- Reduced motion (ana menü sahnesi: paralaks ve parçacık yok; kayıt yoksa işletim sistemi tercihi; src/ui/motion-pref.ts) ---
+    const motion = el('span', 'st-value', reducedMotion() ? 'On' : 'Off');
+    onReducedMotionChange((on) => (motion.textContent = on ? 'On' : 'Off'));
+    this.addRow(col, 'Reduced motion', () => setReducedMotion(!reducedMotion()), [motion]);
 
     // --- Fullscreen (Fullscreen API yoksa satır yok; iPhone'da ipucu) ---
     const support = currentSupport();

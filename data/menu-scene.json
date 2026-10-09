@@ -1,0 +1,66 @@
+{
+  "_not": "Ana menü katmanlı arka planı (Ömer 2026-10-10; src/game/menu-backdrop.ts). Konumlar KATMAN GÖRSELİNİN pikselinde (2580x1080; asıllar assets/source/menu-layers, web sürümleri assets/menu: node tools/make-menu-layers.mjs). Yanan kule far katmanında ölçüldü (02-far.png): kulenin mazgallı tepesi ~(2212-2270, 155), tepedeki alev ~(2230-2265, 135-160), kule ile sağdaki yapı arasındaki alev ~(2270-2295, 185-225); boyanmış duman yukarı-sağa gider.",
+  "layers": ["sky", "far", "middle", "foreground"],
+  "overscan": 1.03,
+  "anchorLeft": -560,
+  "parallax": {
+    "_not": "Katman başına en büyük kayma (dünya px): x fareyle (masaüstü) ya da çok yavaş otomatik salınımla (dokunmatik), y yarısı. ease: her karede hedefe yaklaşma oranı. swaySeconds: otomatik salınımın bir tur süresi.",
+    "x": [0, 6, 13, 24],
+    "y": [0, 3, 6, 10],
+    "ease": 0.06,
+    "swaySeconds": 46
+  },
+  "pushIn": {
+    "_not": "Play görünümüne geçişte sahnenin hafif yakınlaşması (eskiden harita 1,18): 1 + (zoom - 1) * scale; ön katman 'depth' kadar fazla yakınlaşır.",
+    "scale": 0.55,
+    "depth": 0.04
+  },
+  "frames": {
+    "_not": "Efekt sayfası (fx.webp, 1024x512) karelerinin kırpımları [x, y, w, h] (alfa sınırları ölçülerek).",
+    "smoke": [35, 34, 205, 199],
+    "curl": [348, 28, 106, 212],
+    "embers": [591, 98, 109, 107],
+    "ember": [850, 90, 86, 86],
+    "flame0": [18, 288, 58, 168],
+    "flame1": [73, 288, 58, 168],
+    "flame2": [132, 288, 58, 168],
+    "flame3": [189, 288, 58, 168],
+    "ash": [332, 303, 135, 158],
+    "glow": [568, 300, 142, 158],
+    "crow0": [797, 322, 96, 112],
+    "crow1": [903, 322, 96, 112]
+  },
+  "fire": {
+    "flames": [
+      { "x": 2247, "y": 160, "scale": 0.3 },
+      { "x": 2283, "y": 222, "scale": 0.22 }
+    ],
+    "glow": { "x": 2258, "y": 180, "scale": 1.1, "alpha": [0.35, 0.6], "pulseMs": 1700 },
+    "flickerMs": 110
+  },
+  "smoke": {
+    "_not": "Kuleden yükselen duman: 'count' parça, her biri 'lifeMs' boyunca yukarı-sağa süzülür, büyür ve söner (görsel px).",
+    "origin": { "x": 2262, "y": 128 },
+    "count": 7,
+    "lifeMs": 9000,
+    "rise": 260,
+    "drift": 230,
+    "scale": [0.22, 0.75],
+    "alpha": 0.55
+  },
+  "particles": {
+    "_not": "Kor ve kül: sahnenin sağ üçte ikisinde doğar (menü sütunu solda kalır: minX dünya px), yukarı ve yana süzülür.",
+    "embers": 14,
+    "ash": 10,
+    "minX": 760,
+    "lifeMs": [7000, 13000]
+  },
+  "crows": {
+    "everyMs": [20000, 40000],
+    "count": [3, 5],
+    "y": [140, 300],
+    "crossMs": 15000,
+    "scale": 0.24,
+    "flapMs": 170
+  }
+}

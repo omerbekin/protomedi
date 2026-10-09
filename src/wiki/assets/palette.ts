@@ -3,6 +3,28 @@ import { applyFilter, h, searchable, type SectionApi } from '../../gallery/dom';
 
 /** Play ekranı kart görselleri (assets/cards; asıllar assets/source/cards): yeni dosya konunca kendiliğinden listelenir. */
 const CARD_FILES = import.meta.glob('../../../assets/cards/*.{webp,png,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+/** Ana menü katmanlı sahnesi (assets/menu; asıllar assets/source/menu-layers; src/game/menu-backdrop.ts). */
+const MENU_FILES = import.meta.glob('../../../assets/menu/*.{webp,png}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+
+/** Görsel dosya grubu (küçük resim + dosya adı). */
+function imageGroup(title: string, dir: string, files: Record<string, string>, w: number, hgt: number, tag: string): HTMLElement {
+  return h(
+    'div',
+    { class: 'group' },
+    h('div', { class: 'group-head' }, h('h3', { text: title }), h('span', { class: 'muted small', text: `${Object.keys(files).length}` })),
+    h(
+      'div',
+      { class: 'swatches' },
+      ...Object.entries(files).map(([path, url]) => {
+        const name = path.split('/').pop() ?? path;
+        return searchable(
+          h('div', { class: 'swatch-card', title: `${dir}/${name}` }, h('img', { attrs: { src: url, alt: name, loading: 'lazy' }, style: { width: `${w}px`, height: `${hgt}px`, 'object-fit': 'contain', background: '#120c07' } }), h('span', { class: 'mono small muted', text: name })),
+          `${tag} ${name}`,
+        );
+      }),
+    ),
+  );
+}
 
 /** UI / PALETTE: oyunda kullanılan renkler ve yazı tipleri. Altın tonları ve serif font ui-frame.ts'den (Phaser) tembel yüklenir. */
 export function mountPalette(cat: Catalog): SectionApi {
@@ -29,22 +51,8 @@ export function mountPalette(cat: Catalog): SectionApi {
     block('Stats', cat.palette.stat, 'stat'),
     block('Class and summon colors', cat.palette.classes, 'class color'),
     goldBlock,
-    h(
-      'div',
-      { class: 'group' },
-      h('div', { class: 'group-head' }, h('h3', { text: 'Play screen card art (assets/cards)' }), h('span', { class: 'muted small', text: `${Object.keys(CARD_FILES).length}` })),
-      h(
-        'div',
-        { class: 'swatches' },
-        ...Object.entries(CARD_FILES).map(([path, url]) => {
-          const name = path.split('/').pop() ?? path;
-          return searchable(
-            h('div', { class: 'swatch-card', title: `assets/cards/${name}` }, h('img', { attrs: { src: url, alt: name, loading: 'lazy' }, style: { width: '120px', height: '180px', 'object-fit': 'cover' } }), h('span', { class: 'mono small muted', text: name })),
-            `card art menu play ${name}`,
-          );
-        }),
-      ),
-    ),
+    imageGroup('Play screen card art (assets/cards)', 'assets/cards', CARD_FILES, 120, 180, 'card art menu play'),
+    imageGroup('Main menu scene: parallax layers and effects sheet (assets/menu)', 'assets/menu', MENU_FILES, 258, 108, 'main menu scene layer parallax effects'),
     h('div', { class: 'group' }, h('div', { class: 'group-head' }, h('h3', { text: 'Fonts' })), fontHost),
   );
   root.append(h('div', { class: 'section-head' }, h('h2', { text: 'Palette & UI' }), countEl, h('span', { class: 'muted small', text: 'Click a swatch to copy its hex' })), body);

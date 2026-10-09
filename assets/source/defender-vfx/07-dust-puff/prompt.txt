@@ -1,0 +1,12 @@
+Use case: stylized-concept. Create a single pixel-art ANIMATION SPRITE SHEET of the EARTH BROWN DUST PUFF found at row2 column3 in the supplied reference atlas. The reference is only for palette and dust form; exclude every other object.
+One 4-column by 2-row invisible grid with eight square equal cells, reading left to right then top row to bottom row. Canvas ideally 1024x512, each cell 256x256. No text, no grid lines. Actual transparent background. Exactly ONE animation frame in each cell, no labels.
+Eight successive chronological frames of ONE short non-looping medieval ground-impact dust animation, NOT eight independent unrelated dust cloud variations. Same stationary emitter and baseline at 80% cell height in all frames, coherent cloud lobes moving outward and up, camera locked. Maintain same pixel scale and identity.
+Frame1: tiny compact brown ground puff at bottom center, 30px wide.
+Frame2: compact billowing puff emerging up and out, 65px wide.
+Frame3: swelling dusty lobes, 115px wide.
+Frame4: full brown dust puff matching reference, 155px wide.
+Frame5: puff expands sideways, breaks into lighter detached clumps, 175px wide.
+Frame6: thinner separated dust wisps, 185px wide, clearly much less opaque.
+Frame7: only scattered small faint dusty clumps, 190px spread, mostly transparent.
+Frame8: almost completely vanished, just 3 tiny dim brown pixel clusters, 195px spread.
+Keep EVERYTHING within each cell with minimum 24px blank transparent padding on every side. Dust colors exclusively muted earth brown, tan, taupe. NO red, green, yellow, orange glow, neon or fire. No black outline on dust, no solid rectangular backdrop, no painted checkerboard. Crisp pixel clusters with stepped pixel edges, no blurry airbrush or photograph. Temporal coherence across all eight frames: growing, dispersing then fading.

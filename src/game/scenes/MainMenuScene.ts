@@ -3,6 +3,8 @@ import { getMap, latestSave, migrateSaves, readSaves, slotSummaries, type SaveEn
 import { backgroundKey, hasBackground, loadRestInBackground, preloadAssets } from '../assets';
 import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
 import { cardArt, preloadCardArt } from '../card-art';
+import { MenuBackdrop, hasMenuLayers, preloadMenuLayers } from '../menu-backdrop';
+import { onReducedMotionChange, reducedMotion, setReducedMotion } from '../../ui/motion-pref';
 import { blurredTexture, edgeFillers, mapArt } from '../map-art';
 import { coverShift, focusCrop, placeArt } from '../wide-map';
 import layout from '../../../data/battle-layout.json';
@@ -125,6 +127,8 @@ export class MainMenuScene extends Phaser.Scene {
   private cameFrom: MenuView | null = null;
   private busyUntil = 0;
   private bg: Phaser.GameObjects.Image | null = null;
+  /** Katmanlı canlı arka plan (src/game/menu-backdrop.ts); görselleri yoksa eski harita arka planı. */
+  private backdrop: MenuBackdrop | null = null;
   private bgBase = 1;
   /** Arka plan merkezinin taban konumu (yakınlaşmasız; geniş ekranda boşluk kalmayacak kadar kaydırılmış). */
   private bgCenter = { x: W / 2, y: H / 2 };
@@ -173,6 +177,7 @@ export class MainMenuScene extends Phaser.Scene {
     this.busyUntil = 0;
     this.bgBlur = null;
     this.bg = null;
+    this.backdrop = null;
     this.lookTween = null;
     this.cleanups = [];
     this.promptOpen = false;
@@ -182,7 +187,9 @@ export class MainMenuScene extends Phaser.Scene {
     // Açılış hızı: yalnızca menünün ihtiyacı (kart görselleri, harita, logo); avatarlar, sprite'lar ve diğer arka planlar menü
     // görününce arka planda gelir (loadRestInBackground). İlerleme açılış yükleme ekranına bağlıdır (src/ui/boot-loader.ts).
     preloadAssets(this, { sprites: false, avatars: false, backgrounds: MENU_BACKGROUNDS });
-    preloadCampaignArt(this);
+    // Katmanlı arka plan (assets/menu) varsa geniş harita görseli menüde gerekmez: yalnızca Campaign kartının görseli
+    preloadMenuLayers(this);
+    preloadCampaignArt(this, ['valdoria-bg']);
     preloadCardArt(this);
     preloadLogo(this);
   }
@@ -230,8 +237,14 @@ export class MainMenuScene extends Phaser.Scene {
 
   private buildBackground(): void {
     this.cameras.main.setBackgroundColor('#0d0a07');
+    // Katmanlı canlı sahne (Ömer 2026-10-10): yanan kale, yıkık kule, soldaki koyu çamlar; paralaks + ortam animasyonu
+    if (hasMenuLayers(this)) {
+      this.backdrop = new MenuBackdrop(this);
+      this.backdrop.setReduced(reducedMotion());
+      this.cleanups.push(onReducedMotionChange((on) => this.backdrop?.setReduced(on)));
+    }
     // Geniş (21:9) harita görseli varsa o (eski 16:9 haritanın bölgesi eski yerine oturur; geniş ekranda yanları görünür), yoksa 16:9 görsel
-    const art = mapArt(this, getMap('valdoria'));
+    const art = this.backdrop ? null : mapArt(this, getMap('valdoria'));
     if (art) {
       this.bg = this.add.image(W / 2, H / 2, art.key).setDepth(0);
       // Eski kural: 16:9 harita ekranı %4 taşarak kaplar. Aynı dikdörtgen geniş görselin bölgesine uygulanır.
@@ -262,6 +275,7 @@ export class MainMenuScene extends Phaser.Scene {
   /** Geniş ekran yerleşimi (sahne kurulunca ve ekran boyutu değişince): arka plan kayması, vinyet, sol sütun ve Back konumu. */
   private layoutStage(): void {
     const { left, right, viewW } = stageView;
+    this.backdrop?.layout({ left, right });
     if (this.bgPlace) {
       const half = this.bgPlace.w / 2;
       const dx = coverShift({ left: this.bgPlace.cx - half, right: this.bgPlace.cx + half }, left, right);
@@ -288,13 +302,15 @@ export class MainMenuScene extends Phaser.Scene {
       this.placeFillers?.(this.bg);
       this.bgBlur?.setPosition(this.bg.x, this.bg.y).setDisplaySize(this.bg.displayWidth, this.bg.displayHeight).setAlpha(blur);
     }
-    this.darkRect.setFillStyle(0x000000, dark);
+    // Katmanlı sahne: yakınlaşma sahnenin hafif ileri itilmesi; bulanıklık yerine (Settings / Multiplayer) biraz daha koyuluk
+    this.backdrop?.setZoom(zoom, PIVOT);
+    this.darkRect.setFillStyle(0x000000, this.backdrop ? Math.min(0.85, dark + blur * 0.18) : dark);
   }
 
   private tweenLook(view: MenuView, instant: boolean): void {
     const to = backdropFor(view);
     this.lookTween?.stop();
-    if (instant) {
+    if (instant || (this.backdrop && reducedMotion())) {
       this.look = { ...to };
       this.applyLook();
       return;
@@ -557,7 +573,8 @@ export class MainMenuScene extends Phaser.Scene {
   private buildCards(): void {
     const latest = latestSave(storage());
     const anySaves = slotSummaries(storage()).some((x) => x && x.saveCount > 0);
-    const campaignArt = hasCampaignArt(this, 'valdoria-bg') ? campaignArtKey('valdoria-bg') : null;
+    // Campaign kartı (Ömer 2026-10-10): assets/cards/campaign.webp (uçurumdan Valdoria'ya bakan takım); yoksa harita
+    const campaignArt = cardArt(this, 'campaign') ?? (hasCampaignArt(this, 'valdoria-bg') ? campaignArtKey('valdoria-bg') : null);
     // Kart görselleri (Ömer 2026-10-08): Quick Battle = Proving Grounds (öğleden sonra), Multiplayer = Duelling Ring (ay ışığı); yoksa eskileri
     const art = (id: string) => (hasBackground(this, id) ? backgroundKey(id) : null);
     const camp = campaignButtons(!!latest, anySaves);
@@ -826,11 +843,18 @@ export class MainMenuScene extends Phaser.Scene {
     draw();
     this.addPanelRow(p, 'Sound volume', () => undefined, { right: [g, ...step('−', trackX - 46, -1), track, ...step('+', trackX + trackW + 42, 1), value], adjust: (d) => set(level + d, true) });
 
+    // --- Reduced motion: ana menü sahnesinde paralaks ve parçacık yok (src/ui/motion-pref.ts; kayıt yoksa işletim sistemi tercihi) ---
+    const motion = this.valueText(PANEL_W - 6, 0, reducedMotion() ? 'On' : 'Off', TXT_ON).setOrigin(1, 0.5);
+    this.addPanelRow(p, 'Reduced motion', () => {
+      setReducedMotion(!reducedMotion());
+      motion.setText(reducedMotion() ? 'On' : 'Off');
+    }, { right: [motion] });
+
     // --- Fullscreen (API yoksa satır yok; iPhone'da ipucu) ---
     const support = currentSupport();
     if (support !== 'none' && !isStandalone()) {
       const state = this.valueText(PANEL_W - 6, 0, 'Enter', TXT_ON).setOrigin(1, 0.5);
-      const note = this.noteText(COL_X, LOOK.panelY0 + 2 * ROW_H - 10, '', 22, '#cdb88d').setOrigin(0, 0.5);
+      const note = this.noteText(COL_X, LOOK.panelY0 + (this.panelRows.length + 1) * ROW_H - 10, '', 22, '#cdb88d').setOrigin(0, 0.5);
       p.add(note);
       this.cleanups.push(onFullscreenChange((on) => state.active && state.setText(on ? 'Exit' : 'Enter')));
       this.addPanelRow(p, 'Fullscreen', () => {

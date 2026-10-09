@@ -10,6 +10,7 @@
  *   summondeath_<çağrıId>  çağrı öldü (ceset bırakmaz)
  *   summonvanish_<çağrıId> çağrının süresi doldu (despawn)
  *   doomburst / omentransfer / withertick   Hexer motor olayları (hexer)
+ *   guardshare             Guard payı korumacıya geçti (damage.redirected; defender): actor = korumacı, targets[0] = korunan dost (bulunursa)
  */
 import { content, type SkillDef } from '../engine';
 import type { V2Vfx } from './art-v2/types';
@@ -26,6 +27,7 @@ export const EVENT_FX = {
   doom: 'doomburst',
   omenTransfer: 'omentransfer',
   witherTick: 'withertick',
+  guardShare: 'guardshare',
 } as const;
 
 /** Sahibin v2 dosyasındaki olay efekti (seçimden bağımsız; wiki/test için). */

@@ -886,21 +886,24 @@ export class EndlessScene extends Phaser.Scene {
     const av = merchantAvatar(this);
     const bx = S.left;
     const bw = 540;
-    const tx = bx + (av ? 112 : 30);
+    const tx = bx + (av ? 124 : 30);
     const line = this.note(tx, S.bubbleTop + 22, T.merchantLines[this.merchantLine], 27, C.sub, true).setWordWrapWidth(bx + bw - 30 - tx);
     const bh = Math.max(av ? 110 : 0, line.height + 44);
     this.add2(elPanel(this, bx, S.bubbleTop, bw, bh, { alpha: 0.9 }));
     // balonun kuyruğu (figüre doğru)
     const tail = this.add2(this.add.graphics());
-    tail.fillStyle(0x0e0a07, 1).fillTriangle(bx + 136, S.bubbleTop + bh - 1, bx + 164, S.bubbleTop + bh - 1, bx + 150, S.bubbleTop + bh + 14);
-    tail.lineStyle(1, EL.GOLD, 0.42).strokePoints([{ x: bx + 136, y: S.bubbleTop + bh }, { x: bx + 150, y: S.bubbleTop + bh + 14 }, { x: bx + 164, y: S.bubbleTop + bh }], false);
+    const tx0 = bx + 220; // tüccarın başının üstü
+    tail.fillStyle(0x0e0a07, 1).fillTriangle(tx0 - 14, S.bubbleTop + bh - 1, tx0 + 14, S.bubbleTop + bh - 1, tx0, S.bubbleTop + bh + 14);
+    tail.lineStyle(1, EL.GOLD, 0.42).strokePoints([{ x: tx0 - 14, y: S.bubbleTop + bh }, { x: tx0, y: S.bubbleTop + bh + 14 }, { x: tx0 + 14, y: S.bubbleTop + bh }], false);
     if (av) {
-      this.add2(this.add.rectangle(bx + 60, S.bubbleTop + bh / 2, 82, 82, EL.INK, 1).setStrokeStyle(1, EL.GOLD, EL.LINE.a3));
-      const head = this.add2(this.add.image(bx + 60, S.bubbleTop + bh / 2, av));
-      head.setScale(78 / head.width);
+      this.add2(this.add.rectangle(bx + 62, S.bubbleTop + bh / 2, 90, 90, EL.INK, 1).setStrokeStyle(1, EL.GOLD, EL.LINE.a3));
+      const head = this.add2(this.add.image(bx + 62, S.bubbleTop + bh / 2, av));
+      head.setScale(86 / head.width);
     }
     this.add2(line);
     const figTop = S.bubbleTop + bh + 30;
+    // yere basan gölge (gerçek sprite ve yer tutucu için ortak)
+    this.add2(this.add.ellipse(S.left + 200, S.figureBottom - 6, 360, 34, 0x000000, 0.45));
     this.add2(merchantFigure(this, S.left + 200, S.figureBottom, Math.min(760, S.figureBottom - figTop), 440));
     // kese
     this.add2(this.add.image(S.left + 330, 990, purseEmblem(this)).setDisplaySize(72, 72));

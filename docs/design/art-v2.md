@@ -2,7 +2,8 @@
 
 Ömer kararı: tüm karakterlerin **ses, ikon ve skill animasyonları baştan yeniden tasarlanıyor** (iyileştirme değil, yeniden tasarım;
 en yüksek çözünürlük ve kalite). Eskiler (**v1**) DOKUNULMAZ ve korunur; Ömer debug > **Versions** sekmesinden karakter bazında
-v1 / v2 seçip karşılaştırır. Kapsam dışı: **Cutthroat** tamamen; **Defender**'ın skill ikonları ve animasyonları (Defender **sesleri kapsamda**).
+v1 / v2 seçip karşılaştırır. Kapsam dışı: **Cutthroat** tamamen; **Defender**'ın skill İKONLARI (yeni ikon görselleri ayrıca gelecek). Defender'ın
+**sesleri ve animasyonları kapsamda** (2026-10-10: animasyonlar hazır sprite sheet paketiyle, bkz. 3.4).
 
 ## 1. Dosya düzeni (her class kendi dosyalarında; başkasınınkine dokunma)
 
@@ -15,6 +16,7 @@ v1 / v2 seçip karşılaştırır. Kapsam dışı: **Cutthroat** tamamen; **Defe
 
 - Her dosyanın başındaki yorum o class'ın v1 adlarını listeler (hangi anahtarı dolduracağın).
 - Kayıt dosyaları (`src/game/art-v2/icons-index.ts`, `vfx-index.ts`, `audio-index.ts`) **şimdiden tüm class'lar için doludur: dokunma.**
+  (Defender'ın `vfx-index.ts` satırı 2026-10-10'da eklendi; ikon kaydı yok.)
 - Çağrılar sahibine aittir: Skeleton'un skill/ikon/sesleri **undead** dosyalarında, Treant'ınkiler **druid** dosyalarında.
   Çağrı giriş sesleri de (Undead: soulDrain, earthCrack, graveMoan, boneClatter, thud; Druid: woodCreak, thud) sahibin ses dosyasından çözülür.
 - Ortak öğeler (Rest/Skip/Move ikon+sesleri: rest, hourglass, boot, gasp, fistWhoosh, armorRun; durum rozetleri) `shared`
@@ -87,6 +89,7 @@ oynatma `BattleScene.runEventFx`.
 | `doomburst` | `hexer/vfx.ts` (hazır) | otomatik Doom (yığın doldu / süre bitti; Doom Mark kendi efektinde) | `targets` = Doom yiyen, `actor` = Hexer; Promise sütun inince |
 | `omentransfer` | `hexer/vfx.ts` (hazır) | Ill Omen geçişi | `actor` = ölen, `targets` = alıcı |
 | `withertick` | `hexer/vfx.ts` (hazır) | Wither tiki | `targets` = taşıyan |
+| `guardshare` | `defender/vfx.ts` (hazır) | Guard payı korumacıya geçti (damage.redirected) | `actor` = korumacı, `targets[0]` = korunan dost (bulunursa); anında çözülür |
 
 **Undead'de `corpsedrain` + `summon_skeleton`, Druid'de `summon_treant` var** (2026-10-09, gerçekçi doğuş: toprak yarılır, çağrı maskeyle topraktan yükselir; ölüm/kaybolma adları henüz yok, v1'e düşer). Galeri önizlemesi (`debugCastSkill`) tahtada yer yoksa çağıranın en öndeki dostunu, Raise Dead'de ceset yoksa en arkadaki düşmanı düşürür ki doğuş ve ceset emme görünsün.
 Sahne ayrıca şunları kendisi gösterir (efekte gerek yok): yüzen yazılar `+1 Omen` / `+2 Omen!` / `DOOM` / küçük Wither rakamı,
@@ -105,6 +108,21 @@ Dark Bond ikonu). Aksi halde (ortak durum: Stun, Slow...; ya da class'ın v2'sin
 v1 paletine ek, yalnızca v2 çizimlerinin kullanabildiği jetonlar (`pixel-art.ts > V2_PALETTE`; v1 ikonlarında yasak, v1 çıktısı değişmez):
 `'h'` erik #6a2f5f, `'H'` lanet eflatunu #b04fa8, `'v'` safra yeşili #9cab3c, `'V'` koyu safra #6f7a2a, `'q'` kandil kehribarı #d9a441,
 `'t'` ruh turkuazı #3fd6b4, `'T'` koyu turkuaz #1f7a68. Yeni renk gerekirse ui-dev'den kullanılmayan bir harfle eklemesini iste.
+
+### 3.4 Hazır sprite sheet efektleri (2026-10-10; ilk kullanan Defender)
+
+Kodla çizmek yerine hazır kare animasyonu da kullanılabilir:
+- Dosyalar: `assets/vfx/<sahip>/<NN-ad>.png` (4x2 ızgara, 8 kare x 256 px, satır satır, 10 fps, pivot ortada) + aynı adlı `.json` metası
+  (`frames`, `fps`, `frame_size`). Asıllar/promptlar `assets/source/<sahip>-vfx` altında; oyuna YÜKLENMEZ (yalnızca kaynak).
+- Tarama: `src/game/vfx-sheet-files.ts` (Phaser'sız; wiki de okur). Yükleme ve oynatma: `src/game/vfx-sheets.ts`
+  (BattleScene.preload hepsini yükler; eksikse efekt başında `await k.sheetsReady(c.scene, ids)` tembel yükler).
+- Efektte: `k.sheet(c.scene, '<sahip>/<NN-ad>', x, y, { size, squashY, origin, frame | frames, fps, loop, keep, depth, flipX, rotation, alpha, tint, delay })`
+  oynayan sprite döner (doku yoksa null: efekt çökmez); `k.sheetDone(spr)` bitişi bekler. Kareler NEAREST, hız `slow()` ile skillSlowdown'a uyar.
+  Hareket (taşıma, ölçek, sarsıntı, solma) yine kodla: sprite'a tween.
+- Codex > Assets > Versions'ta sahibin kartında "v2 animation sprite sheets" olarak listelenir. `tests/wiki-assets.test.ts`: her sheet'in metası
+  var, sahibinin `vfx.ts`'i kimliğini kullanıyor (bağlantısız sheet kalmaz), Versions'ta görünüyor; `assets/source` hiçbir kodla yüklenmiyor.
+- Defender olay efekti `guardshare` (`defender/vfx.ts`): Guard payı korumacıya geçince (damage.redirected) korunan dostun önünde hayalet kalkan +
+  sapma kıvılcımı (yoksa eski halka). `actor` = korumacı, `targets[0]` = korunan dost.
 
 ## 4. Ses nasıl yazılır
 

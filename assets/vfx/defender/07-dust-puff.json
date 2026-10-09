@@ -1,0 +1,31 @@
+{
+  "frames": 8,
+  "frame_size": [
+    256,
+    256
+  ],
+  "sheet_size": [
+    1024,
+    512
+  ],
+  "columns": 4,
+  "rows": 2,
+  "fps": 10,
+  "animation_duration_ms": 800,
+  "preview_pause_ms": 500,
+  "order": "left to right, top to bottom",
+  "transparent_padding_px": 16,
+  "generator": "built-in image_gen",
+  "gif_frames_including_blank_pause": 9,
+  "gif_durations_ms": [
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    500
+  ]
+}

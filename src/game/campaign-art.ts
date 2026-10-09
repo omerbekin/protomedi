@@ -5,9 +5,11 @@ const files = import.meta.glob('../../assets/campaign/*.{webp,png,jpg,jpeg}', { 
 
 export const campaignArtKey = (id: string): string => `campaign:${id}`;
 
-export function preloadCampaignArt(scene: Phaser.Scene): void {
+/** `only`: yalnızca bu görseller (ana menü yalnızca Campaign kartının görselini ister); verilmezse hepsi. */
+export function preloadCampaignArt(scene: Phaser.Scene, only?: string[]): void {
   for (const [path, url] of Object.entries(files)) {
     const id = (path.split('/').pop() ?? '').replace(/\.[^.]+$/, '');
+    if (only && !only.includes(id)) continue;
     if (!scene.textures.exists(campaignArtKey(id))) scene.load.image(campaignArtKey(id), url);
   }
 }

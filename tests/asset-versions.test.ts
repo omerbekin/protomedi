@@ -122,9 +122,9 @@ describe('sürüm kaydı: her class için dosyalar ve tek satırlık kayıt', ()
       expect(AUDIO_V2[key], `${key} ses kaydı`).toBeDefined();
       expect(existsSync(join(ROOT, 'data/audio-v2', `${key}.json`)), `data/audio-v2/${key}.json`).toBe(true);
     }
-    // Defender: yalnızca sesleri; Cutthroat hiç yok
+    // Defender: animasyon + ses (ikonlar henüz kapsam dışı); Cutthroat hiç yok
     expect(inScope('defender', 'icon')).toBe(false);
-    expect(inScope('defender', 'vfx')).toBe(false);
+    expect(inScope('defender', 'vfx')).toBe(true);
     expect(inScope('defender', 'sfx')).toBe(true);
     expect(ICONS_V2['cutthroat']).toBeUndefined();
     expect(AUDIO_V2['cutthroat']).toBeUndefined();
@@ -252,12 +252,12 @@ describe('sürüm çözümleme', () => {
     });
   });
 
-  it('kapsam: Cutthroat seçilemez, Defender ikon/vfx v2 olmaz ama sesi olur', () => {
+  it('kapsam: Cutthroat seçilemez, Defender ikonu v2 olmaz ama animasyonu ve sesi olur', () => {
     setVersion('cutthroat', 'v2');
     expect(getVersion('cutthroat')).toBe('v1');
     setVersion('defender', 'v2');
     expect(wantsV2('defender', 'icon')).toBe(false);
-    expect(wantsV2('defender', 'vfx')).toBe(false);
+    expect(wantsV2('defender', 'vfx')).toBe(true);
     expect(wantsV2('defender', 'sfx')).toBe(true);
   });
 
@@ -366,6 +366,7 @@ describe('ilerleme ve wiki karşılaştırması', () => {
       expect(v2Label('warrior')).toMatch(/^v2 · \d+\/\d+$/);
     });
     expect(v2Progress('defender').icon.total).toBe(0); // kapsam dışı
+    expect(v2Progress('defender').vfx.ready).toBe(v2Progress('defender').vfx.total); // dört skill animasyonu hazır
     expect(v2Progress('defender').sfx.total).toBeGreaterThan(0);
   });
 

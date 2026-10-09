@@ -84,6 +84,15 @@ function rowCard(r: VersionRow, refreshAll: () => void): HTMLElement {
       h('h4', { text: `New v2 effect sprites (${r.extraSprites.length})` }),
       h('div', { class: 'ver-pairs' }, ...r.extraSprites.map((n) => h('figure', { class: 'ver-pair' }, iconImg(v2SpriteName(r.key, n), r.color, `${n} v2`), h('figcaption', { class: 'small mono', text: n })))),
     );
+  if (r.sheets.length)
+    parts.push(
+      h('h4', { text: `v2 animation sprite sheets (${r.sheets.length})` }),
+      h('div', { class: 'small muted', text: 'assets/vfx: 8 frames each (4x2, 256 px), played by the v2 animations above; originals in assets/source (not loaded by the game).' }),
+      h('div', { class: 'ver-pairs' }, ...r.sheets.map((s) =>
+        h('figure', { class: 'ver-pair' },
+          h('img', { class: 'ver-sheet pixelated', attrs: { src: s.url, alt: s.name }, style: { width: '128px', height: '64px', 'object-fit': 'contain', cursor: 'zoom-in' }, title: `${s.title}: ${s.frames} frames, ${s.fps} fps (click to enlarge)`, on: { click: () => openLightbox(s.url, `${s.name} (${s.frames} frames, ${s.fps} fps)`, true) } }),
+          h('figcaption', { class: 'small mono', text: s.name })))),
+    );
   const scopeNote = !r.scope.icon || !r.scope.vfx ? h('div', { class: 'small muted', text: `v2 covers ${[r.scope.icon && 'icons', r.scope.vfx && 'animations', r.scope.sfx && 'sounds'].filter(Boolean).join(', ')} only.` }) : null;
   return searchable(
     h('article', { class: 'card ver-card' },

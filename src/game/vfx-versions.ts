@@ -11,6 +11,7 @@ import { selectSkillVfx, v2VfxKey } from './vfx-select';
 import { v2SpriteName } from './art-registry';
 import type { VfxKind } from '../ui/vfx-kinds';
 import { VFX, VFX_BASE_KIT, type VfxCtx } from './vfx';
+import { ensureVfxSheets, sheetDone, vfxSheet } from './vfx-sheets';
 
 /** v2 efektinin ikinci parametresi: v1 yardımcıları + v1 efektleri (`v1`) + v2 sprite yardımcıları + Phaser. */
 export const VFX_KIT = {
@@ -23,6 +24,13 @@ export const VFX_KIT = {
   /** Sahibin v2 sprite'ını sahneye koyar (k.sprite ile aynı imza, ad yerine v2 SPRITES adı). */
   v2Sprite: (c: VfxCtx, name: string, hex: string, x: number, y: number, size: number, depth?: number): Phaser.GameObjects.Image =>
     VFX_BASE_KIT.sprite(c.scene, v2SpriteName(ownerOfSkill(c.skill.id) ?? 'unknown', name), hex, x, y, size, depth),
+  /**
+   * Hazır sprite sheet efekti (assets/vfx/<sahip>/<NN-ad>.png, kimlik '<sahip>/<NN-ad>'): oynayan sprite (yoksa null). Ayrıntı src/game/vfx-sheets.ts.
+   * `k.sheetsReady(c.scene, ids)` efekt başında eksikleri tembel yükler; `k.sheetDone(spr)` animasyon bitince çözülür.
+   */
+  sheet: vfxSheet,
+  sheetsReady: ensureVfxSheets,
+  sheetDone,
 };
 export type VfxKit = typeof VFX_KIT;
 

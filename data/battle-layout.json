@@ -20,7 +20,8 @@
       "_cards": "2026-10-10 kart görselleri (assets/cards, 2:3 dikey): kart genişliği tam kaplar, kesit en üstten başlar (y 0,464 = kart yüksekliğinin yarısı; savaşçılar üst kısımda, alt ~%30 başlık / düğmeler için koyu).",
       "quick-battle": [0.5, 0.464],
       "quick-battle-endless": [0.5, 0.464],
-      "multiplayer": [0.5, 0.464]
+      "multiplayer": [0.5, 0.464],
+      "campaign": [0.5, 0.464]
     }
   },
   "characterSize": {

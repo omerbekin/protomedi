@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import audio from '../data/audio.json';
@@ -10,6 +10,9 @@ import { ICON_KINDS } from '../src/ui/icon-kinds';
 import { BACKUP_VFX, VFX_KINDS } from '../src/ui/vfx-kinds';
 import { buildWiki } from '../src/wiki/catalog';
 import { ITEM_ICON_NAMES, REWARD_ICON } from '../src/game/item-icons';
+import { inScope, versionKeys } from '../src/game/asset-versions';
+import { VFX_SHEET_FILES } from '../src/game/vfx-sheet-files';
+import { buildVersions } from '../src/wiki/assets/versions-catalog';
 
 /** assets/ altındaki .png dosyalarını sayfadaki `import.meta.glob` ile aynı şekle (yol -> yol) çevirir. */
 function scan(dir: string, depth: 1 | 2): Record<string, string> {
@@ -170,6 +173,66 @@ describe('Play kartı görselleri (assets/cards)', () => {
       const id = f.replace(/\.[^.]+$/, '');
       expect(layout.backgrounds.cardFocus[id], `${f}: odak yok`).toBeTruthy();
       expect(existsSync(`assets/source/cards/${f}`), `${f}: aslı yok`).toBe(true);
+    }
+  });
+});
+
+describe('Sprite sheet efektleri (assets/vfx) bağlı; assets/source yalnızca kaynak', () => {
+  const vfxRoot = join(__dirname, '..', 'assets', 'vfx');
+  const onDisk = existsSync(vfxRoot)
+    ? readdirSync(vfxRoot).filter((d) => statSync(join(vfxRoot, d)).isDirectory()).flatMap((owner) => readdirSync(join(vfxRoot, owner)).filter((f) => f.endsWith('.png')).map((f) => ({ owner, name: f.replace(/\.png$/, ''), id: `${owner}/${f.replace(/\.png$/, '')}` })))
+    : [];
+
+  it('assets/vfx altındaki her .png bağlı: metası var, oyunun sheet listesinde, sahibinin v2 animasyonunda kullanılıyor ve Codex > Versions da listeleniyor', () => {
+    expect(onDisk.length).toBeGreaterThan(0);
+    expect(VFX_SHEET_FILES.map((f) => f.id).sort()).toEqual(onDisk.map((f) => f.id).sort());
+    const rows = buildVersions();
+    for (const f of onDisk) {
+      const metaPath = join(vfxRoot, f.owner, `${f.name}.json`);
+      expect(existsSync(metaPath), `${f.id}: .json metası yok`).toBe(true);
+      const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as { frames: number; frame_size: [number, number]; fps: number };
+      const png = readFileSync(join(vfxRoot, f.owner, `${f.name}.png`));
+      const [w, hgt] = [png.readUInt32BE(16), png.readUInt32BE(20)]; // PNG IHDR
+      expect(Math.floor(w / meta.frame_size[0]) * Math.floor(hgt / meta.frame_size[1]), `${f.id}: kare sayısı sheet'e sığmıyor`).toBeGreaterThanOrEqual(meta.frames);
+      expect(meta.fps, f.id).toBeGreaterThan(0);
+      expect(versionKeys(), `${f.id}: sahibi bir sürüm anahtarı değil`).toContain(f.owner);
+      expect(inScope(f.owner, 'vfx'), `${f.id}: sahibinin v2 animasyonu kapsam dışı`).toBe(true);
+      const src = readFileSync(join(__dirname, '..', 'src/game/art-v2', f.owner, 'vfx.ts'), 'utf8');
+      expect(src.includes(`'${f.id}'`), `${f.id}: ${f.owner}/vfx.ts kullanmıyor (bağlantısız)`).toBe(true);
+      expect(rows.find((r) => r.key === f.owner)?.sheets.map((x) => x.id), `${f.id}: Codex > Versions da yok`).toContain(f.id);
+    }
+  });
+
+  it('assets/source kaynak/asıl dosyalardır: oyun kodu yüklemez, Legacy / bağlantısız listesine düşmez; her sheet sahibinin aslı assets/source/<sahip>-vfx altında', () => {
+    const srcRoot = join(__dirname, '..', 'src');
+    const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : /\.ts$/.test(e.name) ? [join(d, e.name)] : []));
+    for (const file of walk(srcRoot)) {
+      const text = readFileSync(file, 'utf8');
+      for (const m of text.matchAll(/import\.meta\.glob\(\s*['"]([^'"]+)['"]/g)) expect(m[1], `${file} assets/source yüklüyor`).not.toMatch(/assets\/source/);
+      for (const m of text.matchAll(/^\s*import[^;]*from\s*['"]([^'"]+)['"]/gm)) expect(m[1], `${file} assets/source içe aktarıyor`).not.toMatch(/assets\/source/);
+    }
+    expect(legacyItems.some((i) => /assets\/(source|vfx)\//.test(`${i.id} ${i.label}`)), 'Legacy de assets/source ya da assets/vfx dosyası').toBe(false);
+    for (const owner of new Set(onDisk.map((f) => f.owner))) expect(existsSync(join(__dirname, '..', 'assets', 'source', `${owner}-vfx`)), `assets/source/${owner}-vfx yok`).toBe(true);
+  });
+});
+
+describe('Ana menü katmanlı sahnesi (assets/menu)', () => {
+  it('her dosya kullanılıyor (data/menu-scene.json katmanları + efekt sayfası), asılları assets/source/menu-layers altında, konumlar görselin içinde', async () => {
+    const cfg = (await import('../data/menu-scene.json')).default as unknown as { layers: string[]; fire: { flames: Array<{ x: number; y: number }>; glow: { x: number; y: number } }; smoke: { origin: { x: number; y: number } }; frames: Record<string, unknown> };
+    const used = new Set([...cfg.layers, 'fx']);
+    for (const f of readdirSync('assets/menu')) expect(used.has(f.replace(/\.[^.]+$/, '')), `${f} bağlantısız`).toBe(true);
+    for (const n of used) expect(existsSync(`assets/menu/${n}.webp`), `${n}.webp yok`).toBe(true);
+    expect(readdirSync('assets/source/menu-layers').filter((f) => f.endsWith('.png'))).toHaveLength(5);
+    for (const p of [...cfg.fire.flames, cfg.fire.glow, cfg.smoke.origin]) {
+      expect(p.x).toBeGreaterThan(0);
+      expect(p.x).toBeLessThan(2580);
+      expect(p.y).toBeGreaterThan(0);
+      expect(p.y).toBeLessThan(1080);
+    }
+    for (const [k, r] of Object.entries(cfg.frames)) {
+      if (k.startsWith('_')) continue;
+      const [x, y, w, h] = r as number[];
+      expect(x! >= 0 && y! >= 0 && x! + w! <= 1024 && y! + h! <= 512, `${k} sayfanın dışında`).toBe(true);
     }
   });
 });

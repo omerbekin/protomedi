@@ -7,6 +7,7 @@ import { ATTACK_STATS, DEFENSE_STATS, MAIN_STATS, statRowText } from '../stat-co
 import { PRIMARY_GOLD, RAGE_COLOR, RAGE_ICON, STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON } from '../../ui/stat-icons';
 import { avatarTexture, backgroundKey, characterTexture, hasBackground, preloadAssets } from '../assets';
 import { CombatantView, color, slow, textStyle } from '../combatant-view';
+import { preloadVfxSheets } from '../vfx-sheets';
 import { ensureIcon, ensureSkillIcon } from '../icons';
 import { initialSeed, initialSizes, newSeed } from '../seed';
 import { clampSize } from '../team-select-model';
@@ -280,6 +281,7 @@ export class BattleScene extends Phaser.Scene {
 
   preload(): void {
     preloadAssets(this);
+    preloadVfxSheets(this); // v2 sprite sheet efektleri (assets/vfx; Defender)
   }
 
   create(): void {
@@ -2210,7 +2212,11 @@ export class BattleScene extends Phaser.Scene {
             target.hit(ratio);
             target.damageText(e.amount, ratio, e.crit, this.damageTags(e));
           }
-          if (e.redirected) target.ring(colors.shield, 0.8); // guarded damage taken for an ally
+          if (e.redirected) {
+            // Guard payı korumacıya geçti: v2'de korumacının (Defender) 'guardshare' olay efekti (kalkan önünde sapma kıvılcımı), yoksa halka
+            const ally = [...this.views.values()].find((v) => v !== target && v.combatant.statuses.some((s) => s.kind === 'guard' && s.source === e.target));
+            if (!(await this.runEventFx(this.ownerOfView(target), EVENT_FX.guardShare, { actor: target, targets: ally ? [ally] : [], event: e }))) target.ring(colors.shield, 0.8);
+          }
           target.setHp(e.hpAfter, true, ratio);
           target.setShield(e.shieldAfter, e.magicShieldAfter);
         }

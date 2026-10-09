@@ -1,0 +1,37 @@
+{
+  "slug": "09-war-cry",
+  "title": "Savaş narası",
+  "frames": 8,
+  "fps": 10,
+  "duration_ms": 800,
+  "frame_size": [
+    256,
+    256
+  ],
+  "sheet_size": [
+    1024,
+    512
+  ],
+  "grid": [
+    4,
+    2
+  ],
+  "order": "row-major",
+  "padding_px": 16,
+  "gif_frames_including_blank_pause": 9,
+  "source_cell_edge_pixels_alpha_ge32": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "distinct_frames": 8,
+  "pivot": [
+    128,
+    128
+  ]
+}
