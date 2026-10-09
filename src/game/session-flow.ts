@@ -37,7 +37,7 @@ export function flowButtons(ctx: FlowContext): { newGame: boolean; teamSelect: b
 /** Pure decision: the "Back to Main Menu" entry is shown everywhere except on the main menu itself. */
 export const mainMenuButton = (ctx: FlowContext): boolean => ctx !== 'none' && ctx !== 'main-menu';
 
-export type MenuItemId = 'resume' | 'settings' | 'newGame' | 'teamSelect' | 'retreat' | 'mainMenu';
+export type MenuItemId = 'resume' | 'settings' | 'codex' | 'newGame' | 'teamSelect' | 'retreat' | 'mainMenu';
 
 export interface MenuSpec {
   items: MenuItemId[];
@@ -65,9 +65,11 @@ export function menuItems(ctx: FlowContext): MenuSpec | null {
     case 'campaign-battle-over':
     case 'mp-live':
     case 'mp': {
-      const items: MenuItemId[] = ['resume', 'settings'];
-      if (f.newGame) items.push('newGame');
-      if (f.teamSelect) items.push('teamSelect');
+      // Codex (sağ üst kitap düğmesi kaldırıldı, 2026-10-09); biten savaşta New Game / Team Select sonuç ekranında zaten var: menüde tekrar yok
+      const items: MenuItemId[] = ['resume', 'settings', 'codex'];
+      const over = ctx === 'battle-over';
+      if (f.newGame && !over) items.push('newGame');
+      if (f.teamSelect && !over) items.push('teamSelect');
       if (ctx === 'campaign-battle-live') items.push('retreat');
       items.push('mainMenu');
       const confirm: MenuSpec['confirm'] = {};
@@ -83,6 +85,7 @@ export function menuItems(ctx: FlowContext): MenuSpec | null {
 export const MENU_LABELS: Record<MenuItemId, string> = {
   resume: 'Resume',
   settings: 'Settings',
+  codex: 'Codex',
   newGame: 'New Game',
   teamSelect: 'Team Select',
   retreat: 'Retreat to Map',

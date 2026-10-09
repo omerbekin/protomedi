@@ -165,9 +165,9 @@ body {
   width: min(520px, calc(var(--stage-w, 100vw) - 16px - var(--er) - var(--el)));
   overflow: hidden;
   padding: 12px;
-  background: rgba(15, 15, 25, 0.95);
-  border: 1px solid #8d99ae;
-  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(30, 22, 14, 0.97), rgba(12, 9, 6, 0.97)); /* tasarım kiti */
+  border: 1px solid rgba(217, 178, 106, 0.42);
+  border-radius: 0;
   z-index: 20;
   touch-action: pan-y;
 }
@@ -187,7 +187,7 @@ body {
   margin: 14px 0 6px;
   font: bold 12px monospace;
   text-transform: uppercase;
-  color: #8d99ae;
+  color: #a8977a;
 }
 
 /* Her kategori bir ızgara: satır başına 2-3 düğme */
@@ -230,7 +230,7 @@ body {
 }
 
 .debug-info dt {
-  color: #8d99ae;
+  color: #a8977a;
 }
 
 .debug-info dd {
@@ -276,7 +276,7 @@ body {
   padding: 4px 8px 4px 6px;
   text-align: left;
   border-width: 2px;
-  border-radius: 8px;
+  border-radius: 0;
 }
 
 .debug-action.debug-ibtn.on {
@@ -329,7 +329,7 @@ body {
 }
 
 .debug-ibtn-badge.off {
-  color: #8d99ae;
+  color: #a8977a;
 }
 
 .debug-ibtn-badge.val {
@@ -417,12 +417,12 @@ body {
 }
 
 .settings-toggle.fullscreen-toggle {
-  right: calc(64px + var(--er));
+  right: calc(8px + var(--er));
 }
 
-/* Menu düğmesi (savaş, takım seçimi, multiplayer, sefer haritası): aynı sıra, koyu deri / altın yazı */
+/* Menu düğmesi (savaş, sefer haritası): sağ üstte; dokunmatikte tam ekran düğmesinin solunda (codex kitap düğmesi kaldırıldı) */
 .settings-toggle.menu-toggle {
-  right: calc(120px + var(--er));
+  right: calc(64px + var(--er));
   width: auto;
   min-width: 96px;
   padding: 0 18px;
@@ -439,7 +439,7 @@ body {
 }
 
 .settings-toggle.menu-toggle.no-fs {
-  right: calc(64px + var(--er));
+  right: calc(8px + var(--er));
 }
 
 .settings-toggle.menu-toggle:hover {
@@ -703,27 +703,9 @@ html.settings-open .gm-overlay {
   visibility: hidden;
 }
 
-/* Sol üst "◂ Back" (ana menüdeki gibi; oyun alanının köşesi) */
+/* Sol üst "◂ Back  Esc": görünüm ve konum tasarım kitinden (src/ui/elegant.css > .el-back); burada yalnızca katman */
 .st-back {
-  position: absolute;
-  left: calc(var(--el) + 58 * var(--u) - 10px);
-  top: calc(var(--et) + 64 * var(--u) - max(22px, calc(50 * var(--u))));
-  min-height: 44px;
-  height: max(44px, calc(100 * var(--u)));
-  padding: 0 10px;
-  font: bold calc(36 * var(--u)) var(--st-serif);
-  letter-spacing: calc(2 * var(--u));
-  color: var(--st-text);
-  text-shadow: 0 0 3px #0c0805, 0 2px 0 #0c0805;
-  background: none;
-  border: 0;
-  cursor: pointer;
-}
-
-.st-back:hover,
-.st-label:hover,
-.st-step:hover {
-  color: var(--st-on);
+  z-index: 3;
 }
 
 /* Zarif menü stili (önizleme ?menu=new; src/ui/menu-style.ts): ana menünün Settings sütunuyla aynı ölçüler (MainMenuScene > ELEGANT) */
@@ -785,11 +767,6 @@ html.menu-elegant .st-note {
   font: calc(24 * var(--u)) var(--st-body);
 }
 
-html.menu-elegant .st-back {
-  font: 600 calc(30 * var(--u)) var(--st-serif);
-  letter-spacing: 0.05em;
-  text-shadow: 0 2px 4px #0c0805;
-}
 
 /* Kısa sahne (yatay telefon): daha sıkı */
 html.short .gm-title {
@@ -818,7 +795,7 @@ html.short .gm-list {
   padding: 4px 4px 4px 14px;
   font: 14px system-ui, sans-serif;
   color: #edf2f4;
-  background: rgba(15, 15, 25, 0.95);
+  background: linear-gradient(180deg, rgba(30, 22, 14, 0.97), rgba(12, 9, 6, 0.97)); /* tasarım kiti */
   border: 1px solid #ffd23f;
   border-radius: 10px;
   z-index: 35;
@@ -881,7 +858,7 @@ html.short .gm-list {
   min-height: 48px;
   padding: 5px 2px 4px;
   font: bold 11px system-ui, sans-serif;
-  color: #8d99ae;
+  color: #a8977a;
   background: #1c1d2e;
   border: 1px solid #4a4e69;
   border-radius: 6px;
@@ -970,7 +947,7 @@ html.short .gm-list {
 }
 
 .debug-cells .debug-action.empty {
-  color: #8d99ae;
+  color: #a8977a;
   background: #1c1d2e;
 }
 
@@ -981,7 +958,7 @@ html.short .gm-list {
 }
 
 .debug-note.dim {
-  color: #8d99ae;
+  color: #a8977a;
 }
 
 /* Debug > Versions: class başına satır (avatar + ad + sürüm menüsü) */
@@ -1138,7 +1115,7 @@ html.short .gm-list {
   padding: 20px;
   background: linear-gradient(#2e2218, #110b07);
   border: 2px solid #c79a3e;
-  border-radius: 8px;
+  border-radius: 0;
   color: #f3e4c4;
   font-family: Georgia, 'Times New Roman', serif;
 }

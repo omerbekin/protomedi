@@ -10,7 +10,8 @@ import { CombatantView, color, slow, textStyle } from '../combatant-view';
 import { ensureIcon, ensureSkillIcon } from '../icons';
 import { initialSeed, initialSizes, newSeed } from '../seed';
 import { clampSize } from '../team-select-model';
-import { GOLD, SERIF, cornerOrnaments, ensureGrain, frameRect, glowRect, gradientRect, makeBadge, makePanel } from '../ui-frame';
+import { GOLD, SERIF, cornerOrnaments, ensureGrain, frameRect, glowRect, gradientRect, makeBadge } from '../ui-frame';
+import { elPanel } from '../elegant-ui';
 import { playSfx } from '../audio';
 import { BattleStats, showResultScreen } from '../result-screen';
 import type { ResultAction, ResultScreen } from '../result-screen';
@@ -1875,7 +1876,7 @@ export class BattleScene extends Phaser.Scene {
     const iconSize = 44;
     const items: Phaser.GameObjects.GameObject[] = [];
     // Recessed plaque behind the whole info area
-    items.push(...makePanel(this, -12, -8, width + 24, maxY - top + 16, { top: 0x1a130d, bottom: 0x0b0806, bevel: 3, grain: 0.5, ornaments: false }));
+    items.push(elPanel(this, -12, -8, width + 24, maxY - top + 16, { alpha: 0.95 })); // tasarım kiti paneli
 
     // --- First row ---
     let left = 0;
@@ -3154,7 +3155,7 @@ export class BattleScene extends Phaser.Scene {
     const x = (W - total) / 2;
     const items: Phaser.GameObjects.GameObject[] = [];
     // Carved plaque behind the whole order bar
-    items.push(...makePanel(this, x - 22, y - 12, total + 44, cellSize + 52, { top: 0x261c13, bottom: 0x0e0906, bevel: 3, grain: 0.6, alpha: 0.93 }));
+    items.push(elPanel(this, x - 22, y - 12, total + 44, cellSize + 52, { alpha: 0.93 })); // tasarım kiti paneli
 
     if (this.battle?.mode === 'test') {
       items.push(

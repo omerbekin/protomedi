@@ -53,6 +53,7 @@ import { debugState } from '../debug-state';
 import { isSettingsOpen, setSettingsOpen } from '../../ui/settings';
 import { mountMenuToggle } from '../../ui/game-menu';
 import { openGearScreen, showHandover, showSpoils } from '../../ui/gear-screen';
+import { openWiki } from '../../wiki/view';
 import { EL, diamondPts, elBadge, elBody, elButton, elIconButton, elLink, elPanel, elText, elToast, fadeLine, fitW, hGradient, vGradient } from '../elegant-ui';
 import { MAP_ZOOM, canPan, clampMid, clampZoom, wheelAction, type Bounds } from '../map-view';
 import { drawNodeGlyph, openFormation, openHeroPanel } from '../campaign-panels';
@@ -209,7 +210,7 @@ export class CampaignMapScene extends Phaser.Scene {
     this.pauseMenu = null;
   }
 
-  /** Resume / Save (Normal) / Settings / Back to Main Menu (tasarım kiti: openModal + kit düğmeleri). */
+  /** Resume / Save (Normal) / Settings / Codex / Back to Main Menu (tasarım kiti: openModal + kit düğmeleri). */
   private openMenu(): void {
     if (this.pauseMenu || this.walking) return;
     const s = this.s;
@@ -231,6 +232,8 @@ export class CampaignMapScene extends Phaser.Scene {
         setSettingsOpen(true, () => m.root.active && m.root.setVisible(true));
       },
     });
+    // Codex (sağ üst kitap düğmesi kaldırıldı): menüden açılır
+    items.push({ label: 'Codex', run: () => (this.closeMenu(), openWiki()) });
     items.push({ label: 'Back to Main Menu', run: () => this.scene.start(MENU_SCENE) });
     const m = openModal(this, this.ui, { title: 'Menu', width: 620, height: 170 + items.length * 88 });
     items.forEach((it, i) => {
@@ -1213,7 +1216,7 @@ export class CampaignMapScene extends Phaser.Scene {
     this.modal = openModal(this, this.ui, {
       title: 'Take this road?',
       text: `${node(this.map, id).name}. The other roads will close for this journey.`,
-      height: 380,
+      fit: true,
       buttons: [
         { label: 'Yes', primary: true, run: () => this.march(id) },
         { label: 'No', run: () => this.closeModal() },

@@ -3,11 +3,6 @@
    1920x1080'de 1px) ve küçük ekranda okunur kalsın diye alt sınırlı (max(px, N * --u)); dokunma hedefleri en az 44px.
    Düzen: sol sütun arama + bölüm menüsü | orta sütun madde listesi | sağda madde paneli; Assets bölümleri orta+sağ alanı birlikte kullanır. */
 
-/* Sağ üst kitap düğmesi (en sağda; solunda tam ekran ve Menu) */
-.settings-toggle.wiki-toggle {
-  right: calc(8px + var(--er, 0px));
-}
-
 .wk-overlay.cx {
   --u: var(--gu, 1px);
   /* Assets bölümleri (src/wiki/assets/assets.css) bu değişkenleri okur: kit renkleri */
@@ -53,10 +48,8 @@
 }
 
 .cx .cx-back {
-  left: calc(var(--el, 0px) + max(8px, calc(40 * var(--u))));
-  top: calc(var(--et, 0px) + max(2px, calc(22 * var(--u))));
+  /* konum ve ölçü Geri standardından (src/ui/elegant.css > .el-back) */
   z-index: 3;
-  font-size: max(15px, calc(19 * var(--u)));
 }
 
 .cx .cx-title {
@@ -1317,10 +1310,6 @@
 :root.short .cx .cx-title::before,
 :root.short .cx .cx-title::after {
   flex-basis: 40px;
-}
-
-:root.short .cx .cx-back {
-  top: var(--et, 0px);
 }
 
 :root.short .cx-body {

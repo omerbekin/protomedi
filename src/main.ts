@@ -130,6 +130,7 @@ new GameMenu(document.getElementById('ui-root')!, {
   newGame: () => startNewGame(game),
   teamSelect: () => startTeamSelect(game),
   mainMenu: () => startMainMenu(game),
+  codex: () => wiki.setOpen(true),
   retreat: () => battleNow()?.campaign?.retreat?.(),
   retreatLabel: () => battleNow()?.campaign?.retreatLabel,
   onOpen: () => {

@@ -10,7 +10,7 @@
 import layout from '../../data/battle-layout.json';
 import castleHall from '../../assets/backgrounds/castle-hall.webp?url';
 import { h, isolateKeys, openLightbox } from '../gallery/dom';
-import { bindIcon, bindStatusIcon, iconUrl } from '../ui/dom-icons';
+import { bindIcon, bindStatusIcon } from '../ui/dom-icons';
 import { SHARED_KEY, ownerOfLogo, ownerOfSkill, ownerOfUnit } from '../game/asset-versions';
 import { STAT_COLOR, STAT_ICON } from '../ui/stat-icons';
 import type { MiniShape } from '../ui/shape-diagram';
@@ -154,8 +154,7 @@ export class WikiPanel {
   private readonly articles = new Map<string, WikiArticle>();
 
   constructor(root: HTMLElement, private readonly hooks: WikiHooks) {
-    // Sağ üst kitap düğmesi (savaşta ve haritada Codex'i açar)
-    const toggle = h('button', { class: 'settings-toggle wiki-toggle', title: 'Codex', attrs: { 'aria-label': 'Codex', type: 'button' }, on: { click: () => this.toggle() } }, h('img', { attrs: { src: iconUrl('book'), alt: '' } }));
+    // Sağ üst kitap düğmesi KALDIRILDI (Ömer 2026-10-09): Codex ana menüden (Codex satırı) ve oyun içi Menu'den (Codex) açılır.
 
     this.cat = buildWiki(applyVariantFiles(wikiFiles));
     this.entries = codexEntries(this.cat);
@@ -208,7 +207,7 @@ export class WikiPanel {
       back,
       h('div', { class: 'el-title cx-title', text: 'Codex' }),
       body);
-    root.append(toggle, this.overlay);
+    root.append(this.overlay);
 
     window.addEventListener('keydown', (e) => this.onKey(e), true);
     setNavigator((id, q) => {

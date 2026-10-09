@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Campaign Slots Mockups</title>
+<!--
+  Sefer New / Load akışı: 3 taslak (Ömer 2026-10-09). Oyun kodu DEĞİL; seçim için karşılaştırma sayfası. Açılış: mockups/campaign-slots.html?v=1..3
+  Üstte New / Load anahtarı. Yuva, üzerine yazma onayı, mod + zorluk seçimi ve kayıt listesi tasarım kiti dilinde (kit.css = src/ui/elegant.css kopyası).
+-->
+<link rel="stylesheet" href="kit.css" />
+<style>
+@font-face { font-family: 'Cinzel'; font-weight: 400 900; font-display: swap; src: url('assets/fonts/Cinzel-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-weight: 400 800; font-display: swap; src: url('assets/fonts/EBGaramond-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400 800; font-display: swap; src: url('assets/fonts/EBGaramond-italic-latin.woff2') format('woff2'); }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #050403; overflow: hidden; color: var(--el-txt); -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; }
+#tabs { position: fixed; top: 0; left: 0; right: 0; height: 40px; display: flex; align-items: center; justify-content: center; gap: 4px; background: #0a0806; border-bottom: 1px solid rgba(217,178,106,.18); z-index: 50; font: 600 13px Cinzel, Georgia, serif; letter-spacing: .08em; }
+#tabs button { all: unset; cursor: pointer; padding: 0 12px; height: 40px; display: inline-flex; align-items: center; gap: 8px; color: var(--el-muted); text-transform: uppercase; }
+#tabs button b { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--el-line2); color: var(--el-txt); }
+#tabs button.on { color: var(--el-on); } #tabs button.on b { border-color: var(--el-ember); background: var(--el-ember); color: #1a0f06; }
+#tabs .sep { width: 1px; height: 22px; background: var(--el-line2); margin: 0 10px; }
+@media (max-width: 760px) { #tabs button { padding: 0 6px; font-size: 11px; } }
+#stage { position: absolute; left: 0; top: 0; height: 1080px; transform-origin: 0 0; overflow: hidden; background: #0d0a07; font-family: var(--el-body); font-size: 22px; user-select: none; }
+.bg { position: absolute; inset: 0; background: url('assets/img/map.webp') center / cover; filter: brightness(.55); }
+.bg::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 50%, rgba(8,6,4,.45), rgba(8,6,4,.92) 80%); }
+.abs { position: absolute; }
+.fu { animation: fu .6s var(--el-ease) both; animation-delay: var(--d, 0s); }
+@keyframes fu { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+.k { font: 600 14px var(--el-display); letter-spacing: .24em; text-transform: uppercase; color: rgba(217,178,106,.85); }
+.n { font: 600 22px var(--el-display); letter-spacing: .05em; text-transform: uppercase; color: var(--el-on); }
+.m { font: italic 18px var(--el-body); color: var(--el-muted); }
+.faces { display: flex; gap: 10px; }
+.face { position: relative; width: 58px; height: 58px; border: 1px solid var(--el-line3); background: #120c08; }
+.face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.face i { position: absolute; left: 4px; right: 4px; bottom: -8px; height: 4px; background: rgba(217,178,106,.12); }
+.face i b { position: absolute; left: 0; top: 0; bottom: 0; background: #7fb85a; }
+.tag { font: 600 13px var(--el-display); letter-spacing: .14em; text-transform: uppercase; }
+.tag.iron { color: var(--el-bad); } .tag.norm { color: var(--el-muted); }
+.row { display: flex; align-items: center; gap: 24px; }
+.opt { position: relative; flex: 1; padding: 16px 18px 14px 44px; border: 1px solid var(--el-line2); background: rgba(8,6,4,.45); cursor: pointer; transition: border-color .18s, background .18s, transform .18s var(--el-ease); }
+.opt:hover { border-color: rgba(243,217,153,.9); transform: translateY(-2px); }
+.opt::before { content: ''; position: absolute; left: 18px; top: 24px; width: 10px; height: 10px; transform: rotate(45deg); box-shadow: 0 0 0 1px rgba(217,178,106,.45); }
+.opt.on { border: 2px solid var(--el-on); background: rgba(8,6,4,.7); padding: 15px 17px 13px 43px; }
+.opt.on::before { background: var(--el-ember); box-shadow: 0 0 0 1px var(--el-ember2), 0 0 10px rgba(240,140,40,.6); left: 17px; top: 23px; }
+.opt h4 { margin: 0 0 6px; font: 600 20px var(--el-display); letter-spacing: .08em; text-transform: uppercase; color: var(--el-txt); }
+.opt.on h4 { color: var(--el-on); text-shadow: var(--el-glow); }
+.opt p { margin: 2px 0; font: italic 17px var(--el-body); color: var(--el-muted); line-height: 1.25; }
+.opt.on p { color: var(--el-note); }
+.confirm { border: 1px solid rgba(232,128,106,.5); background: rgba(40,14,10,.55); padding: 14px 18px; display: flex; align-items: center; gap: 18px; }
+.confirm p { margin: 0; flex: 1; font: italic 19px var(--el-body); color: var(--el-note); }
+/* 1: Ledger */
+.ledger .slot { display: grid; grid-template-columns: 140px 1fr auto auto; align-items: center; gap: 24px; padding: 18px 24px; border-bottom: 1px solid var(--el-line1); cursor: pointer; transition: background .2s; position: relative; }
+.ledger .slot:hover { background: linear-gradient(90deg, rgba(224,112,42,.10), transparent 80%); }
+.ledger .slot.sel { background: linear-gradient(90deg, rgba(224,112,42,.16), transparent 80%); }
+.ledger .slot.sel::before { content: ''; position: absolute; left: -7px; top: 50%; width: 11px; height: 11px; margin-top: -6px; transform: rotate(45deg); background: var(--el-ember); box-shadow: 0 0 0 1px var(--el-ember2), 0 0 10px rgba(240,140,40,.6); }
+/* 2: Tomes */
+.tome { width: 480px; height: 360px; padding: 26px 28px; display: flex; flex-direction: column; gap: 14px; border: 1px solid var(--el-line2); background: linear-gradient(180deg, rgba(34,25,16,.9), rgba(10,7,5,.95)); cursor: pointer; transition: transform .28s var(--el-ease), border-color .2s, box-shadow .28s; position: relative; }
+.tome:hover { transform: translateY(-8px); border-color: var(--el-gold); box-shadow: 0 18px 34px rgba(0,0,0,.5); }
+.tome.sel { border: 2px solid var(--el-on); transform: translateY(-8px); }
+.tome .big { font: 600 64px var(--el-display); color: rgba(217,178,106,.25); line-height: 1; }
+.tome .empty { flex: 1; display: grid; place-items: center; font: italic 22px var(--el-body); color: var(--el-dim); border: 1px dashed var(--el-line2); }
+/* 3: Column */
+.colrow { display: flex; align-items: center; gap: 14px; min-height: 84px; padding: 0 8px; border-bottom: 1px solid var(--el-line1); cursor: pointer; }
+.colrow .n { font-size: 26px; color: var(--el-txt); transition: color .18s, transform .18s var(--el-ease), text-shadow .18s; }
+.colrow .el-dia { opacity: 0; transform: rotate(45deg) scale(.4); transition: all .18s var(--el-ease); }
+.colrow:hover .n, .colrow.sel .n { color: var(--el-on); text-shadow: var(--el-glow); transform: translateX(8px); }
+.colrow.sel .el-dia, .colrow:hover .el-dia { opacity: 1; transform: rotate(45deg) scale(1); }
+.steps { display: flex; gap: 0; align-items: center; }
+.steps span { font: 600 15px var(--el-display); letter-spacing: .14em; text-transform: uppercase; color: var(--el-dim); padding: 0 12px; }
+.steps span.on { color: var(--el-on); }
+.steps i { width: 40px; height: 1px; background: var(--el-line2); }
+.save { display: grid; grid-template-columns: 1fr auto auto; gap: 20px; align-items: center; padding: 14px 6px; border-bottom: 1px solid var(--el-line1); }
+</style>
+</head>
+<body>
+<div id="tabs"></div>
+<div id="stage"></div>
+<script>
+const SLOTS = [
+  { mode: 'normal', diff: 'Medium', map: 'Valdoria', stop: 4, stops: 12, node: 'Ashford Village', victories: 3, saves: 3, date: 'Today 21:40', party: [['defender', 0.9], ['warrior', 0.62], ['archer', 1]] },
+  { mode: 'ironman', diff: 'Hard', map: 'Valdoria', stop: 9, stops: 12, node: 'Iron Mooring', victories: 8, saves: 1, date: 'Yesterday 23:12', party: [['paladin', 0.45], ['mage', 0.8], ['hexer', 0.3], ['cutthroat', 1]] },
+  null,
+];
+const SAVES = [
+  { kind: 'Auto', node: 'Ashford Village', stop: 4, region: 'I · The Borderlands', date: 'Today 21:40' },
+  { kind: 'Manual', node: 'Ruined Watchtower', stop: 3, region: 'I · The Borderlands', date: 'Today 21:21' },
+  { kind: 'Start', node: 'Mill Road', stop: 1, region: 'I · The Borderlands', date: 'Today 20:58' },
+];
+const MODES = [
+  { id: 'normal', name: 'Normal', lines: ['Autosave after every victory', 'Save on the map at any time', 'Up to 5 saves in this slot'] },
+  { id: 'ironman', name: 'Ironman', lines: ['Saved only after a victory', 'No manual saves', 'One save, always overwritten'] },
+];
+const DIFFS = [
+  { id: 'easy', name: 'Easy', lines: ['Forgiving foes for learning the classes'] },
+  { id: 'medium', name: 'Medium', lines: ['The intended challenge'] },
+  { id: 'hard', name: 'Hard', lines: ['Sharp enemies, no wasted turns'] },
+];
+const q = new URLSearchParams(location.search);
+const S = { v: Math.min(3, Math.max(1, Number(q.get('v')) || 1)), flow: q.get('flow') === 'load' ? 'load' : 'new', slot: 0, confirm: false, mode: 'normal', diff: 'medium', step: 1, W: 1920 };
+const stage = document.getElementById('stage');
+const faces = (p) => `<div class="faces">${p.map(([c, hp]) => `<div class="face"><img src="assets/img/av-${c}.webp" alt=""><i><b style="width:${hp * 100}%"></b></i></div>`).join('')}</div>`;
+const tag = (s) => `<span class="tag ${s.mode === 'ironman' ? 'iron' : 'norm'}">${s.mode === 'ironman' ? 'Ironman' : 'Normal'} · ${s.diff}</span>`;
+const opts = (list, cur, key) => `<div class="row" style="gap:18px;align-items:stretch">${list.map((o) => `<div class="opt${o.id === cur ? ' on' : ''}" data-set="${key}:${o.id}"><h4>${o.name}</h4>${o.lines.map((l) => `<p>${l}</p>`).join('')}</div>`).join('')}</div>`;
+const back = (label = 'Back') => `<button class="el-back" style="position:absolute;left:48px;top:20px;min-height:72px;font-size:21px" data-act="back"><span>◂ ${label}</span><small>Esc</small></button>`;
+const title = (t, sub) => `<div class="abs" style="left:50%;top:40px;transform:translateX(-50%);text-align:center"><h1 class="el-title">${t}</h1><div class="m" style="margin-top:6px">${sub}</div></div>`;
+const confirmBox = (i) => `<div class="confirm fu"><p>Slot ${i + 1} holds a journey (${SLOTS[i].mode === 'ironman' ? 'Ironman' : 'Normal'}, stop ${SLOTS[i].stop}) with ${SLOTS[i].saves} saves. Overwriting deletes it for good.</p><button class="el-btn primary" data-act="accept">Accept</button><button class="el-btn" data-act="cancel">Cancel</button></div>`;
+const setup = () => `<div class="fu" style="display:flex;flex-direction:column;gap:18px"><div class="k">Mode</div>${opts(MODES, S.mode, 'mode')}<div class="k" style="margin-top:8px">Difficulty</div>${opts(DIFFS, S.diff, 'diff')}<div class="m">Mode and difficulty cannot be changed later.</div></div>`;
+const savesList = (i) => `<div class="fu">${SAVES.map((e, k) => `<div class="save"><div><div class="k" style="font-size:12px">${e.kind}${k === 0 ? ' · Newest' : ''}</div><div class="n" style="font-size:19px;text-transform:none">${SLOTS[i].map} · Stop ${e.stop}/12 · ${e.node}</div><div class="m">${e.region} · ${e.date}</div></div><button class="el-btn primary" style="min-height:52px;padding:0 30px;font-size:18px">Load</button><button class="el-btn" style="min-height:46px;padding:0 20px;font-size:15px">Delete</button></div>`).join('')}</div>`;
+
+function v1() {
+  const s = SLOTS[S.slot];
+  const rows = SLOTS.map((x, i) => `<div class="slot${S.slot === i ? ' sel' : ''}" data-slot="${i}"><div><div class="k">Slot ${i + 1}</div>${x ? tag(x) : ''}</div>
+    <div>${x ? `<div class="n" style="text-transform:none">${x.map} · Stop ${x.stop}/${x.stops} · ${x.node}</div><div class="m">${x.victories} victories · ${x.saves} saves · ${x.date}</div>` : '<div class="m" style="font-size:22px">Empty slot</div>'}</div>
+    <div>${x ? faces(x.party) : ''}</div><div style="width:24px;color:var(--el-dim)">›</div></div>`).join('');
+  let right = '';
+  if (S.flow === 'new') right = s && S.confirm ? confirmBox(S.slot) : setup();
+  else right = s ? savesList(S.slot) : `<div class="m">This slot is empty.</div>`;
+  const action = S.flow === 'new' ? `<button class="el-btn primary ready" data-act="${s && !S.confirm ? 'over' : 'start'}">${s && !S.confirm ? 'Overwrite' : 'Begin the journey'}</button>` : '';
+  return `${back()}${title(S.flow === 'new' ? 'New Campaign' : 'Load Game', S.flow === 'new' ? 'Choose a slot, then how you want to play' : 'Choose a slot and a save')}
+    <div class="abs el-panel fu ledger" style="left:${(S.W - 1640) / 2}px;width:1640px;top:170px;height:800px;display:grid;grid-template-columns:900px 1fr">
+      <div style="border-right:1px solid var(--el-line1);padding:20px 0">${rows}</div>
+      <div style="padding:30px 34px;display:flex;flex-direction:column;gap:20px"><div class="k">${S.flow === 'new' ? (s && S.confirm ? 'Overwrite?' : 'Your journey') : 'Saves'}</div>${right}<div style="margin-top:auto;display:flex;justify-content:flex-end">${action}</div></div></div>`;
+}
+function v2() {
+  const tomes = SLOTS.map((x, i) => `<div class="tome fu${S.slot === i ? ' sel' : ''}" style="--d:${i * 0.08}s" data-slot="${i}">
+    <div style="display:flex;justify-content:space-between;align-items:baseline"><div class="k">Slot ${i + 1}</div><div class="big">${['I', 'II', 'III'][i]}</div></div>
+    ${x ? `${tag(x)}<div class="n" style="font-size:26px">${x.node}</div><div class="m">${x.map} · Stop ${x.stop} of ${x.stops}</div>${faces(x.party)}<div class="m" style="margin-top:auto">${x.victories} victories · ${x.saves} saves<br>${x.date}</div>` : `<div class="empty">An empty tome</div>`}</div>`).join('');
+  const s = SLOTS[S.slot];
+  let below = '';
+  if (S.flow === 'new') below = s && S.confirm ? confirmBox(S.slot) : setup();
+  else below = s ? savesList(S.slot) : '';
+  return `${back()}${title(S.flow === 'new' ? 'New Campaign' : 'Load Game', S.flow === 'new' ? 'Pick a tome to write your journey in' : 'Pick a tome to continue')}
+    <div class="abs" style="left:50%;transform:translateX(-50%);top:170px;display:flex;gap:36px">${tomes}</div>
+    <div class="abs el-panel" style="left:${(S.W - 1300) / 2}px;width:1300px;top:${S.flow === "new" ? 560 : 560}px;padding:22px 28px;display:${below ? 'block' : 'none'}">${below}
+      ${S.flow === 'new' ? `<div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="el-btn primary ready" data-act="${s && !S.confirm ? 'over' : 'start'}">${s && !S.confirm ? 'Overwrite' : 'Begin the journey'}</button></div>` : ''}</div>`;
+}
+function v3() {
+  const rows = SLOTS.map((x, i) => `<div class="colrow${S.slot === i ? ' sel' : ''}" data-slot="${i}"><i class="el-dia"></i><div><div class="n">Slot ${i + 1}</div><div class="m">${x ? `${x.mode === 'ironman' ? 'Ironman' : 'Normal'} · ${x.diff} · Stop ${x.stop}` : 'Empty'}</div></div></div>`).join('');
+  const s = SLOTS[S.slot];
+  const step = S.flow === 'new' ? `<div class="steps fu"><span class="${S.step === 1 ? 'on' : ''}">I · Slot</span><i></i><span class="${S.step === 2 ? 'on' : ''}">II · Mode & difficulty</span></div>` : '';
+  let panel = '';
+  if (S.flow === 'new' && S.step === 2) panel = setup() + `<div style="display:flex;justify-content:space-between;margin-top:24px"><button class="el-btn" data-act="prev">Back</button><button class="el-btn primary ready" data-act="start">Begin the journey</button></div>`;
+  else if (s) panel = `<div class="fu"><div class="k">Slot ${S.slot + 1}</div><div class="n" style="font-size:34px;margin:8px 0 4px;text-transform:none">${s.node}</div>${tag(s)}<div class="m" style="margin:8px 0 18px">${s.map} · Stop ${s.stop} of ${s.stops} · ${s.victories} victories · ${s.date}</div>${faces(s.party)}
+      ${S.flow === 'new' ? (S.confirm ? `<div style="margin-top:26px">${confirmBox(S.slot)}</div>` : `<div style="margin-top:30px"><button class="el-btn primary ready" data-act="over">Overwrite this slot</button></div>`) : `<div style="margin-top:26px">${savesList(S.slot)}</div>`}</div>`;
+  else panel = `<div class="fu"><div class="k">Slot ${S.slot + 1}</div><div class="m" style="font-size:24px;margin:12px 0 26px">An empty slot. A new journey can begin here.</div>${S.flow === 'new' ? '<button class="el-btn primary ready" data-act="next">Choose</button>' : ''}</div>`;
+  return `<div class="abs" style="left:0;top:0;bottom:0;width:640px;background:linear-gradient(90deg,rgba(8,6,4,.95),rgba(8,6,4,.85) 70%,rgba(8,6,4,0))"></div>${back()}
+    <div class="abs" style="left:110px;top:150px;width:440px"><h1 class="el-title" style="justify-content:flex-start;font-size:40px">${S.flow === 'new' ? 'New Campaign' : 'Load Game'}</h1><div style="margin:18px 0 10px">${step}</div>${rows}</div>
+    <div class="abs el-panel corners" style="left:700px;right:110px;top:190px;padding:34px 40px">${panel}</div>`;
+}
+const V = [v1, v2, v3];
+function render() {
+  document.getElementById('tabs').innerHTML = ['Ledger', 'Tomes', 'Column'].map((n, i) => `<button class="${S.v === i + 1 ? 'on' : ''}" data-v="${i + 1}"><b>${i + 1}</b>${n}</button>`).join('') + '<span class="sep"></span>' + ['new', 'load'].map((f) => `<button class="${S.flow === f ? 'on' : ''}" data-flow="${f}">${f === 'new' ? 'New' : 'Load'}</button>`).join('');
+  stage.innerHTML = `<div class="bg"></div>${V[S.v - 1]()}`;
+}
+document.getElementById('tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.v) S.v = Number(b.dataset.v);
+  if (b.dataset.flow) S.flow = b.dataset.flow;
+  S.confirm = false; S.step = 1;
+  history.replaceState(null, '', `?v=${S.v}${S.flow === 'load' ? '&flow=load' : ''}`);
+  render();
+});
+stage.addEventListener('click', (e) => {
+  const sl = e.target.closest('[data-slot]'), st = e.target.closest('[data-set]'), a = e.target.closest('[data-act]');
+  if (sl) { S.slot = Number(sl.dataset.slot); S.confirm = false; S.step = 1; }
+  else if (st) { const [k, v] = st.dataset.set.split(':'); S[k] = v; }
+  else if (a) {
+    const act = a.dataset.act;
+    if (act === 'over') S.confirm = true;
+    else if (act === 'cancel') S.confirm = false;
+    else if (act === 'accept') { S.confirm = false; SLOTS[S.slot] = null; S.step = 2; }
+    else if (act === 'next') S.step = 2;
+    else if (act === 'prev') S.step = 1;
+    else if (act === 'start') { a.textContent = 'Starting…'; return; }
+    else if (act === 'back') { S.confirm = false; S.step = 1; }
+  } else return;
+  render();
+});
+function fit() {
+  const T = 40, vw = innerWidth, vh = innerHeight - T;
+  const W = Math.round(Math.min(2580, Math.max(1920, (vw / vh) * 1080)));
+  const sc = Math.min(vw / W, vh / 1080);
+  stage.style.width = W + 'px';
+  stage.style.transform = `translate(${(vw - W * sc) / 2}px, ${T + (vh - 1080 * sc) / 2}px) scale(${sc})`;
+  if (W !== S.W) { S.W = W; render(); }
+}
+addEventListener('resize', fit);
+fit();
+document.fonts.load('600 32px Cinzel').finally(render);
+</script>
+</body>
+</html>

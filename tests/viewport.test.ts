@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectFullscreenSupport, isIOSLike } from '../src/ui/fullscreen';
+import { detectFullscreenSupport, isIOSLike, wantsFullscreenButton } from '../src/ui/fullscreen';
 import { fitScale, layoutFor, parseRotateMode, rotatedToStage, shouldRotate } from '../src/ui/viewport';
 
 describe('ölçek hesabı (FIT)', () => {
@@ -72,5 +72,13 @@ describe('tam ekran desteği algısı', () => {
   it('iPadOS (Mac gibi görünür) iOS sayılır', () => {
     expect(isIOSLike({ userAgent: 'Mozilla/5.0 (Macintosh)', maxTouchPoints: 5, platform: 'MacIntel' })).toBe(true);
     expect(isIOSLike({ userAgent: 'Mozilla/5.0 (Macintosh)', maxTouchPoints: 0, platform: 'MacIntel' })).toBe(false);
+  });
+});
+
+describe('tam ekran düğmesi yalnızca dokunmatikte (Ömer 2026-10-09)', () => {
+  it('masaüstünde (fare, dokunma yok) düğme yok; telefon / tablette var', () => {
+    expect(wantsFullscreenButton({ coarse: false, maxTouchPoints: 0 })).toBe(false);
+    expect(wantsFullscreenButton({ coarse: true, maxTouchPoints: 5 })).toBe(true);
+    expect(wantsFullscreenButton({ coarse: false, maxTouchPoints: 10 })).toBe(true);
   });
 });

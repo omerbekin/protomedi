@@ -40,30 +40,34 @@ export function bodyText(scene: Phaser.Scene, x: number, y: number, text: string
 export function openModal(
   scene: Phaser.Scene,
   layer: Phaser.GameObjects.Container,
-  o: { title: string; subtitle?: string; text?: string; width?: number; height?: number; buttons?: ModalButton[]; dim?: number; y?: number },
+  o: { title: string; subtitle?: string; text?: string; width?: number; height?: number; buttons?: ModalButton[]; dim?: number; y?: number; fit?: boolean },
 ): Modal {
   const w = o.width ?? 980;
-  const h = o.height ?? 520;
-  const x = W / 2 - w / 2;
-  const y = o.y ?? H / 2 - h / 2;
   const root = scene.add.container(0, 0);
   layer.add(root);
   const dim = scene.add.rectangle(FULL_X0, 0, FULL_W, H, 0x050302, o.dim ?? 0.62).setOrigin(0, 0).setInteractive(); // geniş ekranda da tüm alan
   root.add(dim);
+  // Yazılar önce ölçülür: `fit` (onay pencereleri) yüksekliği içeriğe göre kısar, metin ile düğmeler arasında boşluk kalmaz
+  const sub = o.subtitle ? elBody(scene, W / 2, 0, o.subtitle, 22, EL.MUTED, true, w - 140).setOrigin(0.5, 0).setAlign('center') : null;
+  const text = o.text ? bodyText(scene, W / 2, 0, o.text, w - 140) : null;
+  const buttons = o.buttons ?? [];
+  const contentH = (sub ? sub.height + 12 : 0) + (text ? text.height + 22 : 0);
+  const h = o.fit ? 96 + contentH + (buttons.length ? 120 : 30) : (o.height ?? 520);
+  const x = W / 2 - w / 2;
+  const y = o.y ?? H / 2 - h / 2;
   root.add(elPanel(scene, x, y, w, h, { corners: true, alpha: 0.97 }));
   root.add(elHeading(scene, W / 2, y + 54, o.title, 40, { ornament: Math.min(120, w / 2 - 220) }));
   let top = y + 96;
-  if (o.subtitle) {
-    const sub = elBody(scene, W / 2, top, o.subtitle, 22, EL.MUTED, true, w - 140).setOrigin(0.5, 0).setAlign('center');
+  if (sub) {
+    sub.y = top;
     root.add(sub);
     top += sub.height + 12;
   }
-  if (o.text) {
-    const t = bodyText(scene, W / 2, top + 6, o.text, w - 140);
-    root.add(t);
-    top += t.height + 22;
+  if (text) {
+    text.y = top + 6;
+    root.add(text);
+    top += text.height + 22;
   }
-  const buttons = o.buttons ?? [];
   const by = y + h - 62;
   const bw = Math.min(330, (w - 100) / Math.max(1, buttons.length) - 34);
   const x0 = W / 2 - ((buttons.length - 1) * (bw + 34)) / 2;

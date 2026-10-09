@@ -98,24 +98,6 @@ export function glowRect(g: Phaser.GameObjects.Graphics, x: number, y: number, w
   }
 }
 
-/** Taş/deri paneli: degrade zemin + tane dokusu + çerçeve. Döndürdüğü nesneler bir container'a konabilir. */
-export function makePanel(
-  scene: Phaser.Scene,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  o: { top?: number; bottom?: number; edge?: number; light?: number; bevel?: number; ornaments?: boolean; grain?: number; alpha?: number } = {},
-): Phaser.GameObjects.GameObject[] {
-  const g = scene.add.graphics();
-  gradientRect(g, x, y, w, h, o.top ?? 0x2b2017, o.bottom ?? 0x0f0a07, o.alpha ?? 1);
-  const grain = scene.add.tileSprite(x, y, w, h, ensureGrain(scene)).setOrigin(0, 0).setAlpha(o.grain ?? 0.7);
-  const f = scene.add.graphics();
-  frameRect(f, x, y, w, h, { edge: o.edge, light: o.light, bevel: o.bevel });
-  if (o.ornaments !== false) cornerOrnaments(f, x, y, w, h, Math.max(3, (o.bevel ?? 4) + 1));
-  return [g, grain, f];
-}
-
 /** Sağ üst köşe rozeti: koyu hap + altın kontur. Metin sola/sağa göre ölçülür; sağ kenar `right`. */
 export function makeBadge(scene: Phaser.Scene, right: number, top: number, label: string, size = 14): Phaser.GameObjects.GameObject[] {
   const text = scene.add.text(0, 0, label.toUpperCase(), { fontFamily: SERIF, fontSize: `${size}px`, fontStyle: 'bold', color: '#f3d9a0', stroke: '#0c0805', strokeThickness: 2 });

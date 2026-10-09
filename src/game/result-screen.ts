@@ -2,8 +2,9 @@ import Phaser from 'phaser';
 import type { Battle, BattleEvent, Combatant } from '../engine';
 import { debugState } from './debug-state';
 import { copyMatchData } from '../ui/match-copy';
-import { fitText, goldText, makeMenuButton, serif } from './menu-ui';
-import { GOLD, makePanel } from './ui-frame';
+import { fitText } from './menu-ui';
+import { GOLD } from './ui-frame';
+import { EL, elBody, elButton, elPanel, elText } from './elegant-ui';
 import { tierStyle, unitName } from './unit-label';
 import { FULL_W, FULL_X0 } from '../ui/viewport';
 
@@ -85,13 +86,12 @@ export interface ResultScreen {
 const W = 1920;
 const H = 1080;
 const DEPTH = 6000;
-const hex = (v: number) => `#${v.toString(16).padStart(6, '0')}`;
 
 /** Ortası elmaslı ince süs çizgisi (merkez cx, cy). */
 function ornamentLine(scene: Phaser.Scene, cx: number, cy: number, half: number, edge: number, light: number): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
   for (const dir of [-1, 1]) {
-    g.lineStyle(2, edge, 0.9).lineBetween(cx + dir * 16, cy, cx + dir * half, cy);
+    g.lineStyle(1, edge, 0.85).lineBetween(cx + dir * 16, cy, cx + dir * half, cy);
     g.lineStyle(1, light, 0.55).lineBetween(cx + dir * 16, cy + 4, cx + dir * (half - 30), cy + 4);
     g.fillStyle(light, 0.9).fillCircle(cx + dir * half, cy, 3);
   }
@@ -124,19 +124,20 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   const px = W / 2 - plaqueW / 2;
   const py = 70;
   const plaque = scene.add.container(0, -50).setAlpha(0);
-  const panelParts = makePanel(scene, px, py, plaqueW, plaqueH, { top: victory ? 0x3a2b16 : 0x2c1613, bottom: 0x120a06, edge: accent.edge, light: accent.light, bevel: 5 });
-  plaque.add(panelParts);
+  // Tasarım kiti: ince çerçeveli koyu panel (yenilgide kırmızımsı çerçeve)
+  const panelG = elPanel(scene, px, py, plaqueW, plaqueH, { corners: true, alpha: 0.95, border: victory ? 0.5 : 0.35 });
+  plaque.add(panelG);
   const local = o.localSide ?? 'party';
-  const title = victory ? goldText(scene, W / 2, py + 58, o.title ?? 'VICTORY', 96, 8) : serif(scene, W / 2, py + 58, o.title ?? 'DEFEAT', 96, '#c4695d', { spacing: 8 });
-  title.setOrigin(0.5);
-  if (!victory) title.setTint(0xd98a7e, 0xd98a7e, 0x8a3a32, 0x8a3a32);
+  const title = elText(scene, W / 2, py + 62, o.title ?? (victory ? 'Victory' : 'Defeat'), 84, '#ffffff', { em: 0.12 }).setOrigin(0.5);
+  if (victory) title.setTint(0xfbe7b0, 0xfbe7b0, 0xc7984f, 0xc7984f);
+  else title.setTint(0xd98a7e, 0xd98a7e, 0x8a3a32, 0x8a3a32);
   plaque.add(title);
   plaque.add(ornamentLine(scene, W / 2, py + 118, 300, accent.edge, accent.light));
   const myUnits = battle.combatants.filter((c) => c.side === local && !c.summoned);
   const standing = myUnits.filter((c) => c.hp > 0).length;
   const sub = o.subtitle ?? (victory ? 'The enemy line is broken' : 'Your party has fallen');
-  plaque.add(serif(scene, W / 2, py + 148, sub, 26, accent.text, { bold: false, spacing: 1 }).setOrigin(0.5));
-  plaque.add(serif(scene, W / 2, py + 176, `${stats.turns} turns  -  ${standing} of ${myUnits.length} heroes standing`, 18, '#9c8a68', { bold: false, stroke: 2 }).setOrigin(0.5));
+  plaque.add(elBody(scene, W / 2, py + 148, sub, 26, accent.text).setOrigin(0.5));
+  plaque.add(elBody(scene, W / 2, py + 177, `${stats.turns} turns  ·  ${standing} of ${myUnits.length} heroes standing`, 19, EL.MUTED).setOrigin(0.5));
   plaque.setSize(plaqueW, plaqueH);
   root.add(plaque);
   plaque.setAlpha(0);
@@ -153,11 +154,10 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   const compact = rowH < 58;
   const sh = headH + rowH * rowCount + 28;
   const summary = scene.add.container(0, 24).setAlpha(0);
-  summary.add(makePanel(scene, sx, sy, sw, sh, { top: 0x2a2018, bottom: 0x0e0906, bevel: 4, alpha: 0.97 }));
+  summary.add(elPanel(scene, sx, sy, sw, sh, { alpha: 0.95 }));
   const colW = (sw - 60) / 2;
   const divider = scene.add.graphics();
-  divider.lineStyle(2, GOLD.dark, 0.9).lineBetween(W / 2, sy + 26, W / 2, sy + sh - 26);
-  divider.lineStyle(1, GOLD.edge, 0.4).lineBetween(W / 2 + 3, sy + 26, W / 2 + 3, sy + sh - 26);
+  divider.lineStyle(1, EL.GOLD, EL.LINE.a2).lineBetween(W / 2, sy + 26, W / 2, sy + sh - 26);
   summary.add(divider);
   root.add(summary);
   scene.tweens.add({ targets: summary, y: 0, alpha: 1, duration: 480, ease: 'Cubic.easeOut', delay: 380 });
@@ -172,14 +172,14 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   (['party', 'enemy'] as const).forEach((side, col) => {
     const cx0 = sx + 30 + col * (colW + 0);
     const heading = o.headings ? (side === local ? o.headings.local : o.headings.remote).toUpperCase() : side === local ? 'YOUR PARTY' : 'ENEMY';
-    const head = serif(scene, cx0 + 14, sy + 30, heading, 26, side === winnerSide ? '#f3d9a0' : '#a8977a', { spacing: 4 }).setOrigin(0, 0.5);
+    const head = elText(scene, cx0 + 14, sy + 30, heading, 20, side === winnerSide ? EL.ON : EL.MUTED, { em: 0.2 }).setOrigin(0, 0.5);
     summary.add(head);
     const cols = [colW - 215, colW - 135, colW - 55]; // DMG / TAKEN / HEAL merkez x (sütun içi)
     ['DEALT', 'TAKEN', 'HEALED'].forEach((label, i) => {
-      summary.add(serif(scene, cx0 + cols[i]!, sy + 58, label, 14, '#8d7d5f', { bold: false, stroke: 2, spacing: 2 }).setOrigin(0.5));
+      summary.add(elText(scene, cx0 + cols[i]!, sy + 58, label, 12, EL.MUTED, { em: 0.18 }).setOrigin(0.5));
     });
     const lineG = scene.add.graphics();
-    lineG.lineStyle(1, GOLD.edge, 0.5).lineBetween(cx0 + 10, sy + 70, cx0 + colW - 10, sy + 70);
+    lineG.lineStyle(1, EL.GOLD, EL.LINE.a1).lineBetween(cx0 + 10, sy + 70, cx0 + colW - 10, sy + 70);
     summary.add(lineG);
 
     roster(side).forEach((c, i) => {
@@ -188,8 +188,8 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
       const row = scene.add.container(0, 0).setAlpha(0);
       const isMvp = mvp?.uid === c.uid;
       const g = scene.add.graphics();
-      g.fillStyle(isMvp ? 0x5a4220 : 0x000000, isMvp ? 0.45 : i % 2 === 0 ? 0.18 : 0.08).fillRoundedRect(cx0 + 4, ry - rowH / 2 + 3, colW - 8, rowH - 6, 6);
-      if (isMvp) g.lineStyle(1.5, GOLD.light, 0.8).strokeRoundedRect(cx0 + 4, ry - rowH / 2 + 3, colW - 8, rowH - 6, 6);
+      g.fillStyle(isMvp ? 0xe0702a : 0x000000, isMvp ? 0.12 : i % 2 === 0 ? 0.18 : 0.08).fillRect(cx0 + 4, ry - rowH / 2 + 3, colW - 8, rowH - 6);
+      if (isMvp) g.lineStyle(1, EL.ON_N, 0.8).strokeRect(cx0 + 4.5, ry - rowH / 2 + 3.5, colW - 9, rowH - 7);
       // Avatar çerçevesi
       const av = Math.min(54, rowH - 10);
       const ax = cx0 + 14 + av / 2;
@@ -200,17 +200,17 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
       if (!alive) face.setTint(0x555555).setAlpha(0.6);
       row.add(face);
       const fr = scene.add.graphics();
-      fr.lineStyle(2, alive ? GOLD.edge : 0x4a3f33, 1).strokeRect(ax - av / 2, ry - av / 2, av, av);
+      fr.lineStyle(1, alive ? EL.GOLD : 0x4a3f33, alive ? EL.LINE.a3 : 1).strokeRect(ax - av / 2 + 0.5, ry - av / 2 + 0.5, av - 1, av - 1);
       row.add(fr);
       // İsim + MVP
       const nameX = ax + av / 2 + 14;
-      const nameText = fitText(serif(scene, nameX, compact ? ry : ry - 13, unitName(c), compact ? 19 : 24, alive ? (tierStyle(c.tier)?.hex ?? '#f3e4c4') : '#8d8070').setOrigin(0, 0.5), compact ? 120 : 175);
+      const nameText = fitText(elText(scene, nameX, compact ? ry : ry - 13, unitName(c), compact ? 16 : 19, alive ? (tierStyle(c.tier)?.hex ?? EL.ON) : '#8d8070', { em: 0.04 }).setOrigin(0, 0.5), compact ? 120 : 175);
       row.add(nameText);
       const tagX = compact ? nameX + nameText.displayWidth + 8 : nameX;
       const tagY = compact ? ry : ry + 15;
       const tagSize = compact ? 13 : 17;
-      if (isMvp) row.add(serif(scene, tagX, tagY, 'MVP', tagSize, '#ffe29a', { spacing: 3 }).setOrigin(0, 0.5));
-      else if (!alive) row.add(serif(scene, tagX, tagY, 'Fallen', tagSize, '#7d6f62', { bold: false, stroke: 2 }).setOrigin(0, 0.5));
+      if (isMvp) row.add(elText(scene, tagX, tagY, 'MVP', tagSize - 2, EL.PRI, { em: 0.2 }).setOrigin(0, 0.5));
+      else if (!alive) row.add(elBody(scene, tagX, tagY, 'Fallen', tagSize, '#7d6f62').setOrigin(0, 0.5));
       // Can çubuğu
       const bx = nameX + (compact ? 190 : 185);
       const bw = compact ? 110 : 120;
@@ -218,12 +218,11 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
       const bar = scene.add.graphics();
       const barH = compact ? 9 : 14;
       const barY = compact ? ry - 14 : ry - 16;
-      bar.fillStyle(0x090604, 1).fillRect(bx, barY, bw, barH);
-      if (ratio > 0) bar.fillStyle(side === 'party' ? 0x4f9a4a : 0xb2463c, 1).fillRect(bx + 1, barY + 1, Math.max(2, (bw - 2) * ratio), barH - 2);
-      bar.fillStyle(0xffffff, 0.12).fillRect(bx + 1, barY + 1, bw - 2, compact ? 2 : 4);
-      bar.lineStyle(1, GOLD.dark, 1).strokeRect(bx - 0.5, barY - 0.5, bw + 1, barH + 1);
+      bar.fillStyle(EL.INK, 0.85).fillRect(bx, barY, bw, barH);
+      if (ratio > 0) bar.fillStyle(side === 'party' ? 0x7fb85a : 0xc4553f, 0.95).fillRect(bx + 1, barY + 1, Math.max(2, (bw - 2) * ratio), barH - 2);
+      bar.lineStyle(1, EL.GOLD, EL.LINE.a2).strokeRect(bx - 0.5, barY - 0.5, bw + 1, barH + 1);
       row.add(bar);
-      row.add(serif(scene, bx + bw / 2, compact ? ry + 8 : ry + 14, alive ? `${c.hp} / ${c.maxHp}` : '0', compact ? 12 : 15, '#b5a587', { bold: false, stroke: 2 }).setOrigin(0.5));
+      row.add(elBody(scene, bx + bw / 2, compact ? ry + 8 : ry + 14, alive ? `${c.hp} / ${c.maxHp}` : '0', compact ? 13 : 16, EL.MUTED, false).setOrigin(0.5));
       // Sayaçlar
       const nums: Array<[number, string]> = [
         [stats.dealt.get(c.uid) ?? 0, '#f0cf8a'],
@@ -231,7 +230,7 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
         [stats.healed.get(c.uid) ?? 0, '#8fd08a'],
       ];
       nums.forEach(([n, hexc], k) => {
-        row.add(serif(scene, cx0 + cols[k]!, ry, n > 0 ? String(n) : '-', compact ? 19 : 24, n > 0 ? hexc : '#6b5f4d', { stroke: 3 }).setOrigin(0.5));
+        row.add(elText(scene, cx0 + cols[k]!, ry, n > 0 ? String(n) : '-', compact ? 17 : 21, n > 0 ? hexc : '#6b5f4d', { em: 0.02 }).setOrigin(0.5));
       });
       summary.add(row);
       rowItems.push(row);
@@ -257,28 +256,34 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   const buttons = scene.add.container(0, 0).setAlpha(0);
   const bw = 400;
   const bh = 84;
+  /** Tasarım kiti düğmesi (primary = START dili, secondary = ince çerçeve). */
+  const kitButton = (label: string, run: () => void, x: number, w: number, primary: boolean): Phaser.GameObjects.Container => {
+    const b = elButton(scene, label, run, { kind: primary ? 'primary' : 'secondary', w, h: primary ? bh : 66, size: primary ? 28 : 22, ready: true });
+    b.root.setPosition(x, by);
+    return b.root;
+  };
   // Sefer savaşı: özel düğmeler (yan yana, ortalı); önizlemede yok sayılır
   const actions = !o.preview && o.actions?.length ? o.actions.map((a) => ({ ...a, run: once(a.run) })) : null;
   if (actions) {
     const aw = actions.length > 2 ? 360 : bw;
     const gap = 40;
     const x0 = W / 2 - ((actions.length - 1) * (aw + gap)) / 2;
-    actions.forEach((a, i) => buttons.add(makeMenuButton(scene, x0 + i * (aw + gap), by, aw, bh, a.label, a.run, { primary: !!a.primary, size: a.primary ? 38 : 32 }).container));
+    actions.forEach((a, i) => buttons.add(kitButton(a.label, a.run, x0 + i * (aw + gap), aw, !!a.primary)));
   } else if (o.preview) {
-    buttons.add(makeMenuButton(scene, W / 2 - 220, by, bw, bh, 'Close preview', () => destroy(), { primary: true, size: 36 }).container);
-    buttons.add(makeMenuButton(scene, W / 2 + 220, by, bw, bh, 'Team Select', teamSelect, { size: 36 }).container);
+    buttons.add(kitButton('Close preview', () => destroy(), W / 2 - 220, bw, true));
+    buttons.add(kitButton('Team Select', teamSelect, W / 2 + 220, bw, false));
   } else {
-    buttons.add(makeMenuButton(scene, W / 2 - 220, by, bw, bh, 'New Game', newGame, { primary: true, size: 40 }).container);
-    buttons.add(makeMenuButton(scene, W / 2 + 220, by, bw, bh, 'Team Select', teamSelect, { size: 36 }).container);
+    buttons.add(kitButton('New Game', newGame, W / 2 - 220, bw, true));
+    buttons.add(kitButton('Team Select', teamSelect, W / 2 + 220, bw, false));
   }
   const hintText = actions ? `Enter: ${actions[0]!.label}` : o.preview ? 'Preview  -  Enter or Esc closes' : 'Enter: New Game     Esc: Team Select';
-  const hint = serif(scene, W / 2, by + bh / 2 + 28, hintText, 18, hex(0x8d7d5f), { bold: false, stroke: 2, spacing: 1 }).setOrigin(0.5);
+  const hint = elBody(scene, W / 2, by + bh / 2 + 28, hintText, 18, EL.DIM).setOrigin(0.5);
   buttons.add(hint);
   if (o.matchData) {
     const matchData = o.matchData;
-    const link = serif(scene, W / 2, Math.min(by + bh / 2 + 62, H - 18), 'Copy match data', 20, '#c9b27a', { bold: false, stroke: 2, spacing: 1 }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    link.on('pointerover', () => link.setColor('#ffe29a'));
-    link.on('pointerout', () => link.setColor('#c9b27a'));
+    const link = elBody(scene, W / 2, Math.min(by + bh / 2 + 62, H - 18), 'Copy match data', 20, EL.MUTED).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    link.on('pointerover', () => link.setColor(EL.ON));
+    link.on('pointerout', () => link.setColor(EL.MUTED));
     link.on('pointerdown', () => {
       void copyMatchData({ get: matchData }).then((r) => link.setText(r.ok ? `Copied (${r.moves} moves)` : 'Copy match data'));
     });

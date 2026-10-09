@@ -112,7 +112,9 @@ export class SettingsScreen {
       col.append(note);
     }
 
-    const back = el('button', 'st-back', '◂ Back');
+    // Geri standardı (CLAUDE.md > Geri / Menu kuralı): her yerde aynı sol üst "◂ Back  Esc" (src/ui/elegant.css > .el-back)
+    const back = el('button', 'el-back st-back');
+    back.append(el('span', '', '◂ Back'), el('small', '', 'Esc'));
     back.type = 'button';
     back.addEventListener('click', () => this.setOpen(false));
     this.overlay.append(col, back);

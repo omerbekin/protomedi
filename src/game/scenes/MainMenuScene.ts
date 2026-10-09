@@ -10,8 +10,8 @@ import { onStageResize, stageView, worldXY } from '../stage';
 import { FULL_W, FULL_X0, MENU_COL_X, menuColumnShift } from '../../ui/viewport';
 import { H, W, crown, hpBar, openModal, type Modal } from '../campaign-ui';
 import { MAP_SCENE, loadEntry, startNewCampaign, storage } from '../campaign-session';
-import { classAvatar, classLogoBadge, ensureGlow, fitText, goldText, makeMenuButton, serif } from '../menu-ui';
-import { GOLD, makePanel } from '../ui-frame';
+import { classAvatar, classLogoBadge, ensureGlow, fitText, goldText, serif } from '../menu-ui';
+import { GOLD } from '../ui-frame';
 import { mp, MP_SCENE } from '../mp-client';
 import { addLogo, hasLogo, preloadLogo } from '../branding';
 import { loadVolume, setSettingsVolume } from '../../ui/settings';
@@ -899,29 +899,37 @@ export class MainMenuScene extends Phaser.Scene {
     this.scene.start(MAP_SCENE);
   }
 
-  /** Yuva kartı: mod, zorluk, durak, takım avatarları + can, tarih, kayıt sayısı. Boşsa "Empty slot". */
+  /** Yuva kartı (kit): mod, zorluk, durak, takım avatarları + can, tarih, kayıt sayısı. Boşsa "Empty slot". Sağda kit düğmeleri. */
   private slotCard(root: Phaser.GameObjects.Container, x: number, y: number, w: number, h: number, i: number, sum: SlotSummary | null, buttons: Array<{ label: string; run: () => void; primary?: boolean }>): void {
-    root.add(makePanel(this, x, y, w, h, { top: 0x2a2017, bottom: 0x150e09, bevel: 3, ornaments: false, alpha: 0.95 }));
-    root.add(serif(this, x + 24, y + 26, `SLOT ${i + 1}`, 22, '#f3d9a0', { spacing: 3 }));
+    const bg = this.add.graphics();
+    bg.fillStyle(EL.INK, 0.5).fillRect(x, y, w, h);
+    bg.lineStyle(1, EL.GOLD, sum ? EL.LINE.a2 : EL.LINE.a1).strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    root.add(bg);
+    root.add(elText(this, x + 24, y + 30, `Slot ${i + 1}`, 15, 'rgba(217,178,106,0.85)', { em: 0.24 }).setOrigin(0, 0.5));
     if (!sum) {
-      root.add(serif(this, x + 24, y + 66, 'Empty slot', 26, '#a8977a', { bold: false }));
+      root.add(elBody(this, x + 24, y + 72, 'Empty slot', 24, EL.DIM).setOrigin(0, 0.5));
     } else {
       const diff = CONFIG.difficulties[sum.difficulty]?.name ?? sum.difficulty;
-      root.add(serif(this, x + 150, y + 30, `${sum.mode === 'ironman' ? 'IRONMAN' : 'NORMAL'} · ${diff.toUpperCase()}`, 17, sum.mode === 'ironman' ? '#e08a7a' : '#9cc4ff', { spacing: 2 }));
+      root.add(elText(this, x + 150, y + 30, `${sum.mode === 'ironman' ? 'Ironman' : 'Normal'} · ${diff}`, 15, sum.mode === 'ironman' ? EL.BAD : EL.MUTED, { em: 0.14 }).setOrigin(0, 0.5));
       const l = sum.latest;
-      root.add(serif(this, x + 24, y + 64, l ? `${l.summary.map} · Stop ${l.summary.stop}/${l.summary.stops} · ${l.summary.node}` : 'Journey started, not saved yet', 24, '#f3e4c4'));
-      root.add(serif(this, x + 24, y + 98, `${l ? `${l.summary.victories} victories  ·  ` : ''}${sum.saveCount} save${sum.saveCount === 1 ? '' : 's'}  ·  last played ${dateText(sum.lastPlayed)}`, 17, '#a8977a', { bold: false, stroke: 2 }));
+      root.add(elText(this, x + 24, y + 68, l ? `${l.summary.map} · Stop ${l.summary.stop}/${l.summary.stops} · ${l.summary.node}` : 'Journey started, not saved yet', 21, EL.ON, { em: 0.04, upper: false }).setOrigin(0, 0.5));
+      root.add(elBody(this, x + 24, y + 102, `${l ? `${l.summary.victories} victories  ·  ` : ''}${sum.saveCount} save${sum.saveCount === 1 ? '' : 's'}  ·  last played ${dateText(sum.lastPlayed)}`, 18, EL.MUTED).setOrigin(0, 0.5));
       l?.summary.classes.forEach((cls, k) => {
         const def = content.classes[cls];
         if (!def) return;
         const ax = x + 720 + k * 74;
         root.add(classAvatar(this, def, ax, y + 52, 56));
         root.add(classLogoBadge(this, def, ax - 22, y + 72, 11));
-        root.add(hpBar(this, ax - 28, y + 86, 56, 8, l.summary.hp[k] ?? 1));
-        if (l.state.roster.find((h) => h.class === cls)?.leader) root.add(crown(this, ax + 22, y + 26, 0.7));
+        root.add(hpBar(this, ax - 28, y + 88, 56, 5, l.summary.hp[k] ?? 1));
+        if (l.state.roster.find((hh) => hh.class === cls)?.leader) root.add(crown(this, ax + 22, y + 26, 0.7));
       });
     }
-    buttons.forEach((b, k) => root.add(makeMenuButton(this, x + w - 90 - (buttons.length - 1 - k) * 170, y + h / 2, 150, 64, b.label, b.run, { primary: !!b.primary, size: 24 }).container));
+    buttons.forEach((b, k) => {
+      const bw = 160;
+      const btn = elButton(this, b.label, b.run, { kind: b.primary ? 'primary' : 'secondary', w: bw, h: b.primary ? 62 : 54, size: b.primary ? 19 : 17, ready: true });
+      btn.root.setPosition(x + w - 30 - bw / 2 - (buttons.length - 1 - k) * (bw + 30), y + h / 2);
+      root.add(btn.root);
+    });
   }
 
   // ------------------------------------------------------------ New Campaign: yuva -> mod + zorluk
@@ -944,12 +952,44 @@ export class MainMenuScene extends Phaser.Scene {
     this.openWindow({
       title: `Overwrite slot ${slot + 1}?`,
       text: `The journey in this slot (${sum.mode === 'ironman' ? 'Ironman' : 'Normal'}, ${sum.latest ? `stop ${sum.latest.summary.stop}, ${sum.latest.summary.node}` : 'not saved yet'}) and all of its ${sum.saveCount} saves will be deleted. This cannot be undone.`,
-      height: 440,
+      fit: true,
       buttons: [
-        { label: 'Delete and start', primary: true, run: () => this.chooseOptions(slot) },
+        { label: 'Accept', primary: true, run: () => this.chooseOptions(slot) },
         { label: 'Cancel', run: back },
       ],
     }, back);
+  }
+
+  /** Seçilebilir seçenek kartı (kit): seçili = açık altın çerçeve + kor elmas; başlık Cinzel, açıklama satırları EB Garamond. */
+  private optionCard(layer: Phaser.GameObjects.Container, cx: number, y: number, w: number, h: number, name: string, lines: string[], on: boolean, pick: () => void): void {
+    const c = this.add.container(cx, y);
+    const g = this.add.graphics();
+    let hover = false;
+    const draw = () => {
+      g.clear();
+      g.fillStyle(EL.INK, on ? 0.7 : 0.45).fillRect(-w / 2, 0, w, h);
+      if (on) g.lineStyle(2, EL.ON_N, 1).strokeRect(-w / 2 + 1, 1, w - 2, h - 2);
+      else g.lineStyle(1, EL.GOLD, hover ? 0.9 : EL.LINE.a2).strokeRect(-w / 2 + 0.5, 0.5, w - 1, h - 1);
+    };
+    draw();
+    c.add(g);
+    const dia = elDiamond(this, 6, !on).setPosition(-w / 2 + 26, 34);
+    const t = elText(this, -w / 2 + 44, 34, name, 22, on ? EL.ON : EL.TXT, { em: 0.08 }).setOrigin(0, 0.5);
+    if (on) elGlow(t, true);
+    c.add([dia, t]);
+    lines.forEach((l, k) => c.add(elBody(this, -w / 2 + 44, 70 + k * 27, l, 19, on ? EL.NOTE : EL.MUTED, true, w - 64).setOrigin(0, 0.5)));
+    const z = this.add.zone(0, h / 2, w, h).setInteractive({ useHandCursor: true });
+    z.on('pointerover', () => {
+      hover = true;
+      draw();
+    });
+    z.on('pointerout', () => {
+      hover = false;
+      draw();
+    });
+    z.on('pointerup', pick);
+    c.add(z);
+    layer.add(c);
   }
 
   private chooseOptions(slot: number): void {
@@ -961,7 +1001,7 @@ export class MainMenuScene extends Phaser.Scene {
       title: 'New Campaign',
       subtitle: `Slot ${slot + 1} · Mode and difficulty cannot be changed later`,
       width: 1300,
-      height: 760,
+      height: 690,
       buttons: [
         {
           label: 'Start',
@@ -978,21 +1018,22 @@ export class MainMenuScene extends Phaser.Scene {
     root.add(layer);
     const draw = () => {
       layer.removeAll(true);
-      const pickRow = <T extends string>(y: number, title: string, opts: Array<{ id: T; name: string; lines: string[] }>, cur: T, set: (v: T) => void) => {
-        layer.add(serif(this, W / 2, y, title, 22, '#c9b27a', { spacing: 4, stroke: 2 }).setOrigin(0.5, 0));
-        const bw = Math.min(360, 1180 / opts.length - 20);
+      const pickRow = <T extends string>(y: number, title: string, opts: Array<{ id: T; name: string; lines: string[] }>, cur: T, set: (v: T) => void, h: number) => {
+        layer.add(elText(this, W / 2, y, title, 14, 'rgba(217,178,106,0.85)', { em: 0.24 }).setOrigin(0.5, 0));
+        const bw = Math.min(400, 1180 / opts.length - 24);
         opts.forEach((o, i) => {
-          const x = W / 2 + (i - (opts.length - 1) / 2) * (bw + 20);
-          const on = o.id === cur;
-          layer.add(makeMenuButton(this, x, y + 74, bw, 70, o.name, () => { set(o.id); draw(); }, { primary: on, size: on ? 32 : 28 }).container);
-          o.lines.forEach((l, k) => layer.add(serif(this, x, y + 124 + k * 26, l, 18, on ? '#f3e4c4' : '#a8977a', { bold: false, stroke: 2 }).setOrigin(0.5, 0)));
+          const x = W / 2 + (i - (opts.length - 1) / 2) * (bw + 24);
+          this.optionCard(layer, x, y + 34, bw, h, o.name, o.lines, o.id === cur, () => {
+            set(o.id);
+            draw();
+          });
         });
       };
-      pickRow(area.y, 'MODE', [
+      pickRow(area.y, 'Mode', [
         { id: 'normal' as CampaignMode, name: 'Normal', lines: ['Autosave after every victory', 'Save on the map at any time', 'Up to 5 saves in this slot'] },
-        { id: 'ironman' as CampaignMode, name: 'Ironman', lines: ['Saved only after a victory', 'No manual saves', 'A single save, always overwritten'] },
-      ], mode, (v) => (mode = v));
-      pickRow(area.y + 250, 'DIFFICULTY', DIFFS.map((d) => ({ id: d, name: CONFIG.difficulties[d].name, lines: [CONFIG.difficulties[d].text] })), diff, (v) => (diff = v));
+        { id: 'ironman' as CampaignMode, name: 'Ironman', lines: ['Saved only after a victory', 'No manual saves', 'One save, always overwritten'] },
+      ], mode, (v) => (mode = v), 160);
+      pickRow(area.y + 230, 'Difficulty', DIFFS.map((d) => ({ id: d, name: CONFIG.difficulties[d].name, lines: [CONFIG.difficulties[d].text] })), diff, (v) => (diff = v), 110);
     };
     draw();
   }
@@ -1022,7 +1063,7 @@ export class MainMenuScene extends Phaser.Scene {
     this.openWindow({
       title: `Delete slot ${slot + 1}?`,
       text: `The whole journey (${sum.mode === 'ironman' ? 'Ironman' : 'Normal'}) and all of its ${sum.saveCount} saves will be lost. This cannot be undone.`,
-      height: 420,
+      fit: true,
       buttons: [
         {
           label: 'Delete',
@@ -1048,32 +1089,36 @@ export class MainMenuScene extends Phaser.Scene {
       title: `Load Game · Slot ${slot + 1}`,
       width: 1400,
       height: Math.min(1000, 210 + rows * rowH + 40),
-      buttons: [{ label: 'Back to slots', run: back }],
+      buttons: [{ label: 'Back', run: back }],
     }, back);
-    if (!saves.length) root.add(serif(this, W / 2, area.y + 40, 'No saved games in this slot.', 26, '#c9b48a', { bold: false }).setOrigin(0.5, 0));
+    if (!saves.length) root.add(elBody(this, W / 2, area.y + 40, 'No saved games in this slot.', 24, EL.MUTED).setOrigin(0.5, 0));
     saves.forEach((e, i) => {
       const y = area.y + i * rowH;
       const x = W / 2 - 660;
-      root.add(makePanel(this, x, y, 1320, rowH - 12, { top: 0x2a2017, bottom: 0x150e09, bevel: 3, ornaments: false, alpha: 0.95 }));
-      root.add(serif(this, x + 24, y + 18, `${e.kind === 'manual' ? 'MANUAL' : e.kind === 'start' ? 'START' : 'AUTO'} · ${i === 0 ? 'NEWEST' : ''}`.replace(/ · $/, ''), 16, '#9cc4ff', { spacing: 2 }));
-      root.add(serif(this, x + 24, y + 44, `${e.summary.map} · Stop ${e.summary.stop}/${e.summary.stops} · ${e.summary.node}`, 24, '#f3e4c4'));
-      root.add(serif(this, x + 24, y + 76, `${e.summary.region}  ·  ${e.summary.victories} victories  ·  ${dateText(e.savedAt)}`, 17, '#a8977a', { bold: false, stroke: 2 }));
+      const bg = this.add.graphics();
+      bg.fillStyle(EL.INK, 0.5).fillRect(x, y, 1320, rowH - 12);
+      bg.lineStyle(1, EL.GOLD, EL.LINE.a2).strokeRect(x + 0.5, y + 0.5, 1319, rowH - 13);
+      root.add(bg);
+      root.add(elText(this, x + 24, y + 22, `${e.kind === 'manual' ? 'Manual' : e.kind === 'start' ? 'Start' : 'Auto'}${i === 0 ? ' · Newest' : ''}`, 14, 'rgba(217,178,106,0.85)', { em: 0.2 }).setOrigin(0, 0.5));
+      root.add(elText(this, x + 24, y + 52, `${e.summary.map} · Stop ${e.summary.stop}/${e.summary.stops} · ${e.summary.node}`, 21, EL.ON, { em: 0.04, upper: false }).setOrigin(0, 0.5));
+      root.add(elBody(this, x + 24, y + 82, `${e.summary.region}  ·  ${e.summary.victories} victories  ·  ${dateText(e.savedAt)}`, 18, EL.MUTED).setOrigin(0, 0.5));
       e.summary.classes.forEach((cls, k) => {
         const def = content.classes[cls];
         if (!def) return;
         const ax = x + 720 + k * 74;
         root.add(classAvatar(this, def, ax, y + 40, 56));
         root.add(classLogoBadge(this, def, ax - 22, y + 60, 11));
-        root.add(hpBar(this, ax - 28, y + 74, 56, 8, e.summary.hp[k] ?? 1));
+        root.add(hpBar(this, ax - 28, y + 76, 56, 5, e.summary.hp[k] ?? 1));
       });
-      root.add(makeMenuButton(this, x + 1110, y + 52, 150, 64, 'Load', () => this.loadSave(e), { primary: true, size: 26 }).container);
-      const del = makeMenuButton(this, x + 1250, y + 52, 110, 64, 'Delete', () => {
+      const load = elButton(this, 'Load', () => this.loadSave(e), { kind: 'primary', w: 150, h: 60, size: 19, ready: true });
+      load.root.setPosition(x + 1100, y + (rowH - 12) / 2);
+      const del = elButton(this, 'Delete', () => {
         this.closeModal();
         const backDel = () => this.loadGame(slot);
         this.openWindow({
           title: 'Delete save?',
           text: `${e.summary.node}, stop ${e.summary.stop}. This cannot be undone.`,
-          height: 400,
+          fit: true,
           buttons: [
             {
               label: 'Delete',
@@ -1087,8 +1132,9 @@ export class MainMenuScene extends Phaser.Scene {
             { label: 'Cancel', run: backDel },
           ],
         }, backDel);
-      }, { size: 22 });
-      root.add(del.container);
+      }, { kind: 'secondary', w: 120, h: 52, size: 16 });
+      del.root.setPosition(x + 1250, y + (rowH - 12) / 2);
+      root.add([load.root, del.root]);
     });
   }
 

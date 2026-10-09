@@ -142,10 +142,16 @@ export const TOUCH_HINT = 'Tap the corner arrows for full screen';
  * Sağ üst tam ekran düğmesi. Destek 'none' ise eklenmez; 'ios' ise düğme ipucu gösterir ("Add to Home Screen for full screen");
  * ana ekrandan (standalone) açıldıysa hiç eklenmez. İlk açılışta dokunmatik cihazda kapatılabilir küçük bir ipucu çıkar (bir kez).
  */
+/** Sağ üst tam ekran düğmesi yalnızca dokunmatik cihazda (Ömer 2026-10-09; masaüstünde Settings satırı ve debug girişi yeter). */
+export function wantsFullscreenButton(env: { coarse: boolean; maxTouchPoints: number }): boolean {
+  return env.coarse || env.maxTouchPoints > 0;
+}
+
 export function createFullscreenButton(root: HTMLElement): { setHint: (text: string) => void; support: FullscreenSupport } {
   const support = currentSupport();
   const noop = { setHint: () => {}, support };
   if (support === 'none' || isStandalone()) return noop;
+  if (!wantsFullscreenButton({ coarse: !!window.matchMedia?.('(pointer: coarse)').matches, maxTouchPoints: navigator.maxTouchPoints ?? 0 })) return noop;
 
   const btn = document.createElement('button');
   btn.className = 'settings-toggle fullscreen-toggle';

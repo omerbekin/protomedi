@@ -1,3 +1,4 @@
+/* KOPYA: src/ui/elegant.css (tasarım kiti). Taslak sayfaları oyunun derlemesine girmediği için kopyalandı. */
 /* ZARİF TASARIM KİTİ (DOM tarafı; Phaser karşılığı src/game/elegant-ui.ts; kurallar CLAUDE.md > "Tasarım kiti").
    Ana menü + Quick Battle "Twin Formations" dili: Cinzel 600 büyük harf + EB Garamond italik, ince altın çizgiler, kor elmaslar, yumuşak geçişler.
    Fontlar src/style.css @font-face (yerel dosyalar). Sınıflar `el-` ile başlar; birleştirilebilir (ör. <button class="el-btn primary">).

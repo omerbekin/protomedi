@@ -1,9 +1,7 @@
 import Phaser from 'phaser';
 import type { CombatantDef } from '../engine';
 import { avatarTexture, characterTexture } from './assets';
-import { cornerOrnaments, frameRect, GOLD, makePanel, SERIF } from './ui-frame';
-import type { MiniShape } from '../ui/shape-diagram';
-import { drawMiniShape, miniShapeSize } from './shape-draw';
+import { SERIF } from './ui-frame';
 import { ensureIcon } from './icons';
 import { ownerOfUnit } from './asset-versions';
 import { onStageResize, stageView } from './stage';
@@ -12,11 +10,10 @@ import { edgeFillers } from './map-art';
 import { FULL_W, FULL_X0 } from '../ui/viewport';
 
 /**
- * Menü ekranları (takım seçimi) için ortak çizim yardımcıları: atmosferik arka plan, altın yazı, düğme, tooltip, kafa portresi.
- * Savaş ekranındaki panel dilini (ui-frame.ts) kullanır; hepsi kodla çizilir.
+ * Ortak çizim yardımcıları: atmosferik arka plan, yazı, kafa portresi, class logosu. Düğme / panel / tooltip tasarım kitindedir
+ * (src/game/elegant-ui.ts); eski bronz makeMenuButton / buildTip kaldırıldı (2026-10-09).
  */
 
-const cssHex = (v: number) => `#${v.toString(16).padStart(6, '0')}`;
 
 /**
  * Menü parıltı şiddeti (tek ayar noktası): 1 = eski (çok parlak) görünüm, 0 = hiç parıltı yok. Varsayılan 0,4.
@@ -286,147 +283,3 @@ export function classLogoBadge(scene: Phaser.Scene, def: CombatantDef, cx: numbe
   return [bg, icon];
 }
 
-// --- Düğme ---
-
-export interface MenuButton {
-  container: Phaser.GameObjects.Container;
-  setEnabled(on: boolean): void;
-  shake(): void;
-}
-
-/** Bronz/altın düğme: degrade plaka, çok katmanlı çerçeve, hover parlaması, basma animasyonu. Merkez (cx, cy). */
-export function makeMenuButton(
-  scene: Phaser.Scene,
-  cx: number,
-  cy: number,
-  w: number,
-  h: number,
-  label: string,
-  onTap: () => void,
-  o: { primary?: boolean; size?: number; icon?: string; font?: string; weight?: string; spacing?: number } = {},
-): MenuButton {
-  const primary = !!o.primary;
-  const body = scene.add.graphics();
-  const plate = (top: number, bottom: number, edge: number, light: number) => {
-    body.clear();
-    body.fillGradientStyle(top, top, bottom, bottom, 1).fillRect(-w / 2, -h / 2, w, h);
-    body.fillStyle(0xffffff, 0.08).fillRect(-w / 2 + 4, -h / 2 + 4, w - 8, h / 2 - 4);
-    frameRect(body, -w / 2, -h / 2, w, h, { edge, light, bevel: primary ? 5 : 4 });
-    cornerOrnaments(body, -w / 2, -h / 2, w, h, primary ? 6 : 4);
-  };
-  const glow = scene.add.image(0, 0, ensureGlow(scene)).setTint(primary ? 0xffc860 : 0xffb050).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
-  glow.setDisplaySize(w * 1.5, h * 2.2);
-  const text = goldText(scene, 0, 0, label, o.size ?? (primary ? 40 : 28), o.spacing ?? (primary ? 2 : 1), { font: o.font, weight: o.weight }).setOrigin(0.5);
-  const parts: Phaser.GameObjects.GameObject[] = [glow, body, text];
-  const container = scene.add.container(cx, cy, parts);
-  const zone = scene.add.zone(0, 0, w, h).setInteractive({ useHandCursor: true });
-  container.add(zone);
-  let enabled = true;
-  let pulse: Phaser.Tweens.Tween | undefined;
-  const look = () => {
-    if (primary) plate(enabled ? 0x9a6a28 : 0x3a2c1c, enabled ? 0x3f220c : 0x16100b, enabled ? GOLD.light : 0x5b4a30, enabled ? GOLD.bright : 0x7a6a4c);
-    else plate(0x5c4128, 0x24170d, GOLD.edge, GOLD.light);
-    text.setAlpha(enabled ? 1 : 0.5);
-    pulse?.stop();
-    glow.setAlpha(0);
-    // START: eskiden hızlı altın nabız (0,22-0,6 / 900ms); şimdi çok hafif ve yavaş.
-    if (primary && enabled) pulse = scene.tweens.add({ targets: glow, alpha: { from: fx(0.3), to: fx(0.5) }, duration: 2800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-  };
-  look();
-  const tweenTo = (s: number, ms = 110) => scene.tweens.add({ targets: container, scale: s, duration: ms, ease: 'Sine.easeOut' });
-  zone.on('pointerover', () => {
-    tweenTo(1.035);
-    if (!primary || !enabled) scene.tweens.add({ targets: glow, alpha: fx(enabled ? 0.45 : 0.12), duration: 140 });
-    text.setTint(0xffffff, 0xffffff, 0xffe29a, 0xffe29a);
-  });
-  zone.on('pointerout', () => {
-    tweenTo(1);
-    if (!primary || !enabled) scene.tweens.add({ targets: glow, alpha: 0, duration: 200 });
-    text.setTint(0xfff2c0, 0xfff2c0, 0xc89238, 0xc89238);
-  });
-  zone.on('pointerdown', () => tweenTo(0.96, 70));
-  zone.on('pointerup', () => {
-    tweenTo(1.035, 90);
-    onTap();
-  });
-  return {
-    container,
-    setEnabled(on: boolean) {
-      if (enabled === on) return;
-      enabled = on;
-      look();
-    },
-    shake() {
-      scene.tweens.add({ targets: container, x: { from: cx - 10, to: cx }, duration: 240, ease: 'Bounce.easeOut' });
-    },
-  };
-}
-
-// --- Tooltip ---
-
-export interface TipContent {
-  title: string;
-  titleHex?: string;
-  /** Başlığın solundaki ikon dokusu anahtarı. */
-  icon?: string;
-  /** Sağ üst rozet (hedef türü, arketip). */
-  badge?: string;
-  /** AOE şekil şeması (mini ızgara): rozetin soluna çizilir. */
-  shape?: MiniShape;
-  rows: Array<[string, string?]>;
-  width?: number;
-}
-
-/** Savaş ekranındaki bilgi panelleri dilinde tooltip (taş/deri panel, altın başlık). Konumlanmamış container + boyut döner. */
-export function buildTip(scene: Phaser.Scene, c: TipContent): { container: Phaser.GameObjects.Container; width: number; height: number } {
-  const w = c.width ?? 430;
-  const pad = 18;
-  const items: Phaser.GameObjects.GameObject[] = [];
-  const iconSize = c.icon ? 40 : 0;
-  const title = serif(scene, pad + (iconSize ? iconSize + 12 : 0), pad - 2, c.title, 30, c.titleHex ?? '#ffe29a').setOrigin(0, 0);
-  let y = pad + Math.max(iconSize, title.height) + 4;
-  const body: Phaser.GameObjects.GameObject[] = [title];
-  if (c.icon) body.push(scene.add.image(pad + iconSize / 2, pad + iconSize / 2 - 2, c.icon).setDisplaySize(iconSize, iconSize));
-  if (c.badge) {
-    const badge = serif(scene, 0, 0, c.badge.toUpperCase(), 14, '#f3d9a0', { spacing: 1 });
-    const bw = badge.width + 20;
-    const bh = badge.height + 6;
-    const g = scene.add.graphics();
-    g.fillStyle(0x120c07, 0.95).fillRoundedRect(w - pad - bw, pad, bw, bh, 6);
-    g.lineStyle(2, GOLD.edge, 1).strokeRoundedRect(w - pad - bw, pad, bw, bh, 6);
-    badge.setPosition(w - pad - bw + 10, pad + 3);
-    body.push(g, badge);
-    if (c.shape) {
-      const sz = miniShapeSize(c.shape);
-      body.push(drawMiniShape(scene, w - pad - bw - 10 - sz.w, pad - 6, c.shape));
-      y = Math.max(y, pad - 6 + sz.h + 6);
-    }
-  }
-  const rule = scene.add.graphics();
-  rule.lineStyle(1, GOLD.edge, 0.7).lineBetween(pad, y, w - pad, y);
-  rule.fillStyle(GOLD.light, 0.9).fillPoints([{ x: w / 2, y: y - 3 }, { x: w / 2 + 4, y }, { x: w / 2, y: y + 3 }, { x: w / 2 - 4, y }], true);
-  body.push(rule);
-  y += 10;
-  for (const [text, hex] of c.rows) {
-    const t = serif(scene, pad, y, text, 18, hex ?? '#e6d8bd', { bold: false, stroke: 2 }).setOrigin(0, 0);
-    t.setWordWrapWidth(w - pad * 2, true).setLineSpacing(2);
-    body.push(t);
-    y += t.height + 5;
-  }
-  const h = y + pad - 4;
-  items.push(...makePanel(scene, 0, 0, w, h, { top: 0x2a2017, bottom: 0x0d0805, bevel: 3, grain: 0.7, alpha: 0.98 }), ...body);
-  return { container: scene.add.container(0, 0, items).setDepth(5000), width: w, height: h };
-}
-
-/** Tooltip'i bir dikdörtgenin üstüne/altına koyar ve ekrandan taşırmaz. */
-export function placeTip(tip: { container: Phaser.GameObjects.Container; width: number; height: number }, anchor: { x: number; y: number; w: number; h: number }, prefer: 'above' | 'below', W: number, H: number): void {
-  const margin = 10;
-  let x = anchor.x + anchor.w / 2 - tip.width / 2;
-  let y = prefer === 'above' ? anchor.y - tip.height - margin : anchor.y + anchor.h + margin;
-  if (y < 6) y = anchor.y + anchor.h + margin;
-  if (y + tip.height > H - 6) y = Math.max(6, anchor.y - tip.height - margin);
-  x = Math.min(W - tip.width - 8, Math.max(8, x));
-  tip.container.setPosition(Math.round(x), Math.round(y));
-}
-
-export { cssHex };

@@ -37,6 +37,8 @@ export interface GameMenuHooks {
   newGame: () => void;
   teamSelect: () => void;
   mainMenu: () => void;
+  /** Codex'i aç (menü kapanır). */
+  codex?: () => void;
   /** Sefer savaşından haritaya geri çekil (savaş sayılmaz). */
   retreat: () => void;
   /** Geri çekilme düğmesinin yazısı (endless: 'Retreat to Camp'); yoksa MENU_LABELS.retreat. */
@@ -176,6 +178,9 @@ export class GameMenu {
     switch (id) {
       case 'resume':
         return this.setOpen(false);
+      case 'codex':
+        this.setOpen(false);
+        return this.hooks.codex?.();
       case 'settings':
         // Ayarlar ekranı menünün üstünde açılır; Back / Esc onu kapatınca menü yeniden görünür (savaş durmaya devam eder)
         return setSettingsOpen(true);
