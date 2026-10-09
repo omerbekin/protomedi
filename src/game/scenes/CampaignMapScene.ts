@@ -109,6 +109,10 @@ export class CampaignMapScene extends Phaser.Scene {
   private pauseMenu: Modal | null = null;
   /** Menu > Load: bu yuvanın kayıt listesi (src/game/campaign-slots-ui.ts "Column"). */
   private slotBrowser: SlotBrowser | null = null;
+  /** Kahraman paneli ya da Formation penceresi açık (Menu düğmesi gizlenir; pencerenin kendi Close / Done'ı yeter). */
+  private sideOpen = false;
+  /** Sağ üstteki DOM "Menu" düğmesi. */
+  private menuBtn: HTMLButtonElement | null = null;
   private tip: Phaser.GameObjects.Container | null = null;
   private dashT = 0;
   private drag = { down: false, moved: false, x: 0, y: 0 };
@@ -135,6 +139,8 @@ export class CampaignMapScene extends Phaser.Scene {
     this.modal = null;
     this.pauseMenu = null;
     this.slotBrowser = null;
+    this.sideOpen = false;
+    this.menuBtn = null;
     this.tip = null;
     this.mapZoom = 1;
     this.frame = { left: 0, right: W, top: 0, bottom: H };
@@ -183,6 +189,7 @@ export class CampaignMapScene extends Phaser.Scene {
     this.events.on('update', (_t: number, dt: number) => {
       this.animateDashes(dt);
       this.updatePanButtons();
+      this.syncOverlays();
     });
     this.mountMenuButton();
     this.input.keyboard?.on('keydown-ESC', () => this.onEscape());
@@ -198,13 +205,31 @@ export class CampaignMapScene extends Phaser.Scene {
     if (!root) return;
     root.querySelector('.campaign-menu-toggle')?.remove();
     const b = mountMenuToggle(root, () => this.toggleMenu(), 'campaign-menu-toggle');
+    this.menuBtn = b;
     this.events.once('shutdown', () => {
       b.remove();
+      this.menuBtn = null;
       setSettingsOpen(false);
     });
   }
 
+  /**
+   * Katman düzeni (her karede): açık bir pencere / menü / yuva ekranı / Gear varken alttaki ipucu kartı gizlenir (pencerelerin üstüne
+   * çizilmesin); yuva ekranı, kahraman paneli, Formation ve Gear açıkken sağ üstteki Menu düğmesi de gizlenir (Geri / Menu kuralı:
+   * o ekranların kendi Back / Close / Done'ı yeter).
+   */
+  private syncOverlays(): void {
+    const gear = !!document.querySelector('#ui-root .gr-overlay');
+    const cover = !!this.slotBrowser || this.sideOpen || gear;
+    if (this.menuBtn && this.menuBtn.hidden !== cover) this.menuBtn.hidden = cover;
+    if (this.tip) {
+      const show = !cover && !this.pauseMenu && !this.modal;
+      if (this.tip.visible !== show) this.tip.setVisible(show);
+    }
+  }
+
   private toggleMenu(): void {
+    if (this.slotBrowser || this.sideOpen) return;
     if (this.pauseMenu) this.closeMenu();
     else this.openMenu();
   }
@@ -1033,6 +1058,7 @@ export class CampaignMapScene extends Phaser.Scene {
   private closeModal(): void {
     this.modal?.close();
     this.modal = null;
+    this.sideOpen = false;
   }
 
   private update2(s: CampaignState): void {
@@ -1298,6 +1324,7 @@ export class CampaignMapScene extends Phaser.Scene {
   private openHero(heroId: string): void {
     if (!this.canOpenSide()) return;
     this.closeModal();
+    this.sideOpen = true;
     this.modal = openHeroPanel(this, this.ui, heroId, {
       get: () => this.s,
       gear: (id) => {
@@ -1320,6 +1347,7 @@ export class CampaignMapScene extends Phaser.Scene {
   /** Dizilim penceresi (sürükle ya da dokun-dokun; Auto arrange). Kapanınca harita kalır (önceki kart yeniden açılmaz). */
   private openFormation(): void {
     this.closeModal();
+    this.sideOpen = true;
     this.modal = openFormation(this, this.ui, {
       get: () => this.s,
       move: (heroId, cell) => setState(moveHero(this.s, heroId, cell)),
