@@ -192,12 +192,12 @@ export function buildBackdrop(scene: Phaser.Scene, W: number, H: number, bgKey: 
 // --- Metin ---
 
 /** Serif metin, koyu kontur; çözünürlük 2 (FIT ölçeklemede keskin kalır). */
-export function serif(scene: Phaser.Scene, x: number, y: number, text: string, size: number, hex = '#f3e4c4', o: { bold?: boolean; stroke?: number; spacing?: number } = {}): Phaser.GameObjects.Text {
+export function serif(scene: Phaser.Scene, x: number, y: number, text: string, size: number, hex = '#f3e4c4', o: { bold?: boolean; stroke?: number; spacing?: number; font?: string; weight?: string } = {}): Phaser.GameObjects.Text {
   return scene.add
     .text(x, y, text, {
-      fontFamily: SERIF,
+      fontFamily: o.font ?? SERIF,
       fontSize: `${size}px`,
-      fontStyle: o.bold === false ? 'normal' : 'bold',
+      fontStyle: o.weight ?? (o.bold === false ? 'normal' : 'bold'),
       color: hex,
       stroke: '#0c0805',
       strokeThickness: o.stroke ?? Math.max(2, Math.round(size / 8)),
@@ -207,8 +207,8 @@ export function serif(scene: Phaser.Scene, x: number, y: number, text: string, s
 }
 
 /** Altın degradeli başlık yazısı (beyaz metin + dikey tint). */
-export function goldText(scene: Phaser.Scene, x: number, y: number, text: string, size: number, spacing = 0): Phaser.GameObjects.Text {
-  const t = serif(scene, x, y, text, size, '#ffffff', { stroke: Math.max(3, Math.round(size / 9)), spacing });
+export function goldText(scene: Phaser.Scene, x: number, y: number, text: string, size: number, spacing = 0, o: { font?: string; weight?: string; stroke?: number } = {}): Phaser.GameObjects.Text {
+  const t = serif(scene, x, y, text, size, '#ffffff', { stroke: o.stroke ?? Math.max(3, Math.round(size / 9)), spacing, font: o.font, weight: o.weight });
   t.setTint(0xfff2c0, 0xfff2c0, 0xc89238, 0xc89238);
   return t;
 }
@@ -303,7 +303,7 @@ export function makeMenuButton(
   h: number,
   label: string,
   onTap: () => void,
-  o: { primary?: boolean; size?: number; icon?: string } = {},
+  o: { primary?: boolean; size?: number; icon?: string; font?: string; weight?: string; spacing?: number } = {},
 ): MenuButton {
   const primary = !!o.primary;
   const body = scene.add.graphics();
@@ -316,7 +316,7 @@ export function makeMenuButton(
   };
   const glow = scene.add.image(0, 0, ensureGlow(scene)).setTint(primary ? 0xffc860 : 0xffb050).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
   glow.setDisplaySize(w * 1.5, h * 2.2);
-  const text = goldText(scene, 0, 0, label, o.size ?? (primary ? 40 : 28), primary ? 2 : 1).setOrigin(0.5);
+  const text = goldText(scene, 0, 0, label, o.size ?? (primary ? 40 : 28), o.spacing ?? (primary ? 2 : 1), { font: o.font, weight: o.weight }).setOrigin(0.5);
   const parts: Phaser.GameObjects.GameObject[] = [glow, body, text];
   const container = scene.add.container(cx, cy, parts);
   const zone = scene.add.zone(0, 0, w, h).setInteractive({ useHandCursor: true });

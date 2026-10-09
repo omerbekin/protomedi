@@ -1,3 +1,60 @@
+/* Menü fontları (yerel dosyalar, internetsiz; SIL OFL 1.1, assets/fonts/LICENSE.md): Cinzel başlık/menü satırı, EB Garamond açıklama.
+   latin-ext alt kümesi Türkçe harfler içindir. Yükleme beklemesi: src/ui/menu-fonts.ts; stil anahtarı: src/ui/menu-style.ts */
+
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('../assets/fonts/Cinzel-normal-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('../assets/fonts/Cinzel-normal-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('../assets/fonts/EBGaramond-normal-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('../assets/fonts/EBGaramond-normal-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: italic;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('../assets/fonts/EBGaramond-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: italic;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('../assets/fonts/EBGaramond-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -676,6 +733,71 @@ html.settings-open .gm-overlay {
 .st-label:hover,
 .st-step:hover {
   color: var(--st-on);
+}
+
+/* Zarif menü stili (önizleme ?menu=new; src/ui/menu-style.ts): ana menünün Settings sütunuyla aynı ölçüler (MainMenuScene > ELEGANT) */
+html.menu-elegant .st-overlay {
+  --st-serif: Cinzel, Georgia, 'Palatino Linotype', serif;
+  --st-body: 'EB Garamond', Georgia, 'Palatino Linotype', serif;
+}
+
+/* Konumlar ana menü sütunuyla birebir: başlık ortası y 350, ilk satır ortası y 470, satır 92, yazı COL_X + 34, değer sağ kenarı COL_X + 754 */
+html.menu-elegant .st-col {
+  top: calc(var(--et) + 321.4 * var(--u));
+  width: max(calc(754 * var(--u)), 500px);
+}
+
+html.menu-elegant .st-row {
+  gap: 0;
+}
+
+html.menu-elegant .st-row.on .st-label {
+  transform: translateX(calc(12 * var(--u)));
+}
+
+html.menu-elegant .st-title {
+  margin-bottom: calc(46 * var(--u));
+  font: 600 calc(52 * var(--u)) var(--st-serif);
+  letter-spacing: 0.05em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+html.menu-elegant .st-row {
+  height: max(44px, calc(92 * var(--u)));
+}
+
+html.menu-elegant .st-label {
+  font: 600 calc(28 * var(--u)) var(--st-serif);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 4px #0c0805;
+  transition: transform 0.18s ease-out, color 0.18s, text-shadow 0.18s;
+}
+
+html.menu-elegant .st-row.on .st-label {
+  text-shadow: 0 2px 4px #0c0805, 0 0 calc(16 * var(--u)) rgba(240, 140, 40, 0.55);
+}
+
+html.menu-elegant .st-step {
+  font: 600 calc(34 * var(--u)) var(--st-serif);
+}
+
+html.menu-elegant .st-value {
+  font: 600 calc(26 * var(--u)) var(--st-serif);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 4px #0c0805;
+}
+
+html.menu-elegant .st-note {
+  font: calc(24 * var(--u)) var(--st-body);
+}
+
+html.menu-elegant .st-back {
+  font: 600 calc(30 * var(--u)) var(--st-serif);
+  letter-spacing: 0.05em;
+  text-shadow: 0 2px 4px #0c0805;
 }
 
 /* Kısa sahne (yatay telefon): daha sıkı */

@@ -14,9 +14,9 @@
     "multiplayer": ["duelling-ring-moon", "duelling-ring-storm", "duelling-ring-snow"],
     "offsetY": {},
     "cardFocus": {
-      "_not": "Play kartı görsellerinin odak noktası [x, y] (görselin kesri): kartın tam ortasına gelir, kart boşluksuz dolar (gerekirse yakınlaşır; src/game/wide-map.ts > focusCrop). Ölçüm 2026-10-09: Quick Battle kalenin parmaklıklı kapısı, Multiplayer büyük taş kemerin açıklığı.",
+      "_not": "Play kartı görsellerinin odak noktası [x, y] (görselin kesri): kartın tam ortasına gelir, kart boşluksuz dolar (gerekirse yakınlaşır; src/game/wide-map.ts > focusCrop). Ölçüm 2026-10-09: Quick Battle kalenin parmaklıklı kapısı, Multiplayer büyük taş kemerin açıklığı. 2026-10-09 (Ömer: hafif zoom out): Multiplayer odağı dikeyde ortada (y 0,5 = yakınlaşma yok, kart tam yükseklikte kaplar; eskiden ~1,7x) ve yatayda kemerli kalıntı ile ay arasında: kalıntı kartın ortasında-solunda, ay sağ üstte görünür.",
       "proving-grounds-sunny-afternoon": [0.403, 0.46],
-      "duelling-ring-moon": [0.525, 0.28]
+      "duelling-ring-moon": [0.5425, 0.5]
     }
   },
   "characterSize": {

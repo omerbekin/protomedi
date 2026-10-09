@@ -2,6 +2,7 @@ import { classes, defaultSlots, skills, CELL_COUNT } from '../engine/content';
 import { CONFIG, getMap } from './data';
 import { finalNode, forwardDistances, incoming, node, outgoing } from './graph';
 import { rngFor, shuffle } from './seed';
+import { emptyEquipment, SLOT_IDS } from '../progression/items';
 import type { BattleOutcome, CampaignMap, CampaignMode, Difficulty, CampaignRules, CampaignState, Hero, MapNode, NextStep, StepKind } from './types';
 
 /**
@@ -17,7 +18,7 @@ export const mapOf = (s: CampaignState): CampaignMap => getMap(s.mapId);
 export function newCampaign(o: { mode: CampaignMode; seed: number; mapId?: string; campaignId?: string; difficulty?: Difficulty; slot?: number }): CampaignState {
   const map = getMap(o.mapId ?? CONFIG.maps[0]!);
   return {
-    version: 1,
+    version: 2,
     campaignId: o.campaignId ?? `c-${o.seed}`,
     mode: o.mode,
     difficulty: o.difficulty ?? CONFIG.defaultDifficulty,
@@ -32,6 +33,9 @@ export function newCampaign(o: { mode: CampaignMode; seed: number; mapId?: strin
     tipsSeen: [],
     stats: { victories: 0, defeats: 0 },
     nextHeroId: 1,
+    inventory: [],
+    gold: 0,
+    nextItemId: 1,
   };
 }
 
@@ -136,7 +140,17 @@ function place(s: CampaignState, hero: Hero): void {
 
 function addHero(s: CampaignState, classId: string, o: { leader?: boolean; tutorial?: boolean } = {}): Hero {
   if (!classes[classId]) throw new Error(`Unknown class: ${classId}`);
-  const hero: Hero = { id: `h${s.nextHeroId++}`, class: classId, hpRatio: 1, alive: true, ...(o.leader ? { leader: true } : {}), ...(o.tutorial ? { tutorial: true } : {}) };
+  const hero: Hero = {
+    id: `h${s.nextHeroId++}`,
+    class: classId,
+    hpRatio: 1,
+    alive: true,
+    ...(o.leader ? { leader: true } : {}),
+    ...(o.tutorial ? { tutorial: true } : {}),
+    level: 1,
+    xp: 0,
+    equipment: emptyEquipment(),
+  };
   s.roster.push(hero);
   place(s, hero);
   return hero;
@@ -199,14 +213,42 @@ export function recruit(s: CampaignState, classId: string): CampaignState {
   return t;
 }
 
-/** Ashford: tutorial takımı veda eder (kadrodan çıkar). */
+/**
+ * Ashford: tutorial takımı veda eder (kadrodan çıkar). Takılı item'leri torbaya düşer: yeni bölük onları takar, item takma tutorial'ı burada
+ * başlar (items.md karar 7). Torba sınırı burada uygulanmaz (hiçbir item kaybolmaz; Ömer, madde 278). Teslim anı için `pendingHandover` yazılır.
+ */
 export function farewell(s: CampaignState): CampaignState {
   expectStep(s, 'farewell');
   const t = clone(s);
+  const given: string[] = [];
+  const from: Array<{ heroId: string; class: string }> = [];
+  for (const h of t.roster.filter((x) => x.tutorial)) {
+    let gave = false;
+    for (const slot of SLOT_IDS) {
+      const it = h.equipment[slot];
+      if (it) {
+        t.inventory.push(it);
+        given.push(it.uid);
+        gave = true;
+      }
+      h.equipment[slot] = null;
+    }
+    if (gave) from.push({ heroId: h.id, class: h.class });
+  }
+  // Teslim anı (Aşama 1 arayüzü gösterip onaylatır); item yoksa kayıt yok
+  if (given.length) t.pendingHandover = { node: t.at, from, items: given };
   const leaving = new Set(t.roster.filter((h) => h.tutorial).map((h) => h.id));
   t.roster = t.roster.filter((h) => !leaving.has(h.id));
   t.active = t.active.map((id) => (leaving.has(id) ? '' : id));
   complete(t, 'farewell');
+  return t;
+}
+
+/** Teslim anı görüldü/onaylandı: bekleyen teslim kaydı silinir (item'ler zaten torbada). */
+export function acknowledgeHandover(s: CampaignState): CampaignState {
+  if (!s.pendingHandover) return s;
+  const t = clone(s);
+  delete t.pendingHandover;
   return t;
 }
 

@@ -6,6 +6,7 @@ import type Phaser from 'phaser';
 import { debugTeleport, debugWinNode, getMap, latestSave, newCampaign, nextStep, stopNumber, wipeSaves, type CampaignState } from '../campaign';
 import { current, loadEntry, startNewCampaign, loadLastSave, save, session, setState, storage, MAP_SCENE } from '../game/campaign-session';
 import { debugButton, debugHeading, type DebugMenu } from './debug-menu';
+import { menuStyle } from './menu-style';
 
 export const CAMPAIGN_TAB = 'Campaign';
 
@@ -189,4 +190,19 @@ export function registerCampaignDebug(game: Phaser.Game, debug: DebugMenu): void
   for (const [view, label, icon, hint] of views) {
     debug.register({ id: `menu.${view}`, tab: CAMPAIGN_TAB, section: 'Main menu', icon, label, hint, run: () => openMenu(view) });
   }
+  // Menü stili önizlemesi (src/ui/menu-style.ts): ?menu=new zarif stil, ?menu=old mevcut stil; sayfa yeniden yüklenir
+  debug.register({
+    id: 'menu.style',
+    tab: CAMPAIGN_TAB,
+    section: 'Main menu',
+    icon: 'swap',
+    label: () => `Menu style: ${menuStyle === 'elegant' ? 'new' : 'old'}`,
+    on: () => menuStyle === 'elegant',
+    hint: 'Switch the main menu look between the current style and the new elegant preview (Cinzel / EB Garamond). Reloads the page with ?menu=new or ?menu=old',
+    run: () => {
+      const q = new URLSearchParams(window.location.search);
+      q.set('menu', menuStyle === 'elegant' ? 'old' : 'new');
+      window.location.search = q.toString();
+    },
+  });
 }

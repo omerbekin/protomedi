@@ -94,6 +94,7 @@ export interface CampaignMap {
 }
 
 import type { UnitModifiers, UnitTier } from '../engine/types';
+import type { Equipment, ItemInstance } from '../progression/items';
 
 /** Birim bazında güçlendirme/zayıflatma: motorun UnitModifiers'ı (hpMult, statMult, powerMult, spriteScale, actionsPerTurn...). */
 export type UnitMods = UnitModifiers;
@@ -155,6 +156,12 @@ export interface Hero {
   leader?: boolean;
   /** Tutorial takımından mı (Ashford'da ayrılır). */
   tutorial?: boolean;
+  /** Kalıcı kahraman kaydı (roadmap 1.4, aşama 0). Level sistemi Aşama 2'de; şimdilik hep 1. */
+  level: number;
+  /** Deneyim puanı (Aşama 2 için hazır; şimdilik 0). */
+  xp: number;
+  /** Takılı item'ler: 6 yuva (weapon, helm, armor, gloves, boots, trinket), boş = null. Güce çevrimi: src/progression/loadout.ts. */
+  equipment: Equipment;
 }
 
 /**
@@ -163,8 +170,11 @@ export interface Hero {
  */
 export type StepKind = 'hero' | 'recruit' | 'farewell' | 'company' | 'battle' | 'treasure' | 'event' | 'town' | 'volunteer';
 
+/** Sefer durumunun şema sürümü (2: kahraman level/XP/ekipman, torba, altın; eski 1 okunurken tamamlanır: save.ts > normalizeState). */
+export const STATE_VERSION = 2;
+
 export interface CampaignState {
-  version: 1;
+  version: 2;
   /** Seferin kimliği (aynı seferin kayıtları buna bakar). */
   campaignId: string;
   mode: CampaignMode;
@@ -187,6 +197,24 @@ export interface CampaignState {
   tipsSeen: string[];
   stats: { victories: number; defeats: number };
   nextHeroId: number;
+  /** Sefer torbası (takılı olmayan item'ler; kapasite items.json > bag = 30). */
+  inventory: ItemInstance[];
+  /** Altın (Aşama 1'de loot/tüccar). */
+  gold: number;
+  /** Sıradaki item örneği numarası (uid 'i<n>'). */
+  nextItemId: number;
+  /**
+   * Bekleyen teslim (Ashford vedası, items.md karar 7): ayrılan tutorial takımının item'leri torbaya konmuştur; arayüz (Aşama 1) bu kaydı
+   * "eski takım bunları size bıraktı" anı olarak gösterip onaylatır (`acknowledgeHandover`). Yoksa ya da onaylandıysa yok.
+   */
+  pendingHandover?: Handover;
+}
+
+/** Teslim kaydı: kimden (ayrılan kahramanlar), hangi item'ler (torbadaki uid'ler), hangi düğümde. */
+export interface Handover {
+  node: string;
+  from: Array<{ heroId: string; class: string }>;
+  items: string[];
 }
 
 /** Bir savaşın sonucu (oyuncu birimleri hero id ile). */

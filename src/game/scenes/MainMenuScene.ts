@@ -21,6 +21,8 @@ import { promptCode, promptName } from '../../ui/mp-overlay';
 import { normalizeLobbyCode } from '../../net/lobby-code';
 import { sanitizeName } from '../../net/protocol';
 import { openWiki } from '../../wiki/view';
+import { BODY_FONT, DISPLAY_FONT, menuStyle } from '../../ui/menu-style';
+import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
 import { MAIN_ITEMS, backTarget, backdropFor, campaignButtons, initialView, moveSelection, type MenuItemKey, type MenuView } from '../main-menu-flow';
 
 export interface MainMenuData {
@@ -41,8 +43,33 @@ const COL_X = MENU_COL_X; // sol sütunun yazı başlangıcı (ayarlar ekranı D
 const COL_W = 560; // ana menü yazı satırlarının genişliği
 const PANEL_W = 760; // Settings / Multiplayer satırlarının genişliği (sağda değer/denetim)
 const SHADE_W = 980; // soldan sağa açılan gölge
-const ROW_H = 112; // satır aralığı = dokunma alanı yüksekliği (telefonda ~40-44 gerçek px)
-const ITEM_Y0 = 486;
+/**
+ * Görünüm stili (src/ui/menu-style.ts): 'classic' bugünkü menü; 'elegant' ilk taslağın zarif stili (?menu=new önizleme). Onaylanınca
+ * yalnızca DEFAULT_MENU_STYLE değişir; aşağıdaki ölçüler aynı kalır (önizleme = onaylanan görünüm).
+ */
+const ELEGANT = menuStyle === 'elegant';
+const LOOK = ELEGANT
+  ? {
+      rowH: 92, // ince satırlar (dokunma alanı satırın tamamı)
+      itemY0: 486,
+      mainSize: 30, // Cinzel 600, büyük harf, harf aralığı 0,05em
+      panelSize: 28,
+      panelY0: 470,
+      titleY: 350,
+      titleSize: 52,
+      valueSize: 26,
+      stepSize: 34,
+      backSize: 30,
+      cardTitle: 40,
+      cardLine: 26,
+    }
+  : { rowH: 112, itemY0: 486, mainSize: 50, panelSize: 38, panelY0: 470, titleY: 330, titleSize: 66, valueSize: 32, stepSize: 40, backSize: 36, cardTitle: 50, cardLine: 24 };
+const ROW_H = LOOK.rowH; // satır aralığı = dokunma alanı yüksekliği (telefonda ~40-44 gerçek px)
+const ITEM_Y0 = LOOK.itemY0;
+/** Zarif stilde satır yazısının iç boşluğu (parıltı gölgesi kesilmesin); yazı x'i bu kadar sola alınır. */
+const TPAD = ELEGANT ? 18 : 0;
+const SHADOW_DARK = 'rgba(12,8,5,0.95)';
+const SHADOW_GLOW = 'rgba(240,140,40,0.85)';
 const CARD_W = 460;
 const CARD_H = 640;
 const CARD_GAP = 46;
@@ -79,6 +106,8 @@ interface Row {
  *  - Play: harita yaklaşır, menü sola kayar, üç kart (Campaign · Quick Battle · Multiplayer) aşağıdan yükselir; sol üstte '◂ Back' / Esc.
  *    Campaign kartı: Continue (kayıt varsa) · New (yuva -> mod + zorluk) · Load (yuva -> kayıtlar; kayıt yoksa pasif).
  *  - Settings / Multiplayer: menü sola çekilir, harita kararıp bulanıklaşır, aynı sütunda satırlar belirir. Lobi kurulunca MultiplayerScene.
+ *  - Görünüm stili (2026-10-09): `LOOK` / `ELEGANT` (src/ui/menu-style.ts; ?menu=new önizleme). Elegant: Cinzel satırlar + EB Garamond alt yazılar,
+ *    fontlar hazır olmadan çizilmez (create bekler ve sahneyi yeniden kurar), kartlar hover'da yükselir + görsel yakınlaşır. Akış iki stilde aynı.
  */
 export class MainMenuScene extends Phaser.Scene {
   static readonly KEY = 'MainMenuScene';
@@ -121,7 +150,10 @@ export class MainMenuScene extends Phaser.Scene {
     super(MainMenuScene.KEY);
   }
 
+  private initData: MainMenuData = {};
+
   init(data: MainMenuData): void {
+    this.initData = data ?? {};
     this.openOnStart = data?.open;
     this.startView = initialView(data?.open, data?.view);
     this.modal = null;
@@ -149,6 +181,14 @@ export class MainMenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Zarif stil: Phaser yazıları çizildiği andaki fontla kalır; fontlar hazır değilse bekle ve sahneyi yeniden kur (yedek fontla çizilmesin)
+    if (ELEGANT && !menuFontsReady()) {
+      this.cameras.main.setBackgroundColor('#0d0a07');
+      void whenMenuFontsReady().then(() => {
+        if (this.sys.isActive()) this.scene.restart(this.initData);
+      });
+      return;
+    }
     migrateSaves(storage()); // eski tek-liste kayıtlar Slot 1'e taşınır
     if (mp.active) mp.leave(); // ana menüye dönmek multiplayer lobisinden ayrılmaktır
     this.buildMenuColumn();
@@ -280,14 +320,42 @@ export class MainMenuScene extends Phaser.Scene {
     return this.add.rectangle(-800, 0, 800, H, 0x080604, 0.85).setOrigin(0, 0);
   }
 
+  // ------------------------------------------------------------ yazı stilleri (classic / elegant)
+
+  /** Satır yazısı (menü maddesi, ayar satırı): classic kalın serif + kontur; elegant Cinzel 600, büyük harf, 0,05em, koyu gölge (seçilince kor parıltısı). */
+  private rowText(x: number, y: number, label: string, size: number, color: string): Phaser.GameObjects.Text {
+    if (!ELEGANT) return serif(this, x, y, label, size, color, { spacing: 2, stroke: 3 });
+    return serif(this, x - TPAD, y, label.toUpperCase(), size, color, { font: DISPLAY_FONT, weight: '600', spacing: size * 0.05, stroke: 0 })
+      .setPadding(TPAD, TPAD, TPAD, TPAD)
+      .setShadow(0, 2, SHADOW_DARK, 4, false, true);
+  }
+
+  /** Sağdaki değer yazısı (ses, Enter/Exit, ad, Host/Join). Elegant: Cinzel 600 (küçük harfler Cinzel'de küçük büyük harftir). */
+  private valueText(x: number, y: number, text: string, color: string, size = LOOK.valueSize): Phaser.GameObjects.Text {
+    if (!ELEGANT) return serif(this, x, y, text, size, color, { stroke: 3 });
+    return serif(this, x, y, text, size, color, { font: DISPLAY_FONT, weight: '600', spacing: size * 0.05, stroke: 0 }).setShadow(0, 2, SHADOW_DARK, 4, false, true);
+  }
+
+  /** Açıklama / alt yazı: classic ince serif; elegant EB Garamond. */
+  private noteText(x: number, y: number, text: string, size: number, color: string): Phaser.GameObjects.Text {
+    if (!ELEGANT) return serif(this, x, y, text, size, color, { bold: false, stroke: 2 });
+    return serif(this, x, y, text, size + 2, color, { font: BODY_FONT, weight: 'normal', stroke: 0 }).setShadow(0, 1, SHADOW_DARK, 3, false, true);
+  }
+
+  /** Altın başlık (Settings / Multiplayer sütunu, kart başlıkları). */
+  private titleText(x: number, y: number, text: string, size: number, spacing: number, weight = '600'): Phaser.GameObjects.Text {
+    if (!ELEGANT) return goldText(this, x, y, text, size, spacing);
+    return goldText(this, x, y, text.toUpperCase(), size, size * 0.05, { font: DISPLAY_FONT, weight, stroke: Math.max(2, Math.round(size / 16)) });
+  }
+
   /** Kutusuz yazı satırı: elmas + yazı (+ isteğe bağlı sağ taraf) + ince ayırıcı çizgi. Dokunma alanı satırın tamamı. */
   private makeRow(y: number, label: string, size: number, run: () => void, o: { right?: Phaser.GameObjects.GameObject[]; enabled?: boolean; onHover?: () => void; width?: number } = {}): Row {
     const rw = o.width ?? COL_W;
     const enabled = o.enabled !== false;
     const root = this.add.container(COL_X, y);
     const glow = this.add.image(0, 0, ensureGlow(this)).setTint(0xf08c28).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
-    const text = serif(this, 34, 0, label, size, enabled ? TXT : '#7d705a', { spacing: 2, stroke: 3 }).setOrigin(0, 0.5);
-    glow.setDisplaySize(text.width * 1.5 + 80, size * 2.2).setPosition(34 + text.width / 2, 0);
+    const text = this.rowText(34, 0, label, size, enabled ? TXT : '#7d705a').setOrigin(0, 0.5);
+    glow.setDisplaySize(text.width * 1.5 + 80, size * 2.2).setPosition(text.x + text.width / 2, 0);
     const diamond = this.add.graphics();
     const line = this.add.graphics();
     line.lineStyle(1, 0xd9b26a, 0.16).lineBetween(0, ROW_H / 2 - 2, rw, ROW_H / 2 - 2);
@@ -295,6 +363,7 @@ export class MainMenuScene extends Phaser.Scene {
     root.add([glow, line, diamond, text, ...(o.right ?? []), zone]);
     // Sağ taraftaki etkileşimli parçalar (kaydırıcı, düğme) satırın dokunma alanının üstünde kalsın
     if (o.right) for (const r of o.right) root.bringToTop(r);
+    let isOn: boolean | null = null;
     const setOn = (v: boolean): void => {
       diamond.clear();
       if (v) {
@@ -302,10 +371,22 @@ export class MainMenuScene extends Phaser.Scene {
         diamond.lineStyle(2, 0xffb35a, 0.9).strokePoints([{ x: 10, y: -8 }, { x: 18, y: 0 }, { x: 10, y: 8 }, { x: 2, y: 0 }], true);
       }
       text.setColor(!enabled ? '#7d705a' : v ? TXT_ON : TXT);
-      text.x = v ? 44 : 34;
-      glow.x = text.x + text.width / 2;
       this.tweens.killTweensOf(glow);
       this.tweens.add({ targets: glow, alpha: v && enabled ? 0.22 : 0, duration: 150 });
+      if (!ELEGANT) {
+        text.x = v ? 44 : 34;
+        glow.x = text.x + text.width / 2;
+        return;
+      }
+      // Elegant: seçili satır hafif sağa kayar (taslaktaki padding-left geçişi) + kor parıltısı (yazı gölgesi)
+      if (isOn !== v) text.setShadow(0, v && enabled ? 0 : 2, v && enabled ? SHADOW_GLOW : SHADOW_DARK, v && enabled ? 14 : 4, false, true);
+      const first = isOn === null;
+      isOn = v;
+      const to = (v ? 46 : 34) - TPAD;
+      this.tweens.killTweensOf(text);
+      if (first) text.x = to;
+      else this.tweens.add({ targets: text, x: to, duration: 180, ease: 'Cubic.easeOut', onUpdate: () => (glow.x = text.x + text.width / 2) });
+      glow.x = text.x + text.width / 2;
     };
     setOn(false);
     zone.on('pointerover', () => o.onHover?.());
@@ -320,13 +401,13 @@ export class MainMenuScene extends Phaser.Scene {
     const col = (this.menuCol = this.add.container(0, 0).setDepth(20));
     col.add([this.shadeExtension(), this.columnShade()]);
     if (hasLogo(this)) col.add(addLogo(this, COL_X + 300, 290, 600, 210)); // assets/branding/logo.png
-    else col.add(fitText(goldText(this, COL_X + 300, 290, 'EMBERS OF VALDORIA', 64, 4).setOrigin(0.5), 600));
+    else col.add(fitText(this.titleText(COL_X + 300, 290, 'EMBERS OF VALDORIA', 64, 4).setOrigin(0.5), 600));
     MAIN_ITEMS.forEach((it, i) => {
-      const row = this.makeRow(ITEM_Y0 + i * ROW_H, it.label, 50, () => this.pickMain(it.key), { onHover: () => this.selectMain(i) });
+      const row = this.makeRow(ITEM_Y0 + i * ROW_H, it.label, LOOK.mainSize, () => this.pickMain(it.key), { onHover: () => this.selectMain(i) });
       col.add(row.root);
       this.menuRows.push(row);
     });
-    if (readSaves(storage()).corrupt) col.add(serif(this, COL_X, H - 60, 'A damaged save file was ignored.', 22, '#d88a7e', { bold: false, stroke: 2 }).setOrigin(0, 0.5));
+    if (readSaves(storage()).corrupt) col.add(this.noteText(COL_X, H - 60, 'A damaged save file was ignored.', 22, '#d88a7e').setOrigin(0, 0.5));
     this.selectMain(0);
   }
 
@@ -401,7 +482,10 @@ export class MainMenuScene extends Phaser.Scene {
   }
 
   private buildBack(): void {
-    const t = serif(this, 0, 0, '◂ Back', 36, TXT, { spacing: 2, stroke: 3 }).setOrigin(0, 0.5);
+    const t = (ELEGANT
+      ? serif(this, 0, 0, '◂ Back', LOOK.backSize, TXT, { font: DISPLAY_FONT, weight: '600', spacing: LOOK.backSize * 0.05, stroke: 0 }).setShadow(0, 2, SHADOW_DARK, 4, false, true)
+      : serif(this, 0, 0, '◂ Back', 36, TXT, { spacing: 2, stroke: 3 })
+    ).setOrigin(0, 0.5);
     const zone = this.add.zone(t.width / 2, 0, t.width + 60, 100).setInteractive({ useHandCursor: true });
     this.back = this.add.container(stageView.left + 58, 64, [t, zone]).setDepth(40).setAlpha(0).setVisible(false);
     zone.on('pointerover', () => t.setColor(TXT_ON));
@@ -430,11 +514,16 @@ export class MainMenuScene extends Phaser.Scene {
     ];
     specs.forEach((s, i) => {
       const cx = W / 2 + (i - 1) * (CARD_W + CARD_GAP);
-      const c = this.add.container(cx, CARD_CY).setDepth(30).setAlpha(0).setVisible(false);
+      const outer = this.add.container(cx, CARD_CY).setDepth(30).setAlpha(0).setVisible(false);
+      // Elegant: kart içeriği iç kapta (hover'da hafif yükselir); classic'te doğrudan dış kap
+      const c = ELEGANT ? this.add.container(0, 0) : outer;
+      if (ELEGANT) outer.add(c);
       const hw = CARD_W / 2;
       const hh = CARD_H / 2;
       const base = this.add.rectangle(0, 0, CARD_W, CARD_H, 0x241a11, 1);
       c.add(base);
+      /** Görsel yakınlaşması (elegant hover): kırpma bölgesi merkezde daralır, ölçek aynı oranda büyür (kart dışına taşmaz). */
+      let zoomImg: ((k: number) => void) | null = null;
       if (s.art) {
         const img = this.add.image(0, 0, s.art).setAlpha(0.6);
         // Odak noktası (veri: battle-layout.json > backgrounds.cardFocus) kartın tam ortasında; kart boşluksuz dolar
@@ -442,6 +531,11 @@ export class MainMenuScene extends Phaser.Scene {
         img.setCrop(fc.cropX, fc.cropY, fc.cropW, fc.cropH).setScale(fc.scale);
         img.setOrigin((fc.cropX + fc.cropW / 2) / img.width, (fc.cropY + fc.cropH / 2) / img.height);
         c.add(img);
+        zoomImg = (k) => {
+          const w = fc.cropW / k;
+          const h = fc.cropH / k;
+          img.setCrop(fc.cropX + (fc.cropW - w) / 2, fc.cropY + (fc.cropH - h) / 2, w, h).setScale(fc.scale * k);
+        };
       }
       const shadeKey = canvasTex(this, 'mm-cardshade', 4, 256, (ctx) => {
         const g = ctx.createLinearGradient(0, 0, 0, 256);
@@ -456,15 +550,21 @@ export class MainMenuScene extends Phaser.Scene {
       const frame = this.add.graphics();
       const drawFrame = (on: boolean) => {
         frame.clear();
+        if (ELEGANT) {
+          // İnce altın çerçeve (2 px) + içte koyu çizgi
+          frame.lineStyle(3, 0x1b120a, 1).strokeRect(-hw + 3.5, -hh + 3.5, CARD_W - 7, CARD_H - 7);
+          frame.lineStyle(2, on ? GOLD.bright : 0xd9b26a, 1).strokeRect(-hw + 1, -hh + 1, CARD_W - 2, CARD_H - 2);
+          return;
+        }
         frame.lineStyle(4, 0x1b120a, 1).strokeRect(-hw + 4, -hh + 4, CARD_W - 8, CARD_H - 8);
         frame.lineStyle(on ? 4 : 2, on ? GOLD.bright : 0xd9b26a, 1).strokeRect(-hw, -hh, CARD_W, CARD_H);
       };
       drawFrame(false);
       c.add(frame);
-      c.add(goldText(this, 0, hh - (s.buttons ? 130 : 112), s.name, 50, 2).setOrigin(0.5));
+      c.add(this.titleText(0, hh - (s.buttons ? 130 : 112), s.name, LOOK.cardTitle, 2, '700').setOrigin(0.5));
       const zone = this.add.zone(0, 0, CARD_W, CARD_H).setInteractive({ useHandCursor: !s.buttons });
       c.add(zone);
-      if (s.line) c.add(serif(this, 0, hh - 50, s.line, 24, '#cdb88d', { bold: false, stroke: 3 }).setOrigin(0.5));
+      if (s.line) c.add((ELEGANT ? this.noteText(0, hh - 52, s.line, LOOK.cardLine - 2, '#cdb88d') : serif(this, 0, hh - 50, s.line, 24, '#cdb88d', { bold: false, stroke: 3 })).setOrigin(0.5));
       if (s.buttons) {
         const gap = 10;
         const widths = s.buttons.map((b) => (b.id === 'continue' ? 172 : s.buttons!.length > 2 ? 116 : 160));
@@ -475,20 +575,41 @@ export class MainMenuScene extends Phaser.Scene {
             if (!this.ready()) return;
             if (!b.enabled) return btn.shake();
             runCamp(b.id);
-          }, { primary: b.primary, size: 24 });
+          }, ELEGANT ? { primary: b.primary, size: 22, font: DISPLAY_FONT, weight: '600', spacing: 1 } : { primary: b.primary, size: 24 });
           bx += bw + gap;
           if (!b.enabled) btn.setEnabled(false);
           c.add(btn.container);
         });
       }
+      const look = { lift: 0, zoom: 1 };
+      let lookTw: Phaser.Tweens.Tween | null = null;
       const focus = (on: boolean) => {
         drawFrame(on);
         this.tweens.killTweensOf(glow);
         this.tweens.add({ targets: glow, alpha: on ? 0.12 : 0, duration: 160 });
+        if (!ELEGANT) return;
+        // Elegant: odaklanan kart hafif yükselir, görseli hafif yakınlaşır
+        lookTw?.stop();
+        const from = { ...look };
+        const to = { lift: on ? -10 : 0, zoom: on ? 1.04 : 1 };
+        lookTw = this.tweens.addCounter({
+          from: 0,
+          to: 1,
+          duration: 260,
+          ease: 'Cubic.easeOut',
+          onUpdate: (tw) => {
+            if (!c.active) return void tw.stop(); // kartlar yenilendi (kayıt silindi)
+            const t = tw.getValue() ?? 1;
+            look.lift = from.lift + (to.lift - from.lift) * t;
+            look.zoom = from.zoom + (to.zoom - from.zoom) * t;
+            c.y = look.lift;
+            zoomImg?.(look.zoom);
+          },
+        });
       };
       zone.on('pointerover', () => this.focusCard(i));
       if (!s.buttons) zone.on('pointerup', () => this.ready() && s.run());
-      this.cards.push({ c, focus, run: s.run });
+      this.cards.push({ c: outer, focus, run: s.run });
     });
   }
 
@@ -529,7 +650,7 @@ export class MainMenuScene extends Phaser.Scene {
     if (!kind) return;
     const p = (this.panel = this.add.container(this.colX, 0).setDepth(25));
     p.add([this.shadeExtension(), this.columnShade()]);
-    p.add(goldText(this, COL_X, 330, kind === 'settings' ? 'Settings' : 'Multiplayer', 66, 3).setOrigin(0, 0.5));
+    p.add(this.titleText(COL_X, LOOK.titleY, kind === 'settings' ? 'Settings' : 'Multiplayer', LOOK.titleSize, 3).setOrigin(0, 0.5));
     if (kind === 'settings') this.buildSettings(p);
     else this.buildMultiplayer(p);
     this.panelSel = 0;
@@ -546,7 +667,7 @@ export class MainMenuScene extends Phaser.Scene {
 
   private addPanelRow(p: Phaser.GameObjects.Container, label: string, run: () => void, o: { right?: Phaser.GameObjects.GameObject[]; enabled?: boolean; adjust?: (d: number) => void } = {}): Row {
     const i = this.panelRows.length;
-    const row = this.makeRow(470 + i * ROW_H, label, 38, run, { ...o, width: PANEL_W, onHover: () => this.selectPanel(i) });
+    const row = this.makeRow(LOOK.panelY0 + i * ROW_H, label, LOOK.panelSize, run, { ...o, width: PANEL_W, onHover: () => this.selectPanel(i) });
     row.adjust = o.adjust;
     p.add(row.root);
     this.panelRows.push(row);
@@ -560,7 +681,7 @@ export class MainMenuScene extends Phaser.Scene {
     const trackX = 440;
     const trackW = 200;
     const g = this.add.graphics();
-    const value = serif(this, PANEL_W - 6, 0, String(level), 32, TXT_ON, { stroke: 3 }).setOrigin(1, 0.5);
+    const value = this.valueText(PANEL_W - 6, 0, String(level), TXT_ON).setOrigin(1, 0.5);
     const draw = () => {
       g.clear();
       g.fillStyle(0x120c07, 0.9).fillRect(trackX, -5, trackW, 10);
@@ -578,7 +699,7 @@ export class MainMenuScene extends Phaser.Scene {
       draw();
     };
     const step = (label: string, x: number, d: number) => {
-      const t = serif(this, x, 0, label, 40, TXT_ON, { stroke: 3 }).setOrigin(0.5);
+      const t = this.valueText(x, 0, label, TXT_ON, LOOK.stepSize).setOrigin(0.5);
       const z = this.add.zone(x, 0, 64, ROW_H - 8).setInteractive({ useHandCursor: true });
       z.on('pointerup', () => set(level + d, true));
       return [t, z];
@@ -607,8 +728,8 @@ export class MainMenuScene extends Phaser.Scene {
     // --- Fullscreen (API yoksa satır yok; iPhone'da ipucu) ---
     const support = currentSupport();
     if (support !== 'none' && !isStandalone()) {
-      const state = serif(this, PANEL_W - 6, 0, 'Enter', 32, TXT_ON, { stroke: 3 }).setOrigin(1, 0.5);
-      const note = serif(this, COL_X, 470 + 2 * ROW_H - 10, '', 22, '#cdb88d', { bold: false, stroke: 2 }).setOrigin(0, 0.5);
+      const state = this.valueText(PANEL_W - 6, 0, 'Enter', TXT_ON).setOrigin(1, 0.5);
+      const note = this.noteText(COL_X, LOOK.panelY0 + 2 * ROW_H - 10, '', 22, '#cdb88d').setOrigin(0, 0.5);
       p.add(note);
       this.cleanups.push(onFullscreenChange((on) => state.active && state.setText(on ? 'Exit' : 'Enter')));
       this.addPanelRow(p, 'Fullscreen', () => {
@@ -621,14 +742,14 @@ export class MainMenuScene extends Phaser.Scene {
   /** Multiplayer: mevcut lobi akışının ilk adımı (ad, Host, kodla Join). Lobi kurulmaya başlayınca MultiplayerScene devralır. */
   private buildMultiplayer(p: Phaser.GameObjects.Container): void {
     const ok = !!mp.serverUrl();
-    const name = serif(this, PANEL_W - 6, 0, mp.names().local, 32, TXT_ON, { stroke: 3 }).setOrigin(1, 0.5);
+    const name = this.valueText(PANEL_W - 6, 0, mp.names().local, TXT_ON).setOrigin(1, 0.5);
     fitText(name, 260);
     this.addPanelRow(p, 'Your name', () => void this.askName(name), { right: [name] });
-    this.addPanelRow(p, 'Host a lobby', () => mp.host(), { enabled: ok, right: [serif(this, PANEL_W - 6, 0, 'Host', 32, ok ? TXT_ON : '#7d705a', { stroke: 3 }).setOrigin(1, 0.5)] });
-    this.addPanelRow(p, 'Join with code', () => void this.askCode(), { enabled: ok, right: [serif(this, PANEL_W - 6, 0, 'Join', 32, ok ? TXT_ON : '#7d705a', { stroke: 3 }).setOrigin(1, 0.5)] });
+    this.addPanelRow(p, 'Host a lobby', () => mp.host(), { enabled: ok, right: [this.valueText(PANEL_W - 6, 0, 'Host', ok ? TXT_ON : '#7d705a').setOrigin(1, 0.5)] });
+    this.addPanelRow(p, 'Join with code', () => void this.askCode(), { enabled: ok, right: [this.valueText(PANEL_W - 6, 0, 'Join', ok ? TXT_ON : '#7d705a').setOrigin(1, 0.5)] });
     if (!ok) {
-      p.add(serif(this, COL_X, 470 + 3 * ROW_H, 'Server not configured', 30, '#e08a7a', { stroke: 3 }).setOrigin(0, 0.5));
-      p.add(serif(this, COL_X, 470 + 3 * ROW_H + 44, 'The multiplayer server address has not been set up yet.', 20, '#a8977a', { bold: false, stroke: 2 }).setOrigin(0, 0.5));
+      p.add(this.valueText(COL_X, LOOK.panelY0 + 3 * ROW_H, 'Server not configured', '#e08a7a', ELEGANT ? 26 : 30).setOrigin(0, 0.5));
+      p.add(this.noteText(COL_X, LOOK.panelY0 + 3 * ROW_H + 44, 'The multiplayer server address has not been set up yet.', 20, '#a8977a').setOrigin(0, 0.5));
     }
   }
 

@@ -1,0 +1,61 @@
+{
+  "_not": "Item sistemi verisi (docs/design/progression/items.md; Ömer kararları 2026-10-09, items.md bölüm 7). AŞAMA 0: yalnızca şema + test için 3 örnek item (gerçek item listesi Aşama 1'de, content-designer). Sayılar PROVİZYON (balance-tester). Doğrulama: src/progression/items.ts > validateItems, tests/items-data.test.ts.",
+  "_stats": "Item statları. ip = 1 birimin Item Points değeri (1 IP ~ +%1 savaş gücü). engine = motorda bugün karşılığı var mı (src/progression/loadout.ts eşlemesi: str/dex/int/luck -> attrAdd, armor -> armorAdd, magicArmor -> magicArmorAdd, might -> powerMult toplanarak, +%1 = x0,01). engine:false statlar için motorda yeni toplamsal UnitModifiers alanı gerekir (engine-dev, Aşama 1: hpAdd, critAdd ...); o zamana kadar item verisinde kullanılamaz (doğrulama hatası).",
+  "slots": [
+    { "id": "weapon", "name": "Weapon", "weight": 1.5 },
+    { "id": "helm", "name": "Helm", "weight": 0.8 },
+    { "id": "armor", "name": "Armor", "weight": 1.3 },
+    { "id": "gloves", "name": "Gloves", "weight": 0.8 },
+    { "id": "boots", "name": "Boots", "weight": 0.8 },
+    { "id": "trinket", "name": "Trinket", "weight": 0.8 }
+  ],
+  "rarities": [
+    { "id": "common", "name": "Common", "mult": 0.7, "affixes": 0, "color": "#8a8a84" },
+    { "id": "uncommon", "name": "Uncommon", "mult": 1.0, "affixes": 1, "color": "#5f8f3e" },
+    { "id": "rare", "name": "Rare", "mult": 1.3, "affixes": 2, "color": "#3f6fa8" },
+    { "id": "epic", "name": "Epic", "mult": 1.6, "affixes": 3, "color": "#7a3f9a" },
+    { "id": "legendary", "name": "Legendary", "mult": 2.0, "affixes": 0, "color": "#d9741c" }
+  ],
+  "setColor": "#3f8f84",
+  "budget": { "base": 1, "perIlvl": 0.2, "endlessPerIlvl": 0.1, "tolerance": 0.1, "goldPerIP": 10, "minValue": 5, "sellRatio": 0.25 },
+  "stats": {
+    "str": { "name": "STR", "ip": 5, "engine": true, "integer": true },
+    "dex": { "name": "DEX", "ip": 5, "engine": true, "integer": true },
+    "int": { "name": "INT", "ip": 5, "engine": true, "integer": true },
+    "luck": { "name": "LUCK", "ip": 5, "engine": true, "integer": true },
+    "armor": { "name": "Armor", "ip": 0.8, "engine": true },
+    "magicArmor": { "name": "Magic Armor", "ip": 0.5, "engine": true },
+    "might": { "name": "Might", "ip": 0.5, "engine": true, "percent": true },
+    "hp": { "name": "Max HP", "ip": 0.4, "engine": false },
+    "crit": { "name": "Crit", "ip": 0.25, "engine": false, "percent": true },
+    "critDmg": { "name": "Crit Damage", "ip": 0.05, "engine": false, "percent": true },
+    "accuracy": { "name": "Accuracy", "ip": 0.6, "engine": false, "percent": true },
+    "evasion": { "name": "Evasion", "ip": 0.6, "engine": false, "percent": true },
+    "spd": { "name": "Speed", "ip": 5.5, "engine": false },
+    "mp": { "name": "Max MP", "ip": 0.1, "engine": false },
+    "mpRegen": { "name": "MP Regen", "ip": 2, "engine": false },
+    "hpRegen": { "name": "HP Regen", "ip": 4, "engine": false }
+  },
+  "caps": { "crit": 15, "accuracy": 10, "evasion": 10, "spd": 1.5, "spdPerItem": 0.5 },
+  "weaponFamilies": [
+    { "id": "axes", "name": "Axes & Swords", "classes": ["warrior", "antimage"] },
+    { "id": "maces", "name": "Maces & Shields", "classes": ["defender", "paladin", "warrior"] },
+    { "id": "bows", "name": "Bows", "classes": ["archer"] },
+    { "id": "daggers", "name": "Daggers", "classes": ["cutthroat", "antimage"] },
+    { "id": "staves", "name": "Staves", "classes": ["mage", "druid", "undead"] },
+    { "id": "charms", "name": "Charms", "classes": ["gambler", "hexer"] }
+  ],
+  "bag": 30,
+  "_items": "Sabit (el yapımı) item'ler: MVP kataloğu. Silahta family zorunlu, diğer yuvalarda yok. stats = gerçek değerler (STR/DEX/INT/LUCK tam sayı; might yüzde). IP bütçesi: slot.weight x (budget.base + budget.perIlvl x ilvl) x rarity.mult, ± budget.tolerance (Legendary/Set Aşama 3'te trait/set payıyla).",
+  "items": [
+    { "id": "woodcutters_axe", "name": "Woodcutter's Axe", "slot": "weapon", "family": "axes", "rarity": "common", "ilvl": 2, "stats": { "might": 3 } },
+    { "id": "turnshoes", "name": "Turnshoes", "slot": "boots", "rarity": "common", "ilvl": 2, "stats": { "armor": 1 } },
+    { "id": "bracers_of_the_fox", "name": "Bracers of the Fox", "slot": "gloves", "rarity": "rare", "ilvl": 20, "stats": { "dex": 1 } }
+  ],
+  "_later": "Aşama 2-3 için ayrılmış alanlar (items.md 1.6-1.8, 5.3): bases (affix üretecinin tabanları), affixes, uniques (Legendary), sets, traits. Şimdilik boş.",
+  "bases": [],
+  "affixes": [],
+  "uniques": [],
+  "sets": [],
+  "traits": {}
+}

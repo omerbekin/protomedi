@@ -1,6 +1,6 @@
 # İlerleme Yol Haritası: item, level, skill ağacı, endless, QB/MP itemleme, sefer reworkü
 
-Durum: **TASLAK v1 (yalnızca belge; kod yok).** Yazan: campaign-dev, 2026-10-09. Sorular: bölüm 6 ve `open-questions.md` madde 275.
+Durum: **v2: kararlar alındı (bölüm 6, Ömer 2026-10-09); aşama 0 (ortak temel) uygulandı** (madde 278: `src/progression/`, `data/items.json`, `data/campaign/power-budget.json`, kayıt v3). Yazan: campaign-dev, 2026-10-09. Açık kalan: karar 7 (ücretli dinlenme / Fountain dolumu).
 
 Ömer'in isteği (2026-10-09): "Önce item yapalım (set item'leri de olabilir). Item/level/skill ağacı şimdilik seferde; ileride QB ve MP'de belli bir altın limitiyle karakterler itemlenebilir; endless oyun modu olursa orada da olabilir; KOLAY olacaksa endless modu tasarlayıp bu mekanikleri orada test etmeye de başlayabiliriz. Campaign'i de reworkleyeceğiz bunlar gelince: karakterler gitmediği yola gidebilecek, geri dönüp daha önce temizledikleri yerleri tekrar temizleyip FARM yapabilecekler." Ek: sefer en az 3 bölüm (harita); Valdoria daha sık (daha çok durak) olabilir; skill ağacı sonra (level, skill puanı, filler düğümler, major düğümler: skill'e güçlü özellik ya da evrim).
 
@@ -44,13 +44,15 @@ class temeli (data/classes)  ->  + level  ->  + ağaç (filler)  ->  + item'ler 
 ### 1.3 Güç bütçesi tablosu (PROVİZYON)
 "Efektif güç" = class temeline göre karakterin savaş gücü çarpanı (ölçüm: aynı karakterin yüklemeli ve yüklemesiz hâliyle 4'e 4 sim kazanma oranından türetilir; balance-tester aracı aşama 0'da). items.md'deki **power score** item başına bu bütçeden pay alır.
 
-| Sefer noktası | Item | Level | Ağaç | Toplam (yaklaşık) | Düşman ölçeği (bölüm seviyesi) |
+| Sefer noktası | Item | Level | Ağaç | Toplam (yaklaşık) | Düşman ölçeği (= 1 + 0,8 x açık sistemlerin beklenen gücü) |
 |---|---|---|---|---|---|
-| Başlangıç (Mill Road) | 0 | L1 | 0 | x1,00 | bugünkü karşılaşmalar |
-| Bölüm 1 sonu | +%15 | +%10 | +%5 | x1,30 | x1,25 |
-| Bölüm 2 sonu | +%30 | +%20 | +%15 | x1,75 | x1,65 |
-| Bölüm 3 sonu | +%45 | +%30 | +%25 | x2,30 | x2,10 |
-| Farm ile en fazla ek | +%5 | +%5 | — | eğrinin ~%10 üstü | — |
+| Başlangıç (Mill Road) | 0 | L1 | 0 | x1,00 | x1,00 (bugünkü karşılaşmalar) |
+| Bölüm 1 sonu | +%15 | +%10 | +%5 | x1,30 | x1,24 (yalnızca item açıkken x1,12) |
+| Bölüm 2 sonu | +%30 | +%20 | +%15 | x1,65 | x1,52 (yalnızca item: x1,24) |
+| Bölüm 3 sonu | +%45 | +%30 | +%25 | x2,00 | x1,80 (yalnızca item: x1,36) |
+| Farm ile en fazla ek | +%5 | +%5 | — | eğrinin ~%10 üstü | — (ölçek oyuncunun gerçek gücüne bağlı değil) |
+
+- **Ömer onayladı (2026-10-09, madde 278): telafi %80.** Düşman ölçeği sabit bir tablo değil: item'lerin (ve açıldıkça level/ağacın) o düğümde BEKLENEN gücünün x0,8'i (`data/campaign/power-budget.json`, `src/campaign/power.ts`; bölüm içinde düğüm derinliğiyle doğrusal). Eski taslaktaki düşman sütunu (x1,25 / x1,65 / x2,10, ~%85 telafi) ve toplam sütunundaki yuvarlamalar (x1,75 / x2,30) bu karara göre düzeltildi. Yalnızca oyunda açık sistemler sayılır (`activeSystems`; aşama 0'da boş => ölçek 1).
 
 - Fikir: oyuncunun normal ilerlemesi düşmanın biraz önünde gider (oyuncu güçlendiğini hisseder), farm bu farkı **sınırlı** büyütür (zorluk kolu gibi), ama "her şeyi ezme" seviyesine çıkaramaz (bölüm 2.3 azalan getiri).
 - Kural önerisi: tek bir item karakter gücünün bütçesinin ~1/4'ünden fazlasını vermez; HIZ (SPD/DEX) ve kritik veren item'lerin ayrı tavanı var (risk: bölüm 5).
@@ -87,7 +89,7 @@ class temeli (data/classes)  ->  + level  ->  + ağaç (filler)  ->  + item'ler 
 ### 2.2 Yeniden oynama (farm)
 | Düğüm türü | Yeniden oynanır mı | Düşman | Ödül |
 |---|---|---|---|
-| Battle | Evet | **Yeniden üretilen devriye** (öneri): bölgenin devriye listesinden seed'li seçilen takım (`regions[x].patrols`), bölüm seviyesine göre ölçekli | XP + altın + normal loot, azalan getiri (2.3) |
+| Battle | Evet | **Aynı karşılaşma olabilir** (karar 4, Ömer 2026-10-09); bölgenin devriye listesi (`regions[x].patrols`) isteğe bağlı çeşit olarak ileride, zorunlu değil | XP + altın + normal loot, azalan getiri (2.3) |
 | Guarded Treasure | Savaşı evet (devriye gibi) | Aynı devriye kuralı | Sandık YALNIZCA ilk zaferde; sonra normal savaş ödülü |
 | Elite | Evet (öneri) | Aynı elit karşılaşma, bölüm seviyesine göre | Elitin özel item'i (varsa) yalnızca ilk zaferde; sonra elit loot tablosu, azalan getiri |
 | Boss | **Hayır** (öneri) | — | — |
@@ -95,7 +97,7 @@ class temeli (data/classes)  ->  + level  ->  + ağaç (filler)  ->  + item'ler 
 | Town / City | Her zaman girilir | — | Dinlenme, tüccar, aday |
 | Fountain (yeni) | Evet, şarjlı | — | İyileştirme (2.5) |
 
-- **Neden yeniden üretilen takım:** aynı takımı ezberleyip tekrar tekrar ezmek sıkıcı ve dengeyi bozar; devriye listesi bölgenin temasını korur (Ravenwood'da haydutlar, Black Cathedral çevresinde undead). Savaş seed'i `hash(seed, harita, düğüm, oynama sayısı, deneme)`.
+- **Karar 4:** tekrar oynanan savaşta aynı moblar görünebilir (devriye üretici zorunlu değil). Savaş seed'i yine oynama sayısını içerir: `hash(seed, harita, düğüm, oynama sayısı, deneme)` (zarlar farklı, takım aynı olabilir).
 - **Ölçek bölüm seviyesine bağlı, oyuncu seviyesine DEĞİL.** Düşman oyuncuyla birlikte büyürse farm anlamsızlaşır; bölüme bağlı olunca farm gerçekten kolaylaştırır ama azalan getiriyle sınırlanır.
 
 ### 2.3 Farm sömürüsüne karşı önlemler (öneri: A + B, C yok)
@@ -104,7 +106,7 @@ class temeli (data/classes)  ->  + level  ->  + ağaç (filler)  ->  + item'ler 
 | **A. Azalan getiri (düğüm başına)** | Aynı düğümün N. yeniden oynanışında XP / altın / loot şansı ilk zaferin %60 / %40 / %25'i; taban %25'te kalır. | **Evet** |
 | **B. Seviye farkı cezası** | Karakter, bölüm seviyesinin 3+ level üstündeyse XP'nin yarısı, 5+ üstündeyse %10'u. | **Evet** |
 | C. Zaman / olay bedeli | Her yeniden oynama "Ash Curse" sayacını ilerletir, sayaç dolunca bölgede daha zor düşmanlar. | Hayır (karmaşık; ileride düşünülebilir) |
-| D. Kasaba bedeli | Dinlenme (Rest) altın ister: ilk dinlenme her kasabada bedava, sonra bölüm seviyesine göre küçük ücret. | **Evet** (altına anlam verir, "kasabaya dön, iyileş, tekrar farmla" döngüsünü ücretli yapar) |
+| D. Kasaba bedeli | Dinlenme (Rest) altın ister: ilk dinlenme her kasabada bedava, sonra bölüm seviyesine göre küçük ücret. | **AÇIK: sonra bakılacak** (karar 7) |
 
 ### 2.4 Sis kuralının yeni hâli
 - Mesafe artık **iki yönlü graf**ta ölçülür.
@@ -229,15 +231,15 @@ class temeli (data/classes)  ->  + level  ->  + ağaç (filler)  ->  + item'ler 
 
 ---
 
-## 6. Ömer'e sorular (öneriyle)
+## 6. Kararlar (Ömer, 2026-10-09; eski "Ömer'e sorular" bölümü kapandı)
 
-| # | Soru | Öneri |
+| # | Soru | Karar |
 |---|---|---|
-| 1 | Farm'da **azalan getiri** olsun mu? | **Evet:** aynı düğümün yeniden oynanışında ödül %60 / %40 / %25 (taban %25) + seviye farkı cezası; zaman bedeli ("Ash Curse" sayacı) yok. |
-| 2 | Bölüm boss'u geçilince **önceki bölüme geri dönülsün mü**? | İlk sürümde **hayır** (boss öncesi uyarıyla); kaçırılanlar için sonraki bölümde tüccar/olay yedeği. Gerekirse sonra eklenir. |
-| 3 | **Endless önce mi?** | Ortak katmandan (aşama 0) hemen sonra **Endless Lite, item MVP ile paralel**; tam endless sonra. |
-| 4 | Yeniden oynanan savaşta düşman **aynı takım mı, yeniden üretilen devriye mi**? | **Devriye** (bölgenin listesinden seed'li, bölüm seviyesine göre). |
-| 5 | Boss ve elitler tekrar oynanabilsin mi? | Elit **evet** (özel item yalnızca ilk zaferde), boss **hayır**. |
-| 6 | 3 bölüm: **Seçenek 1** (Valdoria sıklaştırılmış + 2 yeni harita: The Ashlands, The Ember Throne) mı, **Seçenek 2** (mevcut 3 bölge = 3 ayrı yakın plan harita) mı? | **Seçenek 1.** |
-| 7 | Kasabada dinlenme **ücretli** olsun mu (her kasabada ilk dinlenme bedava, sonra küçük altın)? Fountain her 3 yeni zaferde dolsun mu? | **Evet / evet.** |
-| 8 | QB/MP itemleme: varsayılan bütçe 0 + lobide seçilebilir bütçe (0/500/1000/2000), level ve ağaç QB'de yok, uygun mu? | **Evet.** |
+| 1 | Farm'da **azalan getiri** olsun mu? | **EVET** (%60 / %40 / %25, taban %25; 2.3 A). Seviye farkı cezası (2.3 B) öneri olarak kalır, level sistemiyle (aşama 2) birlikte sorulur. |
+| 2 | Bölüm boss'u geçilince **önceki bölüme geri dönülsün mü**? | İlk sürümde **HAYIR** (boss öncesi uyarıyla). |
+| 3 | **Endless önce mi?** | **EVET: Endless Lite item MVP ile paralel**, aşama 0'dan hemen sonra. |
+| 4 | Yeniden oynanan savaşta düşman aynı takım mı, devriye mi? | **AYNI moblar görünebilir**; yeniden üretilen devriye zorunlu değil (ileride çeşit için eklenebilir). 2.2 güncellendi. |
+| 5 | Boss ve elitler tekrar oynanabilsin mi? | **EVET:** elit tekrar oynanabilir (özel item yalnızca ilk zaferde), boss **hayır**. |
+| 6 | 3 bölüm yapısı | **Seçenek 1:** sıklaştırılmış Valdoria + **The Ashlands** + **The Ember Throne**. |
+| 7 | Kasabada ücretli dinlenme ve Fountain dolumu | **SONRA bakılacak (AÇIK).** 2.3 D ve 2.5'teki öneriler bekliyor. |
+| 8 | QB/MP itemleme | **Şimdilik YOK:** Quick Battle'a altın / item / skill ağacı entegre edilmez; QB ve MP dokunulmaz (bölüm 4 ileriye dönük taslak olarak kalır). |

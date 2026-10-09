@@ -52,41 +52,6 @@ export const rosterGroups = () => groupByPrimary(content.selectableClasses.map((
 /** Randomize / `?seed=` akışının havuzu: test class'ları HARİÇ (content.randomPool). */
 export const randomizePool = (): string[] => content.randomPool;
 
-export interface RosterLayout {
-  cols: number;
-  rows: number;
-  /** Kart ölçeği (tasarım boyutuna göre). */
-  scale: number;
-  cardW: number;
-  cardH: number;
-  gap: number;
-}
-
-/**
- * `n` sınıf kartını verilen alana sığdırır: tek satır; çok kalabalıksa iki satır. Kart sayısı sabit değildir (yeni sınıf eklenince büyür).
- */
-export function rosterLayout(n: number, availW: number, availH: number, designW: number, designH: number, gap = 12, maxScale = 1.12, minScale = 0.62): RosterLayout {
-  const fit = (cols: number, rows: number) => {
-    const cw = (availW - (cols - 1) * gap) / cols;
-    const ch = (availH - (rows - 1) * gap) / rows;
-    return Math.min(cw / designW, ch / designH, maxScale);
-  };
-  const count = Math.max(1, n);
-  // Smallest row count whose scale reaches minScale; if none does, the row count with the largest scale (cards never collapse)
-  let rows = 1;
-  let cols = count;
-  let scale = fit(cols, rows);
-  let best = { rows, cols, scale };
-  while (scale < minScale && rows < count) {
-    rows++;
-    cols = Math.ceil(count / rows);
-    scale = fit(cols, rows);
-    if (scale > best.scale) best = { rows, cols, scale };
-  }
-  if (scale < minScale) ({ rows, cols, scale } = best);
-  return { cols, rows, scale, cardW: designW * scale, cardH: designH * scale, gap };
-}
-
 /**
  * Yeni seçilen sınıfın gideceği hücre. Yakın dövüşçüler yalnızca ön sıradan vurabilir: yeri olan ilk sırayı alırlar;
  * diğerleri dolu son sırayın arkasına (o sıra doluysa bir sonrakine) gider.
@@ -142,9 +107,6 @@ export function sizesFromSearch(search: string, fallback: number = defaultTeamSi
 /** Seçicinin + / - adımı (sınırlarda durur). */
 export const stepSize = (current: number, delta: number): number => clampSize(current + delta);
 
-/** Durum yazısı: "You: 5  Enemy: 5". */
-export const sizeSummary = (s: SideSizes): string => `You: ${s.party}  Enemy: ${s.enemies}`;
-
 /** Takımda eksik kalan kişi sayısı (fazlaysa 0). */
 export const missingCount = (cells: string[], size: number): number => Math.max(0, size - teamCount(cells));
 
@@ -174,9 +136,82 @@ export function trimToSize(cells: string[], size: number): string[] {
   return out;
 }
 
-/** Üst bardaki doluluk elmasları: n elmas `maxWidth` içine sığacak şekilde adım (en çok `maxStep`) ve ilk elmasın kaydırması. */
-export function pipLayout(n: number, maxWidth: number, maxStep = 30): { step: number; width: number } {
-  const count = Math.max(1, n);
-  const step = Math.min(maxStep, count > 1 ? maxWidth / count : maxStep);
-  return { step, width: step * count };
+// --- Takım seçimi ekranı ("Twin Formations", Ömer 2026-10-09): saf yardımcılar ---
+
+export type TeamSide = 'party' | 'enemies';
+export type SideCells = Record<TeamSide, string[]>;
+
+/** Bir class'tan her takımda kaç tane var (raf portresindeki mavi / kırmızı sayı rozetleri; 0 = rozet yok). */
+export function classCounts(teams: SideCells, id: string): Record<TeamSide, number> {
+  return { party: teams.party.filter((c) => c === id).length, enemies: teams.enemies.filter((c) => c === id).length };
+}
+
+/**
+ * Alt bilgi satırında gösterilen class: fare bir class'ın (raf portresi ya da yuvadaki birim) üstüne gelince o; fare çekilince
+ * (hovered = null) EN SON gösterilen kalır (eskiden hep listedeki ilk class'a dönüyordu).
+ */
+export const infoClassAfter = (current: string, hovered: string | null | undefined): string => hovered || current;
+
+/**
+ * Sürükle-bırak: bir yuvadaki birimi başka bir yuvaya taşır (aynı takımda yer değiştirme / takas; diğer takıma taşıma).
+ * Hedef yuva doluysa iki birim yer değiştirir (takım sayıları değişmez); boşsa ve hedef takım doluysa taşınmaz ('full').
+ * Yeni takım listeleri döner (girdiler değişmez).
+ */
+export function moveMember(teams: SideCells, sizes: SideSizes, from: { side: TeamSide; i: number }, to: { side: TeamSide; i: number }): { teams: SideCells; ok: boolean; reason?: 'full' | 'same' | 'empty' } {
+  const out: SideCells = { party: [...teams.party], enemies: [...teams.enemies] };
+  if (from.side === to.side && from.i === to.i) return { teams: out, ok: false, reason: 'same' };
+  const unit = out[from.side][from.i];
+  if (!unit) return { teams: out, ok: false, reason: 'empty' };
+  const target = out[to.side][to.i] ?? '';
+  if (from.side !== to.side && !target && teamCount(out[to.side]) >= sizes[to.side]) return { teams: out, ok: false, reason: 'full' };
+  out[from.side][from.i] = target;
+  out[to.side][to.i] = unit;
+  return { teams: out, ok: true };
+}
+
+/** Birimi diğer takımın paneline (yuva seçmeden) bırakma: dizilim kuralıyla (freeCellFor) boş bir yuvaya geçer; takım doluysa 'full'. */
+export function moveToSide(teams: SideCells, sizes: SideSizes, from: { side: TeamSide; i: number }, side: TeamSide): { teams: SideCells; ok: boolean; cell: number; reason?: 'full' | 'same' | 'empty' } {
+  const out: SideCells = { party: [...teams.party], enemies: [...teams.enemies] };
+  const unit = out[from.side][from.i];
+  if (!unit) return { teams: out, ok: false, cell: -1, reason: 'empty' };
+  if (from.side === side) return { teams: out, ok: false, cell: -1, reason: 'same' };
+  if (teamCount(out[side]) >= sizes[side]) return { teams: out, ok: false, cell: -1, reason: 'full' };
+  const cell = freeCellFor(out[side], unit);
+  if (cell < 0) return { teams: out, ok: false, cell: -1, reason: 'full' };
+  out[from.side][from.i] = '';
+  out[side][cell] = unit;
+  return { teams: out, ok: true, cell };
+}
+
+export interface StripLayout {
+  /** Portre kenarı (dünya pikseli). */
+  tile: number;
+  /** Aynı gruptaki portreler arası boşluk. */
+  gap: number;
+  /** STR / DEX / INT / LUCK grupları arası boşluk. */
+  groupGap: number;
+  /** Rafın toplam genişliği. */
+  width: number;
+}
+
+/**
+ * Alttaki class rafının ölçüsü: taslaktaki 124 px portre, 12 px boşluk, 46 px grup aralığı; `availW`'a sığmazsa önce grup aralığı
+ * daralır, sonra hepsi aynı oranda küçülür (en az `minTile`; dokunma hedefi). `groups` = her gruptaki class sayısı (veriden; yeni class rafı büyütür).
+ */
+export function stripLayout(groups: number[], availW: number, o: { tile?: number; gap?: number; groupGap?: number; minTile?: number } = {}): StripLayout {
+  const base = { tile: o.tile ?? 124, gap: o.gap ?? 12, groupGap: o.groupGap ?? 46 };
+  const minTile = o.minTile ?? 72;
+  const n = groups.reduce((a, b) => a + b, 0);
+  const inner = groups.reduce((a, g) => a + Math.max(0, g - 1), 0);
+  const seps = Math.max(0, groups.filter((g) => g > 0).length - 1);
+  const width = (tile: number, gap: number, groupGap: number) => n * tile + inner * gap + seps * groupGap;
+  let groupGap = base.groupGap;
+  if (width(base.tile, base.gap, groupGap) > availW) groupGap = Math.max(26, base.groupGap - (width(base.tile, base.gap, groupGap) - availW) / Math.max(1, seps));
+  let k = Math.min(1, availW / width(base.tile, base.gap, groupGap));
+  k = Math.max(minTile / base.tile, k);
+  let tile = Math.floor(base.tile * k);
+  const gap = Math.max(6, Math.floor(base.gap * k));
+  const gg = Math.floor(groupGap * Math.max(k, 0.7));
+  while (tile > minTile && width(tile, gap, gg) > availW) tile--; // yuvarlama taşırmasın
+  return { tile, gap, groupGap: gg, width: width(tile, gap, gg) };
 }

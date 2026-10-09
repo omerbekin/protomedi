@@ -1,6 +1,6 @@
 # Item (eşya) sistemi: tasarım belgesi (TASLAK / ÖNERİ)
 
-> **Durum: TASLAK, uygulanmadı (2026-10-09).** Bu dosyadaki hiçbir şey `data/`, `src/`, `tests/` ya da `assets/` içine yazılmadı. Tüm sayılar **PROVİZYON**dur: son ayar `balance-tester`'ın `npm run sim:campaign` ölçümüyle yapılır. JSON blokları yalnızca şema taslağıdır.
+> **Durum: KARARLAR ALINDI (bölüm 7, Ömer 2026-10-09); aşama 0 (ortak temel) uygulandı.** Kodda olan: `data/items.json` şeması + 3 örnek item (`tests/items-data.test.ts`), güç toplama katmanı `src/progression/loadout.ts` (item -> `UnitSetup.modifiers`), primary uyarısı `src/progression/primary.ts` (`primaryCheck` / `primaryBonusLost`), kahraman kaydı (level/XP/6 yuva/torba/altın, kayıt v3), güç bütçesi `data/campaign/power-budget.json`. İçerik (item listesi, loot, ekranlar) aşama 1'de. Tüm sayılar **PROVİZYON**dur: son ayar `balance-tester`'ın `npm run sim:campaign` ölçümüyle yapılır.
 >
 > Hazırlayan: content-designer (Opus). Kaynaklar: `docs/design/future-ideas.md` (Item satırları), `docs/design/campaign/campaign.md` (v5), `docs/balance.md` (bantlar + sefer dengesi), `docs/design/combat.md` (Savaş kurulum seçenekleri, hasar ölçekleme kuralı), `data/classes/*.json`, `data/formulas.json`, `src/engine/stats.ts`.
 >
@@ -106,7 +106,7 @@ Neden 5: oyuncuların okuduğu evrensel dil (gri-yeşil-mavi-mor-turuncu); 4 kad
 - **Cooldown azaltma, turnCost, başlangıç cooldown'u, MP bedeli indirimi, Rage**: ultimate/skill kullanım bantlarını (balance.md) doğrudan kırar. Skill ağacının işi.
 - **Lucky Escape / Resilience / Mana Echo / Hunter's Mark şansları**: primary kimliğinin parçası; item yalnızca küçük bir trait olarak (1.7) dokunabilir.
 
-**Primary kuralı (önemli, engine-dev):** motor primary bonusunu "ana stat en yüksek statsa" açıyor (`deriveStats > isPrimaryActive`). Item'le eklenen stat bunu **çevirebilir**: Paladin STR 12 / INT 13, +2 STR'li bir zırhla Mana Echo'yu kaybeder; Undead (12/14) ve Gambler (8/12) da yakın. **Öneri: primary'nin açık olup olmadığı sınıfın TEMEL statlarına göre karar verilir; item ekleri bunu değiştirmez** (`UnitModifiers.primaryFromBase` ya da `applyUnitModifiers` içinde `attrAdd`'den önceki statlarla). Sefer düşmanlarındaki `statMult` tek tip çarptığı için onlarda zaten çevrilmiyor.
+**Primary kuralı (KARAR, Ömer 2026-10-09, madde 278):** motor primary bonusunu "ana stat en yüksek statsa" açar (`deriveStats > isPrimaryActive`) ve **item / level / ağaç statları da SAYILIR**: primary statını başka bir stat geçerse bonus kapanır (Paladin STR 12 / INT 13, +2 STR'li zırhla Mana Echo'yu kaybeder; Undead 12/14 ve Gambler 8/12 da yakın). Bunu yapacak bir item takılmadan / puan verilmeden önce oyuncu **uyarılır**: saf yardımcı `src/progression/primary.ts > primaryCheck(kahraman, { equip | attrDelta })` (`lost`, `overtakenBy`), kısa yol `primaryBonusLost`. Kuşanma ekranı (Aşama 1) ve skill ağacı (Aşama 3) bu uyarıyı gösterir. Motor kuralı değişmedi (eski öneri `primaryFromBase` uygulanmadı/geri alındı).
 
 ### 1.6 Affix sistemi: karışık (öneri)
 
@@ -260,7 +260,7 @@ IP kontrolü: `slotWeight x B(ilvl) x rarityMult` (±%10). Stat IP'leri 1.5 tabl
 | Olay (event) | seçeneğe bağlı (ör. Witch's Hut: "Cursed Merchant" lanetli ama güçlü item: +%30 IP, küçük eksi stat) | | olay verisi (campaign-dev) |
 
 - Kesirli beklenti seed'li yuvarlanır (taban + kalan olasılık). Örnek: 4 kişi normal savaş = 1 item; 3 kişi = %75 ihtimalle 1 item.
-- **Takım boyutuna göre ölçek** gerekçesi: item ihtiyacı kahraman sayısıyla orantılı (6 x kahraman yuva). Tutorial'da 1-2 kişiyken az item düşer; Ashford'da tutorial takımı ayrılırken **takılı item'leri torbaya bırakır** (soru 7), yeni bölük boş başlamaz.
+- **Takım boyutuna göre ölçek** gerekçesi: item ihtiyacı kahraman sayısıyla orantılı (6 x kahraman yuva). Tutorial'da 1-2 kişiyken az item düşer; Ashford'da tutorial takımı ayrılırken **takılı item'leri torbaya bırakır, yeni karakterler onları takar** ve item takma tutorial'ı orada başlar (karar 7; kayıt tarafı aşama 0'da hazır: `farewell` item'leri torbaya taşır), yeni bölük boş başlamaz.
 - Beklenen toplam (3 bölüm, ~10 savaş/bölüm): bölüm 1 ~8-10, bölüm 2 ~13-15, bölüm 3 ~14-16 item → ~38 item; 24 yuva ~1,5 kez yenilenir. Yeterince "yeni şey" ama envanter boğulmaz.
 
 ### 3.2 Nadirlik eğrisi (bölüme göre; normal savaş düşüşü, %)
@@ -271,8 +271,8 @@ IP kontrolü: `slotWeight x B(ilvl) x rarityMult` (±%10). Stat IP'leri 1.5 tabl
 | 2 (ilvl 11-20) | 35 | 40 | 20 | 4,5 | 0,5 |
 | 3 (ilvl 21-30) | 15 | 40 | 32 | 11 | 2 |
 
-- Elit: zar bir kademe yukarı kayar (Common sonucu Uncommon olur...). Boss: en az Rare; Legendary şansı bölüm 1 %0 (boss'a özel Legendary yok, Rare/Epic), bölüm 2 %10, bölüm 3 %20 (final boss garantili 1 Legendary ya da set parçası, oyuncu 3 seçenekten birini seçer: soru 8).
-- **Zorluk etkisi (öneri, soru 6):** Easy ve Medium aynı eğri; **Hard** nadirlik zarı +%10 yukarı kayma ve altın x1,15 (zorluğun ödülü). Item SAYISI zorlukla değişmez (Easy oyuncusu item'siz kalıp daha da zorlanmasın). Veride `campaign.json > difficulties.<x>.loot` (alan zaten "ileride loot" diye ayrılmış).
+- Elit: zar bir kademe yukarı kayar (Common sonucu Uncommon olur...). Boss: en az Rare; Legendary şansı bölüm 1 %0 (boss'a özel Legendary yok, Rare/Epic), bölüm 2 %10, bölüm 3 %20 (final boss garantili 1 Legendary ya da set parçası; otomatik düşer, seçim ekranı YOK: karar 8).
+- **Zorluk etkisi (KARAR 6, Ömer 2026-10-09):** loot her zorlukta AYNI: item sayısı, nadirlik eğrisi ve altın zorluktan bağımsız ("aynı olsun"). Hard'a ek ödül yok.
 
 ### 3.3 Kötü şans koruması (pity)
 
@@ -345,7 +345,7 @@ Görünür sayılar küçük kalır (ör. bölüm 3 sonu bir Warrior: +3 STR, +1
   - **random:** kullanılabilir item'leri rastgele takar ("kötü oyuncu" alt sınırı).
 - Ölçümler: bölüm sonlarında ortalama/medyan GS ve E (4.2 hedefleri), kategori başına ilk deneme kazanma (bugünkü bantlar `best` için hedef + ~5 puan üstü, `random` için hedef içinde), düğüm başına loot sayısı ve nadirlik dağılımı, pity tetiklenme sıklığı, envanter doluluğu, altın eğrisi.
 - IP doğrulama deneyi (2.1): stat başına "+X takan takım" ayna maçı → `statIP` düzeltmesi.
-- Testler: `tests/items-data.test.ts` (şema, IP bütçe toleransı ±%10, her ailenin en az bir sınıfı, set parçalarının yuvaları çakışmıyor), `tests/gear-modifiers.test.ts` (item → UnitModifiers saf dönüşüm; primary kilidi), `tests/loot.test.ts` (seed belirleyiciliği, attempt'ten bağımsızlık, pity, farm azalması), `tests/campaign-gear-balance.test.ts` (best politikası ile kategori bantları).
+- Testler: `tests/items-data.test.ts` (şema, IP bütçe toleransı ±%10, her ailenin en az bir sınıfı, set parçalarının yuvaları çakışmıyor), `tests/gear-modifiers.test.ts` (item → UnitModifiers saf dönüşüm; uygulandı: `tests/loadout.test.ts`), `tests/primary-lock.test.ts` (primary uyarısı), `tests/loot.test.ts` (seed belirleyiciliği, attempt'ten bağımsızlık, pity, farm azalması), `tests/campaign-gear-balance.test.ts` (best politikası ile kategori bantları).
 
 ---
 
@@ -353,7 +353,7 @@ Görünür sayılar küçük kalır (ör. bölüm 3 sonu bir Warrior: +3 STR, +1
 
 ### 5.1 engine-dev (motor; saf, test ile)
 1. `UnitModifiers`'a yeni **toplamsal** alanlar: `hpAdd, mpAdd, spdAdd, critAdd, critMultAdd, accuracyAdd, evasionAdd, hpRegenAdd, mpRegenAdd`. Sıra: temel statlar (`statMult`, `attrMult`, `attrAdd`) → türetme (+ `overrides`) → `hpMult` → **`hpAdd`** → diğer toplamsal ekler → zırhlar → `powerMult`. Yapay zeka/önizleme statları okuduğu için kendiliğinden yansır.
-2. **Primary kilidi:** primary bonusunun açık olup olmadığı sınıfın temel statlarına göre (item `attrAdd`'i çevirmez). Öneri alan: `UnitModifiers.primaryFromBase: true` (sefer kahramanlarında set edilir).
+2. ~~Primary kilidi~~: YOK (Ömer, madde 278): item statları primary'yi normal kurala göre çevirebilir; uyarı arayüzde (`primaryCheck`), motor değişikliği gerekmez.
 3. Tavanlar veride (`items.json > caps`) ama uygulaması campaign tarafında (gear → modifiers dönüşümünde kırpılır); motorda ek kural gerekmez.
 4. (Aşama 3) Trait'ler: `UnitSetup.traits: string[]` + motorda generic kancalar (Opening Ward = savaş başı kalkan, Second Wind = eşik altı tek seferlik şifa, Giantslayer = `tier`'e hasar çarpanı, Steadfast = mevcut displacement bağışıklığı, Iron Will = Resilience'e ek, Quick Start = başlangıç sayacı). Olaylar `passive` ile (yüzen yazı).
 
@@ -434,7 +434,7 @@ Görünür sayılar küçük kalır (ör. bölüm 3 sonu bir Warrior: +3 STR, +1
 1. **Party ekranı > Gear sekmesi:** soldaki kahraman listesi (portre + GS), ortada kahramanın 6 yuvası (siluet etrafında; boşken soluk), sağda torba ızgarası (30, filtre: All / yuva / "Usable by this hero"). Altta stat paneli (alt bar stat bloğuyla aynı düzen: ana statlar | ATK | DEF; değişen değer yeşil/kırmızı).
 2. **Karşılaştırma tooltip'i:** torbadaki item'e gelince/dokununca takılıyla yan yana; her stat satırında fark (+yeşil / −kırmızı), altta **Power +3** özeti; set parça sayısı (2/4) ve bonusların hangisinin açılacağı.
 3. **Equip best** düğmesi (kahraman başına + "All heroes"): sınıf ağırlıklarıyla otomatik (sim'in `best` politikasıyla aynı saf fonksiyon). Telefonda zorunlu kolaylık.
-4. **Loot ekranı** (zafer sonucu ekranında `Continue`'dan önce): item kartları sırayla açılır (nadirlik rengiyle parıltı; Legendary için kor kıvılcımı), altın sayacı; kartta "Equip on..." kısayolu. Boss "Choose one" seçimi (soru 8). Torba doluysa sat/at kararı.
+4. **Loot ekranı** (zafer sonucu ekranında `Continue`'dan önce): item kartları sırayla açılır (nadirlik rengiyle parıltı; Legendary için kor kıvılcımı), altın sayacı; kartta "Equip on..." kısayolu. Boss'ta "Choose one" seçimi YOK (karar 8). Torba doluysa sat/at kararı.
 5. **Tüccar** (town paneli > Merchant): Buy / Sell sekmeleri, altın göstergesi, "Sell all junk".
 6. Haritada takım şeridinde portre altında küçük GS rozeti (ya da "Power 112").
 7. **Wiki/Codex > Items** (veriden türetilir): yuvalar, nadirlikler, aileler-sınıflar tablosu, set ve Legendary listesi (bulunmayanlar "???" isteğe bağlı), IP/altın kuralı kısaca. `tests/wiki.test.ts` kapsamı.
@@ -451,7 +451,7 @@ Görünür sayılar küçük kalır (ör. bölüm 3 sonu bir Warrior: +3 STR, +1
 
 | Aşama | İçerik | Kim | Büyüklük |
 |---|---|---|---|
-| **1. MVP: "loot düşer, takılır, işe yarar"** | `UnitModifiers` toplamsal ekleri + primary kilidi (engine); `data/items.json` + ~40 sabit item (6 yuva, 5 nadirlik, ilvl 1-10 ağırlıklı; affix üreteci YOK); kayıt v2 (ekipman, torba); `gearToModifiers`; savaş sonu loot (3.1 kaynakları, 3.2 eğrisi, attempt'ten bağımsız seed); loot ekranı; Party > Gear (kuşan/çıkar, karşılaştırma, Equip best); `gearCurve` telafisi; sim `--gear`; testler; debug; taban ikonlar yer tutucu (tek ikon x aile rengi). | engine-dev ~0,5, campaign-dev ~1,5, ui-dev ~1,5-2, balance-tester ~1, content-designer (yer tutucu) | **Büyük: ~5 oturum** |
+| **1. MVP: "loot düşer, takılır, işe yarar"** | `UnitModifiers` toplamsal ekleri (engine); primary uyarısı kuşanma ekranında; `data/items.json` + ~40 sabit item (6 yuva, 5 nadirlik, ilvl 1-10 ağırlıklı; affix üreteci YOK); kayıt v2 (ekipman, torba); `gearToModifiers`; savaş sonu loot (3.1 kaynakları, 3.2 eğrisi, attempt'ten bağımsız seed); loot ekranı; Party > Gear (kuşan/çıkar, karşılaştırma, Equip best); `gearCurve` telafisi; sim `--gear`; testler; debug; taban ikonlar yer tutucu (tek ikon x aile rengi). | engine-dev ~0,5, campaign-dev ~1,5, ui-dev ~1,5-2, balance-tester ~1, content-designer (yer tutucu) | **Büyük: ~5 oturum** |
 | **2. Ekonomi** | altın, tüccar, satma, junk; seed'li affix üreteci + adlandırma; pity; farm azalması (roadmap'e göre); hedefli düğüm havuzları; gerçek ikonlar ve sesler. | campaign-dev, ui-dev, content-designer | Orta: ~3 oturum |
 | **3. Kimlik** | Set'ler (3 örnek + bölüm 2-3 için 2-3 daha), Legendary'ler ve trait'ler (engine kancaları), Codex > Items, Legendary efekt/ses. | engine-dev, content-designer, ui-dev | Orta: ~2-3 oturum |
 | **4. Mod genişlemesi** | QB/MP altın limitiyle itemleme (sabit katalog, ayna dengesi ölçümü), endless'ta ilvl 30+ ve GS'ye bağlı dalga ölçeği. | multiplayer-dev, campaign-dev, balance-tester | Ömer kararı sonrası |
@@ -462,20 +462,22 @@ Bölüm 2-3 içeriği (yeni haritalar) roadmap'e bağlı: MVP Valdoria'yı (böl
 
 ---
 
-## 7. Ömer'e sorular (önerilerimle)
+## 7. Kararlar (Ömer, 2026-10-09; eski "Ömer'e sorular" bölümü kapandı)
 
-1. **Yuva sayısı 6 mı** (Weapon, Helm, Armor, Gloves, Boots, Trinket)? *Öneri: evet, 6. İkinci yüzük ileride endless'ta eklenir.*
-2. **Silah kısıtı:** sınıf arketipine göre 6 silah ailesi (Mage asa, Archer yay, Gambler/Hexer tılsım...) mı, yoksa her silah herkese serbest mi? *Öneri: aileler; diğer 5 yuva serbest.*
-3. **Nadirlik:** Common / Uncommon / Rare / Epic / Legendary + ayrı Set etiketi uygun mu? *Öneri: evet.*
-4. **Affix:** MVP'de el yapımı sabit item'ler, sonra "taban + seed'li rastgele ek statlar" (Legendary/Set her zaman sabit) uygun mu? *Öneri: evet (karışık).*
-5. **Güç eğrisi:** bölüm sonlarında item'den +%15 / +%30 / +%45 (roadmap ile aynı) ve düşmanların bunun ~%80'i kadar güçlenmesi (iyi loot hissedilsin, denge kaymasın) uygun mu? *Öneri: evet; sayıları sim düzeltir.*
-6. **Zorluk ve loot:** item SAYISI her zorlukta aynı, Hard'da yalnızca daha iyi nadirlik ve +%15 altın mı? *Öneri: evet (Easy oyuncusu item'siz kalıp daha çok zorlanmasın).*
-7. **Ashford vedası:** tutorial takımı ayrılırken takılı item'lerini torbaya bıraksın mı? *Öneri: evet ("They leave their gear for the new company").*
-8. **Boss ödülü:** boss'ta "3 item'den birini seç" anı olsun mu (diğer düşüşler otomatik)? *Öneri: evet, yalnızca boss ve korunan hazinede; normal savaşta seçim yok (hız).*
+| # | Soru | Karar |
+|---|---|---|
+| 1 | Yuva sayısı 6 mı (Weapon, Helm, Armor, Gloves, Boots, Trinket)? | **EVET, 6 yuva.** |
+| 2 | Silah kısıtı: sınıf arketipine göre 6 silah ailesi mi? | **EVET**, silah aileleri; diğer 5 yuva herkese serbest. |
+| 3 | Nadirlik: Common / Uncommon / Rare / Epic / Legendary + ayrı Set etiketi? | **EVET.** |
+| 4 | Affix: önce el yapımı sabit item'ler, sonra "taban + seed'li rastgele ek statlar" (Legendary/Set sabit)? | **EVET** (karışık; MVP yalnızca sabit). |
+| 5 | Güç eğrisi bölüm sonlarında item'den +%15 / +%30 / +%45, düşman telafisi ~%80? | **EVET** (`data/campaign/power-budget.json`; sayıları sim düzeltir). |
+| 6 | Zorluk ve loot | **Düşen item SAYISI her zorlukta aynı; Hard'a ek nadirlik / altın bonusu YOK** ("aynı olsun"). Loot eğrisi zorluktan bağımsız (3.2 güncellendi). |
+| 7 | Ashford vedası | Ayrılan tutorial takımının item'leri **doğrudan yeni takımın torbasında** görünür (torba sınırı uygulanmaz, hiçbir item kaybolmaz; madde 278) ve **item takma tutorial'ı Ashford'da başlar** (ui-dev, Aşama 1). Bir **teslim anı** olur: "eski takım bunları size bıraktı". Veri hazır: `farewell` sefer durumuna `pendingHandover { node, from: [{ heroId, class }], items: [uid] }` yazar; Aşama 1 arayüzü bunu gösterip onaylatır, onayda `acknowledgeHandover` kaydı siler (item'ler zaten torbada). |
+| 8 | Boss'ta "3 item'den birini seç" | **YOK.** Boss ve korunan hazine dahil tüm düşüşler otomatik. (Fikir ileride farklı mekanikle gelebilir: quest ödülü ya da NPC hediyesi; `docs/design/future-ideas.md`.) |
 
 ---
 
 ## 8. Varsayımlar (open-questions'a not edildi)
-- Primary bonusunun item'le çevrilmemesi (1.5) ve item'de düz hasar/cooldown/hız dışı skill değiştirme olmaması (1.5, 1.7) tasarım önerisidir; Ömer itiraz ederse değişir.
+- (Kapandı, madde 278: primary item'le çevrilebilir, önceden uyarılır.) Item'de düz hasar/cooldown/hız dışı skill değiştirme olmaması (1.5, 1.7) tasarım önerisidir; Ömer itiraz ederse değişir.
 - Bölüm sayısı 3, bölüm başına ~10 savaş durağı varsayıldı (roadmap kesinleştirir; ilvl parametreyle uyarlanır).
 - Altın şu an oyunda yok; altın kaynakları (2.2) bu belgenin önerisi, campaign-dev'in ödül tasarımıyla birleşmeli.

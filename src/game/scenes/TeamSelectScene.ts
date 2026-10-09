@@ -7,25 +7,49 @@ import { ensureIcon, ensureSkillIcon } from '../icons';
 import { ownerOfUnit } from '../asset-versions';
 import { PRIMARY_GOLD, STAT_COLOR, STAT_ICON, STAT_LABEL } from '../../ui/stat-icons';
 import { initialSizes, newSeed } from '../seed';
-import { buildBackdrop, buildTip, classAvatar, ensureGlow, fitText, fx, goldText, makeMenuButton, placeTip, serif } from '../menu-ui';
-import type { MenuButton, TipContent } from '../menu-ui';
+import { classAvatar, ensureGlow } from '../menu-ui';
 import { groupColor } from '../class-order';
-import { archetypeOf, clampSize, freeCellFor, isTeamFull, isTestClass, missingMessage, pipLayout, randomizePool, rangeOf, rosterGroups, rosterIds, rosterLayout, sizeSummary, stepSize, teamCount, trimToSize } from '../team-select-model';
+import {
+  archetypeOf,
+  clampSize,
+  classCounts,
+  freeCellFor,
+  infoClassAfter,
+  isTeamFull,
+  isTestClass,
+  missingMessage,
+  moveMember,
+  moveToSide,
+  randomizePool,
+  rangeOf,
+  rosterGroups,
+  rosterIds,
+  stepSize,
+  stripLayout,
+  teamCount,
+  trimToSize,
+} from '../team-select-model';
+import type { SideSizes, TeamSide } from '../team-select-model';
 import { skillMiniGrid } from '../../ui/shape-diagram';
-import { drawQuadTile } from '../shape-draw';
-import type { SideSizes } from '../team-select-model';
-import { cornerOrnaments, frameRect, glowRect, GOLD, makePanel } from '../ui-frame';
+import { drawMiniShape, miniShapeSize } from '../shape-draw';
 import type { MpTeamHooks } from '../mp-hooks';
 import { toggleGameMenu } from '../../ui/game-menu';
 import { debugState } from '../debug-state';
-import { worldXY } from '../stage';
+import { onStageResize, stageView, worldXY } from '../stage';
+import { FULL_W, FULL_X0 } from '../../ui/viewport';
+import { BODY_FONT, DISPLAY_FONT } from '../../ui/menu-style';
+import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
 
 const { width: W, height: H, colors } = layout;
 const { rows: ROWS, lanes: LANES } = content.GRID;
 const CELLS = content.CELL_COUNT;
 const hexNum = (hex: string) => Phaser.Display.Color.HexStringToColor(hex).color;
 
-type Side = 'party' | 'enemies';
+type Side = TeamSide;
+const SIDES: readonly Side[] = ['party', 'enemies'];
+const NAME: Record<Side, string> = { party: 'Player', enemies: 'Enemy' };
+const ATTRS: Array<'str' | 'dex' | 'int' | 'luck'> = ['str', 'dex', 'int', 'luck'];
+const PRIMARY_GROUP = colors.primaryGroup as Record<string, string>;
 
 export interface TeamSelectData {
   teams: Teams;
@@ -35,72 +59,142 @@ export interface TeamSelectData {
   mp?: MpTeamHooks;
 }
 
-/** Boyut seçicinin ayarları (START düğmesinin sağında). */
-const STEPPER = { cx: { party: 1340, enemies: 1640 } as Record<Side, number>, labelY: 984, rowY: 1030, btn: 52, valueW: 64 };
+// --- Taslak paleti (qb-mockups.html taslak 1 'Twin Formations', Ömer 2026-10-09; taslak uygulandıktan sonra silindi) ---
+const TXT = '#d9c8a2';
+const ON = '#f3d999';
+const MUTED = '#a8977a';
+const DIM = '#7d705a';
+const NOTE = '#cdb88d';
+const PRI = '#ffd76a';
+const PRI_SMALL = '#e9c062';
+const EMBER = 0xe0702a;
+const EMBER2 = 0xffb35a;
+const GOLDC = 0xd9b26a;
+const ONC = 0xf3d999;
+const INK = 0x080604;
+const SH_DARK = 'rgba(12,8,5,0.95)';
+const SH_GLOW = 'rgba(240,140,40,0.85)';
+/** Parıltı (yazı gölgesi) kesilmesin diye yazılara iç boşluk. */
+const PAD = 16;
+const LINE = { a1: 0.16, a2: 0.3, a3: 0.55 };
+/** Takım rozetleri (raf portresinin köşelerinde: o class'tan Player / Enemy takımında kaç tane var). */
+const BADGE: Record<Side, { fill: number; ring: number; text: string; label: string }> = {
+  party: { fill: 0x2b5a92, ring: 0x9cbde6, text: '#f4f8ff', label: '#9cbde6' },
+  enemies: { fill: 0x93382a, ring: 0xe39a88, text: '#fff4f0', label: '#e39a88' },
+};
 
-// --- Yerleşim (1920x1080) ---
-const PANEL_Y = 146;
-const PANEL_W = 880;
-const PANEL_H = 462;
-const PANEL_X: Record<Side, number> = { party: 40, enemies: 1000 };
-const GRID_TOP = 250;
-const SLOT_W = 190;
-const SLOT_H = 108;
-const COL_GAP = 17;
-const LANE_GAP = 14;
-const ROSTER = { x: 40, y: 616, w: 1840, h: 320 };
-const CARD = { w: 188, h: 270 };
-/** Extra width of the divider between two primary-stat groups on the class shelf. */
-const ROSTER_SEP = 14;
-const PRIMARY_GROUP = colors.primaryGroup as Record<string, string>;
-const SIDE_HEX: Record<Side, string> = { party: colors.partySlot, enemies: colors.enemySlot };
-const SIDE_TITLE: Record<Side, string> = { party: 'PLAYER', enemies: 'ENEMY' };
-const SIDE_NAME: Record<Side, string> = { party: 'Player', enemies: 'Enemy' };
-const ATTRS: Array<'str' | 'dex' | 'int' | 'luck'> = ['str', 'dex', 'int', 'luck'];
+// --- Yerleşim (1080 mantıksal yükseklik; kenara yaslananlar stageView.left/right'a göre) ---
+const MID_TOP = 146;
+const SIDE_INSET = 84;
+const CELL = 120;
+const CELL_GAP = 12;
+const GRID_W = ROWS * CELL + (ROWS - 1) * CELL_GAP; // 516
+const GRID_H = LANES * CELL + (LANES - 1) * CELL_GAP; // 384
+const SIDE_W = GRID_W;
+const SIDE_H = 560;
+const HEAD_CY = 30;
+const GRID_Y = 106;
+const ACTS_CY = GRID_Y + GRID_H + 10 + 30;
+const CENTER_CY = MID_TOP + 270;
+const INFO = { top: 724, h: 92, maxW: 1760 };
+const STRIP_TOP = 846;
+const START = { h: 84, cy: 986, right: 48, pad: 56, size: 30 };
+const HIT = 72; // dokunma alanı yüksekliği (görünen satırlardan büyük)
 
-/** Axis-aligned rectangle as a quad (corners clockwise) for the common cell plate. */
-const rectQuad = (x: number, y: number, w: number, h: number) => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
+const easeOut = 'Cubic.easeOut';
 
-interface SlotRect {
+interface Lnk {
+  root: Phaser.GameObjects.Container;
+  width: number;
+  text: Phaser.GameObjects.Text;
+}
+
+interface CellView {
   side: Side;
   i: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  hot: Phaser.GameObjects.Graphics;
+  /** Yuvanın taraf kutusundaki yerel sol üst köşesi. */
+  lx: number;
+  ly: number;
   body: Phaser.GameObjects.Container;
+  hot: Phaser.GameObjects.Container;
 }
 
-interface StepButton {
-  setEnabled(on: boolean): void;
+interface TileView {
+  id: string;
+  root: Phaser.GameObjects.Container;
+  lift: Phaser.GameObjects.Container;
+  frame: Phaser.GameObjects.Graphics;
+  shadow: Phaser.GameObjects.Graphics;
+  img: Phaser.GameObjects.Image;
+  name: Phaser.GameObjects.Text;
+  badges: Record<Side, { c: Phaser.GameObjects.Container; t: Phaser.GameObjects.Text; n: number }>;
+  size: number;
+  hover: boolean;
 }
 
-interface HitRegion {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  key: string;
-  tip: () => TipContent;
+interface SideView {
+  root: Phaser.GameObjects.Container;
+  title: Phaser.GameObjects.Text;
+  dia: Phaser.GameObjects.Graphics;
+  count?: Phaser.GameObjects.Text;
+  grow: Phaser.GameObjects.Graphics;
+  stepper?: { root: Phaser.GameObjects.Container; value: Phaser.GameObjects.Text; minus: (on: boolean) => void; plus: (on: boolean) => void };
+  cells: Phaser.GameObjects.Container;
+  cover?: Phaser.GameObjects.Container;
 }
 
-interface CardView {
-  def: CombatantDef;
-  outer: Phaser.GameObjects.Container;
-  glow: Phaser.GameObjects.Image;
-  selected: Phaser.GameObjects.Graphics;
-  gems: Record<Side, { gem: Phaser.GameObjects.Container; count: Phaser.GameObjects.Text }>;
-  regions: HitRegion[];
-  scale: number;
-  baseY: number;
-  avatarAt: { x: number; y: number };
+interface TipSpec {
+  icon?: string;
+  iconSize?: number;
+  title: string;
+  titleHex?: string;
+  badge?: string;
+  meta?: string;
+  shape?: ReturnType<typeof skillMiniGrid>;
+  lines: Array<[string, string?]>;
+  width?: number;
 }
+
+/** CSS'teki gibi bir yazının üzerinde kalan yatay degrade (koyu bant) için düz dikdörtgen degrade dilimleri. */
+function hGradient(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, color: number, stops: Array<[number, number]>): void {
+  for (let k = 0; k < stops.length - 1; k++) {
+    const [p0, a0] = stops[k]!;
+    const [p1, a1] = stops[k + 1]!;
+    g.fillGradientStyle(color, color, color, color, a0, a1, a0, a1).fillRect(x + p0 * w, y, (p1 - p0) * w + 0.5, h);
+  }
+}
+function vGradient(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, color: number, stops: Array<[number, number]>): void {
+  for (let k = 0; k < stops.length - 1; k++) {
+    const [p0, a0] = stops[k]!;
+    const [p1, a1] = stops[k + 1]!;
+    g.fillGradientStyle(color, color, color, color, a0, a0, a1, a1).fillRect(x, y + p0 * h, w, (p1 - p0) * h + 0.5);
+  }
+}
+/** Yatay ince çizgi: iki uçtan saydamlaşan (CSS linear-gradient(90deg, transparent, renk)). */
+function fadeLine(g: Phaser.GameObjects.Graphics, x0: number, x1: number, y: number, color: number, alpha: number, dir: 'in' | 'out' | 'both'): void {
+  const steps = 24;
+  for (let s = 0; s < steps; s++) {
+    const t = (s + 0.5) / steps;
+    const a = dir === 'in' ? t : dir === 'out' ? 1 - t : 1 - Math.abs(t - 0.5) * 2;
+    g.lineStyle(1, color, alpha * a).lineBetween(x0 + ((x1 - x0) * s) / steps, y, x0 + ((x1 - x0) * (s + 1)) / steps, y);
+  }
+}
+const diamondPts = (cx: number, cy: number, r: number) => [
+  { x: cx, y: cy - r },
+  { x: cx + r, y: cy },
+  { x: cx, y: cy + r },
+  { x: cx - r, y: cy },
+];
 
 /**
- * Start screen: choose 5 classes for your team and 5 for the enemy team, then start the battle.
- * Each team is a formation grid: 4 rows (depth, row 1 = front) with up to 3 characters per row. Drag a character to another cell to move or swap it.
- * A team is a cell list: index = row * 3 + lane, '' = empty cell. The class roster is read from data/classes (new classes appear automatically).
+ * Hızlı savaş takım seçimi: "Twin Formations" (Ömer 2026-10-09 taslak 1; kutusuz zarif menü dili: Cinzel + EB Garamond, ince altın çizgiler, kor elmas).
+ * - Solda Player, sağda Enemy dizilimi (4 sıra x 3 şerit; ön sıra ortaya bakar), başlıkta takım boyutu seçici (1-12), altında Random · Clear.
+ * - Ortada VS + durum yazısı + Random both; START BATTLE sağ alt köşede (geniş ekranda sahnenin sağ kenarına göre).
+ * - Altta bilgi satırı (en son üstüne gelinen / eklenen class'ın statları + skill'leri; fare çekilince kalır) ve STR/DEX/INT/LUCK gruplu class rafı.
+ *   Portre köşelerindeki mavi / kırmızı yuvarlak sayı = o class'tan Player / Enemy takımında kaç tane var (yalnızca varken görünür).
+ * - Tıkla = etkin takıma ekle; sürükle = yuvaya bırak; yuvadaki birim sürüklenince takas / diğer takıma taşıma; tıkla = çıkar.
+ * - Multiplayer: yalnızca kendi tarafı; rakip paneli örtülü, START yerine READY / NOT READY; boyut 4 sabit.
+ * Takım = hücre listesi (dizin = sıra * 3 + şerit, '' = boş). Class listesi veriden (yeni class rafta kendiliğinden görünür).
  */
 export class TeamSelectScene extends Phaser.Scene {
   static readonly KEY = 'TeamSelectScene';
@@ -108,28 +202,35 @@ export class TeamSelectScene extends Phaser.Scene {
   private teams: Record<Side, string[]> = { party: [], enemies: [] };
   /** Seçilen takım boyutları (her taraf 1-12); START yalnızca iki takım da bu boyuta eşit olunca açılır. */
   private sizes: SideSizes = initialSizes();
-  private sizeUi: Partial<Record<Side, { value: Phaser.GameObjects.Text; minus: StepButton; plus: StepButton }>> = {};
-  private sizeSummaryText?: Phaser.GameObjects.Text;
   private active: Side = 'party';
+  /** Raftaki seçili (en son eklenen / tıklanan) class. */
+  private sel = '';
+  /** Alt bilgi satırında gösterilen class (en son üstüne gelinen ya da eklenen; fare çekilince kalır). */
+  private infoId = '';
   private readonly emptyCells = (): string[] => Array.from({ length: CELLS }, () => '');
-  private slotLayer: Record<Side, Phaser.GameObjects.Container | undefined> = { party: undefined, enemies: undefined };
-  private headLayer: Record<Side, Phaser.GameObjects.Container | undefined> = { party: undefined, enemies: undefined };
-  private activeGlow: Record<Side, Phaser.GameObjects.Graphics | undefined> = { party: undefined, enemies: undefined };
-  private slotRects: SlotRect[] = [];
-  private cards = new Map<string, CardView>();
-  private drag?: { side: Side; from: number; sx: number; sy: number; moved: boolean; ghost?: Phaser.GameObjects.Container; over: number | null };
-  private cardDrag?: { id: string; sx: number; sy: number; moved: boolean; ghost?: Phaser.GameObjects.Container; over: { side: Side; i: number } | null };
-  private pop?: { side: Side; cell: number; delay: number };
-  private tip?: { key: string; container: Phaser.GameObjects.Container };
-  private tipTimer?: Phaser.Time.TimerEvent;
-  private startBtn?: MenuButton;
+  private sides = {} as Record<Side, SideView>;
+  private cellViews: CellView[] = [];
+  private tiles = new Map<string, TileView>();
+  private stripRoot?: Phaser.GameObjects.Container;
+  private stripGroups: Phaser.GameObjects.Container[] = [];
+  private infoRoot?: Phaser.GameObjects.Container;
+  private infoLines?: Phaser.GameObjects.Graphics;
+  private menuLink?: Phaser.GameObjects.Container;
+  private center?: Phaser.GameObjects.Container;
   private status?: Phaser.GameObjects.Text;
   private statusTween?: Phaser.Tweens.Tween;
+  private startUi?: { root: Phaser.GameObjects.Container; w: number; set: (ready: boolean, label: string) => void; shake: () => void };
+  private bg?: { img?: Phaser.GameObjects.Image };
+  private toastUi?: { root: Phaser.GameObjects.Container; band: Phaser.GameObjects.Graphics; text: Phaser.GameObjects.Text; timer?: Phaser.Time.TimerEvent };
+  private drag?: { kind: 'class' | 'cell'; id: string; side?: Side; from?: number; sx: number; sy: number; moved: boolean; ghost?: Phaser.GameObjects.Container; over: { side: Side; i: number } | null };
+  private pop?: { side: Side; cell: number };
+  private tip?: { key: string; container: Phaser.GameObjects.Container };
+  private tipTimer?: Phaser.Time.TimerEvent;
   private starting = false;
+  private built = false;
   /** Multiplayer kancaları (yoksa tek oyunculu Quick Battle). */
   mp: MpTeamHooks | undefined = undefined;
   private mpOff: (() => void) | null = null;
-  private mpCover?: Phaser.GameObjects.Container;
   private mpSent = '';
   private mpSyncing = false;
 
@@ -147,8 +248,20 @@ export class TeamSelectScene extends Phaser.Scene {
     this.mp = data.mp;
     this.mpOff?.();
     this.mpOff = null;
-    this.mpCover = undefined;
     this.mpSent = '';
+    this.sides = {} as Record<Side, SideView>;
+    this.cellViews = [];
+    this.tiles = new Map();
+    this.stripGroups = [];
+    this.drag = undefined;
+    this.pop = undefined;
+    this.tip = undefined;
+    this.tipTimer = undefined;
+    this.starting = false;
+    this.built = false;
+    const first = rosterIds()[0] ?? '';
+    this.sel = first;
+    this.infoId = first;
     if (this.mp) {
       // Multiplayer: 4'e 4 sabit; kendi takımımız (rövanşta önceki seçim, yoksa rastgele), rakibinki gizli (boş)
       const local = this.mp.localSide;
@@ -157,42 +270,16 @@ export class TeamSelectScene extends Phaser.Scene {
       if (this.mp.initial) this.teams[local] = trimToSize(pad(this.mp.initial), 4);
       else this.randomize(local, false);
       this.active = local;
-      this.sizeUi = {};
-      this.sizeSummaryText = undefined;
-      this.slotLayer = { party: undefined, enemies: undefined };
-      this.headLayer = { party: undefined, enemies: undefined };
-      this.activeGlow = { party: undefined, enemies: undefined };
-      this.slotRects = [];
-      this.cards = new Map();
-      this.drag = undefined;
-      this.cardDrag = undefined;
-      this.pop = undefined;
-      this.tip = undefined;
-      this.tipTimer = undefined;
-      this.starting = false;
       return;
     }
     // Sizes: given by the caller, else the size of the given teams, else the page address (?party=3&enemies=8) / default 4-4
     if (data.sizes) this.sizes = { party: clampSize(data.sizes.party), enemies: clampSize(data.sizes.enemies) };
     else if (data.teams) this.sizes = { party: clampSize(teamCount(data.teams.party) || this.sizes.party), enemies: clampSize(teamCount(data.teams.enemies) || this.sizes.enemies) };
     else this.sizes = initialSizes();
-    this.sizeUi = {};
-    this.sizeSummaryText = undefined;
     if (data.teams) this.teams = { party: trimToSize(pad(data.teams.party), this.sizes.party), enemies: trimToSize(pad(data.teams.enemies), this.sizes.enemies) };
     else if (this.count('party') === 0 && this.count('enemies') === 0) this.randomize('party', false);
     if (this.count('enemies') === 0) this.randomize('enemies', false);
     this.active = this.count('party') < this.sizes.party || this.count('enemies') >= this.sizes.enemies ? 'party' : 'enemies';
-    this.slotLayer = { party: undefined, enemies: undefined };
-    this.headLayer = { party: undefined, enemies: undefined };
-    this.activeGlow = { party: undefined, enemies: undefined };
-    this.slotRects = [];
-    this.cards = new Map();
-    this.drag = undefined;
-    this.cardDrag = undefined;
-    this.pop = undefined;
-    this.tip = undefined;
-    this.tipTimer = undefined;
-    this.starting = false;
   }
 
   preload(): void {
@@ -200,44 +287,41 @@ export class TeamSelectScene extends Phaser.Scene {
   }
 
   create(): void {
-    const bgId = content.battles[content.DEFAULT_BATTLE]?.background ?? '';
-    buildBackdrop(this, W, H, hasBackground(this, bgId) ? backgroundKey(bgId) : null);
-    this.buildLogo();
-    for (const side of ['party', 'enemies'] as const) this.buildPanel(side);
-    this.buildVersus();
-    this.buildRoster();
-    this.buildFooter();
-    this.refresh();
-    this.cameras.main.fadeIn(380, 6, 3, 1);
+    this.cameras.main.setBackgroundColor('#0d0a07');
+    // Yazılar Cinzel / EB Garamond ile çizilir: fontlar hazır olmadan çizilen yazı yedek fontla kalırdı (src/ui/menu-fonts.ts)
+    if (!menuFontsReady()) {
+      void whenMenuFontsReady().then(() => this.sys.isActive() && !this.built && this.build());
+    } else this.build();
 
-    // İşaretçi dünya koordinatına çevrilir (geniş ekran / gerçek piksel kamerası: pointer.x tuval pikselidir)
-    this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
-      const p = worldXY(this, ptr);
-      this.onDragMove(p);
-      this.onCardDragMove(p);
-      this.onCardHover(p);
-    });
-    this.input.on('pointerup', (ptr: Phaser.Input.Pointer) => {
-      const p = worldXY(this, ptr);
-      this.onDragEnd(p, false);
-      this.onCardDragEnd(p, false);
-    });
-    this.input.on('pointerupoutside', (ptr: Phaser.Input.Pointer) => {
-      const p = worldXY(this, ptr);
-      this.onDragEnd(p, true);
-      this.onCardDragEnd(p, true);
-    });
-    this.input.keyboard?.on('keydown-ENTER', () => this.start());
-    // Esc: sağ üstteki Menu (Resume / Settings / New Game / Back to Main Menu; src/ui/game-menu.ts)
+    this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => this.onDragMove(worldXY(this, ptr)));
+    this.input.on('pointerup', (ptr: Phaser.Input.Pointer) => this.onDragEnd(worldXY(this, ptr), false));
+    this.input.on('pointerupoutside', (ptr: Phaser.Input.Pointer) => this.onDragEnd(worldXY(this, ptr), true));
+    this.input.keyboard?.on('keydown-ENTER', () => this.built && this.start());
+    // Esc: Menu (Resume / Settings / New Game / Back to Main Menu; src/ui/game-menu.ts)
     this.input.keyboard?.on('keydown-ESC', () => !debugState.uiPaused && toggleGameMenu());
     if (this.mp) {
-      this.mpOff = this.mp.onChange(() => !this.mpSyncing && this.scene.isActive() && this.refresh());
+      this.mpOff = this.mp.onChange(() => !this.mpSyncing && this.scene.isActive() && this.built && this.refresh());
       this.events.once('shutdown', () => {
         this.mpOff?.();
         this.mpOff = null;
       });
-      this.refresh();
     }
+  }
+
+  private build(): void {
+    this.built = true;
+    this.buildBackground();
+    this.buildHeader();
+    for (const side of SIDES) this.buildSide(side);
+    this.buildCenter();
+    this.buildStart();
+    this.buildInfo();
+    this.buildToast();
+    this.refresh();
+    this.layout(); // class rafı burada kurulur (genişliğe göre)
+    onStageResize(this, () => this.layout());
+    this.playEntrance();
+    this.cameras.main.fadeIn(380, 6, 3, 1);
   }
 
   // --- State ---
@@ -264,28 +348,23 @@ export class TeamSelectScene extends Phaser.Scene {
   private setActive(side: Side): void {
     if (this.active === side || !this.editable(side)) return;
     this.active = side;
-    this.updateActiveVisuals();
-    this.updateCards();
+    this.refresh();
   }
 
   private start(): void {
     if (this.starting) return;
+    if (!this.ready()) {
+      this.startUi?.shake();
+      this.toast(this.missingText());
+      this.setStatus(this.missingText(), colors.lethal, true);
+      return;
+    }
     if (this.mp) {
       // READY / NOT READY: ikisi de hazır olunca kurucu savaşı başlatır (mp-client sahneyi değiştirir)
-      if (!this.ready()) {
-        this.startBtn?.shake();
-        this.setStatus(this.missingText(), colors.lethal, true);
-        return;
-      }
       const cells = [...this.teams[this.mp.localSide]];
       this.mpSent = cells.join(',');
       this.mp.setTeam(cells, !this.mp.myReady());
       if (this.scene.isActive()) this.refresh();
-      return;
-    }
-    if (!this.ready()) {
-      this.startBtn?.shake();
-      this.setStatus(this.missingText(), colors.lethal, true);
       return;
     }
     this.starting = true;
@@ -321,227 +400,423 @@ export class TeamSelectScene extends Phaser.Scene {
     if (next === this.sizes[side]) return;
     this.sizes[side] = next;
     this.teams[side] = trimToSize(this.teams[side], next);
-    this.active = this.count(side) < next ? side : this.active;
+    if (this.count(side) < next) this.active = side;
     this.refresh();
   }
 
-  /** Adds a class to the active team (cell chosen by the formation rule); `from` is the card avatar position for the fly animation. */
-  private addClass(id: string, cell?: { side: Side; i: number }): void {
-    const def = content.classes[id];
-    if (!def) return;
+  /** Adds a class to a team: the active one (cell by the formation rule) or the given cell (drag). */
+  private addClass(id: string, cell?: { side: Side; i: number } | { side: Side; i: null }): boolean {
+    if (!content.classes[id]) return false;
     let side = cell?.side ?? this.active;
     let i = cell?.i ?? -1;
     if (!this.editable(side)) {
-      this.setStatus('You can only pick your own team', colors.lethal, true);
-      return;
+      this.toast('You can only pick your own team');
+      return false;
     }
-    const replacing = cell !== undefined && !!this.teams[side][i];
+    const replacing = i >= 0 && !!this.teams[side][i];
     if (!replacing && this.count(side) >= this.sizes[side]) {
-      this.setStatus(this.ready() ? 'Both teams are full. Tap a champion to remove it, or drag to rearrange.' : `${SIDE_NAME[side]} team is full (${this.sizes[side]}). Change the size below, or tap a champion to remove it.`, colors.lethal, true);
-      this.pulseActive(side);
-      return;
+      this.toast(`${NAME[side]} team is full (${this.sizes[side]} / ${this.sizes[side]})`);
+      return false;
     }
     if (i < 0) i = freeCellFor(this.teams[side], id);
-    if (i < 0) return;
+    if (i < 0) return false;
     this.teams[side][i] = id;
-    const card = this.cards.get(id);
-    if (card) this.flyAvatar(card, side, i);
-    this.pop = { side, cell: i, delay: card && !cell ? 230 : 0 };
+    this.pop = { side, cell: i };
+    this.sel = id;
+    this.infoId = id;
+    // Dolan taraftan eksik olan diğer tarafa geç
     if (this.count(side) >= this.sizes[side] && this.count(this.other(side)) < this.sizes[this.other(side)] && this.editable(this.other(side))) side = this.other(side);
     this.active = side;
     this.refresh();
+    return true;
   }
 
-  // --- Static scenery ---
+  // --- Text helpers (taslak tipografisi) ---
 
-  private buildLogo(): void {
-    const cx = W / 2;
-    const w = 640;
-    const h = 86;
-    const x = cx - w / 2;
-    const y = 12;
-    // Fading gold rules left and right of the plaque
-    const rules = this.add.graphics().setDepth(20);
+  /** Cinzel 600, büyük harf, harf aralığı `em`; koyu yazı gölgesi. */
+  private cz(x: number, y: number, text: string, size: number, color: string, em = 0.05, o: { pad?: boolean; weight?: string } = {}): Phaser.GameObjects.Text {
+    const t = this.add
+      .text(x - (o.pad ? PAD : 0), y, text.toUpperCase(), { fontFamily: DISPLAY_FONT, fontSize: `${size}px`, fontStyle: o.weight ?? '600', color, letterSpacing: size * em })
+      .setResolution(2)
+      .setShadow(0, 2, SH_DARK, 4, false, true);
+    if (o.pad) t.setPadding(PAD, PAD, PAD, PAD);
+    return t;
+  }
+
+  /** EB Garamond (varsayılan italik); hafif koyu gölge. */
+  private gar(x: number, y: number, text: string, size: number, color: string, italic = true): Phaser.GameObjects.Text {
+    return this.add
+      .text(x, y, text, { fontFamily: BODY_FONT, fontSize: `${size}px`, fontStyle: italic ? 'italic' : 'normal', color })
+      .setResolution(2)
+      .setShadow(0, 2, SH_DARK, 4, false, true);
+  }
+
+  private glow(t: Phaser.GameObjects.Text, on: boolean): void {
+    if (on) t.setShadow(0, 0, SH_GLOW, 14, false, true);
+    else t.setShadow(0, 2, SH_DARK, 4, false, true);
+  }
+
+  /** Kor elmas (dolu) ya da içi boş altın elmas. */
+  private diamond(r: number, hollow = false): Phaser.GameObjects.Graphics {
+    const g = this.add.graphics();
+    if (hollow) {
+      g.lineStyle(1, GOLDC, 0.45).strokePoints(diamondPts(0, 0, r), true);
+      return g;
+    }
+    g.fillStyle(EMBER, 0.25).fillPoints(diamondPts(0, 0, r + 4), true);
+    g.fillStyle(EMBER, 1).fillPoints(diamondPts(0, 0, r), true);
+    g.lineStyle(1, EMBER2, 1).strokePoints(diamondPts(0, 0, r), true);
+    return g;
+  }
+
+  /**
+   * Kutusuz yazı düğmesi (ana menü satırı dili): hover'da önünde kor elmas belirir, yazı açılır + kor parıltısı + 4 px sağa kayar.
+   * Kök (0, 0) = sol kenar, dikey orta. Dokunma alanı en az HIT yüksekliğinde.
+   */
+  private lnk(label: string, run: () => void, o: { size?: number; small?: string; enabled?: () => boolean; tip?: () => TipSpec } = {}): Lnk {
+    const size = o.size ?? 21;
+    const root = this.add.container(0, 0);
+    const dia = this.diamond(7).setPosition(11, 0).setAlpha(0).setScale(0.4);
+    const text = this.cz(28, 0, label, size, TXT, 0.08, { pad: true }).setOrigin(0, 0.5);
+    const tw = text.width - PAD * 2;
+    let width = 28 + tw + 14;
+    const parts: Phaser.GameObjects.GameObject[] = [dia, text];
+    if (o.small) {
+      const s = this.gar(28 + tw + 16, 1, o.small, 17, DIM).setOrigin(0, 0.5);
+      parts.push(s);
+      width += 16 + s.width;
+    }
+    const zone = this.add.zone(width / 2, 0, width, HIT).setInteractive({ useHandCursor: true });
+    root.add([...parts, zone]);
+    const enabled = () => (o.enabled ? o.enabled() : true);
+    const hover = (v: boolean) => {
+      const on = v && enabled();
+      this.tweens.killTweensOf([dia, text]);
+      this.tweens.add({ targets: dia, alpha: on ? 1 : 0, scale: on ? 1 : 0.4, duration: 180, ease: easeOut });
+      this.tweens.add({ targets: text, x: (on ? 32 : 28) - PAD, duration: 180, ease: easeOut });
+      text.setColor(!enabled() ? DIM : on ? ON : TXT);
+      this.glow(text, on);
+    };
+    zone.on('pointerover', () => {
+      if (this.drag?.moved) return;
+      hover(true);
+      if (o.tip) this.showTip(`lnk:${label}`, o.tip(), this.worldRect(zone, width, HIT));
+    });
+    zone.on('pointerout', () => {
+      hover(false);
+      if (o.tip) this.hideTip();
+    });
+    zone.on('pointerup', () => {
+      if (this.drag?.moved || !enabled()) return;
+      run();
+    });
+    return { root, width, text };
+  }
+
+  /** Bir bölge nesnesinin (kap içinde) dünya dikdörtgeni (tooltip konumu için). */
+  private worldRect(obj: Phaser.GameObjects.Zone, w: number, h: number): { x: number; y: number; w: number; h: number } {
+    const m = obj.getWorldTransformMatrix();
+    return { x: m.tx - (w * m.scaleX) / 2, y: m.ty - (h * m.scaleY) / 2, w: w * m.scaleX, h: h * m.scaleY };
+  }
+
+  // --- Scenery ---
+
+  private buildBackground(): void {
+    const want = ['proving-grounds-sunny-afternoon', content.battles[content.DEFAULT_BATTLE]?.background ?? ''];
+    const id = want.find((b) => b && hasBackground(this, b));
+    const img = id ? this.add.image(W / 2, H / 2, backgroundKey(id)).setDepth(0) : undefined;
+    this.bg = { img };
+    // Taslaktaki koyulaştırma: linear-gradient(180deg, .82 0%, .66 30%, .72 60%, .94 70%, .97 100%)
+    const shade = this.add.graphics().setDepth(1);
+    vGradient(shade, FULL_X0, 0, FULL_W, H, INK, [
+      [0, 0.82],
+      [0.3, 0.66],
+      [0.6, 0.72],
+      [0.7, 0.94],
+      [1, 0.97],
+    ]);
+  }
+
+  /** Arka plan görseli görünen alanı kaplar (background-size: cover; background-position: center 60%). */
+  private layoutBackground(): void {
+    const img = this.bg?.img;
+    if (!img) return;
+    const vw = stageView.viewW || W;
+    const k = Math.max(vw / img.width, H / img.height);
+    img.setScale(k);
+    const h = img.height * k;
+    img.setPosition(W / 2, (H - h) * 0.6 + h / 2);
+  }
+
+  private buildHeader(): void {
+    const menu = this.lnk('◂ Menu', () => toggleGameMenu(), { small: 'Esc' });
+    this.menuLink = menu.root.setDepth(30);
+    menu.root.y = 26 + 30;
+    // Başlık: altın degradeli Cinzel + iki yanda süslü çizgi (ince çizgi + içi boş elmas)
+    const title = this.add.container(W / 2, 58).setDepth(20);
+    const t = this.add
+      .text(0, 0, 'QUICK BATTLE', { fontFamily: DISPLAY_FONT, fontSize: '40px', fontStyle: '600', color: '#ffffff', letterSpacing: 40 * 0.14 })
+      .setResolution(2)
+      .setOrigin(0.5)
+      .setShadow(0, 2, 'rgba(0,0,0,0.9)', 3, false, true)
+      .setTint(0xfbe7b0, 0xfbe7b0, 0xc7984f, 0xc7984f);
+    const half = (t.width - 40 * 0.14) / 2;
+    const orn = this.add.graphics();
     for (const dir of [-1, 1]) {
-      const start = cx + dir * (w / 2 + 20);
-      const len = 560;
-      const steps = 56;
-      for (let s = 0; s < steps; s++) {
-        const a = 1 - s / steps;
-        const x0 = start + dir * (s * len / steps);
-        rules.lineStyle(2, GOLD.light, a * 0.8).lineBetween(x0, y + h / 2, x0 + dir * (len / steps + 1), y + h / 2);
-        rules.lineStyle(1, GOLD.edge, a * 0.6).lineBetween(x0, y + h / 2 + 7, x0 + dir * (len / steps + 1), y + h / 2 + 7);
-        rules.lineStyle(1, GOLD.edge, a * 0.6).lineBetween(x0, y + h / 2 - 7, x0 + dir * (len / steps + 1), y + h / 2 - 7);
-      }
-      const tipX = start + dir * 6;
-      rules.fillStyle(0x1a1008, 1).fillPoints([{ x: tipX, y: y + h / 2 - 8 }, { x: tipX + 8, y: y + h / 2 }, { x: tipX, y: y + h / 2 + 8 }, { x: tipX - 8, y: y + h / 2 }], true);
-      rules.lineStyle(2, GOLD.bright, 1).strokePoints([{ x: tipX, y: y + h / 2 - 8 }, { x: tipX + 8, y: y + h / 2 }, { x: tipX, y: y + h / 2 + 8 }, { x: tipX - 8, y: y + h / 2 }], true);
+      const d0 = half + 22; // yazıya en yakın uç: elmas
+      const dx = dir * (d0 + 4);
+      orn.lineStyle(1, GOLDC, 0.8).strokePoints(diamondPts(dx, 0, 5.6), true);
+      fadeLine(orn, dir * (d0 + 8 + 8 + 120), dir * (d0 + 8 + 8), 0, GOLDC, 0.6, 'in'); // uzak uçta saydam
     }
-    this.add.image(cx, y + h / 2, ensureGlow(this)).setDepth(19).setTint(0xffb860).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(w * 1.3, h * 2.4).setAlpha(fx(0.3)); // sabit, nabızsız
-    const plate = makePanel(this, x, y, w, h, { top: 0x33261a, bottom: 0x120b07, bevel: 5, grain: 0.8 });
-    for (const o of plate) (o as Phaser.GameObjects.Components.Depth & Phaser.GameObjects.GameObject).setDepth?.(21);
-    const swordL = this.add.image(x + 56, y + h / 2, ensureIcon(this, 'sword', '#e8c47e', false)).setDisplaySize(50, 50).setDepth(22);
-    const swordR = this.add.image(x + w - 56, y + h / 2, ensureIcon(this, 'sword', '#e8c47e', false)).setDisplaySize(50, 50).setDepth(22).setFlipX(true);
-    swordL.setAngle(-8);
-    swordR.setAngle(8);
-    const shadow = serif(this, cx + 2, y + h / 2 + 4, 'Embers of Valdoria', 56, '#000000', { stroke: 0 }).setOrigin(0.5).setDepth(22).setAlpha(0.55);
-    const title = goldText(this, cx, y + h / 2 + 1, 'Embers of Valdoria', 56, 3).setOrigin(0.5).setDepth(23);
-    // Uzun ad plakaya (kılıçların arasına) sığsın: oran korunarak küçült
-    const room = w - 150;
-    if (title.width > room) for (const t of [title, shadow]) t.setScale(room / title.width);
-    // Light sweep across the plaque
-    const shine = this.add.graphics().setDepth(24).setBlendMode(Phaser.BlendModes.ADD);
-    shine.fillStyle(0xffe6a8, fx(0.3)).fillPoints([{ x: 0, y: y }, { x: 46, y: y }, { x: 18, y: y + h }, { x: -28, y: y + h }], true);
-    const maskG = this.make.graphics({ x: 0, y: 0 });
-    maskG.fillRect(x + 6, y + 6, w - 12, h - 12);
-    shine.setMask(maskG.createGeometryMask());
-    shine.setX(x - 80);
-    this.tweens.add({ targets: shine, x: x + w + 60, duration: 1500, ease: 'Sine.easeInOut', repeat: -1, repeatDelay: 16000, delay: 4000 });
-    void title;
-    serif(this, cx, y + h + 22, 'ASSEMBLE YOUR CHAMPIONS', 19, '#b9a27a', { spacing: 5, stroke: 3 }).setOrigin(0.5).setDepth(22);
+    title.add([orn, t]);
+    this.titleRoot = title;
   }
+  private titleRoot?: Phaser.GameObjects.Container;
 
-  private buildVersus(): void {
-    const cx = W / 2;
-    const cy = PANEL_Y + PANEL_H / 2;
-    const g = this.add.graphics().setDepth(20);
-    g.lineStyle(2, GOLD.edge, 0.55).lineBetween(cx, PANEL_Y + 20, cx, cy - 44).lineBetween(cx, cy + 44, cx, PANEL_Y + PANEL_H - 20);
-    g.fillStyle(0x140d08, 1).fillCircle(cx, cy, 38);
-    g.lineStyle(4, GOLD.edge, 1).strokeCircle(cx, cy, 38);
-    g.lineStyle(1.5, GOLD.light, 0.9).strokeCircle(cx, cy, 31);
-    g.fillStyle(GOLD.light, 1);
-    for (const [dx, dy] of [[0, -44], [0, 44]] as const) g.fillPoints([{ x: cx + dx, y: cy + dy - 6 }, { x: cx + dx + 5, y: cy + dy }, { x: cx + dx, y: cy + dy + 6 }, { x: cx + dx - 5, y: cy + dy }], true);
-    goldText(this, cx, cy + 1, 'VS', 30, 1).setOrigin(0.5).setDepth(21);
-  }
-
-  private buildPanel(side: Side): void {
-    const px = PANEL_X[side];
-    const hex = hexNum(SIDE_HEX[side]);
-    const panel = makePanel(this, px, PANEL_Y, PANEL_W, PANEL_H, { top: 0x2a2018, bottom: 0x0d0806, bevel: 5, grain: 0.75, alpha: 0.96 });
-    for (const o of panel) (o as Phaser.GameObjects.Components.Depth & Phaser.GameObjects.GameObject).setDepth?.(10);
-    // Side-coloured banner tint along the header
-    const tint = this.add.graphics().setDepth(11);
-    tint.fillGradientStyle(hex, hex, hex, hex, 0.24, 0.0, 0.1, 0).fillRect(px + 8, PANEL_Y + 8, PANEL_W - 16, 66);
-    tint.lineStyle(1, GOLD.edge, 0.7).lineBetween(px + 22, PANEL_Y + 76, px + PANEL_W - 22, PANEL_Y + 76);
-    tint.fillStyle(GOLD.light, 0.9).fillPoints([{ x: px + PANEL_W / 2, y: PANEL_Y + 72 }, { x: px + PANEL_W / 2 + 5, y: PANEL_Y + 76 }, { x: px + PANEL_W / 2, y: PANEL_Y + 80 }, { x: px + PANEL_W / 2 - 5, y: PANEL_Y + 76 }], true);
-    // Crest + title
-    const crest = this.add.graphics().setDepth(12);
-    const cx0 = px + 56;
-    const cy0 = PANEL_Y + 42;
-    crest.fillStyle(0x120c07, 1).fillPoints([{ x: cx0, y: cy0 - 26 }, { x: cx0 + 22, y: cy0 - 8 }, { x: cx0 + 16, y: cy0 + 20 }, { x: cx0, y: cy0 + 28 }, { x: cx0 - 16, y: cy0 + 20 }, { x: cx0 - 22, y: cy0 - 8 }], true);
-    crest.lineStyle(3, GOLD.edge, 1).strokePoints([{ x: cx0, y: cy0 - 26 }, { x: cx0 + 22, y: cy0 - 8 }, { x: cx0 + 16, y: cy0 + 20 }, { x: cx0, y: cy0 + 28 }, { x: cx0 - 16, y: cy0 + 20 }, { x: cx0 - 22, y: cy0 - 8 }], true);
-    crest.fillStyle(hex, 0.95).fillPoints([{ x: cx0, y: cy0 - 18 }, { x: cx0 + 15, y: cy0 - 5 }, { x: cx0 + 11, y: cy0 + 15 }, { x: cx0, y: cy0 + 21 }, { x: cx0 - 11, y: cy0 + 15 }, { x: cx0 - 15, y: cy0 - 5 }], true);
-    crest.fillStyle(0xffffff, 0.22).fillPoints([{ x: cx0, y: cy0 - 18 }, { x: cx0 + 15, y: cy0 - 5 }, { x: cx0, y: cy0 + 2 }, { x: cx0 - 15, y: cy0 - 5 }], true);
-    goldText(this, px + 96, cy0 - 2, SIDE_TITLE[side], 40, 3).setOrigin(0, 0.5).setDepth(12);
-
-    // Active (picking) glow around the whole panel
-    const glow = this.add.graphics().setDepth(13);
-    glowRect(glow, px, PANEL_Y, PANEL_W, PANEL_H, GOLD.bright, 0.85, 6);
-    glow.setAlpha(0);
-    this.activeGlow[side] = glow;
-    const hdr = this.add.zone(px, PANEL_Y, PANEL_W, 80).setOrigin(0, 0).setDepth(14).setInteractive({ useHandCursor: true });
-    hdr.on('pointerup', () => this.setActive(side));
-    this.add.zone(px, PANEL_Y + 80, PANEL_W, PANEL_H - 80).setOrigin(0, 0).setDepth(9).setInteractive().on('pointerup', () => this.setActive(side));
-
-    // Column labels: row 1 (front) faces the middle of the screen
-    for (let c = 0; c < ROWS; c++) {
-      const row = side === 'party' ? ROWS - 1 - c : c;
-      const x = px + 34 + c * (SLOT_W + COL_GAP) + SLOT_W / 2;
-      const label = row === 0 ? 'FRONT' : row === ROWS - 1 ? 'BACK' : `ROW ${row + 1}`;
-      const t = serif(this, x, PANEL_Y + 96, label, 15, row === 0 ? '#ffe29a' : '#a8946f', { spacing: 3, stroke: 2 }).setOrigin(0.5).setDepth(12);
-      if (row === 0) {
-        const tg = this.add.graphics().setDepth(12).fillStyle(GOLD.bright, 0.95);
-        const tx = side === 'party' ? x + t.width / 2 + 14 : x - t.width / 2 - 14;
-        const d = side === 'party' ? 1 : -1;
-        tg.fillPoints([{ x: tx - d * 5, y: PANEL_Y + 90 }, { x: tx + d * 5, y: PANEL_Y + 96 }, { x: tx - d * 5, y: PANEL_Y + 102 }], true);
-      }
+  private buildSide(side: Side): void {
+    const root = this.add.container(0, MID_TOP).setDepth(12);
+    const enemy = side === 'enemies';
+    // Başlık satırı: [elmas + PLAYER] [n / boyut] [çizgi] [< 4 >]  (Enemy'de ayna)
+    const dia = this.diamond(7.8).setScale(0.4).setAlpha(0);
+    const title = this.cz(0, HEAD_CY, NAME[side], 32, TXT, 0.1, { pad: true }).setOrigin(0, 0.5);
+    const tw = title.width - PAD * 2;
+    const titleW = 11 + 14 + tw;
+    const tx0 = enemy ? SIDE_W - titleW : 0; // başlık bloğunun sol kenarı
+    dia.setPosition(tx0 + 5.5, HEAD_CY);
+    title.x = tx0 + 25 - PAD;
+    const tzone = this.add.zone(tx0 + titleW / 2, HEAD_CY, titleW + 20, HIT).setInteractive({ useHandCursor: this.editable(side) });
+    tzone.on('pointerup', () => !this.drag?.moved && this.setActive(side));
+    const grow = this.add.graphics();
+    const parts: Phaser.GameObjects.GameObject[] = [grow, dia, title, tzone];
+    let count: Phaser.GameObjects.Text | undefined;
+    const showCount = this.editable(side) || !this.mp;
+    if (showCount) {
+      count = this.gar(0, HEAD_CY + 1, '', 22, MUTED).setOrigin(enemy ? 1 : 0, 0.5);
+      count.x = enemy ? tx0 - 16 : titleW + 16;
+      parts.push(count);
     }
-    // Dice / clear (multiplayer: yalnızca kendi panelinde)
-    if (!this.editable(side)) return;
-    const bx = px + PANEL_W - 34;
-    this.iconButton(bx - 26, PANEL_Y + 40, 'cross', 'Clear team', () => {
-      this.teams[side] = this.emptyCells();
-      this.active = side;
-      this.refresh();
-    });
-    this.iconButton(bx - 26 - 66, PANEL_Y + 40, 'dice', 'Randomize team', () => {
-      this.active = side;
-      this.randomize(side);
-    });
-  }
-
-  private buildFooter(): void {
-    this.startBtn = makeMenuButton(this, W / 2, 1018, 500, 88, this.mp ? 'READY' : 'START BATTLE', () => this.start(), { primary: true, size: 42 });
-    this.startBtn.container.setDepth(30);
-    if (this.mp) {
-      const local = this.mp.localSide;
-      makeMenuButton(this, 380, 1018, 360, 66, 'Randomize', () => this.randomize(local), { size: 28 }).container.setDepth(30);
-      this.status = serif(this, W / 2, 957, '', 22, colors.muted, { stroke: 3 }).setOrigin(0.5).setDepth(30);
-      return;
+    const view: SideView = { root, title, dia, count, grow, cells: this.add.container(0, 0) };
+    if (!this.mp) {
+      view.stepper = this.makeStepper(side);
+      view.stepper.root.setPosition(enemy ? 0 : SIDE_W - 168, HEAD_CY);
+      parts.push(view.stepper.root);
     }
-    const rand = makeMenuButton(
-      this,
-      380,
-      1018,
-      360,
-      66,
-      'Randomize both',
-      () => {
-        this.randomize('party', false);
-        this.randomize('enemies');
-      },
-      { size: 28 },
-    );
-    rand.container.setDepth(30);
-    this.status = serif(this, W / 2, 957, '', 22, colors.muted, { stroke: 3 }).setOrigin(0.5).setDepth(30);
-    // Team sizes: two small steppers (- value +) right of START, plus a one-line summary
-    this.sizeSummaryText = serif(this, (STEPPER.cx.party + STEPPER.cx.enemies) / 2, 957, '', 22, '#ffe29a', { stroke: 3 }).setOrigin(0.5).setDepth(30);
-    for (const side of ['party', 'enemies'] as const) this.buildStepper(side);
+    // FRONT etiketi (ön sıra ortaya bakar: Player'da sağ sütun, Enemy'de sol)
+    const front = this.cz(enemy ? CELL / 2 : SIDE_W - CELL / 2, GRID_Y - 30 + 8, 'Front', 13, 'rgba(217,178,106,0.7)', 0.24).setOrigin(0.5);
+    parts.push(front, view.cells);
+    // Random · Clear (yalnızca düzenlenebilen taraf)
+    if (this.editable(side)) {
+      const r = this.lnk('Random', () => {
+        this.active = side;
+        this.randomize(side);
+      });
+      const c = this.lnk('Clear', () => {
+        this.teams[side] = this.emptyCells();
+        this.active = side;
+        this.refresh();
+      });
+      const sep = this.cz(0, ACTS_CY, '◆', 14, 'rgba(217,178,106,0.35)', 0).setOrigin(0.5);
+      const total = r.width + 6 + 14 + 6 + c.width;
+      const x0 = enemy ? SIDE_W - total : 0;
+      r.root.setPosition(x0, ACTS_CY);
+      sep.x = x0 + r.width + 6 + 7;
+      c.root.setPosition(x0 + r.width + 6 + 14 + 6, ACTS_CY);
+      parts.push(r.root, sep, c.root);
+    }
+    root.add(parts);
+    this.sides[side] = view;
   }
 
-  /** `- 5 +` size picker for one team (44px+ touch targets). */
-  private buildStepper(side: Side): void {
-    const { cx: cxs, labelY, rowY, btn, valueW } = STEPPER;
-    const cx = cxs[side];
-    const hex = hexNum(SIDE_HEX[side]);
-    serif(this, cx, labelY, `${SIDE_NAME[side]} size`, 18, '#b9a27a', { spacing: 2, stroke: 3 }).setOrigin(0.5).setDepth(30);
-    const gap = 10;
-    const mk = (dx: number, sign: -1 | 1): StepButton => {
+  /** Başlık çizgisi (sayının bittiği yerden boyut seçiciye kadar). Sayı yazısı değişince yeniden çizilir. */
+  private drawGrow(side: Side): void {
+    const v = this.sides[side];
+    const enemy = side === 'enemies';
+    const titleW = 25 + v.title.width - PAD * 2;
+    const countW = v.count ? v.count.width + 16 : 0;
+    const stepW = v.stepper ? 168 + 16 : 0;
+    const a = enemy ? stepW : titleW + countW + 16;
+    const b = enemy ? SIDE_W - titleW - countW - 16 : SIDE_W - stepW;
+    v.grow.clear();
+    if (b > a) v.grow.lineStyle(1, GOLDC, LINE.a1).lineBetween(a, HEAD_CY, b, HEAD_CY);
+  }
+
+  /** `< 4 >` boyut seçici: altın ok düğmeleri (60 px; dokunma alanı 72) + değer. Kök (0, 0) = sol kenar, dikey orta. */
+  private makeStepper(side: Side): NonNullable<SideView['stepper']> {
+    const root = this.add.container(0, 0);
+    const mk = (cx: number, sign: -1 | 1) => {
       const g = this.add.graphics();
       let enabled = true;
-      const draw = (hover: boolean): void => {
+      let hover = false;
+      const draw = () => {
         g.clear();
-        g.fillGradientStyle(hover && enabled ? 0x7a5532 : 0x5c4128, hover && enabled ? 0x7a5532 : 0x5c4128, 0x24170d, 0x24170d, enabled ? 1 : 0.55).fillRect(-btn / 2, -btn / 2, btn, btn);
-        frameRect(g, -btn / 2, -btn / 2, btn, btn, { bevel: 3, alpha: enabled ? 1 : 0.5 });
-        g.lineStyle(7, enabled ? 0xf3e4c4 : 0x7d6f62, 1).lineBetween(-11, 0, 11, 0);
-        if (sign > 0) g.lineBetween(0, -11, 0, 11);
+        const col = !enabled ? GOLDC : hover ? ONC : GOLDC;
+        const a = enabled ? 1 : 0.22;
+        g.lineStyle(5, 0x000000, a * 0.45);
+        const pts = sign < 0 ? [{ x: 3, y: -7 }, { x: -4, y: 0 }, { x: 3, y: 7 }] : [{ x: -3, y: -7 }, { x: 4, y: 0 }, { x: -3, y: 7 }];
+        g.strokePoints(pts.map((p) => ({ x: p.x, y: p.y + 1 })), false);
+        g.lineStyle(2, col, a).strokePoints(pts, false);
       };
-      draw(false);
-      const c = this.add.container(cx + dx, rowY, [g]).setDepth(30);
-      const zone = this.add.zone(0, 0, btn + 6, btn + 6).setInteractive({ useHandCursor: true });
+      draw();
+      const c = this.add.container(cx, 0, [g]);
+      const zone = this.add.zone(0, 0, HIT, HIT).setInteractive({ useHandCursor: true });
       c.add(zone);
-      zone.on('pointerover', () => draw(true));
-      zone.on('pointerout', () => draw(false));
-      zone.on('pointerdown', () => enabled && this.tweens.add({ targets: c, scale: 0.92, duration: 60 }));
-      zone.on('pointerup', () => {
-        this.tweens.add({ targets: c, scale: 1, duration: 80 });
-        this.setSize(side, stepSize(this.sizes[side], sign));
+      zone.on('pointerover', () => {
+        hover = true;
+        draw();
       });
-      return {
-        setEnabled: (on: boolean) => {
-          enabled = on;
-          draw(false);
-        },
+      zone.on('pointerout', () => {
+        hover = false;
+        draw();
+        this.tweens.add({ targets: c, scale: 1, duration: 120 });
+      });
+      zone.on('pointerdown', () => enabled && this.tweens.add({ targets: c, scale: 0.9, duration: 80, ease: easeOut }));
+      zone.on('pointerup', () => {
+        this.tweens.add({ targets: c, scale: 1, duration: 120, ease: easeOut });
+        if (enabled) this.setSize(side, stepSize(this.sizes[side], sign));
+      });
+      root.add(c);
+      return (on: boolean) => {
+        enabled = on;
+        draw();
       };
     };
-    const half = valueW / 2 + gap + btn / 2;
-    const minus = mk(-half, -1);
-    const plus = mk(half, 1);
-    const plate = this.add.graphics().setDepth(30);
-    plate.fillStyle(0x0c0806, 0.85).fillRect(cx - valueW / 2, rowY - 24, valueW, 48);
-    frameRect(plate, cx - valueW / 2, rowY - 24, valueW, 48, { bevel: 3, edge: GOLD.edge, light: hex });
-    const value = goldText(this, cx, rowY + 1, String(this.sizes[side]), 34, 1).setOrigin(0.5).setDepth(31);
-    this.sizeUi[side] = { value, minus, plus };
+    const minus = mk(30, -1);
+    const value = this.cz(84, 1, '4', 34, ON, 0).setOrigin(0.5);
+    root.add(value);
+    const plus = mk(138, 1);
+    return { root, value, minus, plus };
+  }
+
+  private buildCenter(): void {
+    const c = this.add.container(W / 2, 0).setDepth(14);
+    const mpMode = !!this.mp;
+    // VS (çizgiler iki yanda), durum yazısı, Random both: dikeyde orta bölmenin ortasında
+    const vsH = 65;
+    const stH = 28;
+    const rbH = mpMode ? 0 : 60;
+    const total = vsH + 22 + stH + (mpMode ? 0 : 22 + rbH);
+    const y0 = CENTER_CY - total / 2;
+    const vs = this.cz(0, y0 + vsH / 2, 'VS', 54, 'rgba(243,217,153,0.85)', 0.1).setOrigin(0.5);
+    const vw = vs.width - 54 * 0.1;
+    const lines = this.add.graphics();
+    fadeLine(lines, -vw / 2 - 18 - 70, -vw / 2 - 18, y0 + vsH / 2 + 1, GOLDC, LINE.a3, 'in');
+    fadeLine(lines, vw / 2 + 18 + 70, vw / 2 + 18, y0 + vsH / 2 + 1, GOLDC, LINE.a3, 'in');
+    vs.x = 54 * 0.05;
+    this.status = this.gar(0, y0 + vsH + 22 + stH / 2, '', 21, NOTE).setOrigin(0.5);
+    c.add([lines, vs, this.status]);
+    if (!mpMode) {
+      const rb = this.lnk('Random both', () => {
+        this.randomize('party', false);
+        this.randomize('enemies');
+      });
+      rb.root.setPosition(-rb.width / 2, y0 + vsH + 22 + stH + 22 + rbH / 2);
+      c.add(rb.root);
+    }
+    this.center = c;
+  }
+
+  /** START BATTLE (multiplayer: READY): ince altın çerçeve, iki yanda elmas; hazırken nefes alan kor parıltısı. Sağ alt köşe. */
+  private buildStart(): void {
+    const label0 = this.mp ? 'Not ready' : 'Start Battle';
+    const probe = this.cz(0, 0, label0, START.size, DIM, 0.12);
+    const w = Math.ceil(probe.width + START.pad * 2);
+    probe.destroy();
+    const h = START.h;
+    const root = this.add.container(0, START.cy).setDepth(30);
+    const breath = this.add.image(0, 0, ensureGlow(this)).setTint(EMBER).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(w * 1.35, h * 2.6).setAlpha(0);
+    const plate = this.add.graphics();
+    const text = this.cz(0, 0, this.mp ? 'Ready' : 'Start Battle', START.size, DIM, 0.12, { pad: true }).setOrigin(0.5);
+    const lift = this.add.container(0, 0, [plate, text]);
+    const zone = this.add.zone(0, 0, w + 16, h + 12).setInteractive({ useHandCursor: true });
+    root.add([breath, lift, zone]);
+    let ready = false;
+    let hover = false;
+    let breathTween: Phaser.Tweens.Tween | undefined;
+    const draw = () => {
+      plate.clear();
+      plate.fillStyle(0x000000, 0.35).fillRect(-w / 2 + 4, -h / 2 + 14, w - 8, h); // alt gölge
+      plate.lineStyle(3, 0x0c0805, 0.8).strokeRect(-w / 2 - 3.5, -h / 2 - 3.5, w + 7, h + 7);
+      vGradient(plate, -w / 2, -h / 2, w, h, 0x261b11, [
+        [0, 0.88],
+        [1, 0.88],
+      ]);
+      plate.fillGradientStyle(0x0c0906, 0x0c0906, 0x0c0906, 0x0c0906, 0, 0, 0.75, 0.75).fillRect(-w / 2, -h / 2, w, h);
+      const border = ready ? (hover ? ONC : GOLDC) : GOLDC;
+      plate.lineStyle(2, border, ready ? 1 : 0.28).strokeRect(-w / 2, -h / 2, w, h);
+      for (const sx of [-1, 1]) {
+        const cx = sx * (w / 2 + 2);
+        if (ready) {
+          plate.fillStyle(EMBER, 0.3).fillPoints(diamondPts(cx, 0, 13), true);
+          plate.fillStyle(EMBER, 1).fillPoints(diamondPts(cx, 0, 8.5), true);
+          plate.lineStyle(1, EMBER2, 1).strokePoints(diamondPts(cx, 0, 8.5), true);
+        } else {
+          plate.fillStyle(0x3a2d20, 1).fillPoints(diamondPts(cx, 0, 8.5), true);
+          plate.lineStyle(1, GOLDC, 0.35).strokePoints(diamondPts(cx, 0, 8.5), true);
+        }
+      }
+      text.setColor(ready ? ON : DIM);
+      this.glow(text, ready && hover);
+    };
+    const set = (r: boolean, label: string) => {
+      if (text.text !== label.toUpperCase()) text.setText(label.toUpperCase());
+      if (r === ready && breathTween) return draw();
+      ready = r;
+      draw();
+      breathTween?.stop();
+      breath.setAlpha(0);
+      breathTween = ready ? this.tweens.add({ targets: breath, alpha: { from: 0, to: 0.32 }, duration: 1300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' }) : undefined;
+      if (!ready) this.tweens.add({ targets: lift, y: 0, duration: 250, ease: easeOut });
+    };
+    zone.on('pointerover', () => {
+      hover = true;
+      draw();
+      if (ready) this.tweens.add({ targets: lift, y: -3, duration: 250, ease: easeOut });
+    });
+    zone.on('pointerout', () => {
+      hover = false;
+      draw();
+      this.tweens.add({ targets: lift, y: 0, duration: 250, ease: easeOut });
+    });
+    zone.on('pointerdown', () => this.tweens.add({ targets: lift, scale: 0.97, duration: 70 }));
+    zone.on('pointerup', () => {
+      this.tweens.add({ targets: lift, scale: 1, duration: 120, ease: easeOut });
+      if (!this.drag?.moved) this.start();
+    });
+    set(false, this.mp ? 'Ready' : 'Start Battle');
+    this.startUi = {
+      root,
+      w,
+      set,
+      shake: () => this.tweens.add({ targets: lift, x: { from: -10, to: 0 }, duration: 260, ease: 'Bounce.easeOut' }),
+    };
+  }
+
+  private buildToast(): void {
+    const band = this.add.graphics();
+    const text = this.gar(0, 0, '', 23, ON).setOrigin(0.5);
+    const root = this.add.container(W / 2, 120 + 25, [band, text]).setDepth(5500).setAlpha(0);
+    this.toastUi = { root, band, text };
+  }
+
+  /** Kısa bildirim (üst ortada, iki yana saydamlaşan koyu bant): takım dolu, eksik sınıf... */
+  private toast(msg: string): void {
+    const t = this.toastUi;
+    if (!t || !msg) return;
+    t.text.setText(msg);
+    const w = t.text.width + 68 + 140;
+    const h = 52;
+    t.band.clear();
+    hGradient(t.band, -w / 2, -h / 2, w, h, 0x0a0705, [
+      [0, 0],
+      [0.18, 0.92],
+      [0.82, 0.92],
+      [1, 0],
+    ]);
+    this.tweens.killTweensOf(t.root);
+    t.root.setPosition(W / 2, 145 - 10);
+    this.tweens.add({ targets: t.root, alpha: 1, y: 145, duration: 250, ease: easeOut });
+    t.timer?.remove();
+    t.timer = this.time.delayedCall(1700, () => this.tweens.add({ targets: t.root, alpha: 0, y: 135, duration: 250, ease: easeOut }));
   }
 
   private setStatus(text: string, hex: string, pulse = false): void {
@@ -549,366 +824,386 @@ export class TeamSelectScene extends Phaser.Scene {
     this.status.setText(text).setColor(hex);
     if (pulse) {
       this.statusTween?.stop();
-      this.status.setScale(1.14);
+      this.status.setScale(1.1);
       this.statusTween = this.tweens.add({ targets: this.status, scale: 1, duration: 360, ease: 'Back.easeOut' });
     }
   }
 
-  private iconButton(cx: number, cy: number, kind: 'dice' | 'cross', hint: string, onTap: () => void): void {
-    const size = 52;
-    const g = this.add.graphics();
-    const draw = (hover: boolean) => {
-      g.clear();
-      g.fillGradientStyle(hover ? 0x7a5532 : 0x5c4128, hover ? 0x7a5532 : 0x5c4128, 0x24170d, 0x24170d, 1).fillRect(-size / 2, -size / 2, size, size);
-      frameRect(g, -size / 2, -size / 2, size, size, { bevel: 3 });
-      if (kind === 'dice') {
-        g.fillStyle(0xf3e4c4, 1).fillRoundedRect(-14, -14, 28, 28, 5);
-        g.fillStyle(0x2a1a0e, 1);
-        for (const [dx, dy] of [[-7, -7], [7, -7], [0, 0], [-7, 7], [7, 7]] as const) g.fillCircle(dx, dy, 3);
-      } else {
-        g.lineStyle(7, 0xd9584a, 1).lineBetween(-11, -11, 11, 11).lineBetween(11, -11, -11, 11);
-        g.lineStyle(2, 0xffb0a0, 0.8).lineBetween(-11, -13, 11, 9);
-      }
-    };
-    draw(false);
-    const c = this.add.container(cx, cy, [g]).setDepth(15);
-    const zone = this.add.zone(0, 0, size + 6, size + 6).setInteractive({ useHandCursor: true });
-    c.add(zone);
-    zone.on('pointerover', () => {
-      draw(true);
-      this.tweens.add({ targets: c, scale: 1.08, duration: 100 });
-      this.showTip(`btn:${kind}:${cx}`, { title: hint, rows: [], width: 230 }, { x: cx - size / 2, y: cy - size / 2, w: size, h: size }, 'below');
-    });
-    zone.on('pointerout', () => {
-      draw(false);
-      this.tweens.add({ targets: c, scale: 1, duration: 120 });
-      this.hideTip();
-    });
-    zone.on('pointerdown', () => this.tweens.add({ targets: c, scale: 0.92, duration: 60 }));
-    zone.on('pointerup', () => {
-      this.tweens.add({ targets: c, scale: 1.08, duration: 80 });
-      this.hideTip(true);
-      onTap();
-    });
+  // --- Info line (alt bilgi satırı) ---
+
+  private buildInfo(): void {
+    this.infoLines = this.add.graphics().setDepth(14);
+    this.infoRoot = this.add.container(0, INFO.top + INFO.h / 2).setDepth(15);
   }
 
-  // --- Roster (class cards) ---
+  private infoBox(): { x0: number; w: number } {
+    const vw = stageView.viewW || W;
+    const w = Math.min(INFO.maxW, vw - 168);
+    return { x0: W / 2 - w / 2, w };
+  }
 
-  private buildRoster(): void {
-    const { x, y, w, h } = ROSTER;
-    for (const o of makePanel(this, x, y, w, h, { top: 0x2a2018, bottom: 0x0d0806, bevel: 5, grain: 0.75, alpha: 0.96 })) (o as Phaser.GameObjects.Components.Depth & Phaser.GameObjects.GameObject).setDepth?.(10);
-    const head = this.add.graphics().setDepth(11);
-    head.lineStyle(1, GOLD.edge, 0.7).lineBetween(x + 22, y + 48, x + w - 22, y + 48);
-    head.fillStyle(GOLD.light, 0.9).fillPoints([{ x: x + w / 2, y: y + 44 }, { x: x + w / 2 + 5, y: y + 48 }, { x: x + w / 2, y: y + 52 }, { x: x + w / 2 - 5, y: y + 48 }], true);
-    goldText(this, x + 36, y + 24, 'CLASSES', 26, 4).setOrigin(0, 0.5).setDepth(12);
-    serif(this, x + w - 36, y + 25, 'Tap a class to add it to the glowing team  -  or drag it onto a slot', 18, '#a8946f', { bold: false, stroke: 2 }).setOrigin(1, 0.5).setDepth(12);
-
-    const ids = rosterIds();
-    const groupOf = new Map<string, number>();
-    rosterGroups().forEach((g, gi) => g.items.forEach((c) => groupOf.set(c.id, gi)));
-    const groupCount = new Set(groupOf.values()).size;
-    // Extra room for the thin coloured dividers between STR / DEX / INT / LCK groups (worst case: all of them in one row)
-    const area = { x: x + 24, y: y + 62, w: w - 48, h: h - 62 - 12 };
-    const lay = rosterLayout(ids.length, area.w - Math.max(0, groupCount - 1) * ROSTER_SEP, area.h, CARD.w, CARD.h);
-    const rowIds = (r: number) => ids.slice(r * lay.cols, (r + 1) * lay.cols);
-    const breaks = (arr: string[], k: number) => k > 0 && groupOf.get(arr[k]!) !== groupOf.get(arr[k - 1]!);
-    const rowsWidth = (r: number) => {
-      const arr = rowIds(r);
-      return arr.length * lay.cardW + (arr.length - 1) * lay.gap + arr.reduce((n, _, k) => n + (breaks(arr, k) ? ROSTER_SEP : 0), 0);
-    };
-    const dividers = this.add.graphics().setDepth(12);
-    const blockH = lay.rows * lay.cardH + (lay.rows - 1) * lay.gap;
-    for (let r = 0; r < lay.rows; r++) {
-      const arr = rowIds(r);
-      let cursor = area.x + (area.w - rowsWidth(r)) / 2;
-      const cy = area.y + r * (lay.cardH + lay.gap) + lay.cardH / 2 + (area.h - blockH) / 2;
-      arr.forEach((id, k) => {
-        if (breaks(arr, k)) {
-          const col = hexNum(groupColor(PRIMARY_GROUP, content.classes[id]?.primary));
-          const lx = cursor + (ROSTER_SEP - lay.gap) / 2; // middle of the gap between the two cards
-          dividers.lineStyle(2, col, 0.75).lineBetween(lx, cy - lay.cardH / 2 + 6, lx, cy + lay.cardH / 2 - 6);
-          cursor += ROSTER_SEP;
-        }
-        this.cards.set(id, this.buildCard(content.classes[id]!, cursor + lay.cardW / 2, cy, lay.scale));
-        cursor += lay.cardW + lay.gap;
+  /** Bilgi satırını çizer: avatar · ad + rol · 4 stat · 4 skill + pasif · ipucu. */
+  private renderInfo(): void {
+    const root = this.infoRoot;
+    if (!root || !this.infoLines) return;
+    const def = content.classes[this.infoId];
+    root.removeAll(true);
+    const { x0, w } = this.infoBox();
+    this.infoLines.clear();
+    this.infoLines.lineStyle(1, GOLDC, LINE.a1).lineBetween(x0, INFO.top, x0 + w, INFO.top).lineBetween(x0, INFO.top + INFO.h, x0 + w, INFO.top + INFO.h);
+    if (!def) return;
+    let x = x0 + 12;
+    // Avatar (üstüne gelince class özeti: türev statlar, pasif, skill'ler)
+    const av = this.add.graphics();
+    av.fillStyle(0x120c08, 1).fillRect(x, -36, 72, 72);
+    const img = classAvatar(this, def, x + 36, 0, 72);
+    const avb = this.add.graphics();
+    avb.lineStyle(2, GOLDC, LINE.a3).strokeRect(x, -36, 72, 72);
+    root.add([av, img, avb]);
+    x += 72 + 26;
+    const nm = this.cz(x, -12, def.name, 30, ON, 0.06).setOrigin(0, 0.5);
+    const rl = this.gar(x, 20, archetypeOf(def), 20, MUTED).setOrigin(0, 0.5);
+    root.add([nm, rl]);
+    const nameW = Math.max(nm.width, rl.width);
+    const czone = this.add.zone(x0 + 12 + (72 + 26 + nameW) / 2, 0, 72 + 26 + nameW, 80).setInteractive();
+    czone.on('pointerover', () => !this.drag?.moved && this.showTip(`class:${def.id}`, this.classTip(def), { x: x0 + 12, y: INFO.top + 6, w: 72 + 26 + nameW, h: 80 }));
+    czone.on('pointerout', () => this.hideTip());
+    root.add(czone);
+    x += Math.max(nameW, 210) + 26;
+    // Statlar: ikon + kısa ad + değer (primary altın)
+    for (const k of ATTRS) {
+      const pri = def.primary === k;
+      const sx = x;
+      const ic = this.add.image(x + 11, 0, ensureIcon(this, STAT_ICON[k], STAT_COLOR[k], false)).setDisplaySize(22, 22);
+      x += 22 + 6;
+      const lb = this.cz(x, 1, STAT_LABEL[k], 12, pri ? PRI_SMALL : MUTED, 0.12).setOrigin(0, 0.5);
+      x += lb.width + 6;
+      const v = this.cz(x, 0, String(def.stats[k]), 19, pri ? PRI : TXT, 0).setOrigin(0, 0.5);
+      x += v.width;
+      const zw = x - sx;
+      const z = this.add.zone(sx + zw / 2, 0, zw + 12, 60).setInteractive();
+      z.on('pointerover', () => !this.drag?.moved && this.showTip(`stat:${def.id}:${k}`, this.statTip(def, k), { x: sx, y: INFO.top + 20, w: zw, h: 50 }));
+      z.on('pointerout', () => this.hideTip());
+      root.add([ic, lb, v, z]);
+      x += 18;
+    }
+    x += 26 - 18;
+    // Skill'ler (48 px kutular) + pasif
+    const boxes: Array<{ key: string; icon: string; tip: () => TipSpec }> = def.skills
+      .map((sid) => content.skills[sid])
+      .filter((sk): sk is NonNullable<typeof sk> => !!sk)
+      .map((sk) => ({ key: `skill:${def.id}:${sk.id}`, icon: ensureSkillIcon(this, sk), tip: () => this.skillTip(def, sk.id) }));
+    if (def.passive) {
+      const p = def.passive;
+      boxes.push({
+        key: `passive:${def.id}`,
+        icon: ensureIcon(this, p.icon, def.color, false, ownerOfUnit(def.id)),
+        tip: () => ({ icon: ensureIcon(this, p.icon, def.color, false, ownerOfUnit(def.id)), title: p.name, badge: 'Passive', lines: [[describePassive(p, def.stats, content.formulas)]] }),
       });
     }
-  }
-
-  private statCell(def: CombatantDef, kind: (typeof ATTRS)[number]): TipContent {
-    const info = describeStat(kind, def.stats, content.formulas);
-    return {
-      title: info.bonus ? `${info.title} - ${info.bonus.name}` : info.title,
-      titleHex: info.primary ? PRIMARY_GOLD : STAT_COLOR[kind],
-      icon: ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false),
-      rows: info.lines.map((l): [string] => [l]),
-      width: 400,
-    };
-  }
-
-  private skillTip(def: CombatantDef, skillId: string): TipContent | null {
-    const skill = content.skills[skillId];
-    if (!skill) return null;
-    const info = describeSkill(skill, def.stats, content.formulas, content.summons, { statuses: content.statuses, grounds: content.grounds });
-    const elementHex = (k: (typeof info.kinds)[number]): string | undefined => (k === 'shield' ? colors.shield : k === 'magicShield' ? colors.magicShield : k ? colors.element[k] : undefined);
-    const rows: Array<[string, string?]> = [[`Cost: ${info.cost}     Cooldown: ${info.cooldown}`, colors.muted]];
-    info.lines.forEach((l, i) => rows.push([l, elementHex(info.kinds[i])]));
-    if (info.initialCooldown) rows.push([info.initialCooldown, colors.muted]);
-    const shape = skillMiniGrid(skill, content.formulas.formation);
-    return { title: info.name, titleHex: '#f4ede1', icon: ensureSkillIcon(this, skill), badge: info.targetBadge, ...(shape ? { shape } : {}), rows, width: 450 };
-  }
-
-  private classTip(def: CombatantDef): TipContent {
-    const f = content.formulas;
-    const s = def.stats;
-    const rows: Array<[string, string?]> = [];
-    if (isTestClass(def)) rows.push(['Test class: left out of random teams, add it by hand', '#ffb347']);
-    if (def.primary) {
-      const b = primaryBonusInfo(def.primary, f, true);
-      rows.push([`Primary stat ${def.primary.toUpperCase()} - ${b.name}: ${b.detail}`, PRIMARY_GOLD]);
-    }
-    rows.push([`HP ${s.hp}    MP ${s.mp}    SPD ${s.spd}`]);
-    rows.push([`Armor ${s.armor}${s.magicArmor > 0 ? `    Magic armor ${s.magicArmor}` : ''}    Crit ${(s.critChance * 100).toFixed(1).replace(/\.0$/, '')}% x${s.critMult.toFixed(2)}`]);
-    if (def.passive) {
-      rows.push([`Passive - ${def.passive.name}`, '#ffe29a']);
-      rows.push([describePassive(def.passive, s, f), '#cdbf9f']);
-    }
-    rows.push(['Skills', '#ffe29a']);
-    for (const id of def.skills) {
-      const sk = content.skills[id];
-      if (!sk) continue;
-      const info = describeSkill(sk, s, f, content.summons, { statuses: content.statuses, grounds: content.grounds });
-      rows.push([`${info.name}  -  ${info.cost}${(sk.cooldown ?? 0) > 0 ? `, cd ${sk.cooldown}` : ''}`, '#cdbf9f']);
-    }
-    return { title: def.name, titleHex: '#ffe29a', icon: ensureIcon(this, def.logo, def.color, false, ownerOfUnit(def.id)), badge: `${archetypeOf(def)} - ${rangeOf(def)}`, rows, width: 470 };
-  }
-
-  private buildCard(def: CombatantDef, cx: number, cy: number, scale: number): CardView {
-    const col = hexNum(def.color);
-    const inner = this.add.container(-CARD.w / 2, -CARD.h / 2);
-    const glow = this.add.image(0, 0, ensureGlow(this)).setTint(col).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(CARD.w * 1.4, CARD.h * 1.2).setAlpha(0);
-    const outer = this.add.container(cx, cy, [glow, inner]).setScale(scale).setDepth(15);
-    const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (inner.add(o), o);
-
-    makePanel(this, 0, 0, CARD.w, CARD.h, { top: 0x2f241a, bottom: 0x0f0a07, bevel: 3, ornaments: false, grain: 0.65 }).forEach((o) => {
-      inner.add(o);
-    });
-    const tint = add(this.add.graphics());
-    tint.fillGradientStyle(col, col, col, col, 0.3, 0.3, 0, 0).fillRect(5, 5, CARD.w - 10, 150);
-    cornerOrnaments(tint, 0, 0, CARD.w, CARD.h, 3);
-
-    // Primary-stat group accent: coloured top strip + inner outline, and an icon + letters badge straddling the top edge (colour-blind safe)
-    const grp = def.primary ? hexNum(groupColor(PRIMARY_GROUP, def.primary)) : null;
-    if (grp !== null && def.primary) {
-      const accent = add(this.add.graphics());
-      accent.fillStyle(grp, 0.9).fillRect(5, 5, CARD.w - 10, 4);
-      accent.lineStyle(1.5, grp, 0.55).strokeRect(4, 4, CARD.w - 8, CARD.h - 8);
-    }
-
-    // Avatar (head portrait) in a framed plate
-    const px = 44;
-    const py = 14;
-    const ps = 100;
-    const plate = add(this.add.graphics());
-    plate.fillGradientStyle(0x1b130d, 0x1b130d, 0x0a0705, 0x0a0705, 1).fillRect(px, py, ps, ps);
-    add(this.add.image(px + ps / 2, py + ps / 2, ensureGlow(this)).setTint(col).setDisplaySize(ps * 1.1, ps * 1.1).setAlpha(fx(0.55)).setBlendMode(Phaser.BlendModes.ADD));
-    const head = add(classAvatar(this, def, px + ps / 2, py + ps / 2 + 1, ps - 6));
-    head.setDepth(1);
-    const plateFrame = add(this.add.graphics());
-    frameRect(plateFrame, px, py, ps, ps, { bevel: 3, edge: GOLD.edge, light: GOLD.light });
-    // Class logo medallion on the plate corner
-    const medal = add(this.add.graphics());
-    medal.fillStyle(0x120c07, 1).fillCircle(px + 4, py + ps - 6, 19);
-    medal.lineStyle(3, GOLD.edge, 1).strokeCircle(px + 4, py + ps - 6, 19);
-    medal.lineStyle(1, GOLD.light, 0.8).strokeCircle(px + 4, py + ps - 6, 15);
-    add(this.add.image(px + 4, py + ps - 6, ensureIcon(this, def.logo, def.color, false, ownerOfUnit(def.id))).setDisplaySize(26, 26));
-
-    // TEST ribbon for test classes (bottom-right corner of the avatar plate)
-    if (isTestClass(def)) {
-      const tg = add(this.add.graphics());
-      tg.fillStyle(0x1a0f06, 1).fillRoundedRect(px + ps - 46, py + ps - 12, 54, 22, 5);
-      tg.fillStyle(0xffb347, 1).fillRoundedRect(px + ps - 44, py + ps - 10, 50, 18, 4);
-      add(serif(this, px + ps - 19, py + ps - 1, 'TEST', 14, '#2a1405', { spacing: 1, stroke: 0 }).setOrigin(0.5));
-    }
-
-    // Selection marks (gems in the top corners)
-    const gems = {} as CardView['gems'];
-    for (const side of ['party', 'enemies'] as const) {
-      const gx = side === 'party' ? 16 : CARD.w - 16;
+    boxes.forEach((b, k) => {
+      const bx = x;
+      const box = this.add.container(bx + 24, 0);
       const g = this.add.graphics();
-      const hex = hexNum(SIDE_HEX[side]);
-      g.fillStyle(0x120c07, 1).fillPoints([{ x: 0, y: -13 }, { x: 11, y: 0 }, { x: 0, y: 13 }, { x: -11, y: 0 }], true);
-      g.fillStyle(hex, 1).fillPoints([{ x: 0, y: -9 }, { x: 7, y: 0 }, { x: 0, y: 9 }, { x: -7, y: 0 }], true);
-      g.fillStyle(0xffffff, 0.35).fillPoints([{ x: 0, y: -9 }, { x: 7, y: 0 }, { x: 0, y: 0 }], true);
-      g.lineStyle(2, GOLD.light, 1).strokePoints([{ x: 0, y: -13 }, { x: 11, y: 0 }, { x: 0, y: 13 }, { x: -11, y: 0 }], true);
-      const count = serif(this, 0, 22, '', 15, SIDE_HEX[side]).setOrigin(0.5);
-      const gem = this.add.container(gx, 24, [g, count]).setVisible(false);
-      add(gem);
-      gems[side] = { gem, count };
-    }
-
-    if (grp !== null && def.primary) {
-      const bw = 62;
-      const bh = 20;
-      const bx = CARD.w / 2 - bw / 2;
-      const by = -8;
-      const badge = add(this.add.graphics());
-      badge.fillStyle(0x120c07, 1).fillRoundedRect(bx, by, bw, bh, 6);
-      badge.fillStyle(grp, 0.28).fillRoundedRect(bx, by, bw, bh, 6);
-      badge.lineStyle(2, grp, 1).strokeRoundedRect(bx, by, bw, bh, 6);
-      add(this.add.image(bx + 15, by + bh / 2, ensureIcon(this, STAT_ICON[def.primary], groupColor(PRIMARY_GROUP, def.primary), false)).setDisplaySize(15, 15));
-      add(serif(this, bx + 25, by + bh / 2 + 1, STAT_LABEL[def.primary], 13, '#f6ead0', { spacing: 1, stroke: 2 }).setOrigin(0, 0.5));
-    }
-
-    // Name + archetype pill
-    const name = fitText(add(serif(this, CARD.w / 2, 136, def.name, 26, '#f6ead0')).setOrigin(0.5), CARD.w - 22);
-    void name;
-    const tagText = serif(this, 0, 0, archetypeOf(def).toUpperCase(), 13, '#f0dcb0', { spacing: 2, stroke: 2 }).setOrigin(0.5);
-    const tw = Math.min(CARD.w - 24, tagText.width + 22);
-    const pill = add(this.add.graphics());
-    pill.fillStyle(col, 0.28).fillRoundedRect(CARD.w / 2 - tw / 2, 152, tw, 22, 11);
-    pill.lineStyle(1.5, col, 0.9).strokeRoundedRect(CARD.w / 2 - tw / 2, 152, tw, 22, 11);
-    tagText.setPosition(CARD.w / 2, 163);
-    fitText(tagText, tw - 10);
-    add(tagText);
-    const rule = add(this.add.graphics());
-    rule.lineStyle(1, GOLD.edge, 0.7).lineBetween(14, 183, CARD.w - 14, 183);
-
-    // Stats 2 x 2 (primary in gold)
-    const regions: HitRegion[] = [];
-    ATTRS.forEach((kind, i) => {
-      const sx = 12 + (i % 2) * 86;
-      const sy = 190 + Math.floor(i / 2) * 22;
-      const primary = def.primary === kind;
-      if (primary) {
-        const hl = add(this.add.graphics());
-        hl.fillStyle(0xffd700, 0.14).fillRoundedRect(sx - 3, sy - 1, 82, 20, 4);
-        hl.lineStyle(1, 0xffd700, 0.5).strokeRoundedRect(sx - 3, sy - 1, 82, 20, 4);
-      }
-      add(this.add.image(sx + 8, sy + 9, ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false)).setDisplaySize(15, 15));
-      add(serif(this, sx + 19, sy + 9, STAT_LABEL[kind], 12, primary ? PRIMARY_GOLD : '#b5a27e', { stroke: 2 }).setOrigin(0, 0.5));
-      add(serif(this, sx + 76, sy + 9, String(def.stats[kind]), 17, primary ? PRIMARY_GOLD : '#f3e4c4', { stroke: 2 }).setOrigin(1, 0.5));
-      regions.push({ x: sx - 3, y: sy - 1, w: 82, h: 20, key: `stat:${def.id}:${kind}`, tip: () => this.statCell(def, kind) });
+      const passive = def.passive && k === boxes.length - 1;
+      const drawBox = (hov: boolean) => {
+        g.clear();
+        g.fillStyle(INK, 0.55).fillRect(-24, -24, 48, 48);
+        if (passive) g.lineStyle(1, hov ? ONC : GOLDC, hov ? 1 : LINE.a2).strokeCircle(0, 0, 23);
+        else g.lineStyle(1, hov ? ONC : GOLDC, hov ? 1 : LINE.a2).strokeRect(-24, -24, 48, 48);
+      };
+      drawBox(false);
+      const ic = this.add.image(0, 0, b.icon).setDisplaySize(passive ? 34 : 48, passive ? 34 : 48);
+      const z = this.add.zone(0, 0, 58, 64).setInteractive();
+      box.add([g, ic, z]);
+      z.on('pointerover', () => {
+        if (this.drag?.moved) return;
+        drawBox(true);
+        this.tweens.add({ targets: box, y: -2, duration: 180, ease: easeOut });
+        this.showTip(b.key, b.tip(), { x: bx, y: INFO.top + 22, w: 48, h: 48 });
+      });
+      z.on('pointerout', () => {
+        drawBox(false);
+        this.tweens.add({ targets: box, y: 0, duration: 180, ease: easeOut });
+        this.hideTip();
+      });
+      root.add(box);
+      x += 48 + 10;
     });
-
-    // Skill icon strip + passive crest
-    const strip = [...def.skills.map((id) => ({ skill: id })), ...(def.passive ? [{ passive: true as const }] : [])];
-    const iconSize = 30;
-    const gap = 5;
-    const total = strip.length * iconSize + (strip.length - 1) * gap;
-    let ix = (CARD.w - total) / 2;
-    const iy = 237;
-    for (const item of strip) {
-      if ('skill' in item) {
-        const sk = content.skills[item.skill];
-        if (sk) add(this.add.image(ix + iconSize / 2, iy + iconSize / 2, ensureSkillIcon(this, sk)).setDisplaySize(iconSize, iconSize));
-        regions.push({ x: ix, y: iy, w: iconSize, h: iconSize, key: `skill:${def.id}:${item.skill}`, tip: () => this.skillTip(def, item.skill) ?? { title: item.skill, rows: [] } });
-      } else if (def.passive) {
-        const p = def.passive;
-        const pg = add(this.add.graphics());
-        pg.fillStyle(0x1a1008, 1).fillCircle(ix + iconSize / 2, iy + iconSize / 2, iconSize / 2);
-        pg.lineStyle(2, GOLD.light, 1).strokeCircle(ix + iconSize / 2, iy + iconSize / 2, iconSize / 2 - 1);
-        add(this.add.image(ix + iconSize / 2, iy + iconSize / 2, ensureIcon(this, p.icon, def.color, false, ownerOfUnit(def.id))).setDisplaySize(21, 21));
-        regions.push({
-          x: ix,
-          y: iy,
-          w: iconSize,
-          h: iconSize,
-          key: `passive:${def.id}`,
-          tip: () => ({ title: p.name, titleHex: '#ffe29a', icon: ensureIcon(this, p.icon, def.color, false, ownerOfUnit(def.id)), badge: 'Passive', rows: [[describePassive(p, def.stats, content.formulas)]], width: 420 }),
-        });
+    // İpucu (sağa yaslı, iki satır; etkin takımın adı vurgulu)
+    const right = x0 + w - 12;
+    if (right - x > 260) {
+      const l1 = this.mp
+        ? ([['Click to add to ', DIM, true], ['your', ON, false], [' team, or drag onto a slot.', DIM, true]] as const)
+        : ([['Click to add to the ', DIM, true], [NAME[this.active], ON, false], [' team, or drag onto a slot.', DIM, true]] as const);
+      let rx = right;
+      for (let k = l1.length - 1; k >= 0; k--) {
+        const [s, col, it] = l1[k]!;
+        const t = this.gar(rx, -11, s, 19, col, it).setOrigin(1, 0.5);
+        root.add(t);
+        rx -= t.width;
       }
-      ix += iconSize + gap;
+      root.add(this.gar(right, 12, 'Click a placed hero to remove it.', 19, DIM).setOrigin(1, 0.5));
     }
+  }
 
-    // Selected overlay (bright gold frame + glow), toggled by state
-    const selected = add(this.add.graphics()).setVisible(false);
-    glowRect(selected, 0, 0, CARD.w, CARD.h, GOLD.bright, fx(0.9), 4);
-    frameRect(selected, 0, 0, CARD.w, CARD.h, { bevel: 4, edge: GOLD.light, light: GOLD.bright });
+  /** Bilgi satırındaki class'ı değiştirir (fare çekilince geri dönmez). */
+  private showInfo(id: string | null): void {
+    const next = infoClassAfter(this.infoId, id);
+    if (next === this.infoId) return;
+    this.infoId = next;
+    this.renderInfo();
+  }
 
-    const zone = this.add.zone(cx, cy, CARD.w * scale, CARD.h * scale).setDepth(16).setInteractive({ useHandCursor: true });
-    const view: CardView = { def, outer, glow, selected, gems, regions, scale, baseY: cy, avatarAt: { x: px + ps / 2, y: py + ps / 2 } };
-    zone.on('pointerover', (p: Phaser.Input.Pointer) => {
-      this.tweens.add({ targets: outer, y: view.baseY - 8, scale: scale * 1.045, duration: 140, ease: 'Sine.easeOut' });
-      this.tweens.add({ targets: glow, alpha: fx(0.5), duration: 160 });
-      outer.setDepth(17);
-      this.showTip(`class:${def.id}`, this.classTip(def), this.cardRect(view), 'above');
-      this.onCardHover(p);
+  // --- Class strip (raf) ---
+
+  private buildStrip(): void {
+    this.stripRoot?.destroy();
+    this.tiles = new Map();
+    this.stripGroups = [];
+    const root = this.add.container(0, STRIP_TOP).setDepth(16);
+    this.stripRoot = root;
+    const groups = rosterGroups();
+    const avail = this.startLeft() - 40 - (stageView.left + 48);
+    const lay = stripLayout(
+      groups.map((g) => g.items.length),
+      avail,
+    );
+    let x = 0;
+    groups.forEach((g) => {
+      const gc = this.add.container(x, 0);
+      const col = groupColor(PRIMARY_GROUP, g.stat);
+      const colN = hexNum(col);
+      const gw = g.items.length * lay.tile + (g.items.length - 1) * lay.gap;
+      // Grup etiketi: elmas + STR + saydamlaşan çizgi
+      const gl = this.add.graphics();
+      gl.fillStyle(colN, 0.85).fillPoints(diamondPts(4, 10, 5.6), true);
+      const label = this.cz(18, 10, g.test ? 'Test' : (g.stat ?? 'other'), 14, col, 0.26).setOrigin(0, 0.5);
+      const lx = 18 + label.width + 10;
+      fadeLine(gl, lx, gw, 10, colN, 0.45, 'out');
+      gc.add([gl, label]);
+      g.items.forEach((c, k) => {
+        const tv = this.buildTile(c.id, k * (lay.tile + lay.gap), 20 + 12, lay.tile, col);
+        gc.add(tv.root);
+        this.tiles.set(c.id, tv);
+      });
+      root.add(gc);
+      this.stripGroups.push(gc);
+      x += gw + lay.groupGap;
+    });
+    const width = x - lay.groupGap;
+    // Sahnenin ortasında; START'la çakışırsa sola kayar (ama sol kenardan taşmaz)
+    const right = this.startLeft() - 40;
+    root.x = Math.max(stageView.left + 48, Math.min(W / 2 - width / 2, right - width));
+    this.updateTiles();
+  }
+
+  private buildTile(id: string, x: number, y: number, size: number, groupHex: string): TileView {
+    const def = content.classes[id]!;
+    const root = this.add.container(x, y);
+    const lift = this.add.container(0, 0);
+    const shadow = this.add.graphics().setAlpha(0);
+    shadow.fillStyle(0x000000, 0.18).fillRect(-4, 8, size + 8, size + 6).fillStyle(0x000000, 0.22).fillRect(0, 10, size, size);
+    const bg = this.add.graphics();
+    vGradient(bg, 0, 0, size, size, 0x281d13, [
+      [0, 0.7],
+      [1, 0.7],
+    ]);
+    bg.fillGradientStyle(0x0a0705, 0x0a0705, 0x0a0705, 0x0a0705, 0, 0, 0.85, 0.85).fillRect(0, 0, size, size);
+    const img = classAvatar(this, def, size / 2, size / 2, size);
+    const accent = this.add.graphics();
+    accent.fillStyle(hexNum(groupHex), 0.55).fillRect(0, 0, size, 2);
+    const frame = this.add.graphics();
+    const name = fitWidth(this.cz(size / 2, size + 8 + 10, def.name, 15, TXT, 0.06).setOrigin(0.5), size + 14);
+    const parts: Phaser.GameObjects.GameObject[] = [shadow, bg, img, accent];
+    if (isTestClass(def)) {
+      const tg = this.add.graphics();
+      tg.fillStyle(0xffb347, 1).fillRect(size - 44, size - 18, 40, 14);
+      parts.push(tg, this.cz(size - 24, size - 11, 'Test', 10, '#2a1405', 0.06).setOrigin(0.5).setShadow(0, 0, 'rgba(0,0,0,0)', 0));
+    }
+    // Takım rozetleri: sol üst mavi (Player), sağ üst kırmızı (Enemy); yalnızca o class takımda varken
+    const badges = {} as TileView['badges'];
+    for (const side of SIDES) {
+      const b = BADGE[side];
+      const bx = side === 'party' ? 17 : size - 17;
+      const g = this.add.graphics();
+      g.fillStyle(0x000000, 0.45).fillCircle(0, 1.5, 13.5);
+      g.fillStyle(b.fill, 1).fillCircle(0, 0, 12);
+      g.lineStyle(1.5, b.ring, 1).strokeCircle(0, 0, 12);
+      // Rakam yazısı: Cinzel'in '1'i 'I' gibi okunur; düz rakamlı serif
+      const t = this.add
+        .text(0, 0.5, '', { fontFamily: "'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif", fontSize: '15px', fontStyle: 'bold', color: b.text })
+        .setResolution(2)
+        .setOrigin(0.5)
+        .setShadow(0, 1, 'rgba(0,0,0,0.6)', 2, false, true);
+      const c = this.add.container(bx, 17, [g, t]).setVisible(false);
+      badges[side] = { c, t, n: 0 };
+    }
+    lift.add([...parts, frame, badges.party.c, badges.enemies.c, name]);
+    const zone = this.add.zone(size / 2, (size + 30) / 2, size + 10, size + 34).setInteractive({ useHandCursor: true });
+    root.add([lift, zone]);
+    const tv: TileView = { id, root, lift, frame, shadow, img, name, badges, size, hover: false };
+    zone.on('pointerover', () => {
+      if (this.drag?.moved) return;
+      tv.hover = true;
+      this.styleTile(tv);
+      this.tweens.add({ targets: lift, y: -6, duration: 250, ease: easeOut });
+      this.tweens.add({ targets: shadow, alpha: 1, duration: 250 });
+      this.zoomImg(img, 1.06, size);
+      this.showInfo(id);
+    });
+    zone.on('pointermove', (ptr: Phaser.Input.Pointer) => {
+      if (this.drag?.moved) return;
+      // Rozetin üstünde: anlamını söyleyen küçük ipucu
+      const p = worldXY(this, ptr);
+      const m = root.getWorldTransformMatrix();
+      const lx = p.x - m.tx;
+      const ly = p.y - m.ty + 6;
+      for (const side of SIDES) {
+        const b = badges[side];
+        if (b.n > 0 && Math.hypot(lx - b.c.x, ly - b.c.y) <= 16) {
+          this.showTip(`badge:${id}:${side}`, { title: `${NAME[side]} team`, titleHex: BADGE[side].label, lines: [[`${b.n} ${def.name}${b.n > 1 ? 's' : ''} in the ${NAME[side]} team`]], width: 340 }, { x: m.tx + b.c.x - 14, y: m.ty - 6 + b.c.y - 14, w: 28, h: 28 });
+          return;
+        }
+      }
+      if (this.tip?.key.startsWith('badge:')) this.hideTip(true);
     });
     zone.on('pointerout', () => {
-      this.tweens.add({ targets: outer, y: view.baseY, scale, duration: 160, ease: 'Sine.easeOut' });
-      this.tweens.add({ targets: glow, alpha: 0, duration: 220 });
-      outer.setDepth(15);
-      this.hideTip();
+      tv.hover = false;
+      this.styleTile(tv);
+      this.tweens.add({ targets: lift, y: 0, duration: 250, ease: easeOut });
+      this.tweens.add({ targets: shadow, alpha: 0, duration: 250 });
+      this.zoomImg(img, 1, size);
+      if (this.tip?.key.startsWith('badge:')) this.hideTip();
     });
     zone.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
       const p = worldXY(this, ptr);
-      this.tweens.add({ targets: outer, scale: scale * 0.97, duration: 70 });
-      this.cardDrag = { id: def.id, sx: p.x, sy: p.y, moved: false, over: null };
+      this.drag = { kind: 'class', id, sx: p.x, sy: p.y, moved: false, over: null };
     });
-    zone.on('pointerup', () => this.tweens.add({ targets: outer, scale: scale * 1.045, duration: 90 }));
-    zone.setData('card', view);
-    return view;
+    this.styleTile(tv);
+    return tv;
   }
 
-  private cardRect(c: CardView): { x: number; y: number; w: number; h: number } {
-    const w = CARD.w * c.scale;
-    const h = CARD.h * c.scale;
-    return { x: c.outer.x - w / 2, y: c.baseY - h / 2, w, h };
+  /** Raf portresinin çerçevesi ve ad rengi: hover altın, seçili 2 px açık altın. */
+  private styleTile(tv: TileView): void {
+    const s = tv.size;
+    const sel = this.sel === tv.id;
+    tv.frame.clear();
+    if (sel) tv.frame.lineStyle(2, ONC, 1).strokeRect(1, 1, s - 2, s - 2);
+    else tv.frame.lineStyle(1, GOLDC, tv.hover ? 1 : LINE.a2).strokeRect(0.5, 0.5, s - 1, s - 1);
+    tv.name.setColor(tv.hover || sel ? ON : TXT);
   }
 
-  /** Moving over a card: stat cells and skill icons get their own tooltip. */
-  private onCardHover(p: { x: number; y: number }): void {
-    if (this.cardDrag?.moved || this.drag?.moved) return;
-    for (const c of this.cards.values()) {
-      const r = this.cardRect(c);
-      if (p.x < r.x || p.x > r.x + r.w || p.y < r.y - 12 || p.y > r.y + r.h + 4) continue;
-      const lx = (p.x - c.outer.x) / c.outer.scaleX + CARD.w / 2;
-      const ly = (p.y - c.outer.y) / c.outer.scaleY + CARD.h / 2;
-      const hit = c.regions.find((q) => lx >= q.x && lx <= q.x + q.w && ly >= q.y && ly <= q.y + q.h);
-      if (hit) {
-        this.showTip(hit.key, hit.tip(), r, 'above');
-      } else this.showTip(`class:${c.def.id}`, this.classTip(c.def), r, 'above');
-      return;
-    }
+  /**
+   * Görseli kendi kutusu içinde yakınlaştırır (CSS'teki overflow:hidden + scale(1.06)): kırpma bölgesi merkezde daralır, ölçek aynı oranda büyür.
+   * `box` = kutunun kenarı (dünya pikseli).
+   */
+  private zoomImg(img: Phaser.GameObjects.Image, to: number, box: number): void {
+    const st = (img.getData('zoom') as number | undefined) ?? 1;
+    const fw = img.frame.width;
+    const fh = img.frame.height;
+    const base = (img.getData('base') as number | undefined) ?? box / Math.max(fw, fh);
+    img.setData('base', base);
+    const flip = img.flipX;
+    const apply = (z: number) => {
+      img.setData('zoom', z);
+      const cw = fw / z;
+      const ch = fh / z;
+      img.setCrop((fw - cw) / 2, (fh - ch) / 2, cw, ch);
+      img.setScale(base * z);
+      img.setFlipX(flip);
+    };
+    const o = { z: st };
+    this.tweens.add({ targets: o, z: to, duration: 350, ease: easeOut, onUpdate: () => apply(o.z) });
   }
 
-  /** Card visuals follow the teams: gems for membership, gold frame for classes in the active team. */
-  private updateCards(): void {
-    for (const c of this.cards.values()) {
-      const inTeam: Record<Side, number> = { party: 0, enemies: 0 };
-      for (const side of ['party', 'enemies'] as const) inTeam[side] = this.teams[side].filter((t) => t === c.def.id).length;
-      for (const side of ['party', 'enemies'] as const) {
-        const g = c.gems[side];
-        g.gem.setVisible(inTeam[side] > 0);
-        g.count.setText(inTeam[side] > 1 ? `x${inTeam[side]}` : '');
+  /** Rozet sayıları ve seçili çerçeve takımları izler. */
+  private updateTiles(): void {
+    for (const tv of this.tiles.values()) {
+      const n = classCounts(this.teams, tv.id);
+      for (const side of SIDES) {
+        const b = tv.badges[side];
+        const v = this.mp && !this.editable(side) ? 0 : n[side];
+        if (v === b.n) continue;
+        const appear = b.n === 0 && v > 0;
+        b.n = v;
+        b.t.setText(String(v));
+        b.c.setVisible(v > 0);
+        if (v > 0) {
+          this.tweens.killTweensOf(b.c);
+          b.c.setScale(appear ? 0.4 : 1.25);
+          this.tweens.add({ targets: b.c, scale: 1, duration: 260, ease: 'Back.easeOut' });
+        }
       }
-      const sel = inTeam[this.active] > 0;
-      c.selected.setVisible(sel);
-      c.outer.setAlpha(this.count(this.active) >= this.sizes[this.active] && !sel ? 0.72 : 1);
+      this.styleTile(tv);
     }
   }
 
   // --- Teams ---
 
-  private updateActiveVisuals(): void {
-    for (const side of ['party', 'enemies'] as const) {
-      const g = this.activeGlow[side];
-      if (!g) continue;
-      this.tweens.killTweensOf(g);
-      // Aktif takım: eskiden hızlı nabız (0,35-0,9 / 900ms); şimdi sabite yakın, çok yavaş.
-      if (side === this.active) this.tweens.add({ targets: g, alpha: { from: fx(1.2), to: fx(1.5) }, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-      else this.tweens.add({ targets: g, alpha: 0, duration: 200 });
+  private sideX(side: Side): number {
+    return side === 'party' ? stageView.left + SIDE_INSET : stageView.right - SIDE_INSET - SIDE_W;
+  }
+
+  /** START düğmesinin sol kenarı (dünya x). */
+  private startLeft(): number {
+    return stageView.right - START.right - (this.startUi?.w ?? 380);
+  }
+
+  /** Yuvanın taraf kutusundaki yerel konumu: Player'ın ön sırası sağda, Enemy'ninki solda; şerit = satır. */
+  private cellLocal(side: Side, i: number): { lx: number; ly: number } {
+    const row = Math.floor(i / LANES);
+    const lane = i % LANES;
+    const col = side === 'party' ? ROWS - 1 - row : row;
+    return { lx: col * (CELL + CELL_GAP), ly: GRID_Y + lane * (CELL + CELL_GAP) };
+  }
+
+  private refresh(): void {
+    if (!this.built) return;
+    this.hideTip(true);
+    for (const side of SIDES) this.drawTeam(side);
+    this.updateHeads();
+    this.updateTiles();
+    this.renderInfo();
+    const ok = this.ready();
+    if (this.mp) {
+      this.refreshMp();
+      const me = this.mp.myReady();
+      this.startUi?.set(ok, me ? 'Not ready' : 'Ready');
+      if (!ok) this.setStatus(this.missingText(), colors.lethal);
+      else if (me) this.setStatus(this.mp.opponentReady() ? 'Both ready - starting...' : 'Waiting for your opponent to be ready', ON);
+      else this.setStatus('Your team is complete - press READY', ON);
+    } else {
+      this.startUi?.set(ok, 'Start Battle');
+      if (ok) this.setStatus('Both teams are ready', ON);
+      else this.setStatus(this.missingText(), NOTE);
+    }
+    this.pop = undefined;
+  }
+
+  private updateHeads(): void {
+    for (const side of SIDES) {
+      const v = this.sides[side];
+      const on = this.active === side;
+      v.title.setColor(on ? ON : TXT);
+      this.glow(v.title, on);
+      this.tweens.killTweensOf(v.dia);
+      this.tweens.add({ targets: v.dia, alpha: on ? 1 : 0, scale: on ? 1 : 0.4, duration: 200, ease: easeOut });
+      v.count?.setText(`${this.count(side)} / ${this.sizes[side]}`);
+      if (v.stepper) {
+        v.stepper.value.setText(String(this.sizes[side]));
+        v.stepper.minus(this.sizes[side] > 1);
+        v.stepper.plus(this.sizes[side] < CELLS);
+      }
+      this.drawGrow(side);
+      if (!v.root.getData('entering')) {
+        this.tweens.killTweensOf(v.root);
+        this.tweens.add({ targets: v.root, alpha: on ? 1 : 0.78, duration: 300 });
+      }
     }
   }
 
-  private pulseActive(side: Side): void {
-    const g = this.activeGlow[side];
-    if (!g) return;
-    this.tweens.add({ targets: this.headLayer[side], x: { from: 8, to: 0 }, duration: 260, ease: 'Bounce.easeOut' });
-  }
-
-  /** Multiplayer: rakip panelinin örtüsü (takımı gizli; yalnızca hazır durumu); takım değiştiyse hazır bozulur. */
+  /** Multiplayer: rakip dizilimin örtüsü (takımı gizli; yalnızca hazır durumu); takım değiştiyse hazır bozulur. */
   private refreshMp(): void {
     const m = this.mp;
     if (!m) return;
@@ -921,190 +1216,261 @@ export class TeamSelectScene extends Phaser.Scene {
       m.setTeam([...cells], false);
       this.mpSyncing = false;
     }
-    const other = this.other(m.localSide);
-    this.mpCover?.destroy();
-    const px = PANEL_X[other];
-    const c = this.add.container(0, 0).setDepth(16);
+    const v = this.sides[this.other(m.localSide)];
+    v.cover?.destroy();
+    const c = this.add.container(0, 0);
     const g = this.add.graphics();
-    g.fillStyle(0x070403, 0.72).fillRect(px + 12, PANEL_Y + 84, PANEL_W - 24, PANEL_H - 96);
-    c.add(g);
+    g.fillStyle(INK, 0.8).fillRect(-6, GRID_Y - 6, GRID_W + 12, GRID_H + 12);
+    g.lineStyle(1, GOLDC, LINE.a2).strokeRect(-6, GRID_Y - 6, GRID_W + 12, GRID_H + 12);
     const ready = m.opponentReady();
-    c.add(goldText(this, px + PANEL_W / 2, PANEL_Y + PANEL_H / 2 - 22, ready ? 'OPPONENT IS READY' : 'OPPONENT IS CHOOSING...', 40, 4).setOrigin(0.5));
-    c.add(serif(this, px + PANEL_W / 2, PANEL_Y + PANEL_H / 2 + 30, `${m.opponentName()}'s team is revealed when the battle starts`, 20, '#b9a27a', { bold: false, stroke: 2 }).setOrigin(0.5));
-    this.mpCover = c;
-  }
-
-  private refresh(): void {
-    this.hideTip(true);
-    this.slotRects = [];
-    for (const side of ['party', 'enemies'] as const) this.drawTeam(side);
-    this.updateActiveVisuals();
-    this.updateCards();
-    for (const side of ['party', 'enemies'] as const) {
-      const ui = this.sizeUi[side];
-      if (!ui) continue;
-      ui.value.setText(String(this.sizes[side]));
-      ui.minus.setEnabled(this.sizes[side] > 1);
-      ui.plus.setEnabled(this.sizes[side] < CELLS);
-    }
-    this.sizeSummaryText?.setText(sizeSummary(this.sizes));
-    const ok = this.ready();
-    this.startBtn?.setEnabled(ok);
-    if (this.mp) {
-      this.refreshMp();
-      const me = this.mp.myReady();
-      for (const o of this.startBtn?.container.list ?? []) if (o instanceof Phaser.GameObjects.Text) o.setText(me ? 'NOT READY' : 'READY');
-      if (!ok) this.setStatus(this.missingText(), colors.lethal);
-      else if (me) this.setStatus(this.mp.opponentReady() ? 'Both ready - starting...' : 'Waiting for your opponent to be ready', '#ffe29a');
-      else this.setStatus('Your team is complete - press READY', '#ffe29a');
-      this.pop = undefined;
-      return;
-    }
-    if (ok) this.setStatus('Both teams are ready - the battle awaits', '#ffe29a');
-    else this.setStatus(this.missingText(), colors.lethal);
-    this.pop = undefined;
+    const cy = GRID_Y + GRID_H / 2;
+    const dia = this.diamond(7).setPosition(GRID_W / 2, cy - 56);
+    if (!ready) dia.setAlpha(0.35);
+    c.add([g, dia]);
+    c.add(fitWidth(this.cz(GRID_W / 2, cy - 14, ready ? 'Opponent is ready' : 'Opponent is choosing...', 28, ready ? ON : TXT, 0.08, { pad: true }).setOrigin(0.5), GRID_W - 20));
+    c.add(fitWidth(this.gar(GRID_W / 2, cy + 30, `${m.opponentName()}'s team is revealed when the battle starts`, 20, MUTED).setOrigin(0.5), GRID_W - 30));
+    v.root.add(c);
+    v.cover = c;
   }
 
   private drawTeam(side: Side): void {
-    const px = PANEL_X[side];
-    for (const l of [this.slotLayer[side], this.headLayer[side]]) {
-      if (!l) continue;
-      for (const ch of l.list) this.tweens.killTweensOf(ch);
-      l.destroy();
-    }
-    const head = this.add.container(0, 0).setDepth(12);
-    this.headLayer[side] = head;
-    const hex = hexNum(SIDE_HEX[side]);
-    // Member count: one diamond per place of the chosen team size + "n/size"
-    const n = this.count(side);
-    const size = this.sizes[side];
-    const full = n >= size;
-    const pip = pipLayout(size, 300);
-    const pg = this.add.graphics();
-    const pipsX = px + 330;
-    const pipsY = PANEL_Y + 42;
-    for (let k = 0; k < size; k++) {
-      const x = pipsX + k * pip.step;
-      const pts = [{ x, y: pipsY - 11 }, { x: x + 9, y: pipsY }, { x, y: pipsY + 11 }, { x: x - 9, y: pipsY }];
-      pg.fillStyle(0x120c07, 1).fillPoints(pts, true);
-      if (k < n) {
-        pg.fillStyle(hex, 1).fillPoints([{ x, y: pipsY - 8 }, { x: x + 6, y: pipsY }, { x, y: pipsY + 8 }, { x: x - 6, y: pipsY }], true);
-        pg.fillStyle(0xffffff, 0.35).fillPoints([{ x, y: pipsY - 8 }, { x: x + 6, y: pipsY }, { x, y: pipsY }], true);
-      }
-      pg.lineStyle(2, k < n ? GOLD.light : GOLD.dark, 1).strokePoints(pts, true);
-    }
-    head.add(pg);
-    head.add(serif(this, pipsX + pip.width - pip.step / 2 + 14, pipsY, `${n}/${size}`, 24, full ? '#ffe29a' : '#b9a27a').setOrigin(0, 0.5));
-
-    const layer = this.add.container(0, 0).setDepth(12);
-    this.slotLayer[side] = layer;
+    const v = this.sides[side];
+    for (const ch of v.cells.list) this.tweens.killTweensOf(ch);
+    v.cells.removeAll(true);
+    this.cellViews = this.cellViews.filter((c) => c.side !== side);
     const team = this.teams[side];
-    for (let c = 0; c < ROWS; c++) {
-      const row = side === 'party' ? ROWS - 1 - c : c;
-      for (let lane = 0; lane < LANES; lane++) {
-        const i = row * LANES + lane;
-        const cx = px + 34 + c * (SLOT_W + COL_GAP) + SLOT_W / 2;
-        const cy = GRID_TOP + lane * (SLOT_H + LANE_GAP) + SLOT_H / 2;
-        const def = team[i] ? content.classes[team[i]!] : undefined;
-        const body = this.drawSlot(side, i, cx, cy, def, side === 'enemies');
-        if (!def && full) body.setAlpha(0.4); // team is full: free cells cannot take a new champion
-        layer.add(body);
-        const hot = this.add.graphics();
-        drawQuadTile(hot, rectQuad(cx - SLOT_W / 2, cy - SLOT_H / 2, SLOT_W, SLOT_H), 'anchor', 'neutral'); // drop target: same plate as the battle floor's anchor
-        hot.setVisible(false);
-        layer.add(hot);
-        this.slotRects.push({ side, i, x: cx - SLOT_W / 2, y: cy - SLOT_H / 2, w: SLOT_W, h: SLOT_H, hot, body });
-        if (this.pop && this.pop.side === side && this.pop.cell === i) {
-          body.setScale(0.7).setAlpha(0);
-          this.tweens.add({ targets: body, scale: 1, alpha: 1, duration: 260, delay: this.pop.delay, ease: 'Back.easeOut' });
-          const flash = this.add.image(cx, cy, ensureGlow(this)).setTint(0xffe29a).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(SLOT_W * 1.2, SLOT_H * 1.5).setAlpha(0);
-          layer.add(flash);
-          this.tweens.add({ targets: flash, alpha: { from: fx(0.8), to: 0 }, duration: 300, delay: this.pop.delay + 60, onComplete: () => flash.destroy() });
-        }
+    for (let i = 0; i < CELLS; i++) {
+      const { lx, ly } = this.cellLocal(side, i);
+      const row = Math.floor(i / LANES);
+      const id = this.mp && !this.editable(side) ? '' : team[i];
+      const def = id ? content.classes[id] : undefined;
+      const body = this.drawCell(side, i, lx, ly, def, row === 0);
+      const hot = this.add.container(lx + CELL / 2, ly + CELL / 2).setVisible(false);
+      const hg = this.add.graphics();
+      hg.lineStyle(2, EMBER, 1).strokeRect(-CELL / 2 + 1, -CELL / 2 + 1, CELL - 2, CELL - 2);
+      hg.lineStyle(1, EMBER, 0.8).strokeRect(-CELL / 2 + 3, -CELL / 2 + 3, CELL - 6, CELL - 6);
+      const hglow = this.add.image(0, 0, ensureGlow(this)).setTint(EMBER).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(CELL * 1.6, CELL * 1.6).setAlpha(0.38);
+      hot.add([hglow, hg]);
+      v.cells.add([body, hot]);
+      this.cellViews.push({ side, i, lx, ly, body, hot });
+      if (this.pop && this.pop.side === side && this.pop.cell === i) {
+        body.setScale(0.8).setAlpha(0);
+        this.tweens.add({ targets: body, scale: 1, alpha: 1, duration: 420, ease: easeOut });
       }
     }
   }
 
-  /** One formation cell (centered at cx, cy): a recess when empty, a framed class plate when filled. */
-  private drawSlot(side: Side, i: number, cx: number, cy: number, def: CombatantDef | undefined, flip: boolean): Phaser.GameObjects.Container {
-    const hex = hexNum(SIDE_HEX[side]);
-    const hw = SLOT_W / 2;
-    const hh = SLOT_H / 2;
+  /** Bir dizilim yuvası (merkezli kap): boşken ince çerçeve + ortada içi boş elmas; doluyken avatar + ad + (hover'da) ×. */
+  private drawCell(side: Side, i: number, lx: number, ly: number, def: CombatantDef | undefined, front: boolean): Phaser.GameObjects.Container {
+    const h = CELL / 2;
+    const body = this.add.container(lx + h, ly + h);
     const g = this.add.graphics();
-    const body = this.add.container(cx, cy, [g]);
+    body.add(g);
     if (!def) {
-      // Empty cell: the common cell plate ('selectable', toned by side), same look as the battle floor
-      g.fillStyle(0x070403, 0.5).fillRect(-hw, -hh, SLOT_W, SLOT_H);
-      drawQuadTile(g, rectQuad(-hw, -hh, SLOT_W, SLOT_H), 'selectable', side === 'party' ? 'ally' : 'enemy');
+      g.fillStyle(INK, 0.38).fillRect(-h, -h, CELL, CELL);
+      const warm = this.add.image(0, h * 0.4, ensureGlow(this)).setTint(GOLDC).setDisplaySize(CELL * 1.1, CELL * 0.9).setAlpha(0.09);
+      const frame = this.add.graphics();
+      frame.lineStyle(1, GOLDC, front ? 0.42 : LINE.a2).strokeRect(-h + 0.5, -h + 0.5, CELL - 1, CELL - 1);
+      frame.lineStyle(1, GOLDC, 0.22).strokePoints(diamondPts(0, 0, 6.4), true);
+      body.add([warm, frame]);
+      const z = this.add.zone(0, 0, CELL, CELL).setInteractive();
+      z.on('pointerup', () => !this.drag?.moved && this.editable(side) && this.setActive(side));
+      body.add(z);
       return body;
     }
-    const col = hexNum(def.color);
-    g.fillGradientStyle(hex, hex, 0x0c0806, 0x0c0806, 0.34, 0.34, 1, 1).fillRect(-hw, -hh, SLOT_W, SLOT_H);
-    g.fillGradientStyle(0x2a2017, 0x2a2017, 0x120b07, 0x120b07, 0.78, 0.78, 0.78, 0.78).fillRect(-hw, -hh, SLOT_W, SLOT_H);
-    g.fillGradientStyle(hex, hex, hex, hex, 0.3, 0.0, 0.12, 0).fillRect(-hw + 3, -hh + 3, SLOT_W - 6, SLOT_H - 6);
-    frameRect(g, -hw, -hh, SLOT_W, SLOT_H, { bevel: 4, edge: hex === 0 ? GOLD.edge : GOLD.edge, light: GOLD.light });
-    cornerOrnaments(g, -hw, -hh, SLOT_W, SLOT_H, 3);
-    // Avatar plate
-    const ax = -hw + 10;
-    const ay = -hh + 14;
-    const as = SLOT_H - 28;
-    g.fillGradientStyle(0x1b130d, 0x1b130d, 0x0a0705, 0x0a0705, 1).fillRect(ax, ay, as, as);
-    body.add(this.add.image(ax + as / 2, ay + as / 2, ensureGlow(this)).setTint(col).setDisplaySize(as * 1.1, as * 1.1).setAlpha(fx(0.5)).setBlendMode(Phaser.BlendModes.ADD));
-    body.add(classAvatar(this, def, ax + as / 2, ay + as / 2 + 1, as - 4, flip));
-    const pf = this.add.graphics();
-    frameRect(pf, ax, ay, as, as, { bevel: 3, edge: hex, light: GOLD.light });
-    body.add(pf);
+    vGradient(g, -h, -h, CELL, CELL, 0x2e2115, [
+      [0, 0.75],
+      [1, 0.75],
+    ]);
+    g.fillGradientStyle(0x0a0705, 0x0a0705, 0x0a0705, 0x0a0705, 0, 0, 0.9, 0.9).fillRect(-h, -h, CELL, CELL);
+    const img = classAvatar(this, def, 0, 0, CELL - 4, side === 'enemies');
+    const shade = this.add.graphics();
+    vGradient(shade, -h, h - 40, CELL, 40, 0x080604, [
+      [0, 0],
+      [1, 0.92],
+    ]);
+    const name = fitWidth(this.cz(0, h - 13, def.name, 13, ON, 0.06).setOrigin(0.5), CELL - 8);
+    const x = this.cz(h - 12, -h + 13, '×', 16, ON, 0).setOrigin(0.5).setAlpha(0);
+    const frame = this.add.graphics();
+    const drawFrame = (hov: boolean) => {
+      frame.clear();
+      frame.lineStyle(2, hov ? ONC : GOLDC, hov ? 1 : 0.62).strokeRect(-h + 1, -h + 1, CELL - 2, CELL - 2);
+    };
+    drawFrame(false);
+    body.add([img, shade, name, x, frame]);
     if (isTestClass(def)) {
       const tg = this.add.graphics();
-      tg.fillStyle(0x1a0f06, 1).fillRoundedRect(ax + as - 40, ay + as - 14, 44, 18, 4);
-      tg.fillStyle(0xffb347, 1).fillRoundedRect(ax + as - 38, ay + as - 12, 40, 14, 3);
-      body.add([tg, serif(this, ax + as - 18, ay + as - 5, 'TEST', 11, '#2a1405', { spacing: 1, stroke: 0 }).setOrigin(0.5)]);
+      tg.fillStyle(0xffb347, 1).fillRect(-h + 4, -h + 4, 34, 13);
+      body.add([tg, this.cz(-h + 21, -h + 10.5, 'Test', 9, '#2a1405', 0.04).setOrigin(0.5).setShadow(0, 0, 'rgba(0,0,0,0)', 0)]);
     }
-    // Name, archetype, logo
-    const colX = ax + as + 12 + (hw * 2 - (ax + hw) - as - 12 - 8) / 2;
-    const colW = hw * 2 - (ax + hw) - as - 12 - 8;
-    body.add(fitText(serif(this, colX, -hh + 32, def.name, 22, '#f6ead0').setOrigin(0.5), colW));
-    body.add(fitText(serif(this, colX, -hh + 52, archetypeOf(def).toUpperCase(), 12, '#b9a27a', { spacing: 1, stroke: 2 }).setOrigin(0.5), colW));
-    const medal = this.add.graphics();
-    medal.fillStyle(0x120c07, 1).fillCircle(colX, hh - 26, 16);
-    medal.lineStyle(2, GOLD.edge, 1).strokeCircle(colX, hh - 26, 16);
-    body.add(medal);
-    body.add(this.add.image(colX, hh - 26, ensureIcon(this, def.logo, def.color, false, ownerOfUnit(def.id))).setDisplaySize(22, 22));
-    // Hover glow + remove mark
-    const hov = this.add.graphics().setAlpha(0);
-    drawQuadTile(hov, rectQuad(-hw, -hh, SLOT_W, SLOT_H), 'hover', side === 'party' ? 'ally' : 'enemy');
-    const x = this.add.graphics().setAlpha(0);
-    x.fillStyle(0x120c07, 0.95).fillCircle(hw - 14, -hh + 14, 11);
-    x.lineStyle(2, GOLD.edge, 1).strokeCircle(hw - 14, -hh + 14, 11);
-    x.lineStyle(3, 0xe0685a, 1).lineBetween(hw - 18, -hh + 10, hw - 10, -hh + 18).lineBetween(hw - 10, -hh + 10, hw - 18, -hh + 18);
-    body.add([hov, x]);
-    const zone = this.add.zone(0, 0, SLOT_W, SLOT_H).setInteractive({ useHandCursor: true });
+    const zone = this.add.zone(0, 0, CELL, CELL).setInteractive({ useHandCursor: this.editable(side) });
     body.add(zone);
     zone.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
       const p = worldXY(this, ptr);
-      if (this.editable(side)) this.drag = { side, from: i, sx: p.x, sy: p.y, moved: false, over: null };
+      if (this.editable(side)) this.drag = { kind: 'cell', id: def.id, side, from: i, sx: p.x, sy: p.y, moved: false, over: null };
     });
     zone.on('pointerover', () => {
-      this.tweens.add({ targets: [hov, x], alpha: 1, duration: 120 });
-      if (!this.drag?.moved && !this.cardDrag?.moved) this.showTip(`class:${def.id}`, this.classTip(def), { x: cx - hw, y: cy - hh, w: SLOT_W, h: SLOT_H }, 'below');
+      if (this.drag?.moved) return;
+      drawFrame(true);
+      this.tweens.add({ targets: x, alpha: 0.9, duration: 180 });
+      this.zoomImg(img, 1.06, CELL - 4);
+      this.showInfo(def.id);
     });
     zone.on('pointerout', () => {
-      this.tweens.add({ targets: [hov, x], alpha: 0, duration: 160 });
-      this.hideTip();
+      drawFrame(false);
+      this.tweens.add({ targets: x, alpha: 0, duration: 180 });
+      this.zoomImg(img, 1, CELL - 4);
     });
     return body;
   }
 
-  // --- Tooltips ---
+  // --- Layout (geniş ekran) ---
 
-  private showTip(key: string, content: TipContent, anchor: { x: number; y: number; w: number; h: number }, prefer: 'above' | 'below'): void {
+  private layout(): void {
+    if (!this.built) return;
+    this.hideTip(true);
+    this.layoutBackground();
+    this.menuLink?.setX(stageView.left + 48);
+    for (const side of SIDES) this.sides[side].root.setX(this.sideX(side));
+    this.startUi?.root.setX(stageView.right - START.right - (this.startUi?.w ?? 0) / 2);
+    this.renderInfo();
+    if (!this.drag) {
+      const entering = this.stripGroups.some((g) => g.getData('entering'));
+      if (!entering) this.buildStrip();
+    }
+  }
+
+  // --- Entrance animation (taslağın .fu / .fi geçişleri) ---
+
+  private playEntrance(): void {
+    const fu = (o: Phaser.GameObjects.Container, delay: number, alpha = 1) => {
+      const y = o.y;
+      o.setData('entering', true);
+      o.setAlpha(0).setY(y + 24);
+      this.tweens.add({ targets: o, alpha, y, duration: 700, delay, ease: easeOut, onComplete: () => o.setData('entering', false) });
+    };
+    const fi = (o: Phaser.GameObjects.Container | Phaser.GameObjects.Graphics, delay: number) => {
+      o.setAlpha(0);
+      this.tweens.add({ targets: o, alpha: 1, duration: 900, delay, ease: 'Sine.easeInOut' });
+    };
+    if (this.titleRoot) fi(this.titleRoot, 0);
+    if (this.menuLink) fi(this.menuLink, 100);
+    fu(this.sides.party.root, 150, this.active === 'party' ? 1 : 0.78);
+    fu(this.sides.enemies.root, 250, this.active === 'enemies' ? 1 : 0.78);
+    if (this.center) fu(this.center, 300);
+    if (this.startUi) fu(this.startUi.root, 300);
+    if (this.infoRoot) fi(this.infoRoot, 300);
+    if (this.infoLines) fi(this.infoLines, 300);
+    this.stripGroups.forEach((g, gi) => fu(g, 350 + gi * 70));
+  }
+
+  // --- Tooltips (taslaktaki #tip) ---
+
+  private statTip(def: CombatantDef, kind: (typeof ATTRS)[number]): TipSpec {
+    const info = describeStat(kind, def.stats, content.formulas);
+    return {
+      icon: ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false),
+      iconSize: 40,
+      title: info.title,
+      titleHex: info.primary ? PRI : STAT_COLOR[kind],
+      badge: info.bonus ? `Primary · ${info.bonus.name}` : undefined,
+      lines: info.lines.map((l): [string] => [l]),
+    };
+  }
+
+  private skillTip(def: CombatantDef, skillId: string): TipSpec {
+    const skill = content.skills[skillId];
+    if (!skill) return { title: skillId, lines: [] };
+    const info = describeSkill(skill, def.stats, content.formulas, content.summons, { statuses: content.statuses, grounds: content.grounds });
+    const kc = (k: (typeof info.kinds)[number]): string => (k === 'shield' ? colors.shield : k === 'magicShield' ? colors.magicShield : k ? (colors.element as Record<string, string>)[k] ?? TXT : TXT);
+    const lines: Array<[string, string?]> = info.lines.map((l, i) => [l, kc(info.kinds[i])]);
+    if (info.initialCooldown) lines.push([info.initialCooldown, MUTED]);
+    const shape = skillMiniGrid(skill, content.formulas.formation);
+    return { icon: ensureSkillIcon(this, skill), title: info.name, badge: info.targetBadge, meta: `Cost ${info.cost}   ·   Cooldown ${info.cooldown}`, shape, lines };
+  }
+
+  private classTip(def: CombatantDef): TipSpec {
+    const f = content.formulas;
+    const s = def.stats;
+    const lines: Array<[string, string?]> = [];
+    if (isTestClass(def)) lines.push(['Test class: left out of random teams, add it by hand', '#ffb347']);
+    if (def.primary) {
+      const b = primaryBonusInfo(def.primary, f, true);
+      lines.push([`Primary ${def.primary.toUpperCase()} - ${b.name}: ${b.detail}`, PRIMARY_GOLD]);
+    }
+    lines.push([`HP ${s.hp}   ·   MP ${s.mp}   ·   SPD ${s.spd}`]);
+    lines.push([`Armor ${s.armor}${s.magicArmor > 0 ? `   ·   Magic armor ${s.magicArmor}` : ''}   ·   Crit ${(s.critChance * 100).toFixed(1).replace(/\.0$/, '')}% x${s.critMult.toFixed(2)}`]);
+    if (def.passive) lines.push([`${def.passive.name}: ${describePassive(def.passive, s, f)}`, NOTE]);
+    return { icon: ensureIcon(this, def.logo, def.color, false, ownerOfUnit(def.id)), title: def.name, badge: `${archetypeOf(def)} · ${rangeOf(def)}`, lines };
+  }
+
+  /** Zarif tooltip: koyu degrade kutu, ince altın çerçeve, Cinzel başlık + EB Garamond satırlar; yukarı kayarak belirir. */
+  private buildTip(spec: TipSpec): { container: Phaser.GameObjects.Container; width: number; height: number } {
+    const w = spec.width ?? 460;
+    const px = 20;
+    const items: Phaser.GameObjects.GameObject[] = [];
+    let y = 18;
+    const iconS = spec.icon ? (spec.iconSize ?? 52) : 0;
+    let hx = px;
+    if (spec.icon) {
+      items.push(this.add.image(px + iconS / 2, y + iconS / 2, spec.icon).setDisplaySize(iconS, iconS));
+      const b = this.add.graphics();
+      b.lineStyle(1, GOLDC, LINE.a2).strokeRect(px, y, iconS, iconS);
+      items.push(b);
+      hx += iconS + 14;
+    }
+    const shapeSz = spec.shape ? miniShapeSize(spec.shape) : null;
+    const textW = w - hx - px - (shapeSz ? shapeSz.w + 10 : 0);
+    const title = fitWidth(this.cz(hx, 0, spec.title, 24, spec.titleHex ?? ON, 0.05).setOrigin(0, 0), textW);
+    const badge = spec.badge ? this.gar(hx, 0, spec.badge, 18, MUTED).setOrigin(0, 0) : null;
+    const headH = title.displayHeight + (badge ? badge.height : 0);
+    const blockH = Math.max(iconS, headH);
+    title.y = y + (blockH - headH) / 2;
+    if (badge) {
+      badge.y = title.y + title.displayHeight - 2;
+      if (badge.width > textW) badge.setScale(textW / badge.width);
+      items.push(badge);
+    }
+    items.push(title);
+    if (spec.shape && shapeSz) items.push(drawMiniShape(this, w - px - shapeSz.w, y + (blockH - shapeSz.h) / 2, spec.shape));
+    y += Math.max(blockH, shapeSz?.h ?? 0) + 8;
+    const rule = this.add.graphics();
+    items.push(rule);
+    if (spec.meta) {
+      rule.lineStyle(1, GOLDC, LINE.a1).lineBetween(px, y, w - px, y);
+      const m = this.cz(px, y + 6, spec.meta, 14, MUTED, 0.1).setOrigin(0, 0);
+      items.push(m);
+      y += 6 + m.height + 8;
+    } else if (spec.lines.length) {
+      rule.lineStyle(1, GOLDC, LINE.a1).lineBetween(px, y, w - px, y);
+      y += 8;
+    }
+    for (const [text, hex] of spec.lines) {
+      const t = this.add
+        .text(px, y, text, { fontFamily: BODY_FONT, fontSize: '19px', color: hex ?? TXT, wordWrap: { width: w - px * 2, useAdvancedWrap: true }, lineSpacing: 1 })
+        .setResolution(2);
+      items.push(t);
+      y += t.height + 3;
+    }
+    const h = y + 14;
+    const bg = this.add.graphics();
+    bg.fillStyle(0x000000, 0.35).fillRect(4, 14, w, h); // alt gölge
+    bg.lineStyle(3, 0x080604, 0.7).strokeRect(-1.5, -1.5, w + 3, h + 3);
+    bg.fillGradientStyle(0x1e160e, 0x1e160e, 0x0c0906, 0x0c0906, 0.97).fillRect(0, 0, w, h);
+    bg.lineStyle(1, GOLDC, 0.42).strokeRect(0.5, 0.5, w - 1, h - 1);
+    return { container: this.add.container(0, 0, [bg, ...items]).setDepth(5000), width: w, height: h };
+  }
+
+  private showTip(key: string, spec: TipSpec, anchor: { x: number; y: number; w: number; h: number }): void {
     this.tipTimer?.remove();
     if (this.tip?.key === key) return;
     this.hideTip(true);
-    const t = buildTip(this, content);
-    placeTip(t, anchor, prefer, W, H);
-    t.container.setAlpha(0);
-    this.tweens.add({ targets: t.container, alpha: 1, duration: 110 });
+    const t = this.buildTip(spec);
+    let ty = anchor.y - t.height - 14;
+    if (ty < 50) ty = anchor.y + anchor.h + 14;
+    const tx = Math.max(stageView.left + 16, Math.min(stageView.right - t.width - 16, anchor.x + anchor.w / 2 - t.width / 2));
+    t.container.setPosition(Math.round(tx), Math.round(ty) + 6).setAlpha(0);
+    this.tweens.add({ targets: t.container, alpha: 1, y: Math.round(ty), duration: 160, ease: easeOut });
     this.tip = { key, container: t.container };
   }
 
@@ -1118,36 +1484,54 @@ export class TeamSelectScene extends Phaser.Scene {
     else this.tipTimer = this.time.delayedCall(70, kill);
   }
 
-  // --- Drag: moving characters inside a team ---
+  // --- Drag & drop (raf -> yuva; yuva -> yuva; yuva -> diğer takım) ---
 
-  private slotAt(x: number, y: number, side?: Side): SlotRect | undefined {
-    return this.slotRects.find((s) => (!side || s.side === side) && x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h);
+  private slotAt(x: number, y: number): CellView | undefined {
+    return this.cellViews.find((c) => {
+      const sx = this.sideX(c.side) + c.lx;
+      const sy = MID_TOP + c.ly;
+      return x >= sx && x <= sx + CELL && y >= sy && y <= sy + CELL && this.editable(c.side);
+    });
   }
 
-  private makeGhost(def: CombatantDef, side: Side | null, p: { x: number; y: number }): Phaser.GameObjects.Container {
+  /** Taraf kutusu (yuvaya değil panelin boş yerine bırakma = o takıma otomatik yerleştir). */
+  private sideAt(x: number, y: number): Side | null {
+    for (const side of SIDES) {
+      const sx = this.sideX(side);
+      if (x >= sx && x <= sx + SIDE_W && y >= MID_TOP && y <= MID_TOP + SIDE_H && this.editable(side)) return side;
+    }
+    return null;
+  }
+
+  private makeGhost(def: CombatantDef, flip: boolean, p: { x: number; y: number }): Phaser.GameObjects.Container {
+    const s = 112;
+    const glow = this.add.image(0, 0, ensureGlow(this)).setTint(EMBER).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(s * 1.7, s * 1.7).setAlpha(0.4);
     const g = this.add.graphics();
-    g.fillStyle(0x120c07, 0.95).fillRect(-72, -50, 144, 100);
-    frameRect(g, -72, -50, 144, 100, { bevel: 3 });
-    const head = classAvatar(this, def, 0, -8, 68, side === 'enemies');
-    const name = fitText(serif(this, 0, 36, def.name, 20).setOrigin(0.5), 130);
-    return this.add.container(p.x, p.y, [g, head, name]).setDepth(6000).setAlpha(0.92).setScale(1.05);
+    g.fillStyle(0x000000, 0.45).fillRect(-s / 2 + 4, -s / 2 + 12, s, s);
+    g.fillStyle(0x120c08, 1).fillRect(-s / 2, -s / 2, s, s);
+    const img = classAvatar(this, def, 0, 0, s, flip);
+    const f = this.add.graphics();
+    f.lineStyle(2, ONC, 1).strokeRect(-s / 2, -s / 2, s, s);
+    return this.add.container(p.x, p.y, [glow, g, img, f]).setDepth(6000);
   }
 
   private onDragMove(p: { x: number; y: number }): void {
     const d = this.drag;
     if (!d) return;
-    if (!d.moved && Math.hypot(p.x - d.sx, p.y - d.sy) > 14) {
+    if (!d.moved && Math.hypot(p.x - d.sx, p.y - d.sy) > 8) {
       d.moved = true;
       this.hideTip(true);
-      d.ghost = this.makeGhost(content.classes[this.teams[d.side][d.from]!]!, d.side, p);
-      this.slotRects.find((s) => s.side === d.side && s.i === d.from)?.body.setAlpha(0.3);
+      const def = content.classes[d.id]!;
+      d.ghost = this.makeGhost(def, d.kind === 'cell' && d.side === 'enemies', p);
+      if (d.kind === 'cell') this.cellViews.find((c) => c.side === d.side && c.i === d.from)?.body.setAlpha(0.3);
     }
     if (!d.moved) return;
     d.ghost?.setPosition(p.x, p.y);
-    const over = this.slotAt(p.x, p.y, d.side)?.i ?? null;
-    if (over !== d.over) {
+    const s = this.slotAt(p.x, p.y);
+    const over = s && !(d.kind === 'cell' && s.side === d.side && s.i === d.from) ? { side: s.side, i: s.i } : null;
+    if (over?.side !== d.over?.side || over?.i !== d.over?.i) {
       d.over = over;
-      for (const s of this.slotRects) if (s.side === d.side) s.hot.setVisible(over !== null && s.i === over && s.i !== d.from);
+      for (const c of this.cellViews) c.hot.setVisible(!!over && c.side === over.side && c.i === over.i);
     }
   }
 
@@ -1156,82 +1540,50 @@ export class TeamSelectScene extends Phaser.Scene {
     if (!d) return;
     this.drag = undefined;
     d.ghost?.destroy();
-    const team = this.teams[d.side];
+    for (const c of this.cellViews) c.hot.setVisible(false);
     if (!d.moved) {
-      if (!outside) {
-        team[d.from] = ''; // tap = remove
+      if (outside) return;
+      if (d.kind === 'class') {
+        // tıkla = etkin takıma ekle
+        if (!this.addClass(d.id)) this.refresh();
+      } else if (d.side !== undefined && d.from !== undefined) {
+        // tıkla = çıkar
+        this.teams[d.side][d.from] = '';
         this.active = d.side;
+        this.refresh();
       }
-    } else {
-      const to = outside ? null : (this.slotAt(p.x, p.y, d.side)?.i ?? null);
-      if (to !== null && to !== d.from) {
-        [team[d.from], team[to]] = [team[to]!, team[d.from]!]; // move into an empty cell or swap
-        this.pop = { side: d.side, cell: to, delay: 0 };
-      }
+      return;
+    }
+    if (outside) return this.refresh();
+    const slot = this.slotAt(p.x, p.y);
+    const side = slot ? slot.side : this.sideAt(p.x, p.y);
+    if (d.kind === 'class') {
+      if (slot) this.addClass(d.id, { side: slot.side, i: slot.i });
+      else if (side) this.addClass(d.id, { side, i: null });
+      else this.refresh();
+      return;
+    }
+    if (d.side === undefined || d.from === undefined) return this.refresh();
+    const from = { side: d.side, i: d.from };
+    if (slot) {
+      const r = moveMember(this.teams, this.sizes, from, { side: slot.side, i: slot.i });
+      if (r.ok) {
+        this.teams = r.teams;
+        this.pop = { side: slot.side, cell: slot.i };
+      } else if (r.reason === 'full') this.toast(`${NAME[slot.side]} team is full`);
+    } else if (side && side !== d.side) {
+      const r = moveToSide(this.teams, this.sizes, from, side);
+      if (r.ok) {
+        this.teams = r.teams;
+        this.pop = { side, cell: r.cell };
+      } else if (r.reason === 'full') this.toast(`${NAME[side]} team is full`);
     }
     this.refresh();
   }
+}
 
-  // --- Drag: from a class card onto a slot ---
-
-  private onCardDragMove(p: { x: number; y: number }): void {
-    const d = this.cardDrag;
-    if (!d) return;
-    if (!d.moved && Math.hypot(p.x - d.sx, p.y - d.sy) > 14) {
-      d.moved = true;
-      this.hideTip(true);
-      d.ghost = this.makeGhost(content.classes[d.id]!, null, p);
-    }
-    if (!d.moved) return;
-    d.ghost?.setPosition(p.x, p.y);
-    const s = this.slotAt(p.x, p.y);
-    const over = s ? { side: s.side, i: s.i } : null;
-    if (over?.side !== d.over?.side || over?.i !== d.over?.i) {
-      d.over = over;
-      for (const r of this.slotRects) r.hot.setVisible(!!over && r.side === over.side && r.i === over.i);
-    }
-  }
-
-  private onCardDragEnd(p: { x: number; y: number }, outside: boolean): void {
-    const d = this.cardDrag;
-    if (!d) return;
-    this.cardDrag = undefined;
-    d.ghost?.destroy();
-    const card = this.cards.get(d.id);
-    if (card) this.tweens.add({ targets: card.outer, scale: card.scale, duration: 100 });
-    if (!d.moved) {
-      if (!outside) this.addClass(d.id);
-      return;
-    }
-    for (const r of this.slotRects) r.hot.setVisible(false);
-    if (outside) return;
-    const s = this.slotAt(p.x, p.y);
-    if (s) this.addClass(d.id, { side: s.side, i: s.i });
-  }
-
-  /** A copy of the card's avatar flies into the team slot it was added to. */
-  private flyAvatar(card: CardView, side: Side, cell: number): void {
-    const row = Math.floor(cell / LANES);
-    const lane = cell % LANES;
-    const c = side === 'party' ? ROWS - 1 - row : row;
-    const tx = PANEL_X[side] + 34 + c * (SLOT_W + COL_GAP) + 10 + (SLOT_H - 28) / 2;
-    const ty = GRID_TOP + lane * (SLOT_H + LANE_GAP) + SLOT_H / 2;
-    const fromX = card.outer.x - (CARD.w / 2 - card.avatarAt.x) * card.scale;
-    const fy = card.outer.y - (CARD.h / 2 - card.avatarAt.y) * card.scale;
-    const img = classAvatar(this, card.def, fromX, fy, 96 * card.scale, side === 'enemies').setDepth(5500);
-    const trail = this.add.image(fromX, fy, ensureGlow(this)).setTint(hexNum(card.def.color)).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(110, 110).setDepth(5499).setAlpha(fx(0.7));
-    const to = { x: tx, y: ty };
-    this.tweens.add({ targets: [img, trail], x: to.x, y: to.y, duration: 240, ease: 'Cubic.easeInOut' });
-    this.tweens.add({ targets: img, scale: img.scale * 0.86, duration: 240 });
-    this.tweens.add({
-      targets: [img, trail],
-      alpha: 0,
-      delay: 200,
-      duration: 80,
-      onComplete: () => {
-        img.destroy();
-        trail.destroy();
-      },
-    });
-  }
+/** Yazı `maxW`'dan genişse oranı koruyarak küçültür. */
+function fitWidth(t: Phaser.GameObjects.Text, maxW: number): Phaser.GameObjects.Text {
+  if (t.width > maxW) t.setScale(maxW / t.width);
+  return t;
 }

@@ -6,7 +6,7 @@
  * avuçtaki mavi çekirdekten doğar, altın mühür geometrisiyle biçimlenir. Ateşlerin çekirdeği mavi-beyaz (en sıcak gaz alevi).
  *
  * Bu class'ın v1 ikon adları (ICONS anahtarları): wizhat, echo, fireball, blizzard, manabarrier, meteor
- * SPRITES: v2 efektlerinin (vfx.ts) ek çizimleri (k.v2Sprite(c, 'ad', renk, x, y, boyut)).
+ * SPRITES: boş (efekt dokuları vfx.ts'de gürültüyle üretilir).
  */
 import type { V2SpriteEntry } from '../types';
 import { crystal, sparkle, type PxGrid } from '../../pixel-art';
@@ -37,25 +37,6 @@ function cometShape(g: PxGrid, hx: number, hy: number, tx: number, ty: number, r
   const s2 = side(-1);
   for (let i = s2.length - 2; i >= 0; i -= 2) pts.push(s2[i]!, s2[i + 1]!);
   g.poly(pts, t);
-}
-
-/** Meteor kayası: düzensiz kaya, açık üst-sol yüz, erimiş çatlak ağı (zikzak), gidiş yönünde (sağ-alt) kızgın kenar. */
-function meteorRock(g: PxGrid, crack: string, hot: string, edge: string): void {
-  g.poly([8, 6, 17, 3, 25, 6, 29.5, 14, 28, 23, 21, 29, 11, 28.5, 4, 22, 3, 12], 'k');
-  g.poly([9, 7.5, 17, 4.6, 24.5, 7.5, 28, 14.5, 26.5, 22, 20.5, 27.2, 11.5, 27, 5.5, 21.5, 4.6, 12.5], 'd');
-  g.poly([9, 7.5, 17, 4.6, 21, 6.5, 15, 12, 8, 14], 'm');
-  g.disc(11, 9.5, 1.6, 'l');
-  // çatlak ağı
-  for (const [a, b, c, d] of [
-    [12, 13, 15.5, 16.5], [15.5, 16.5, 14, 20.5], [14, 20.5, 10, 22.5], [15.5, 16.5, 20, 15], [20, 15, 23.5, 17.5],
-    [23.5, 17.5, 22, 22.5], [14, 20.5, 17.5, 24.5], [20, 15, 21, 10.5], [7, 17, 10, 18.5],
-  ] as Array<[number, number, number, number]>) g.line(a, b, c, d, crack, 0.9);
-  g.disc(15.5, 16.5, 1.2, hot);
-  g.disc(23.5, 17.5, 0.9, hot);
-  // gidiş yönündeki kızgın kenar
-  g.line(28.5, 15, 27.5, 22.5, edge, 1.2);
-  g.line(27.5, 22.5, 21, 28.3, edge, 1.2);
-  g.line(21, 28.3, 13, 28, edge, 1);
 }
 
 /** Mavi avuç alevi (mage'in imzası): koyu mavi dış, mavi, buz mavisi, beyaz çekirdek. */
@@ -228,108 +209,8 @@ export const ICONS: Record<string, V2SpriteEntry> = {
 
 // ------------------------------------------------------------------------------------------------ efekt sprite'ları
 
-export const SPRITES: Record<string, V2SpriteEntry> = {
-  /** Ateş okunun gövdesi (sağa bakar): mavi-beyaz çekirdek, turuncu manto, kısa alev kuyruğu. */
-  bolt: { size: 128, draw: (g) => {
-    cometShape(g, 23, 16, 2, 16, 8, 'r', 0.25);
-    cometShape(g, 23.4, 16, 6, 16, 6.8, 'f', 0.2);
-    cometShape(g, 23.8, 16, 11, 16, 5.2, 'y', 0.1);
-    g.disc(24.2, 16, 3.8, 'c');
-    g.disc(25, 15.6, 2.2, 'w');
-  } },
-  /** Aynı, alev dilleri farklı (iki kare titreme). */
-  bolt2: { size: 128, draw: (g) => {
-    cometShape(g, 23, 16, 1, 17, 8.3, 'r', -0.25);
-    cometShape(g, 23.4, 16, 5, 15, 6.6, 'f', -0.2);
-    cometShape(g, 23.8, 16, 10, 16.5, 5.4, 'y', -0.1);
-    g.disc(24.2, 16, 3.9, 'c');
-    g.disc(25, 15.4, 2.2, 'w');
-  } },
-  /** Alev dili (aşağıdan yukarı; origin altta kullanılır). */
-  tongue: { size: 96, draw: (g) => {
-    g.poly([16, 1, 22, 12, 23, 22, 19, 31, 13, 31, 9, 22, 11, 13, 14, 9], 'r');
-    g.poly([16.5, 7, 20.5, 15, 20.5, 23, 18, 31, 14, 31, 11.5, 23, 13, 15], 'f');
-    g.poly([16.5, 15, 18.8, 21, 18, 31, 14.5, 31, 13.8, 22], 'y');
-    g.poly([16.2, 22, 17.4, 26, 16.8, 31, 15.2, 31, 15, 26], 'w');
-  } },
-  /** Buz sarkıtı (aşağı bakan sivri kristal). */
-  icicle: { size: 128, draw: (g) => {
-    g.poly([11, 1, 21, 1, 22.5, 6, 16, 31, 9.5, 6], 'u');
-    g.poly([11, 1, 16, 1, 16, 31, 9.5, 6], 'c');
-    g.line(13, 3, 15, 22, 'w', 0.75);
-    g.poly([18.5, 2, 21, 2, 21.5, 5, 19, 13], 'U');
-  } },
-  /** Buz kırığı (küçük yassı parça). */
-  chip: { size: 64, draw: (g) => {
-    g.poly([4, 14, 14, 4, 28, 10, 24, 22, 10, 27], 'c');
-    g.poly([14, 4, 28, 10, 18, 15], 'w');
-    g.poly([10, 27, 24, 22, 18, 15], 'u');
-  } },
-  /** Kar tanesi (küçük, altı kollu). */
-  flake: { size: 64, draw: (g) => {
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * Math.PI;
-      g.line(16 - Math.cos(a) * 13, 16 - Math.sin(a) * 13, 16 + Math.cos(a) * 13, 16 + Math.sin(a) * 13, 'w', 3);
-    }
-    g.disc(16, 16, 4, 'c');
-  } },
-  /** Meteor kayası (erimiş çatlak ağı, sağ-alt = gidiş yönü kızgın kenar), iki kare: çatlak kızgınlığı farklı. */
-  rock: { size: 192, draw: (g) => meteorRock(g, 'f', 'y', 'R') },
-  rock2: { size: 192, draw: (g) => meteorRock(g, 'y', 'w', 'f') },
-  /** Meteorun alev mantosu (sağa bakan uzun kuyruklu alev; kaya önüne konur), iki kare titreme. */
-  mantle: { size: 256, draw: (g) => {
-    cometShape(g, 24, 16, 0.5, 15, 7.6, 'R', 0.22);
-    cometShape(g, 24.4, 16, 4, 16.5, 6.6, 'r', 0.25);
-    cometShape(g, 24.8, 16, 9, 15.5, 5.6, 'f', 0.18);
-    cometShape(g, 25.2, 16, 14, 16, 4.4, 'y', 0.1);
-  } },
-  mantle2: { size: 256, draw: (g) => {
-    cometShape(g, 24, 16, 1.5, 17, 7.8, 'R', -0.22);
-    cometShape(g, 24.4, 16, 3, 15, 6.4, 'r', -0.25);
-    cometShape(g, 24.8, 16, 8, 16.8, 5.8, 'f', -0.18);
-    cometShape(g, 25.2, 16, 13, 15.6, 4.3, 'y', -0.1);
-  } },
-  /** Kaya parçası (enkaz). */
-  debris: { size: 64, draw: (g) => {
-    g.poly([6, 10, 16, 4, 27, 9, 26, 22, 14, 28, 5, 21], 'd');
-    g.poly([6, 10, 16, 4, 18, 14, 9, 18], 'm');
-    g.line(14, 16, 22, 20, 'f', 1.5);
-  } },
-  /** Altın mühür halkası (efekt; kontursuz, ince): daire, iç daire, 8 rün çentiği ve çapraz baklavalar. */
-  sigilring: { size: 192, outline: false, draw: (g) => {
-    g.ring(16, 16, 15.5, 'y', 0.6);
-    g.ring(16, 16, 12.6, 'y', 0.35);
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      const x = 16 + Math.cos(a) * 14.05;
-      const y = 16 + Math.sin(a) * 14.05;
-      if (i % 2) g.poly([x - 0.9, y, x, y - 0.9, x + 0.9, y, x, y + 0.9], 'y');
-      else g.line(16 + Math.cos(a) * 12.6, 16 + Math.sin(a) * 12.6, 16 + Math.cos(a) * 15.5, 16 + Math.sin(a) * 15.5, 'y', 0.35);
-    }
-    g.line(16, 4, 16, 28, 'y', 0.3);
-    g.ring(16, 16, 5, 'y', 0.35);
-  } },
-  /** Kubbe fasetinin tek altıgeni (Mana Barrier'ı oluşturan cam parçaları). */
-  facet: { size: 64, draw: (g) => {
-    const p: number[] = [];
-    for (let i = 0; i < 6; i++) p.push(16 + Math.cos((i / 6) * Math.PI * 2) * 14, 16 + Math.sin((i / 6) * Math.PI * 2) * 14);
-    g.poly(p, 'u');
-    const q: number[] = [];
-    for (let i = 0; i < 6; i++) q.push(16 + Math.cos((i / 6) * Math.PI * 2) * 10, 16 + Math.sin((i / 6) * Math.PI * 2) * 10);
-    g.poly(q, 'c');
-    g.line(8, 10, 14, 6, 'w', 2);
-  } },
-  /** Mana damlası (mavi). */
-  manadrop: { size: 64, draw: (g) => {
-    g.poly([16, 2, 24, 17, 16, 30, 8, 17], 'u');
-    g.disc(16, 20, 8, 'u');
-    g.disc(16, 21, 5, 'c');
-    g.disc(13.5, 18, 2, 'w');
-  } },
-  /** Kara lanet kırığı (dispel ile kopan debuff). */
-  hexshard: { size: 64, draw: (g) => {
-    g.poly([6, 4, 26, 10, 20, 28, 4, 20], 'P');
-    g.poly([6, 4, 26, 10, 14, 14], 'p');
-    g.line(10, 18, 18, 12, 'o', 2);
-  } },
-};
+/**
+ * v2 efektlerinin ek çizimleri. 2026-10-09 gerçekçi yeniden tasarımla Mage efektleri dokularını vfx.ts içinde gürültüyle üretir
+ * (ateş/alev/duman/kaya/mühür/kalkan); eski çizgi film sprite'ları (bolt, mantle, rock, tongue, icicle, flake, facet...) kaldırıldı.
+ */
+export const SPRITES: Record<string, V2SpriteEntry> = {};

@@ -7,3 +7,5 @@ export * from './seed';
 export * from './state';
 export * from './encounters';
 export * from './save';
+export * from './power';
+export * from './gear';

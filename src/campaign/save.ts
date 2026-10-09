@@ -1,7 +1,8 @@
 import { CONFIG, MAPS } from './data';
 import { findNode } from './graph';
 import { activeHeroes, stopNumber } from './state';
-import type { CampaignMode, CampaignState, Difficulty } from './types';
+import { emptyEquipment, SLOT_IDS, type ItemInstance } from '../progression/items';
+import type { CampaignMode, CampaignState, Difficulty, Hero } from './types';
 
 /**
  * Sefer kaydı (campaign.md 5.2-5.3 + madde 256): tarayıcıda tek anahtar, sürümlü JSON. Depolama dışarıdan verilir (tarayıcıda localStorage, testte bellek).
@@ -14,7 +15,8 @@ import type { CampaignMode, CampaignState, Difficulty } from './types';
  */
 
 export const SAVE_KEY = 'protomedi.campaign.v1';
-export const SAVE_VERSION = 2;
+/** Kayıt dosyası sürümü. 3 (madde 278): sefer durumu v2 (kahraman level/XP/ekipman, torba, altın); 2 ve 1 okunurken taşınır. */
+export const SAVE_VERSION = 3;
 export const SLOT_COUNT = CONFIG.rules.slots;
 
 export interface KV {
@@ -70,10 +72,48 @@ const DIFFS: Difficulty[] = ['easy', 'medium', 'hard'];
 const maxFor = (mode: CampaignMode) => (mode === 'ironman' ? CONFIG.rules.maxSaves.ironman : CONFIG.rules.maxSaves.normal);
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 
-/** Eski kayıtlarda olmayan alanları tamamlar (zorluk: varsayılan, yuva). Geçersizse null. */
+const isItem = (it: unknown): it is ItemInstance => !!it && typeof it === 'object' && typeof (it as ItemInstance).uid === 'string' && typeof (it as ItemInstance).id === 'string';
+
+/**
+ * Sefer durumu v1 -> v2 (madde 278): kahramana level 1, XP 0, boş 6 yuva; sefere boş torba, 0 altın. v2'de eksik/bozuk alanlar da aynı
+ * varsayılanlarla tamamlanır (bozuk item girdisi atılır). Diğer her şey aynen kalır.
+ */
+function upgradeState(s: CampaignState): void {
+  const raw = s as unknown as Record<string, unknown>;
+  if (raw.version === 1) raw.version = 2;
+  if (Array.isArray(s.roster))
+    s.roster = s.roster.map((h) => {
+      if (!h || typeof h !== 'object') return h;
+      const eq = emptyEquipment();
+      const old = (h as Partial<Hero>).equipment as Record<string, unknown> | undefined;
+      if (old && typeof old === 'object') for (const k of SLOT_IDS) if (isItem(old[k])) eq[k] = old[k] as ItemInstance;
+      return {
+        ...h,
+        level: Number.isInteger(h.level) && h.level >= 1 ? h.level : 1,
+        xp: typeof h.xp === 'number' && h.xp >= 0 ? h.xp : 0,
+        equipment: eq,
+      };
+    });
+  s.inventory = Array.isArray(s.inventory) ? s.inventory.filter(isItem) : [];
+  // Bekleyen teslim: bozuksa atılır (item'ler zaten torbada; yalnızca gösterilecek an kaybolur)
+  const ho = s.pendingHandover as unknown as Record<string, unknown> | undefined;
+  if (ho !== undefined && !(ho && typeof ho.node === 'string' && Array.isArray(ho.items) && ho.items.every((u) => typeof u === 'string') && Array.isArray(ho.from)))
+    delete (s as { pendingHandover?: unknown }).pendingHandover;
+  s.gold = typeof s.gold === 'number' && Number.isFinite(s.gold) && s.gold >= 0 ? s.gold : 0;
+  // uid çakışmasın: sıradaki numara mevcut en büyük 'i<n>'den büyük
+  const equipped = Array.isArray(s.roster) ? s.roster.flatMap((h) => (h?.equipment ? SLOT_IDS.map((k) => h.equipment[k]) : [])) : [];
+  const used = [...s.inventory, ...equipped].filter(isItem).map((it) => Number(/^i(\d+)$/.exec(it.uid)?.[1] ?? 0));
+  const next = Math.max(0, ...used) + 1;
+  s.nextItemId = Number.isInteger(s.nextItemId) && s.nextItemId >= next ? s.nextItemId : next;
+}
+
+/** Eski kayıtlarda olmayan alanları tamamlar (zorluk: varsayılan, yuva; v1 -> v2: kahraman kaydı, torba, altın). Geçersizse null. */
 export function normalizeState(x: unknown, slot?: number): CampaignState | null {
   if (!x || typeof x !== 'object') return null;
   const s = { ...(x as CampaignState) };
+  const v = (s as unknown as { version: unknown }).version;
+  if (v !== 1 && v !== 2) return null;
+  upgradeState(s);
   if (!DIFFS.includes(s.difficulty)) s.difficulty = CONFIG.defaultDifficulty;
   if (slot !== undefined) s.slot = slot;
   else if (typeof s.slot !== 'number' || s.slot < 0 || s.slot >= SLOT_COUNT) s.slot = 0;
@@ -84,7 +124,7 @@ export function normalizeState(x: unknown, slot?: number): CampaignState | null 
 export function isValidState(x: unknown): x is CampaignState {
   if (!x || typeof x !== 'object') return false;
   const s = x as Partial<CampaignState>;
-  if (s.version !== 1 || typeof s.seed !== 'number' || typeof s.mapId !== 'string' || typeof s.at !== 'string') return false;
+  if (s.version !== 2 || typeof s.seed !== 'number' || typeof s.mapId !== 'string' || typeof s.at !== 'string') return false;
   if (s.mode !== 'normal' && s.mode !== 'ironman') return false;
   if (!DIFFS.includes(s.difficulty as Difficulty) || typeof s.slot !== 'number') return false;
   const map = MAPS[s.mapId];
@@ -92,6 +132,8 @@ export function isValidState(x: unknown): x is CampaignState {
   if (!Array.isArray(s.path) || !s.path.every((id) => typeof id === 'string' && findNode(map, id))) return false;
   if (!Array.isArray(s.done) || !Array.isArray(s.tipsSeen) || !Array.isArray(s.active) || !Array.isArray(s.roster)) return false;
   if (!s.roster.every((h) => h && typeof h.id === 'string' && typeof h.class === 'string' && typeof h.hpRatio === 'number')) return false;
+  if (!s.roster.every((h) => typeof h.level === 'number' && typeof h.xp === 'number' && !!h.equipment && SLOT_IDS.every((k) => h.equipment[k] === null || isItem(h.equipment[k])))) return false;
+  if (!Array.isArray(s.inventory) || !s.inventory.every(isItem) || typeof s.gold !== 'number' || typeof s.nextItemId !== 'number') return false;
   if (!s.stats || typeof s.stats.victories !== 'number' || typeof s.nextHeroId !== 'number' || typeof s.campaignId !== 'string') return false;
   return true;
 }
@@ -150,7 +192,9 @@ export function readSaves(kv: KV | null): { file: SaveFile; corrupt: boolean; mi
       const m = migrateV1(parsed.saves, counter);
       return { file: m.file, corrupt: m.dropped, migrated: true };
     }
-    if (parsed.version !== SAVE_VERSION || !Array.isArray(parsed.slots)) return { file: empty(), corrupt: true, migrated: false };
+    // Sürüm 2 (yuvalar, sefer durumu v1) ile 3 aynı dosya düzeni; 2'nin durumları cleanEntry > normalizeState ile v2'ye taşınır
+    if ((parsed.version !== SAVE_VERSION && parsed.version !== 2) || !Array.isArray(parsed.slots)) return { file: empty(), corrupt: true, migrated: false };
+    const fromV2 = parsed.version === 2;
     const file = empty();
     file.counter = counter;
     let corrupt = false;
@@ -166,7 +210,7 @@ export function readSaves(kv: KV | null): { file: SaveFile; corrupt: boolean; mi
       file.slots[i] = { ...sd, difficulty: DIFFS.includes(sd.difficulty) ? sd.difficulty : CONFIG.defaultDifficulty, saves };
     }
     file.lastSlot = typeof parsed.lastSlot === 'number' && file.slots[parsed.lastSlot] ? parsed.lastSlot : null;
-    return { file, corrupt, migrated: false };
+    return { file, corrupt, migrated: fromV2 };
   } catch {
     return { file: empty(), corrupt: true, migrated: false };
   }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONFIG,
   SAVE_KEY,
+  SAVE_VERSION,
   SLOT_COUNT,
   autoResolve,
   battlePlan,
@@ -126,7 +127,7 @@ describe('sefer kaydı: 3 yuva, yuva başına kayıtlar', () => {
     expect(r.file.slots[1]!.saves[0]!.state.slot).toBe(1);
     expect(r.file.slots[2]!.campaignId).toBe('c3'); // en eski sefer son yuvada
     expect(migrateSaves(kv)).toBe(true);
-    expect(JSON.parse(kv.getItem(SAVE_KEY)!).version).toBe(2);
+    expect(JSON.parse(kv.getItem(SAVE_KEY)!).version).toBe(SAVE_VERSION);
     expect(latestSave(kv)!.id).toBe('s3');
   });
 

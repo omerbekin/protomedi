@@ -19,7 +19,15 @@ import { installViewport, parseRotateMode } from './ui/viewport';
 import { installStage, setStageMetrics } from './game/stage';
 import { WikiPanel } from './wiki/view';
 import { debugState } from './game/debug-state';
+import { menuStyle } from './ui/menu-style';
+import { whenMenuFontsReady } from './ui/menu-fonts';
 import './style.css';
+
+// Ana menü stili (?menu=new önizleme; varsayılan src/ui/menu-style.ts): zarif stilde fontlar hemen yüklenmeye başlar, oyun içi Settings sütunu CSS sınıfıyla
+if (menuStyle === 'elegant') {
+  document.documentElement.classList.add('menu-elegant');
+  void whenMenuFontsReady();
+}
 
 // Geliştirme sunucusunda sekme adı canlı olmadığını belirtir (canlı sürüm: Embers of Valdoria).
 if (import.meta.env.DEV) document.title = 'Embers of Valdoria (dev - NOT LIVE)';

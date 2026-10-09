@@ -2,6 +2,8 @@ import { bosses, CELL_COUNT, classes, randomPool } from '../engine/content';
 import { CONFIG, ENCOUNTERS, getMap } from './data';
 import { node } from './graph';
 import { battleSeed } from './seed';
+import { chapterEnemyMods } from './power';
+import { loadoutSetup } from '../progression/loadout';
 import { activeHeroes, heroById } from './state';
 import type { UnitSetup } from '../engine/types';
 import type { BattleOutcome, CampaignState, Difficulty, DifficultyEnemyMods, EncounterDef, UnitMods } from './types';
@@ -81,17 +83,22 @@ export function battlePlan(s: CampaignState, attempt = 0, caps = ENGINE_CAPS): B
   const enc = resolveEncounter(n.encounter, caps);
   const party: Record<number, UnitSetup> = {};
   const enemies: Record<number, UnitSetup> = {};
-  // Can taşıma: eksik canlı karakter o oranla başlar (motor en az 1 can verir)
-  if (CONFIG.rules.carryHp && caps.startHp)
-    s.active.forEach((id, cell) => {
-      const h = id ? heroById(s, id) : undefined;
-      if (h && h.hpRatio < 1) party[cell] = { startHpRatio: h.hpRatio };
-    });
+  s.active.forEach((id, cell) => {
+    const h = id ? heroById(s, id) : undefined;
+    if (!h) return;
+    // Güç toplama katmanı (temel + item; ileride level/ağaç): hiçbir şey takılı değilse boş => birim bugünküyle aynı
+    const setup: UnitSetup = caps.unitMods ? loadoutSetup(h) : {};
+    // Can taşıma: eksik canlı karakter o oranla başlar (motor en az 1 can verir)
+    if (CONFIG.rules.carryHp && caps.startHp && h.hpRatio < 1) setup.startHpRatio = h.hpRatio;
+    if (Object.keys(setup).length) party[cell] = setup;
+  });
+  // Bölüm ölçeği (data/campaign/power-budget.json): açık ilerleme sistemi yokken 1 => düşmanlar bugünküyle aynı
+  const chapterMods = chapterEnemyMods(s.mapId, n.id);
   if (caps.unitMods)
     for (const u of enc.def.units) {
       const diff = CONFIG.difficulties[s.difficulty];
       // noTierMods: rütbe eki (enemyTier) bu birime uygulanmaz (The Bridge Warden: fazları/telgrafları zaten zor; sim ölçümü, open-questions)
-      const mods = withDifficulty(withDifficulty(u.mods, diff?.enemy), u.tier && !u.noTierMods ? diff?.enemyTier?.[u.tier] : undefined);
+      const mods = withDifficulty(withDifficulty(withDifficulty(u.mods, chapterMods), diff?.enemy), u.tier && !u.noTierMods ? diff?.enemyTier?.[u.tier] : undefined);
       const setup: UnitSetup = {
         ...(mods ? { modifiers: mods } : {}),
         ...(u.name ? { displayName: u.name } : {}),
