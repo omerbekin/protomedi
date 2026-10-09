@@ -3,7 +3,7 @@
  * denemek için), sonraki elit/boss dalgasına atla, altın ver, en iyi koşular listesini sil. Sahne sınıfını içe aktarmaz (Node testinde Phaser yok).
  */
 import type Phaser from 'phaser';
-import { SCORES_KEY, applyOutcome, autoPlayWave, waveKind, wavePlan, type EndlessRun } from '../endless';
+import { SCORES_KEY, applyOutcome, autoPlayWave, grantRelic, waveKind, wavePlan, type EndlessRun } from '../endless';
 import { ENDLESS_SCENE, commit, continueRun, endless, openEndless, recordScore, startRun, storage } from '../game/endless-session';
 import type { DebugMenu } from './debug-menu';
 
@@ -90,6 +90,19 @@ export function registerEndlessDebug(game: Phaser.Game, debug: DebugMenu): void 
     run: () => {
       const run = readyRun();
       commit({ ...run, gold: run.gold + 200 });
+      if (game.scene.isActive(ENDLESS_SCENE)) open(game);
+    },
+  });
+  debug.register({
+    id: 'endless.relic',
+    tab: TAB,
+    section: SECTION,
+    icon: 'ankh',
+    label: 'Give relic',
+    hint: 'Give the current Endless run the next relic it does not have yet (a suspended battle is discarded, its setup changed)',
+    run: () => {
+      const run = readyRun();
+      commit(grantRelic(run));
       if (game.scene.isActive(ENDLESS_SCENE)) open(game);
     },
   });

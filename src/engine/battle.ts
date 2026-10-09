@@ -2397,6 +2397,7 @@ export class Battle {
    */
   private finishAction(actor: Combatant, emit: Emit, turnCost = 1): void {
     this.turnsTaken++;
+    if (actor.openingDamageMult !== undefined) delete actor.openingDamageMult; // ilk eylem bitti
     // Telgraf adalet kuralı: bu birim oynadı (eylem, pas ya da sersemlik)
     for (const t of this.telegraphs) if (t.waitFor.includes(actor.uid)) t.waitFor = t.waitFor.filter((u) => u !== actor.uid);
     if (this.mode === 'turns' && actor.summoned && actor.lifespan !== undefined && actor.hp > 0) {
@@ -2803,7 +2804,8 @@ export class Battle {
     const rolled = effect.guaranteedCrit ? { crit: true } : rollCrit(this.effectiveStats(actor, effect.critBonus ?? 0), this.rng);
     const crit = this.debug.crit === 'auto' ? rolled.crit : this.debug.crit === 'always';
     const mult = crit ? actor.stats.critMult : 1;
-    const total = Math.max(f.damage.minDamage, Math.round(base * mult * this.debug.damageMult));
+    // openingDamageMult (endless Banner of the Bridge): yalnızca birimin ilk eyleminde; yoksa x1 (sonuç birebir aynı)
+    const total = Math.max(f.damage.minDamage, Math.round(base * mult * this.debug.damageMult * (actor.openingDamageMult ?? 1)));
 
     const guard = target.statuses.find((s) => s.kind === 'guard');
     const guardian = guard ? this.get(guard.source) : undefined;
@@ -2961,6 +2963,8 @@ export class Battle {
     // Çağrı olmayan birim yuvasında ceset bırakır (revivable); çağrının ölümü (sahibiyle birlikte ölmesi dahil) ceset bırakmaz
     const corpse = this.leaveCorpse(c);
     emit({ type: 'death', target: c.uid, corpse });
+    // fallAllyHealRatio (endless Last Rites): düşen kahramanın canlı dostları maks canlarının bu oranı kadar iyileşir
+    if (!c.summoned && c.fallAllyHealRatio) for (const a of this.living(c.side)) if (!a.summoned && a !== c) this.applyHeal(c, a, Math.round(a.maxHp * c.fallAllyHealRatio), false, emit, 'last_rites');
     // Dark Bond: ölen birimin kurduğu ya da taşıdığı bağ kopar
     this.breakAllBonds(c, emit);
     // Ill Omen (Hexer pasifi): ölenin Omen'leri en yakın canlı dostuna geçer
@@ -3197,6 +3201,10 @@ function createSetupCombatant(baseDef: CombatantDef, side: Side, slot: number, u
   if (hp !== undefined) c.hp = Math.max(1, Math.min(c.maxHp, Math.round(hp)));
   const mp = finite(unit.startMp) ? unit.startMp : finite(unit.startMpRatio) ? c.maxMp * unit.startMpRatio : undefined;
   if (mp !== undefined) c.mp = Math.max(0, Math.min(c.maxMp, Math.round(mp)));
+  // Kalıntı kancaları (endless; verilmezse birim aynı): savaş başı kalkan, ilk eylem hasar çarpanı, düşünce dostlara şifa
+  if (finite(unit.startShieldRatio) && unit.startShieldRatio > 0) c.shield += Math.round(c.maxHp * unit.startShieldRatio);
+  if (finite(unit.openingDamageMult) && unit.openingDamageMult !== 1) c.openingDamageMult = unit.openingDamageMult;
+  if (finite(unit.fallAllyHealRatio) && unit.fallAllyHealRatio > 0) c.fallAllyHealRatio = unit.fallAllyHealRatio;
   // Hazır çağrı (ör. düşman Skeleton): çağrı kuralları, sahipsiz ve süresiz
   if (unit.summoned) c.summoned = true;
   if (unit.lockSkills && unit.lockSkills.length > 0) c.lockedSkills = [...unit.lockSkills];

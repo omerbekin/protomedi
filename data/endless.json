@@ -26,6 +26,18 @@
   "items": { "ilvlPerWave": 1, "ilvlAhead": 2, "window": 6 },
   "_shop": "Her 'every' dalgada (elit sonrası) ödülden sonra dükkân: 'size' item, fiyat = item değeri (items.json, 10 x IP).",
   "shop": { "every": 5, "size": 3 },
+  "_relics": "Kalıntılar (Ömer onayı 2026-10-09, madde 282): her boss zaferinden sonra koşunun sahip olmadığı kalıntılardan 'offer' tanesi (seed'li) sunulur, oyuncu birini seçer; koşu boyunca kalır. effect alanları: startShieldRatio (savaş başı kalkan, maks canın oranı), victoryHeal (zafer şifası; carry.victoryHeal yerine), critAdd (kritik şansı, 0,05 = +%5), openingDamageMult (her kahramanın ilk eyleminde skill hasarı çarpanı), fallAllyHealRatio (kahraman düşünce canlı dostlar maks canın bu oranı kadar iyileşir), armorAdd / magicArmorAdd (düz ek). icon: ikon türü (src/ui/icon-kinds.ts), color: ikon rengi.",
+  "relics": {
+    "offer": 2,
+    "list": [
+      { "id": "ember_of_valdren", "name": "Ember of Valdren", "icon": "flame", "color": "#f0a040", "text": "At the start of each wave, every hero gains a shield worth 8% of their max health.", "effect": { "startShieldRatio": 0.08 } },
+      { "id": "pilgrims_bell", "name": "Pilgrim's Bell", "icon": "holy", "color": "#f3e2a0", "text": "After each victory, heroes recover 30% health instead of 20%.", "effect": { "victoryHeal": 0.3 } },
+      { "id": "whetstone_of_ashford", "name": "Whetstone of Ashford", "icon": "burst", "color": "#e8c47e", "text": "Every hero has +5% critical chance.", "effect": { "critAdd": 0.05 } },
+      { "id": "banner_of_the_bridge", "name": "Banner of the Bridge", "icon": "warcry", "color": "#e0643c", "text": "Each hero deals +15% damage with their first action of every wave.", "effect": { "openingDamageMult": 1.15 } },
+      { "id": "last_rites", "name": "Last Rites", "icon": "ankh", "color": "#cfd8e8", "text": "When a hero falls, the remaining heroes recover 15% of their max health.", "effect": { "fallAllyHealRatio": 0.15 } },
+      { "id": "iron_oath", "name": "Iron Oath", "icon": "shield", "color": "#9cbde6", "text": "Every hero has +2 armor and +2 magic armor.", "effect": { "armorAdd": 2, "magicArmorAdd": 2 } }
+    ]
+  },
   "difficulty": "medium",
   "highScores": 10
 }

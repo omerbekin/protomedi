@@ -7,7 +7,7 @@
 // iç içe çağrı (applyChoice -> useSkill -> useGlobal) tek eylem sayılır. Debug araçlarının doğrudan durum değiştirmesi (can ver vb.) kayda girmez.
 import type { Battle } from '../engine';
 import type { Side } from '../engine/types';
-import { stateHash } from '../net/state-hash';
+import { fnv1a, stateHash } from '../net/state-hash';
 
 /** Bir eylem: `use` = useSkill(actor, skill, target, slot, board, corpse) (global skill'ler de bu kapıdan geçer), `skip` = skipTurn(). */
 export type ReplayAction = { k: 'use'; a: string; s: string; t?: string; slot?: number; b?: Side; c?: string } | { k: 'skip' };
@@ -21,7 +21,12 @@ export interface SuspendedBattle {
   turn: number;
   /** Kaydedildiği andaki stateHash (devamda doğrulama). */
   hash: string;
+  /** Savaş kurulumunun parmak izi (planKey): kurulum değiştiyse (ör. debug kalıntı/item) kayıt kullanılmaz. Eski kayıtta yok. */
+  setup?: string;
 }
+
+/** Dalga planının parmak izi (takımlar + birim kurulumları + seed): devam ederken aynı savaşın kurulduğunu doğrular. */
+export const planKey = (plan: { seed: number; party: string[]; enemies: string[]; units: unknown }): string => fnv1a(JSON.stringify([plan.seed, plan.party, plan.enemies, plan.units]));
 
 export const battleHash = (battle: Battle): string => stateHash(battle);
 

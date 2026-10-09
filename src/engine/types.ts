@@ -323,6 +323,15 @@ export interface UnitSetup {
   startHp?: number;
   /** Başlangıç canı oranı (0-1, maks cana göre; yuvarlanır, en az 1 can). */
   startHpRatio?: number;
+  /*
+   * Endless kalıntı kancaları (madde 282; genel, verilmezse hiçbir şey değişmez; Quick Battle / multiplayer / sefer vermez):
+   */
+  /** Savaş başı kalkan: maks canın bu oranı (shield havuzuna eklenir, yuvarlanır). */
+  startShieldRatio?: number;
+  /** Birimin İLK eyleminde vurduğu skill hasarı bu kadar çarpılır (ör. 1,15); ilk eylemden sonra kalkar. */
+  openingDamageMult?: number;
+  /** Bu birim düşünce (çağrı değilse) kendi tarafındaki canlı, çağrı olmayan dostlar maks canlarının bu oranı kadar iyileşir. */
+  fallAllyHealRatio?: number;
   /** Başlangıç MP'si (mutlak; [0, maks MP]). startMpRatio'dan önceliklidir. */
   startMp?: number;
   /** Başlangıç MP oranı (0-1). */
@@ -1000,6 +1009,10 @@ export interface Combatant {
   maxHp: number;
   mp: number;
   maxMp: number;
+  /** İlk eylem hasar çarpanı (UnitSetup.openingDamageMult; ilk eylemden sonra silinir). */
+  openingDamageMult?: number;
+  /** Düşünce dostlara şifa oranı (UnitSetup.fallAllyHealRatio). */
+  fallAllyHealRatio?: number;
   /** Her türlü hasarı emen kalkan (süre sınırı yok; tükenene kadar durur). */
   shield: number;
   /** Yalnızca büyü hasarını emen kalkan. */

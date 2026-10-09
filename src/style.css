@@ -138,12 +138,23 @@ body {
   min-width: 64px;
   min-height: 44px;
   padding: 0 12px;
-  font: bold 14px monospace;
-  color: #edf2f4;
-  background: rgba(60, 60, 80, 0.7);
-  border: 1px solid #8d99ae;
-  border-radius: 8px;
+  /* tasarım kiti: koyu zemin, ince altın çizgi, Cinzel */
+  font: 600 12px Cinzel, Georgia, 'Palatino Linotype', serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a8977a;
+  background: linear-gradient(180deg, rgba(30, 22, 14, 0.82), rgba(12, 9, 6, 0.86));
+  border: 1px solid rgba(217, 178, 106, 0.3);
+  border-radius: 0;
+  box-shadow: 0 0 0 3px rgba(12, 8, 5, 0.5);
+  cursor: pointer;
+  transition: color 0.18s, border-color 0.18s;
   z-index: 30;
+}
+
+.debug-toggle:hover {
+  color: #f3d999;
+  border-color: #f3d999;
 }
 
 .debug-panel {
@@ -380,10 +391,19 @@ body {
   width: 48px;
   height: 48px;
   padding: 0;
-  background: rgba(60, 60, 80, 0.7);
-  border: 1px solid #8d99ae;
-  border-radius: 8px;
+  /* tasarım kiti: koyu zemin, ince altın çizgi, köşesiz */
+  background: linear-gradient(180deg, rgba(30, 22, 14, 0.86), rgba(12, 9, 6, 0.9));
+  border: 1px solid rgba(217, 178, 106, 0.42);
+  border-radius: 0;
+  box-shadow: 0 0 0 3px rgba(12, 8, 5, 0.6);
+  cursor: pointer;
+  transition: border-color 0.18s, transform 0.18s cubic-bezier(0.33, 1, 0.68, 1);
   z-index: 30;
+}
+
+.settings-toggle:hover {
+  border-color: #f3d999;
+  transform: translateY(-2px);
 }
 
 .settings-toggle[hidden] {

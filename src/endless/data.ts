@@ -3,6 +3,7 @@ import endlessJson from '../../data/endless.json';
 import encountersJson from '../../data/campaign/encounters.json';
 import type { Equipment, RarityId } from '../progression/items';
 import type { SuspendedBattle } from './replay';
+import type { RelicDef } from './relics';
 import type { UnitModifiers, UnitTier } from '../engine/types';
 
 export interface EndlessConfig {
@@ -21,6 +22,8 @@ export interface EndlessConfig {
   };
   items: { ilvlPerWave: number; ilvlAhead: number; window: number };
   shop: { every: number; size: number };
+  /** Kalıntılar: boss sonrası teklif sayısı + liste (src/endless/relics.ts). */
+  relics: { offer: number; list: RelicDef[] };
   difficulty: 'easy' | 'medium' | 'hard';
   highScores: number;
 }
@@ -86,7 +89,7 @@ export interface ShopEntry {
   sold?: boolean;
 }
 
-export type RunPhase = 'ready' | 'reward' | 'shop' | 'over';
+export type RunPhase = 'ready' | 'relic' | 'reward' | 'shop' | 'over';
 
 export interface RunStats {
   /** Kazanılan dalga sayısı. */
@@ -115,6 +118,10 @@ export interface EndlessRun {
   startedAt: string;
   /** Koşu bitince: nasıl bitti. */
   end?: 'defeat' | 'abandoned';
+  /** Sahip olunan kalıntılar (id; koşu boyunca). Eski kayıtta yok = []. */
+  relics?: string[];
+  /** phase 'relic': seçilecek kalıntılar. */
+  relicOffer?: string[];
   /** Hero's Feast etkisi (yoksa yok). */
   blessing?: Blessing;
   /** Yarıda bırakılan savaş (seed + eylem günlüğü; src/endless/replay.ts). Yalnızca 'ready' aşamasında ve aynı dalga için geçerli. */

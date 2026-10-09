@@ -8,3 +8,4 @@ export * from './format';
 export * from './flow';
 export * from './replay';
 export * from './ui-text';
+export * from './relics';

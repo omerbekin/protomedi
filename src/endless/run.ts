@@ -4,6 +4,7 @@ import { ITEMS, RARITY_IDS, canEquip, itemDef, itemIP, itemValue, type ItemDef, 
 import { ENDLESS, type EndlessConfig, type EndlessHero, type EndlessRun, type RewardCard, type ScoreEntry, type ShopEntry, type WaveKind } from './data';
 import { rngFor, waveKind, waveSeed, type WavePlan } from './waves';
 import type { SuspendedBattle } from './replay';
+import { relicOffer, victoryHealOf } from './relics';
 import type { Rng } from '../engine/rng';
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -92,7 +93,7 @@ export function applyOutcome(run: EndlessRun, plan: Pick<WavePlan, 'wave'>, out:
     const h = heroOf(s, u.heroId);
     if (!h) continue;
     if (boss) h.hpRatio = clamp01(cfg.carry.bossVictoryHeal);
-    else h.hpRatio = u.alive ? clamp01(u.hpRatio + cfg.carry.victoryHeal) : clamp01(cfg.carry.reviveRatio);
+    else h.hpRatio = u.alive ? clamp01(u.hpRatio + victoryHealOf(run.relics, cfg)) : clamp01(cfg.carry.reviveRatio);
   }
   // Hero's Feast: kazanılan her dalga bir hak düşer
   if (s.blessing) {
@@ -103,13 +104,42 @@ export function applyOutcome(run: EndlessRun, plan: Pick<WavePlan, 'wave'>, out:
   s.wave = run.wave + 1;
   s.phase = 'reward';
   s.offer = rewardOffer(s, cfg, catalog);
+  // Boss zaferi: önce kalıntı seçimi (sahip olunmayan yoksa atlanır), sonra ödül kartları
+  if (boss) {
+    const relics = relicOffer(s.seed, s.stats.cleared, s.relics, cfg);
+    if (relics.length) {
+      s.phase = 'relic';
+      s.relicOffer = relics;
+    }
+  }
+  return s;
+}
+
+/** Kalıntıyı seç (yalnızca 'relic' aşamasında ve teklifteki biri): koşuya eklenir, ödül kartlarına geçilir. */
+export function chooseRelic(run: EndlessRun, id: string): EndlessRun {
+  if (run.phase !== 'relic' || !run.relicOffer?.includes(id) || run.relics?.includes(id)) return run;
+  const s = clone(run);
+  s.relics = [...(s.relics ?? []), id];
+  delete s.relicOffer;
+  s.phase = s.offer ? 'reward' : 'ready';
+  return s;
+}
+
+/** Kalıntı ver (debug "Give relic"): sahip olunmayan ilk kalıntı (ya da verilen); hepsi varsa durum aynı. Yarım savaş kaydı silinir (kurulum değişti). */
+export function grantRelic(run: EndlessRun, id?: string, cfg: EndlessConfig = ENDLESS): EndlessRun {
+  const owned = run.relics ?? [];
+  const pick = id ?? cfg.relics.list.find((r) => !owned.includes(r.id))?.id;
+  if (!pick || owned.includes(pick) || !cfg.relics.list.some((r) => r.id === pick)) return run;
+  const s = clone(run);
+  s.relics = [...owned, pick];
+  delete s.suspended;
   return s;
 }
 
 /** Koşudan vazgeç (kamp ekranında, onaylı): skor yine yazılır. */
 export function abandonRun(run: EndlessRun): EndlessRun {
   if (run.phase === 'over') return run;
-  const s: EndlessRun = { ...clone(run), phase: 'over', end: 'abandoned', offer: undefined, shop: undefined };
+  const s: EndlessRun = { ...clone(run), phase: 'over', end: 'abandoned', offer: undefined, shop: undefined, relicOffer: undefined };
   delete s.suspended;
   return s;
 }

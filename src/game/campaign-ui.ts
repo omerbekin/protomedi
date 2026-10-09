@@ -1,12 +1,14 @@
 import Phaser from 'phaser';
 import { content } from '../engine';
-import { classAvatar, classLogoBadge, goldText, makeMenuButton, serif } from './menu-ui';
-import { GOLD, SERIF, makePanel } from './ui-frame';
+import { classAvatar, classLogoBadge } from './menu-ui';
 import { FULL_W, FULL_X0 } from '../ui/viewport';
+import { EL, elBody, elButton, elHeading, elPanel, elText, fitW } from './elegant-ui';
+import { BODY_FONT } from '../ui/menu-style';
 
 /**
- * Sefer ekranlarının ortak parçaları (ana menü ve harita): pencere (modal), sınıf kartı, can çubuğu, parşömen plaka.
- * Hepsi kodla çizilir; metinler İngilizce. Her parça verilen `layer` container'ına eklenir (harita sahnesinde arayüz kamerası katmanı).
+ * Sefer ekranlarının ortak parçaları (ana menü ve harita): pencere (modal), sınıf kartı, can çubuğu, taç.
+ * Görünüm tasarım kitidir (src/game/elegant-ui.ts; CLAUDE.md > Tasarım kiti): ince çerçeveli koyu panel, altın Cinzel başlık,
+ * EB Garamond metin, kit düğmeleri. Her parça verilen `layer` container'ına eklenir (harita sahnesinde arayüz kamerası katmanı).
  */
 
 export const W = 1920;
@@ -25,15 +27,16 @@ export interface Modal {
   area: { x: number; y: number; w: number; h: number };
 }
 
-/** Wraps text to a width (serif metin). */
-export function bodyText(scene: Phaser.Scene, x: number, y: number, text: string, width: number, size = 26, color = '#e8d9b8'): Phaser.GameObjects.Text {
+/** Ortalanmış, sarılmış gövde metni (EB Garamond). */
+export function bodyText(scene: Phaser.Scene, x: number, y: number, text: string, width: number, size = 25, color: string = EL.NOTE): Phaser.GameObjects.Text {
   return scene.add
-    .text(x, y, text, { fontFamily: SERIF, fontSize: `${size}px`, color, stroke: '#0c0805', strokeThickness: 3, wordWrap: { width }, align: 'center', lineSpacing: 6 })
+    .text(x, y, text, { fontFamily: BODY_FONT, fontSize: `${size}px`, color, wordWrap: { width, useAdvancedWrap: true }, align: 'center', lineSpacing: 4 })
     .setResolution(2)
+    .setShadow(0, 2, EL.SH_DARK, 4, false, true)
     .setOrigin(0.5, 0);
 }
 
-/** Ortada pencere: kararan zemin (altındaki tıklamaları yutar), taş panel, altın başlık, metin, alt düğmeler. */
+/** Ortada pencere: kararan zemin (altındaki tıklamaları yutar), kit paneli, altın başlık, metin, alt düğmeler (ilk primary). */
 export function openModal(
   scene: Phaser.Scene,
   layer: Phaser.GameObjects.Container,
@@ -45,27 +48,32 @@ export function openModal(
   const y = o.y ?? H / 2 - h / 2;
   const root = scene.add.container(0, 0);
   layer.add(root);
-  const dim = scene.add.rectangle(FULL_X0, 0, FULL_W, H, 0x050302, o.dim ?? 0.55).setOrigin(0, 0).setInteractive(); // geniş ekranda da tüm alan
+  const dim = scene.add.rectangle(FULL_X0, 0, FULL_W, H, 0x050302, o.dim ?? 0.62).setOrigin(0, 0).setInteractive(); // geniş ekranda da tüm alan
   root.add(dim);
-  root.add(makePanel(scene, x, y, w, h, { top: 0x2e2218, bottom: 0x110b07, bevel: 5, alpha: 0.98 }));
-  root.add(goldText(scene, W / 2, y + 52, o.title, 48, 3).setOrigin(0.5));
-  let top = y + 92;
+  root.add(elPanel(scene, x, y, w, h, { corners: true, alpha: 0.97 }));
+  root.add(elHeading(scene, W / 2, y + 54, o.title, 40, { ornament: Math.min(120, w / 2 - 220) }));
+  let top = y + 96;
   if (o.subtitle) {
-    root.add(serif(scene, W / 2, top + 4, o.subtitle, 22, '#b9a27a', { bold: false, stroke: 2, spacing: 1 }).setOrigin(0.5, 0));
-    top += 40;
+    const sub = elBody(scene, W / 2, top, o.subtitle, 22, EL.MUTED, true, w - 140).setOrigin(0.5, 0).setAlign('center');
+    root.add(sub);
+    top += sub.height + 12;
   }
   if (o.text) {
-    const t = bodyText(scene, W / 2, top + 6, o.text, w - 120);
+    const t = bodyText(scene, W / 2, top + 6, o.text, w - 140);
     root.add(t);
     top += t.height + 22;
   }
   const buttons = o.buttons ?? [];
-  const by = y + h - 64;
-  const bw = Math.min(360, (w - 80) / Math.max(1, buttons.length) - 30);
-  const x0 = W / 2 - ((buttons.length - 1) * (bw + 30)) / 2;
-  buttons.forEach((b, i) => root.add(makeMenuButton(scene, x0 + i * (bw + 30), by, bw, 78, b.label, b.run, { primary: !!b.primary, size: b.primary ? 32 : 28 }).container));
+  const by = y + h - 62;
+  const bw = Math.min(330, (w - 100) / Math.max(1, buttons.length) - 34);
+  const x0 = W / 2 - ((buttons.length - 1) * (bw + 34)) / 2;
+  buttons.forEach((b, i) => {
+    const btn = elButton(scene, b.label, b.run, { kind: b.primary ? 'primary' : 'secondary', w: bw, h: b.primary ? 72 : 60, size: b.primary ? 24 : 19, ready: true });
+    btn.root.setPosition(x0 + i * (bw + 34), by);
+    root.add(btn.root);
+  });
   root.setAlpha(0);
-  scene.tweens.add({ targets: root, alpha: 1, duration: 220 });
+  scene.tweens.add({ targets: root, alpha: 1, duration: 200, ease: EL.EASE });
   let closed = false;
   return {
     root,
@@ -78,26 +86,25 @@ export function openModal(
   };
 }
 
-/** Can çubuğu (0-1), yeşil -> sarı -> kırmızı. */
+/** İnce can çubuğu (0-1): koyu zemin, yeşil -> sarı -> kırmızı, ince altın çerçeve (kit). */
 export function hpBar(scene: Phaser.Scene, x: number, y: number, w: number, h: number, ratio: number): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
   const r = Phaser.Math.Clamp(ratio, 0, 1);
-  const col = r > 0.6 ? 0x4f9a4a : r > 0.3 ? 0xc9a23a : 0xb2463c;
-  g.fillStyle(0x090604, 1).fillRect(x, y, w, h);
-  if (r > 0) g.fillStyle(col, 1).fillRect(x + 1, y + 1, Math.max(2, (w - 2) * r), h - 2);
-  g.fillStyle(0xffffff, 0.12).fillRect(x + 1, y + 1, w - 2, Math.max(1, h / 3));
-  g.lineStyle(1, GOLD.dark, 1).strokeRect(x - 0.5, y - 0.5, w + 1, h + 1);
+  const col = r > 0.6 ? 0x7fb85a : r > 0.3 ? 0xd9b24a : 0xc4553f;
+  g.fillStyle(EL.INK, 0.85).fillRect(x, y, w, h);
+  if (r > 0) g.fillStyle(col, 0.95).fillRect(x + 1, y + 1, Math.max(2, (w - 2) * r), h - 2);
+  g.lineStyle(1, EL.GOLD, EL.LINE.a2).strokeRect(x - 0.5, y - 0.5, w + 1, h + 1);
   return g;
 }
 
-/** Küçük taç (lider işareti), merkez (cx, cy). */
+/** Küçük taç (lider işareti), merkez (cx, cy): ince altın çizgi + kor taş. */
 export function crown(scene: Phaser.Scene, cx: number, cy: number, s = 1): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
   const pts = [-14, 8, -14, -6, -7, 1, 0, -10, 7, 1, 14, -6, 14, 8].map((v) => v * s);
   const p = Array.from({ length: pts.length / 2 }, (_, i) => new Phaser.Math.Vector2(cx + pts[i * 2]!, cy + pts[i * 2 + 1]!));
-  g.fillStyle(0xf2c94c, 1).fillPoints(p, true);
-  g.lineStyle(2, 0x5a3a10, 1).strokePoints(p, true);
-  g.fillStyle(0xb2463c, 1).fillCircle(cx, cy + 3 * s, 2.5 * s);
+  g.fillStyle(0x2a1d10, 0.95).fillPoints(p, true);
+  g.lineStyle(1.5, EL.ON_N, 1).strokePoints(p, true);
+  g.fillStyle(EL.EMBER, 1).fillCircle(cx, cy + 3 * s, 2.5 * s);
   return g;
 }
 
@@ -107,7 +114,7 @@ export interface ClassCard {
   setLeader(on: boolean): void;
 }
 
-/** Sınıf kartı: kafa avatarı, ad, birincil stat; seçilince altın çerçeve, lider tacı. Dokunma alanı kartın tamamı (>= 44 gerçek px). */
+/** Sınıf kartı (kit): ince çerçeve, kafa avatarı, Cinzel ad, primary stat; seçilince açık altın çerçeve, lider tacı. Dokunma alanı kartın tamamı. */
 export function classCard(
   scene: Phaser.Scene,
   cx: number,
@@ -120,40 +127,47 @@ export function classCard(
   const def = content.classes[classId]!;
   const c = scene.add.container(cx, cy);
   const bg = scene.add.graphics();
-  const draw = (sel: boolean) => {
+  let hover = false;
+  let sel = false;
+  const draw = () => {
     bg.clear();
-    bg.fillGradientStyle(sel ? 0x4a3418 : 0x2a2017, sel ? 0x4a3418 : 0x2a2017, 0x120c07, 0x120c07, 1).fillRect(-w / 2, -h / 2, w, h);
-    bg.lineStyle(sel ? 4 : 2, sel ? GOLD.bright : GOLD.edge, 1).strokeRect(-w / 2, -h / 2, w, h);
+    bg.fillGradientStyle(0x281d13, 0x281d13, 0x0a0705, 0x0a0705, sel ? 0.95 : 0.8).fillRect(-w / 2, -h / 2, w, h);
+    if (sel) bg.lineStyle(2, EL.ON_N, 1).strokeRect(-w / 2 + 1, -h / 2 + 1, w - 2, h - 2);
+    else bg.lineStyle(1, EL.GOLD, hover ? 1 : EL.LINE.a2).strokeRect(-w / 2 + 0.5, -h / 2 + 0.5, w - 1, h - 1);
   };
-  draw(false);
+  draw();
   c.add(bg);
   const av = Math.min(w - 30, h - 80);
   c.add(classAvatar(scene, def, 0, -h / 2 + 12 + av / 2, av));
   c.add(classLogoBadge(scene, def, -av / 2 + 14, -h / 2 + 12 + av - 12, 15)); // class logosu (seçili sanat sürümüyle)
-  const name = serif(scene, 0, h / 2 - 50, def.name, 22, '#f3e4c4').setOrigin(0.5);
-  if (name.width > w - 12) name.setScale((w - 12) / name.width);
+  const name = fitW(elText(scene, 0, h / 2 - 50, def.name, 19, EL.ON, { em: 0.05 }).setOrigin(0.5), w - 12);
   c.add(name);
   const sub = o.tag ?? (def.primary ? def.primary.toUpperCase() : '');
-  c.add(serif(scene, 0, h / 2 - 24, sub, 15, '#b9a27a', { bold: false, stroke: 2, spacing: 1 }).setOrigin(0.5));
-  if (o.hp !== undefined) c.add(hpBar(scene, -w / 2 + 12, h / 2 - 12, w - 24, 7, o.hp));
+  c.add(fitW(elBody(scene, 0, h / 2 - 24, sub, 16, EL.MUTED).setOrigin(0.5), w - 12));
+  if (o.hp !== undefined) c.add(hpBar(scene, -w / 2 + 12, h / 2 - 12, w - 24, 6, o.hp));
   const crownMark = crown(scene, w / 2 - 22, -h / 2 + 20, 1).setVisible(false);
   c.add(crownMark);
   if (o.onTap) {
     const zone = scene.add.zone(0, 0, w, h).setInteractive({ useHandCursor: true });
     zone.on('pointerup', () => o.onTap?.());
-    zone.on('pointerover', () => c.setScale(1.03));
-    zone.on('pointerout', () => c.setScale(1));
+    zone.on('pointerover', () => {
+      hover = true;
+      draw();
+      scene.tweens.add({ targets: c, y: cy - 4, duration: 200, ease: EL.EASE });
+    });
+    zone.on('pointerout', () => {
+      hover = false;
+      draw();
+      scene.tweens.add({ targets: c, y: cy, duration: 200, ease: EL.EASE });
+    });
     c.add(zone);
   }
-  return { container: c, setSelected: draw, setLeader: (on) => crownMark.setVisible(on) };
-}
-
-/** Parşömen plaka (harita etiketleri): açık krem degrade, koyu kahve kenar. Merkez üst (cx, top). */
-export function parchmentPlate(scene: Phaser.Scene, cx: number, top: number, w: number, h: number, alpha = 1): Phaser.GameObjects.Graphics {
-  const g = scene.add.graphics();
-  g.fillStyle(0x000000, 0.35 * alpha).fillRect(cx - w / 2 + 3, top + 4, w, h);
-  g.fillGradientStyle(0xf1e4c3, 0xf1e4c3, 0xd9c497, 0xd9c497, alpha).fillRect(cx - w / 2, top, w, h);
-  g.lineStyle(2, 0x6b4f26, alpha).strokeRect(cx - w / 2, top, w, h);
-  g.lineStyle(1, 0xb08a4a, 0.8 * alpha).strokeRect(cx - w / 2 + 4, top + 4, w - 8, h - 8);
-  return g;
+  return {
+    container: c,
+    setSelected: (on) => {
+      sel = on;
+      draw();
+    },
+    setLeader: (on) => crownMark.setVisible(on),
+  };
 }

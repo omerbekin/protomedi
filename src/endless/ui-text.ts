@@ -59,6 +59,13 @@ export const UI_TEXT = {
   primaryWarning: "Warning: turns off this hero's primary bonus",
   primaryWarningShort: 'Turns off the primary bonus',
 
+  // Kalıntı
+  relicTitle: 'Choose a Relic',
+  relicSub: 'The boss has fallen. A relic stays with your company for the whole run.',
+  relicTake: 'Claim',
+  relicsOwned: 'RELICS',
+  relicEffectLabel: 'Whole run',
+
   // Dükkân
   shopTitle: 'Merchant',
   shopSub: (gold: number) => `A travelling merchant follows the company. You have ${gold} gold.`,

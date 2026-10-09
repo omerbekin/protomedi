@@ -19,6 +19,7 @@ import { buildGrounds, buildStatuses, skillOwner, searchText, avatarMap, groupBy
 import type { GroundEntry, Owner, StatusEntry } from '../gallery/catalog';
 import { STAT_COLOR, STAT_ICON, STAT_LABEL } from '../ui/stat-icons';
 import { shapeMiniGrid, skillMiniGrid } from '../ui/shape-diagram';
+import { ELEMENT_ICON } from '../game/float-text';
 import type { MiniShape } from '../ui/shape-diagram';
 
 const f: Formulas = content.formulas;
@@ -43,7 +44,17 @@ export interface WikiArticle {
   blocks: WikiBlock[];
   /** Küçük şekil şemaları (Area shapes makalesi): etiket + mini ızgara. */
   shapes?: Array<{ label: string; shape: MiniShape }>;
+  /** Items and gear makalesi: yuvalar (Codex yuva siluetleri) ve nadirlik renkleri (data/items.json). */
+  gear?: { slots: Array<{ id: string; name: string }>; rarities: Array<{ id: string; name: string; color: string }> };
   search: string;
+}
+
+/** Codex çapraz bağlantısı için kısa skill kaydı (ikon + sahibi). */
+export interface WikiSkillRef {
+  id: string;
+  name: string;
+  icon: string;
+  ownerId: string;
 }
 
 export interface WikiSkill {
@@ -68,6 +79,9 @@ export interface WikiSkill {
   kinds: Array<string | undefined>;
   /** AOE şekil skill'inde küçük şekil şeması (kapsanan hücreler + anchor); diğerlerinde yok. */
   shape?: MiniShape;
+  /** Skill'in uyguladığı durumlar (statuses.json id; Codex durum çipleri) ve bıraktığı zeminler (grounds.json id). */
+  statuses: string[];
+  grounds: string[];
   search: string;
 }
 
@@ -108,6 +122,10 @@ export interface WikiElement {
   color: string;
   /** Bu elementi kullanan skill adları. */
   skills: string[];
+  /** Aynı skill'ler, ikon ve sahibiyle (Codex bağlantıları). */
+  skillRefs: WikiSkillRef[];
+  /** Element ikonu (yüzen hasar yazısındaki ikonla aynı: float-text.ts > ELEMENT_ICON; fiziksel: kılıç). */
+  icon: string;
   /** "Undead takes x1.5 damage" gibi satırlar. */
   weakTo: Array<{ tag: string; mult: number; units: string[] }>;
   search: string;
@@ -121,11 +139,14 @@ export interface WikiStatus {
   color: string;
   text: string;
   usedBy: string[];
+  /** Bu durumu uygulayan skill'ler (ikon + sahibi; skill tarafındaki `statuses` ile aynı kural: skillStatusIds). */
+  usedBySkills: WikiSkillRef[];
   search: string;
 }
 
 export interface WikiGround extends Omit<GroundEntry, 'usedBy'> {
   usedBy: string[];
+  usedBySkills: WikiSkillRef[];
   text: string;
   search: string;
 }
@@ -160,6 +181,28 @@ function statsFor(skill: SkillDef): Stats {
   const def = unitDefs()[owner.id] ?? Object.values(content.classes)[0]!;
   return def.stats;
 }
+
+/** Skill'in uyguladığı durum id'leri (status, dot, omen, randomStatus, detonate; Dark Bond -> dark_bond); yalnızca statuses.json'da olanlar. */
+export function skillStatusIds(skill: SkillDef): string[] {
+  const out: string[] = [];
+  for (const e of skill.effects) {
+    if (e.type === 'status' || e.type === 'dot' || e.type === 'detonate') out.push(e.status);
+    else if (e.type === 'omen') out.push(e.status ?? 'omen');
+    else if (e.type === 'randomStatus') out.push(...e.options.map((o) => o.status));
+    else if (e.type === 'bond') out.push('dark_bond');
+  }
+  return [...new Set(out)].filter((id) => !!content.statuses[id]);
+}
+
+/** Skill'in bıraktığı zemin id'leri. */
+export function skillGroundIds(skill: SkillDef): string[] {
+  return [...new Set(skill.effects.flatMap((e) => (e.type === 'ground' ? [e.ground] : [])))].filter((id) => !!content.grounds[id]);
+}
+
+const skillRefOf = (s: SkillDef): WikiSkillRef => ({ id: s.id, name: s.name, icon: s.icon, ownerId: skillOwner(s.id).id });
+
+/** Element -> Codex ikonu (fiziksel ve bilinmeyen: kılıç). */
+export const elementIcon = (id: string): string => ELEMENT_ICON[id] ?? 'sword';
 
 export function skillElements(skill: SkillDef): Element[] {
   const out: Element[] = [];
@@ -208,6 +251,8 @@ export function buildSkill(skill: SkillDef): WikiSkill {
     lines: info.lines,
     kinds: info.kinds,
     ...(wikiMiniGrid(skill) ? { shape: wikiMiniGrid(skill)! } : {}),
+    statuses: skillStatusIds(skill),
+    grounds: skillGroundIds(skill),
     search: searchText(skill.name, owner.name, skillRange(skill), info.targetBadge, info.target, info.cost, ...info.lines, ...elements, TARGET_BADGE[skill.target], TARGET_TEXT[skill.target]),
   };
 }
@@ -692,6 +737,11 @@ export function buildMechanics(): WikiArticle[] {
 
 /** Item'ler (madde 280; sayılar data/items.json'dan): yuvalar, nadirlik, silah aileleri, loot, primary uyarısı. */
 function itemsArticle(): WikiArticle {
+  const gear = { slots: itemsJson.slots.map((x) => ({ id: x.id, name: x.name })), rarities: itemsJson.rarities.map((x) => ({ id: x.id, name: x.name, color: x.color })) };
+  return { ...itemsArticleBody(), gear };
+}
+
+function itemsArticleBody(): WikiArticle {
   const L = itemsJson.loot;
   const fams = itemsJson.weaponFamilies.map((x) => `${x.name} (${x.classes.map((c) => content.classes[c]?.name ?? c).join(', ')})`).join('; ');
   return article('items', 'Campaign', 'Items and gear', 'helm', [
@@ -765,26 +815,33 @@ function difficultyText(): string {
 // ---------------------------------------------------------------- durumlar, zeminler, elementler
 
 export function buildWikiStatuses(): WikiStatus[] {
-  return buildStatuses().map((s: StatusEntry) => ({ id: s.id, name: s.name, type: s.type, icon: s.icon, color: s.color, text: s.text, usedBy: s.usedBy.map((u) => u.name), search: searchText(s.name, s.type, s.text, ...s.usedBy.map((u) => u.name)) }));
+  const skills = allSkills();
+  return buildStatuses().map((s: StatusEntry) => {
+    const usedBySkills = skills.filter((k) => skillStatusIds(k).includes(s.id)).map(skillRefOf);
+    return { id: s.id, name: s.name, type: s.type, icon: s.icon, color: s.color, text: s.text, usedBy: s.usedBy.map((u) => u.name), usedBySkills, search: searchText(s.name, s.type, s.text, ...s.usedBy.map((u) => u.name), ...usedBySkills.map((u) => u.name)) };
+  });
 }
 
 export function buildWikiGrounds(): WikiGround[] {
+  const skills = allSkills();
   return buildGrounds().map((g) => {
     const text = `Leaves ${g.name} on the area. Enemies standing there take ${g.element} (magic) damage at the start of each of their turns.`;
-    return { ...g, usedBy: g.usedBy.map((u) => u.name), text, search: searchText(g.name, g.element, text, ...g.usedBy.map((u) => u.name)) };
+    const usedBySkills = skills.filter((k) => skillGroundIds(k).includes(g.id)).map(skillRefOf);
+    return { ...g, usedBy: g.usedBy.map((u) => u.name), usedBySkills, text, search: searchText(g.name, g.element, text, ...g.usedBy.map((u) => u.name)) };
   });
 }
 
 export function buildElements(): WikiElement[] {
-  const users = new Map<string, string[]>();
-  for (const s of allSkills()) for (const el of skillElements(s)) users.set(el, [...(users.get(el) ?? []), s.name]);
+  const users = new Map<string, SkillDef[]>();
+  for (const s of allSkills()) for (const el of skillElements(s)) users.set(el, [...(users.get(el) ?? []), s]);
   return Object.keys(ELEMENT_COLOR).map((id) => {
     const weakTo = Object.entries(f.weaknesses).flatMap(([tag, m]) => {
       const mult = (m as Record<string, number>)[id];
       return mult === undefined ? [] : [{ tag, mult, units: Object.values(unitDefs()).filter((d) => d.tags?.includes(tag)).map((d) => d.name) }];
     });
-    const skills = users.get(id) ?? [];
-    return { id, name: cap(id), color: ELEMENT_COLOR[id]!, skills, weakTo, search: searchText(id, ...skills, ...weakTo.map((w) => w.tag)) };
+    const defs = users.get(id) ?? [];
+    const skills = defs.map((s) => s.name);
+    return { id, name: cap(id), color: ELEMENT_COLOR[id]!, icon: elementIcon(id), skills, skillRefs: defs.map(skillRefOf), weakTo, search: searchText(id, ...skills, ...weakTo.map((w) => w.tag)) };
   });
 }
 

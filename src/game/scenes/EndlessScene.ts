@@ -6,6 +6,8 @@ import {
   ENDLESS,
   UI_TEXT as T,
   buyItem,
+  chooseRelic,
+  relicDef,
   cardText,
   cardTitle,
   chooseReward,
@@ -33,7 +35,8 @@ import {
 import { ITEMS, SLOT_IDS, itemDef, itemValue, primaryBonusLost, slotDef, type ItemDef } from '../../progression';
 import { backgroundKey, hasBackground, preloadAssets } from '../assets';
 import { classAvatar, fitText } from '../menu-ui';
-import { EL, elBody, elButton, elConfirm, elConfirmOpen, elHeading, elLink, elPanel, elText, type ElButton } from '../elegant-ui';
+import { EL, elBody, elButton, elConfirm, elConfirmOpen, elHeading, elIconButton, elLink, elPanel, elText, elTip, placeElTip, type ElButton } from '../elegant-ui';
+import { ensureIcon } from '../icons';
 import { onStageResize, stageView } from '../stage';
 import { FULL_W, FULL_X0 } from '../../ui/viewport';
 import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
@@ -81,6 +84,8 @@ export class EndlessScene extends Phaser.Scene {
   private pending = false;
   /** Takım seçiminde üstüne gelinen class'ın bilgi satırı. */
   private infoText: Phaser.GameObjects.Text | null = null;
+  /** Açık tooltip (kalıntı ikonu). */
+  private tip: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super(ENDLESS_SCENE);
@@ -189,6 +194,13 @@ export class EndlessScene extends Phaser.Scene {
     this.go(endlessView(next));
   }
 
+  private actChooseRelic(run: EndlessRun, id: string): void {
+    const next = chooseRelic(run, id);
+    if (next === run) return;
+    commit(next);
+    this.go(endlessView(next));
+  }
+
   private actBuy(run: EndlessRun, index: number): void {
     const next = buyItem(run, index);
     if (next === run) return;
@@ -248,6 +260,7 @@ export class EndlessScene extends Phaser.Scene {
 
   private renderNow(): void {
     this.infoText = null;
+    this.hideTip();
     this.closeConfirm();
     this.root.removeAll(true);
     this.backBtn?.destroy();
@@ -256,6 +269,7 @@ export class EndlessScene extends Phaser.Scene {
       title: () => this.drawTitle(),
       pick: () => this.drawPick(),
       camp: () => this.drawCamp(),
+      relic: () => this.drawRelic(),
       reward: () => this.drawReward(),
       shop: () => this.drawShop(),
       over: () => this.drawOver(),
@@ -345,14 +359,69 @@ export class EndlessScene extends Phaser.Scene {
     this.add2(this.note(CX, 246, T.campStats(run.gold, gearScore(run), run.stats.cleared), 24, C.accent).setOrigin(0.5));
     if (run.blessing) this.add2(this.note(CX, 280, T.campBlessing(run.blessing.hpMult, run.blessing.waves), 22, C.bright, true).setOrigin(0.5));
     run.heroes.forEach((h, i) => this.heroPanel(h, CX + (i - (run.heroes.length - 1) / 2) * 420, 310));
+    this.relicRow(run.relics ?? [], CX, 852);
     if (endless.notice) {
-      this.add2(this.note(CX, 820, endless.notice, 24, C.accent, true).setOrigin(0.5));
+      this.add2(this.note(CX, 806, endless.notice, 22, C.accent, true).setOrigin(0.5));
       endless.notice = '';
     }
     this.button(CX - 420, LOOK.buttonY, 320, T.abandonRun, () => this.actAbandon());
     // Yarım kalan savaş varsa yalnızca ona dönülür (aynı dalgayı baştan başlatmak yok: yeniden deneme hilesi olmasın)
     if (susp) this.button(CX + 300, LOOK.buttonY, 520, resumeLabel(susp.wave, susp.turn), () => this.actResume(), { primary: true });
     else this.button(CX + 300, LOOK.buttonY, 420, kind === 'boss' ? T.faceBoss : T.fightWave(run.wave), () => this.actFight(), { primary: true });
+  }
+
+  /** Sahip olunan kalıntılar: ikon sırası (kit ikon düğmesi), üstüne gelince / dokununca ad + etki tooltip'i. */
+  private relicRow(ids: string[], cx: number, y: number): void {
+    const defs = ids.map((id) => relicDef(id)).filter((d): d is NonNullable<typeof d> => !!d);
+    if (!defs.length) return;
+    const size = 44;
+    const step = 56;
+    const x0 = cx - ((defs.length - 1) * step) / 2;
+    this.add2(this.label(x0 - size, y, T.relicsOwned, 18, C.dim).setOrigin(1, 0.5));
+    defs.forEach((d, i) => {
+      const x = x0 + i * step;
+      const show = (on: boolean) => (on ? this.showRelicTip(d.id, x, y, size) : this.hideTip());
+      const b = elIconButton(this, { icon: ensureIcon(this, d.icon, d.color, false) }, () => show(true), { size, onHover: show });
+      b.root.setPosition(x, y);
+      this.add2(b.root);
+    });
+  }
+
+  private showRelicTip(id: string, x: number, y: number, size: number): void {
+    const d = relicDef(id);
+    if (!d) return;
+    this.hideTip();
+    const tip = elTip(this, { icon: ensureIcon(this, d.icon, d.color, false), title: d.name, meta: T.relicEffectLabel, lines: [[d.text]], width: 420 });
+    placeElTip(this, tip, { x: x - size / 2, y: y - size / 2, w: size, h: size }, 'above');
+    this.tip = tip.container;
+  }
+
+  private hideTip(): void {
+    this.tip?.destroy();
+    this.tip = null;
+  }
+
+  /** Boss sonrası kalıntı seçimi: teklif edilen kalıntılar kart olarak; biri alınır. */
+  private drawRelic(): void {
+    const run = endless.run;
+    if (!run?.relicOffer?.length) return this.go(endlessView(run));
+    this.heading(T.relicTitle, T.relicSub);
+    const n = run.relicOffer.length;
+    const w = 420;
+    const gap = 60;
+    run.relicOffer.forEach((id, i) => {
+      const d = relicDef(id);
+      if (!d) return;
+      const cx = CX + (i - (n - 1) / 2) * (w + gap);
+      const top = 300;
+      const h = 500;
+      this.panel(cx - w / 2, top, w, h, 0.9);
+      this.add2(this.add.image(cx, top + 110, ensureIcon(this, d.icon, d.color, false)).setDisplaySize(112, 112));
+      this.add2(fitText(this.label(cx, top + 190, d.name.toUpperCase(), 28).setOrigin(0.5, 0), w - 40));
+      this.add2(this.note(cx, top + 250, d.text, 24, C.text).setOrigin(0.5, 0).setWordWrapWidth(w - 60).setAlign('center'));
+      this.button(cx, top + h - 58, 220, T.relicTake, () => this.actChooseRelic(run, id), { primary: true, h: 68 });
+    });
+    if (run.relics?.length) this.relicRow(run.relics, CX, 900);
   }
 
   private heroPanel(h: EndlessHero, cx: number, top: number): void {

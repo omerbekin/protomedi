@@ -4,6 +4,7 @@ import { Rng } from '../engine/rng';
 import type { UnitModifiers, UnitSetup } from '../engine/types';
 import { loadoutSetup } from '../progression/loadout';
 import { ENDLESS, encounter, type EndlessConfig, type EndlessRun, type WaveKind } from './data';
+import { withRelics } from './relics';
 
 /** FNV-1a + karıştırma: parçalardan seed (sefer seed.ts ile aynı yöntem; endless kendi kopyasını taşır, sefer modülüne bağlanmaz). */
 export function hashSeed(...parts: Array<string | number>): number {
@@ -109,7 +110,8 @@ export function wavePlan(run: EndlessRun, cfg: EndlessConfig = ENDLESS): WavePla
     party[slot] = h.class;
     placed.push({ id: h.id, slot });
     // Güç katmanı (item; ileride level/ağaç) + can taşıma
-    const setup: UnitSetup = { ...loadoutSetup(h) };
+    // Güç: item (loadout) + kalıntılar (koşu boyu; kalkan / ilk eylem / düşünce şifa kancaları + kritik / zırh ekleri)
+    const setup: UnitSetup = withRelics({ ...loadoutSetup(h) }, run.relics, cfg);
     // Hero's Feast (boss ödülü): kalan dalgalarda maks can çarpanı (item güçlendirmesiyle birleşir)
     if (run.blessing && run.blessing.waves > 0 && run.blessing.hpMult !== 1)
       setup.modifiers = { ...(setup.modifiers ?? {}), hpMult: r3((setup.modifiers?.hpMult ?? 1) * run.blessing.hpMult) };

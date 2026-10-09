@@ -24,12 +24,14 @@ export function parseRun(raw: string | null): EndlessRun | null {
     const r = data?.run;
     if (data?.version !== SAVE_VERSION || !r || r.version !== 1) return null;
     if (!isNum(r.seed) || !isNum(r.wave) || r.wave < 1 || !isNum(r.gold) || !isNum(r.nextItem)) return null;
-    if (!['ready', 'reward', 'shop', 'over'].includes(r.phase)) return null;
+    if (!['ready', 'relic', 'reward', 'shop', 'over'].includes(r.phase)) return null;
     if (!Array.isArray(r.heroes) || !r.heroes.length) return null;
     for (const h of r.heroes) if (!h || typeof h.id !== 'string' || !classes[h.class] || !isNum(h.hpRatio) || typeof h.equipment !== 'object' || !h.equipment) return null;
     if (!r.stats || !isNum(r.stats.cleared) || !isNum(r.stats.turns) || !isNum(r.stats.kills)) return null;
     if (r.phase === 'reward' && !Array.isArray(r.offer)) return null;
     if (r.phase === 'shop' && !Array.isArray(r.shop)) return null;
+    if (r.relics !== undefined && (!Array.isArray(r.relics) || r.relics.some((x) => typeof x !== 'string'))) return null;
+    if (r.phase === 'relic' && !Array.isArray(r.relicOffer)) return null;
     if (r.blessing !== undefined && (!isNum(r.blessing.hpMult) || !isNum(r.blessing.waves))) return null;
     // Bozuk yarım savaş kaydı koşuyu bozmaz: yalnızca o kayıt atılır
     if (r.suspended !== undefined && !validSuspended(r.suspended)) delete r.suspended;

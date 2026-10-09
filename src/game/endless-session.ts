@@ -8,6 +8,7 @@ import {
   attachRecorder,
   battleFor,
   battleHash,
+  planKey,
   replayActions,
   restoreBattle,
   suspendedOf,
@@ -132,7 +133,7 @@ function startRecording(battle: Battle, plan: WavePlan, actions: ReplayAction[])
     const run = endless.run;
     if (!active || !run || run.phase !== 'ready' || run.wave !== plan.wave) return;
     log.push(a);
-    commit(withSuspended(run, { wave: plan.wave, seed: plan.seed, actions: [...log], turn: battle.turnsTaken, hash: battleHash(battle) }));
+    commit(withSuspended(run, { wave: plan.wave, seed: plan.seed, actions: [...log], turn: battle.turnsTaken, hash: battleHash(battle), setup: planKey(plan) }));
   });
   recording = {
     battle,
@@ -159,7 +160,7 @@ export function startWave(scene: Phaser.Scene, resume = false): WavePlan | null 
   if (!run || run.phase !== 'ready') return null;
   const plan = wavePlan(run);
   let susp = resume ? suspendedOf(run) : null;
-  if (susp && !restoreBattle(battleFor(plan), susp)) {
+  if (susp && ((susp.setup !== undefined && susp.setup !== planKey(plan)) || !restoreBattle(battleFor(plan), susp))) {
     susp = null;
     endless.notice = 'The suspended battle could not be restored. The wave starts over.';
   }

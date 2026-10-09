@@ -2,7 +2,7 @@
 import type { EndlessRun } from './data';
 
 /** Ekran görünümleri: title (Continue / New Run / en iyi koşular), pick (takım seçimi), camp (sıradaki dalga), reward (3 kart), shop, over (skor). */
-export type EndlessView = 'title' | 'pick' | 'camp' | 'reward' | 'shop' | 'over';
+export type EndlessView = 'title' | 'pick' | 'camp' | 'relic' | 'reward' | 'shop' | 'over';
 
 /** Açılış görünümü: istenen başlık/seçim ekranı önceliklidir; yoksa bellekteki koşunun aşaması; koşu yoksa başlık. */
 export function endlessView(run: EndlessRun | null, requested?: 'title' | 'pick'): EndlessView {
@@ -11,6 +11,8 @@ export function endlessView(run: EndlessRun | null, requested?: 'title' | 'pick'
   switch (run.phase) {
     case 'ready':
       return 'camp';
+    case 'relic':
+      return 'relic';
     case 'reward':
       return 'reward';
     case 'shop':

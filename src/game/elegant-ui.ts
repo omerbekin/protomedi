@@ -587,10 +587,11 @@ export function elBadge(scene: Phaser.Scene, tone: ElBadgeTone, r = 12): { c: Ph
 }
 
 /** Üst ortada kısa bildirim (iki yana saydamlaşan koyu bant, EB Garamond italik); dönen fonksiyon mesajı gösterir. */
-export function elToast(scene: Phaser.Scene, y = 145): (msg: string) => void {
+export function elToast(scene: Phaser.Scene, y = 145, parent?: Phaser.GameObjects.Container): (msg: string) => void {
   const band = scene.add.graphics();
   const text = elBody(scene, 0, 0, '', 23, EL.ON).setOrigin(0.5);
   const root = scene.add.container(960, y, [band, text]).setDepth(5500).setAlpha(0);
+  parent?.add(root); // ör. iki kameralı sahnede arayüz katmanı
   let timer: Phaser.Time.TimerEvent | undefined;
   return (msg: string) => {
     if (!msg) return;

@@ -1,30 +1,34 @@
-/* Wiki (sağ üst kitap simgesi; en sağda, solunda tam ekran ve Menu): koyu deri/altın tasarım dili, serif başlıklar (ayarlar, debug menüsü ve galeriyle tutarlı). */
+/* CODEX (oyun içi wiki; src/wiki/view.ts). Ömer 2026-10-09 taslak 1 "Codex": tasarım kiti dili (src/ui/elegant.css: el-back, el-title,
+   el-heading, el-panel, el-dia) + bu ekrana özgü parçalar (cx- önekli). Ölçüler oyun birimiyle (--gu: 1 mantıksal birimin CSS pikseli;
+   1920x1080'de 1px) ve küçük ekranda okunur kalsın diye alt sınırlı (max(px, N * --u)); dokunma hedefleri en az 44px.
+   Düzen: sol sütun arama + bölüm menüsü | orta sütun madde listesi | sağda madde paneli; Assets bölümleri orta+sağ alanı birlikte kullanır. */
+
+/* Sağ üst kitap düğmesi (en sağda; solunda tam ekran ve Menu) */
 .settings-toggle.wiki-toggle {
   right: calc(8px + var(--er, 0px));
 }
 
-.wk-overlay {
-  --w-bg: #0b0806;
-  --w-panel-top: #2a2017;
-  --w-panel-bottom: #0d0805;
-  --w-panel: #1a1410;
-  --w-gold-dark: #6b4f26;
-  --w-gold-edge: #9a7438;
-  --w-gold: #e8c47e;
-  --w-gold-bright: #ffe29a;
-  --w-text: #f4ede1;
-  --w-muted: #b9ab94;
-  --w-serif: Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+.wk-overlay.cx {
+  --u: var(--gu, 1px);
+  /* Assets bölümleri (src/wiki/assets/assets.css) bu değişkenleri okur: kit renkleri */
+  --w-panel-top: #1e160e;
+  --w-panel-bottom: #0c0906;
+  --w-gold-dark: rgba(217, 178, 106, 0.3);
+  --w-gold-edge: rgba(217, 178, 106, 0.55);
+  --w-gold: #d9b26a;
+  --w-gold-bright: #f3d999;
+  --w-text: #d9c8a2;
+  --w-muted: #a8977a;
+  --w-serif: var(--el-body);
+  --cx-gap: max(10px, calc(40 * var(--u)));
+  --cx-top: max(54px, calc(128 * var(--u)));
   position: fixed;
   inset: 0;
   z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2vh 2vw;
-  background: rgba(4, 2, 1, 0.78);
-  color: var(--w-text);
-  font: 15px/1.4 system-ui, sans-serif;
+  overflow: hidden;
+  color: var(--el-txt);
+  background: #0d0a07;
+  font: max(14px, calc(21 * var(--u))) / 1.38 var(--el-body);
   touch-action: pan-y;
   -webkit-user-select: text;
   user-select: text;
@@ -35,716 +39,1031 @@
   display: none !important;
 }
 
-.wk-modal {
-  display: flex;
-  flex-direction: column;
-  width: min(1560px, 100%);
-  height: 100%;
-  background: linear-gradient(180deg, var(--w-panel-top), var(--w-panel-bottom));
-  border: 2px solid var(--w-gold-edge);
-  border-radius: 10px;
-  box-shadow: 0 0 0 1px #000, 0 12px 40px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 226, 154, 0.1);
-  overflow: hidden;
+.cx-bg {
+  position: absolute;
+  inset: 0;
+  background: center 40% / cover no-repeat;
 }
 
-.wk-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: linear-gradient(180deg, #3a2b1c, #1f1610);
-  border-bottom: 2px solid var(--w-gold-dark);
+.cx-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8, 6, 4, 0.9), rgba(8, 6, 4, 0.84) 40%, rgba(8, 6, 4, 0.94));
 }
 
-.wk-headicon {
-  width: 36px;
-  height: 36px;
+.cx .cx-back {
+  left: calc(var(--el, 0px) + max(8px, calc(40 * var(--u))));
+  top: calc(var(--et, 0px) + max(2px, calc(22 * var(--u))));
+  z-index: 3;
+  font-size: max(15px, calc(19 * var(--u)));
 }
 
-.wk-title {
-  font: bold 26px var(--w-serif);
-  letter-spacing: 3px;
-  color: var(--w-gold-bright);
-  text-shadow: 0 2px 0 #000;
+.cx .cx-title {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--et, 0px) + max(6px, calc(30 * var(--u))));
+  transform: translateX(-50%);
+  font-size: max(20px, calc(34 * var(--u)));
+  animation: cx-fi 0.6s ease both;
 }
 
-.wk-search {
-  flex: 1;
-  min-width: 0;
-  max-width: 520px;
-  height: 44px;
-  margin-left: 12px;
-  padding: 0 14px;
-  font: 16px system-ui, sans-serif;
-  color: var(--w-text);
-  background: #120d09;
-  border: 1px solid var(--w-gold-dark);
-  border-radius: 6px;
-}
-
-.wk-search:focus {
-  outline: none;
-  border-color: var(--w-gold);
-}
-
-.wk-close {
-  width: 44px;
-  height: 44px;
-  margin-left: auto;
-  padding: 0;
-  font: bold 30px/1 var(--w-serif);
-  color: var(--w-gold-bright);
-  background: #5a3e2b;
-  border: 1px solid var(--w-gold-edge);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.wk-close:hover {
-  background: #7a5538;
-}
-
-.wk-body {
-  display: flex;
-  flex: 1;
+.cx-body {
+  position: absolute;
+  left: calc(var(--el, 0px) + max(8px, calc(64 * var(--u))));
+  right: calc(var(--er, 0px) + max(8px, calc(64 * var(--u))));
+  top: calc(var(--et, 0px) + var(--cx-top));
+  bottom: calc(var(--eb, 0px) + max(8px, calc(46 * var(--u))));
+  display: grid;
+  grid-template-columns: max(150px, calc(380 * var(--u))) max(180px, calc(470 * var(--u))) minmax(0, 1fr);
+  gap: var(--cx-gap);
   min-height: 0;
 }
 
-.wk-nav {
+/* --- sol sütun: arama + menü --- */
+.cx-side {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 250px;
-  padding: 12px;
-  overflow-y: auto;
-  background: rgba(0, 0, 0, 0.25);
-  border-right: 1px solid var(--w-gold-dark);
+  min-height: 0;
+  animation: cx-fu 0.6s var(--el-ease) both 0.05s;
 }
 
-.wk-navbtn {
+.cx-search {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  padding: 6px 10px;
-  text-align: left;
-  font: bold 14px var(--w-serif);
-  letter-spacing: 1px;
-  color: var(--w-text);
-  background: #2a1f16;
-  border: 1px solid var(--w-gold-dark);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.wk-navbtn img {
-  width: 30px;
-  height: 30px;
+  gap: max(6px, calc(10 * var(--u)));
   flex: none;
-  image-rendering: pixelated;
+  height: max(44px, calc(50 * var(--u)));
+  padding: 0 max(8px, calc(14 * var(--u)));
+  border: 1px solid var(--el-line2);
+  background: rgba(8, 6, 4, 0.6);
+  transition: border-color 0.18s;
 }
 
-.wk-navtitle {
+.cx-search:focus-within {
+  border-color: var(--el-line3);
+}
+
+.cx-search svg {
+  flex: none;
+  width: max(14px, calc(18 * var(--u)));
+  height: max(14px, calc(18 * var(--u)));
+  fill: none;
+  stroke: var(--el-gold);
+  stroke-width: 2;
+}
+
+.cx-search-input {
   flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  font: italic max(14px, calc(19 * var(--u))) var(--el-body);
+  color: var(--el-txt);
+  background: none;
+  border: 0;
+  outline: none;
 }
 
-.wk-navcount {
-  min-width: 28px;
-  padding: 1px 7px;
-  text-align: center;
-  font: bold 12px system-ui, sans-serif;
-  color: #1a1410;
-  background: var(--w-gold);
-  border-radius: 10px;
+.cx-search-input::placeholder {
+  color: var(--el-dim);
 }
 
-.wk-navbtn.active {
-  background: #5a3e2b;
-  border-color: var(--w-gold-bright);
-  box-shadow: inset 0 0 0 1px rgba(255, 226, 154, 0.3);
+.cx-nav {
+  flex: 1;
+  min-height: 0;
+  margin-top: max(6px, calc(18 * var(--u)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(217, 178, 106, 0.3) transparent;
 }
 
-.wk-navbtn.empty {
+.cx-navrow {
+  display: flex;
+  align-items: center;
+  gap: max(6px, calc(12 * var(--u)));
+  width: 100%;
+  min-height: max(44px, calc(58 * var(--u)));
+  padding: 0 max(2px, calc(6 * var(--u)));
+  font: 600 max(12px, calc(20 * var(--u))) var(--el-display);
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  color: var(--el-txt);
+  text-shadow: var(--el-sh);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--el-line1);
+  cursor: pointer;
+  transition: color 0.18s, text-shadow 0.18s, opacity 0.18s;
+}
+
+.cx-navrow .el-dia {
+  width: max(7px, calc(10 * var(--u)));
+  height: max(7px, calc(10 * var(--u)));
+  opacity: 0;
+  transform: rotate(45deg) scale(0.4);
+  transition: opacity 0.18s, transform 0.18s var(--el-ease);
+}
+
+.cx-navicon {
+  flex: none;
+  width: max(18px, calc(28 * var(--u)));
+  height: max(18px, calc(28 * var(--u)));
+  opacity: 0.85;
+  transition: transform 0.18s var(--el-ease);
+}
+
+.cx-navtitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: transform 0.18s var(--el-ease);
+}
+
+.cx-navcount {
+  flex: none;
+  font: italic max(12px, calc(16 * var(--u))) var(--el-body);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--el-dim);
+}
+
+.cx-navrow:hover,
+.cx-navrow.on {
+  color: var(--el-on);
+  text-shadow: var(--el-glow);
+}
+
+.cx-navrow:hover .cx-navtitle,
+.cx-navrow.on .cx-navtitle,
+.cx-navrow:hover .cx-navicon,
+.cx-navrow.on .cx-navicon {
+  transform: translateX(max(3px, calc(6 * var(--u))));
+}
+
+.cx-navrow:hover .el-dia,
+.cx-navrow.on .el-dia {
+  opacity: 1;
+  transform: rotate(45deg) scale(1);
+}
+
+.cx-navrow.sub {
+  min-height: max(44px, calc(46 * var(--u)));
+  padding-left: max(10px, calc(26 * var(--u)));
+  font-size: max(11px, calc(15 * var(--u)));
+  color: var(--el-muted);
+}
+
+.cx-navrow.sub .cx-navicon {
+  width: max(16px, calc(22 * var(--u)));
+  height: max(16px, calc(22 * var(--u)));
+}
+
+.cx-navrow.empty {
   opacity: 0.4;
 }
 
-.wk-content {
+/* --- orta sütun: madde listesi --- */
+.cx-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  animation: cx-fu 0.6s var(--el-ease) both 0.12s;
+}
+
+.cx-listtop {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border-bottom: 1px solid var(--el-line1);
+}
+
+.cx-listhead {
   flex: 1;
   min-width: 0;
-  padding: 16px 18px 28px;
+  border-bottom: 0;
+  font-size: max(11px, calc(15 * var(--u)));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cx-listcount {
+  font: italic max(12px, calc(16 * var(--u))) var(--el-body);
+  color: var(--el-dim);
+}
+
+.cx-listbody {
+  flex: 1;
+  min-height: 0;
+  margin-top: max(6px, calc(14 * var(--u)));
+  padding-right: 4px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(217, 178, 106, 0.3) transparent;
 }
 
-.wk-section h2 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 14px;
-  font: bold 28px var(--w-serif);
-  letter-spacing: 2px;
-  color: var(--w-gold-bright);
-  text-shadow: 0 2px 0 #000;
+.cx-group + .cx-group {
+  margin-top: max(10px, calc(22 * var(--u)));
 }
 
-.wk-count {
-  padding: 2px 10px;
-  font: bold 15px system-ui, sans-serif;
-  letter-spacing: 0;
-  color: #1a1410;
-  background: var(--w-gold);
-  border-radius: 12px;
-  text-shadow: none;
+.cx-groupname {
+  margin: 0 0 max(4px, calc(8 * var(--u)));
+  font: 600 max(10px, calc(13 * var(--u))) var(--el-display);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--el-dim);
 }
 
-.wk-group {
-  margin: 20px 0 10px;
-  padding-bottom: 4px;
-  font: bold 18px var(--w-serif);
-  letter-spacing: 2px;
-  color: var(--w-gold);
-  border-bottom: 1px solid var(--w-gold-dark);
-}
-
-.wk-grid {
+/* Class portre ızgarası */
+.cx-tilegrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(max(62px, calc(124 * var(--u))), 1fr));
+  gap: max(8px, calc(22 * var(--u))) max(6px, calc(18 * var(--u)));
+  padding: max(4px, calc(8 * var(--u))) 2px 2px;
 }
 
-.wk-grid.units {
-  grid-template-columns: repeat(auto-fill, minmax(560px, 1fr));
+.cx-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: max(4px, calc(8 * var(--u)));
+  min-width: 0;
+  padding: 0;
+  color: var(--el-txt);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: transform 0.25s var(--el-ease);
 }
 
-.wk-grid.skills {
-  grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
+.cx-tilepic {
+  width: 100%;
+  aspect-ratio: 1;
 }
 
-.wk-card {
-  padding: 12px 14px;
-  background: linear-gradient(180deg, #281d14, #15100b);
-  border: 1px solid var(--w-gold-dark);
-  border-left: 4px solid var(--accent, var(--w-gold-edge));
-  border-radius: 8px;
+.cx-tilename {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 max(10px, calc(15 * var(--u))) var(--el-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: var(--el-sh);
 }
 
-.wk-card h3 {
+.cx-tile:hover {
+  transform: translateY(max(-3px, calc(-6 * var(--u))));
+}
+
+.cx-tile:hover .cx-portrait {
+  border-color: var(--el-gold);
+}
+
+.cx-tile:hover .cx-portrait img {
+  transform: scale(1.06);
+}
+
+.cx-tile.on .cx-portrait {
+  border: 2px solid var(--el-on);
+  box-shadow: 0 0 18px rgba(240, 140, 40, 0.35);
+}
+
+.cx-tile.on .cx-tilename,
+.cx-tile:hover .cx-tilename {
+  color: var(--el-on);
+}
+
+/* Portre (avatar -> sprite -> logo; boş kutu yok) */
+.cx-portrait {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 35%, #2a1d12, #120c08 70%);
+  border: 1px solid var(--el-line2);
+  transition: border-color 0.2s;
+}
+
+.cx-portrait::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: var(--g, var(--el-gold));
+  opacity: 0.65;
+}
+
+.cx-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.35s var(--el-ease);
+  -webkit-user-drag: none;
+}
+
+.cx-portrait.from-sprite img {
+  object-position: 50% 0;
+  image-rendering: pixelated;
+}
+
+.cx-portrait .cx-portrait-logo {
+  width: 64%;
+  height: 64%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+/* İkonlu satır listesi */
+.cx-rowlist {
+  display: flex;
+  flex-direction: column;
+}
+
+.cx-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 8px;
-  font: bold 19px var(--w-serif);
-  color: var(--w-gold-bright);
+  gap: max(8px, calc(14 * var(--u)));
+  width: 100%;
+  min-height: max(44px, calc(56 * var(--u)));
+  padding: 2px max(4px, calc(8 * var(--u)));
+  text-align: left;
+  color: var(--el-txt);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--el-line1);
+  cursor: pointer;
+  transition: background 0.2s;
 }
 
-.wk-card p {
-  margin: 0 0 8px;
+.cx-row b {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 max(11px, calc(17 * var(--u))) var(--el-display);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-shadow: var(--el-sh);
+  transition: color 0.18s;
 }
 
-.wk-card ul {
-  margin: 0 0 6px;
-  padding-left: 20px;
-}
-
-.wk-card li {
-  margin: 3px 0;
-}
-
-.wk-card .muted,
-.muted {
-  color: var(--w-muted);
-}
-
-.wk-overlay .small {
-  font-size: 12.5px;
-}
-
-.wk-icon {
-  width: 40px;
-  height: 40px;
+.cx-row small {
   flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: italic max(11px, calc(16 * var(--u))) var(--el-body);
+  color: var(--el-dim);
+}
+
+.cx-row:hover,
+.cx-row.on {
+  background: linear-gradient(90deg, rgba(224, 112, 42, 0.14), transparent 80%);
+}
+
+.cx-row:hover b,
+.cx-row.on b {
+  color: var(--el-on);
+}
+
+.cx-row.on {
+  box-shadow: inset 2px 0 0 var(--el-ember);
+}
+
+.cx-ico {
+  flex: none;
+  object-fit: contain;
   image-rendering: pixelated;
+}
+
+.cx-rowpic {
+  width: max(26px, calc(42 * var(--u)));
+  height: max(26px, calc(42 * var(--u)));
+}
+
+.cx-ico.tiny {
+  width: max(14px, calc(20 * var(--u)));
+  height: max(14px, calc(20 * var(--u)));
+}
+
+.cx-ico.small {
+  width: max(18px, calc(28 * var(--u)));
+  height: max(18px, calc(28 * var(--u)));
+}
+
+.cx-ico.big {
+  width: max(34px, calc(60 * var(--u)));
+  height: max(34px, calc(60 * var(--u)));
+  padding: max(2px, calc(4 * var(--u)));
+  background: rgba(8, 6, 4, 0.6);
+  border: 1px solid var(--el-line2);
+}
+
+.cx-ico.head {
+  width: max(52px, calc(110 * var(--u)));
+  height: max(52px, calc(110 * var(--u)));
+  padding: max(4px, calc(8 * var(--u)));
+  background: radial-gradient(circle at 50% 40%, rgba(60, 42, 24, 0.9), rgba(10, 7, 5, 0.9) 75%);
+  border: 1px solid var(--el-line3);
+}
+
+.cx-ico.zoom {
   cursor: zoom-in;
 }
 
-.wk-icon.big {
-  width: 56px;
-  height: 56px;
-  padding: 3px;
-  background: #0e0a07;
-  border: 1px solid var(--w-gold-dark);
-  border-radius: 6px;
+/* Skill süzgeçleri */
+.cx-filters {
+  margin-bottom: max(8px, calc(14 * var(--u)));
 }
 
-.wk-icon.head {
-  width: 40px;
-  height: 40px;
-  cursor: default;
+.cx-filters > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font: 600 max(11px, calc(14 * var(--u))) var(--el-display);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--el-muted);
+  cursor: pointer;
+  list-style: none;
 }
 
-.wk-icon.small {
-  width: 24px;
-  height: 24px;
+.cx-filters > summary::-webkit-details-marker {
+  display: none;
 }
 
-.wk-icon.tiny {
-  width: 20px;
-  height: 20px;
-  cursor: default;
+.cx-filters > summary::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 1px rgba(217, 178, 106, 0.55);
+  transition: background 0.18s;
 }
 
-.wk-icon.logo {
-  width: 56px;
-  height: 56px;
+.cx-filters[open] > summary::before {
+  background: var(--el-ember);
 }
 
-.wk-article h3 .wk-icon {
-  width: 32px;
-  height: 32px;
+.cx-filters > summary:hover {
+  color: var(--el-on);
 }
 
-.wk-tablewrap {
+.cx-filter {
+  margin: 4px 0 8px;
+}
+
+.cx-filterlabel {
+  display: block;
+  font: italic max(12px, calc(15 * var(--u))) var(--el-body);
+  color: var(--el-dim);
+}
+
+.cx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px max(4px, calc(10 * var(--u)));
+}
+
+.cx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: max(32px, calc(36 * var(--u)));
+  padding: 0 4px;
+  font: 600 max(10px, calc(13 * var(--u))) var(--el-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--el-muted);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+  transition: color 0.18s, border-color 0.18s;
+}
+
+.cx-chip:hover {
+  color: var(--el-on);
+}
+
+.cx-chip.on {
+  color: var(--el-on);
+  border-bottom-color: var(--el-ember);
+  text-shadow: var(--el-glow);
+}
+
+.cx-chippic {
+  width: max(16px, calc(22 * var(--u)));
+  height: max(16px, calc(22 * var(--u)));
+}
+
+/* --- sağ: madde paneli --- */
+.cx-article,
+.cx-wide {
+  min-height: 0;
+  overflow-x: hidden;
+  padding: max(12px, calc(34 * var(--u))) max(14px, calc(40 * var(--u)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(217, 178, 106, 0.3) transparent;
+  animation: cx-fu 0.6s var(--el-ease) both 0.2s;
+}
+
+.cx-wide {
+  grid-column: 2 / -1;
+}
+
+.cx-fade {
+  animation: cx-fi 0.35s ease both;
+}
+
+.cx-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-style: italic;
+  color: var(--el-dim);
+}
+
+.cx-ahead {
+  display: flex;
+  align-items: center;
+  gap: max(10px, calc(22 * var(--u)));
+  min-width: 0;
+}
+
+.cx-ahead-text {
+  min-width: 0;
+}
+
+.cx-art h1 {
+  margin: 0;
+  font: 600 max(20px, calc(46 * var(--u))) / 1.05 var(--el-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--el-on);
+  text-shadow: var(--el-sh);
+  overflow-wrap: anywhere;
+}
+
+.cx-role {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 6px;
+  margin-top: 4px;
+  font: italic max(14px, calc(22 * var(--u))) var(--el-body);
+  color: var(--el-muted);
+}
+
+.cx-pri {
+  font: 600 max(12px, calc(17 * var(--u))) var(--el-display);
+  letter-spacing: 0.14em;
+  font-style: normal;
+}
+
+.cx-headtags {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+}
+
+.cx-art p {
+  margin: max(6px, calc(12 * var(--u))) 0;
+  color: var(--el-note);
+}
+
+.cx-art .cx-h3 {
+  margin: max(12px, calc(26 * var(--u))) 0 max(6px, calc(10 * var(--u)));
+  font-size: max(11px, calc(14 * var(--u)));
+}
+
+.cx-ul {
+  margin: max(6px, calc(10 * var(--u))) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cx-ul li {
+  position: relative;
+  margin: max(4px, calc(8 * var(--u))) 0;
+  padding-left: max(16px, calc(24 * var(--u)));
+  color: var(--el-note);
+}
+
+.cx-ul li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  background: var(--el-ember);
+  box-shadow: 0 0 0 1px var(--el-ember2);
+}
+
+.cx-dim {
+  color: var(--el-dim);
+  font-style: italic;
+}
+
+.cx-note {
+  font-style: italic;
+  color: var(--el-note);
+  line-height: 1.3;
+}
+
+.cx-label {
+  font: 600 max(10px, calc(13 * var(--u))) var(--el-display);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--el-dim);
+}
+
+.cx-tag {
+  display: inline-flex;
+  align-items: center;
+  font: 600 max(10px, calc(13 * var(--u))) var(--el-display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--el-dim);
+  font-style: normal;
+}
+
+.cx-tag.strong {
+  color: var(--el-txt);
+}
+
+.cx-tag.warn {
+  color: var(--el-pri);
+}
+
+.cx-tag.test {
+  padding: 1px 6px;
+  color: #1a0f06;
+  background: var(--el-ember2);
+}
+
+.cx-kind.buff {
+  color: #8fdc50;
+  font-style: normal;
+}
+
+.cx-kind.debuff {
+  color: var(--el-bad);
+  font-style: normal;
+}
+
+/* Tablo */
+.cx-tablewrap {
+  margin: max(8px, calc(14 * var(--u))) 0;
   overflow-x: auto;
 }
 
-.wk-table {
+.cx-table {
+  width: 100%;
   border-collapse: collapse;
-  width: 100%;
+  font-size: max(13px, calc(18 * var(--u)));
 }
 
-.wk-table th,
-.wk-table td {
-  padding: 6px 10px;
+.cx-table th,
+.cx-table td {
+  padding: max(4px, calc(8 * var(--u))) max(6px, calc(12 * var(--u)));
   text-align: left;
-  border: 1px solid var(--w-gold-dark);
+  border-bottom: 1px solid var(--el-line1);
 }
 
-.wk-table th {
-  color: var(--w-gold-bright);
-  background: #2a1f16;
-  font-family: var(--w-serif);
+.cx-table th {
+  font: 600 max(10px, calc(13 * var(--u))) var(--el-display);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(217, 178, 106, 0.85);
+  border-bottom-color: var(--el-line2);
 }
 
-/* --- class kartları --- */
-.wk-unit {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 14px;
+.cx-table td {
+  color: var(--el-note);
 }
 
-.wk-unit-art {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.wk-sprite {
-  width: 100%;
-  max-height: 300px;
-  object-fit: contain;
-  cursor: zoom-in;
-}
-
-.wk-unit-mini {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.wk-avatar {
-  width: 72px;
-  height: 72px;
-  object-fit: cover;
-  border: 2px solid var(--accent, var(--w-gold-edge));
-  border-radius: 8px;
-  cursor: zoom-in;
-}
-
-.wk-sprite.missing,
-.wk-avatar.missing {
-  display: grid;
-  place-items: center;
-  min-height: 72px;
-  color: var(--w-muted);
-  font-size: 12px;
-}
-
-.wk-unit-name {
-  flex-wrap: wrap;
-  font-size: 26px !important;
-}
-
-.wk-role {
-  font: italic 15px var(--w-serif);
-  color: var(--w-muted);
-}
-
-.wk-chip {
-  display: inline-block;
-  padding: 1px 8px;
-  font: 12.5px system-ui, sans-serif;
-  color: var(--w-text);
-  background: #3a2b1c;
-  border: 1px solid var(--w-gold-dark);
-  border-radius: 10px;
-}
-
-.wk-chip.warn {
-  color: #ffd07a;
-  border-color: #b8892e;
-}
-
-.wk-chip.buff {
-  color: #7dff9b;
-  margin-left: 8px;
-}
-
-.wk-chip.debuff {
-  color: #ff8a8a;
-  margin-left: 8px;
-}
-
-.wk-primary {
-  margin: 4px 0 8px;
-  padding: 6px 10px;
-  background: rgba(255, 215, 0, 0.08);
-  border: 1px solid var(--w-gold-edge);
-  border-radius: 6px;
-}
-
-.wk-primary b {
-  color: #ffd700;
-}
-
-.wk-attrs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px 14px;
-  margin-bottom: 8px;
-}
-
-.wk-attr {
-  display: flex;
+.cx-cell {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.wk-attr.primary .wk-attr-name {
-  color: #ffd700;
+/* Class maddesi */
+.cx-unithead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.wk-attr-name {
-  width: 40px;
-  font-weight: bold;
-  font-size: 13px;
+.cx-bigportrait {
+  width: max(64px, calc(124 * var(--u)));
+  height: max(64px, calc(124 * var(--u)));
+  border-color: var(--el-line3);
 }
 
-.wk-bar {
-  flex: 1;
-  height: 8px;
-  background: #0e0a07;
-  border-radius: 4px;
-  overflow: hidden;
+.cx-fullsprite {
+  flex: none;
+  max-width: 34%;
+  height: max(80px, calc(170 * var(--u)));
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.6));
+  cursor: zoom-in;
 }
 
-.wk-fill {
-  display: block;
-  height: 100%;
-}
-
-.wk-attr-val {
-  width: 22px;
-  text-align: right;
-  font: bold 14px ui-monospace, Consolas, monospace;
-}
-
-.wk-stats {
+.cx-attrs {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-bottom: 8px;
+  gap: max(6px, calc(12 * var(--u))) max(14px, calc(30 * var(--u)));
+  margin-top: max(10px, calc(18 * var(--u)));
+  padding: max(6px, calc(10 * var(--u))) 0;
+  border-top: 1px solid var(--el-line1);
+  border-bottom: 1px solid var(--el-line1);
 }
 
-.wk-stat {
+.cx-attr {
+  display: inline-flex;
+  align-items: center;
+  gap: max(5px, calc(8 * var(--u)));
+  font: 600 max(15px, calc(22 * var(--u))) var(--el-display);
+  color: var(--el-txt);
+}
+
+.cx-attr small {
+  font: 600 max(10px, calc(13 * var(--u))) var(--el-display);
+  letter-spacing: 0.14em;
+  color: var(--el-muted);
+}
+
+.cx-attr.primary b,
+.cx-attr.primary small {
+  color: var(--el-pri);
+}
+
+.cx-bonus {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: max(8px, calc(12 * var(--u)));
+  font-size: max(13px, calc(19 * var(--u)));
+}
+
+.cx-bonus b,
+.cx-passive b {
+  font: 600 max(11px, calc(15 * var(--u))) var(--el-display);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffe29a;
+}
+
+.cx-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(max(150px, calc(250 * var(--u))), 1fr));
+  gap: 0 max(12px, calc(26 * var(--u)));
+}
+
+.cx-stat {
+  display: flex;
+  align-items: center;
+  gap: max(6px, calc(10 * var(--u)));
+  min-height: max(28px, calc(38 * var(--u)));
+  border-bottom: 1px solid var(--el-line1);
+  font-size: max(13px, calc(18 * var(--u)));
+  color: var(--el-muted);
+}
+
+.cx-stat span {
+  flex: 1;
+  min-width: 0;
+  font-style: italic;
+}
+
+.cx-stat b {
+  font: 600 max(12px, calc(17 * var(--u))) var(--el-display);
+  color: var(--el-txt);
+}
+
+.cx-passive {
+  display: flex;
+  align-items: flex-start;
+  gap: max(10px, calc(16 * var(--u)));
+  font-size: max(13px, calc(19 * var(--u)));
+}
+
+/* Skill satırı (class maddesinde ve Skills maddesinde) */
+.cx-skill {
+  display: flex;
+  align-items: flex-start;
+  gap: max(10px, calc(16 * var(--u)));
+  padding: max(8px, calc(14 * var(--u))) 0;
+  border-bottom: 1px solid var(--el-line1);
+}
+
+.cx-skill-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.cx-skillart .cx-skill-body {
+  margin-top: max(10px, calc(18 * var(--u)));
+}
+
+.cx-skill-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px max(8px, calc(14 * var(--u)));
+}
+
+.cx-skill-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0;
+  color: var(--el-txt);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color 0.18s, text-shadow 0.18s;
+}
+
+.cx-skill-link b {
+  font: 600 max(13px, calc(19 * var(--u))) var(--el-display);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cx-skill-link:hover {
+  color: var(--el-on);
+  text-shadow: var(--el-glow);
+}
+
+.cx-eltag {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 13px;
+  font: 600 max(10px, calc(13 * var(--u))) var(--el-display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-style: normal;
+  color: var(--c);
 }
 
-.wk-passive {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 6px 0 10px;
-  padding: 8px;
-  background: #0e0a07;
-  border-radius: 6px;
-}
-
-.wk-skills {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* --- skill blokları --- */
-.wk-skill {
-  display: flex;
-  gap: 10px;
-  padding: 8px;
-  background: #0e0a07;
-  border-left: 3px solid var(--accent, var(--w-gold-edge));
-  border-radius: 6px;
-}
-
-.wk-skill-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.wk-skill-name {
+.cx-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  font: 17px var(--w-serif);
-  color: var(--w-gold-bright);
-}
-
-.wk-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
+  gap: 4px max(10px, calc(16 * var(--u)));
   margin: 4px 0;
 }
 
-.wk-badge {
-  padding: 1px 8px;
-  font: bold 12.5px system-ui, sans-serif;
-  color: #1a1410;
-  background: var(--w-gold);
-  border-radius: 10px;
+.cx-meta .cx-tag + .cx-tag::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  margin-right: max(10px, calc(16 * var(--u)));
+  margin-left: calc(-1 * max(5px, calc(8 * var(--u))));
+  transform: rotate(45deg) translateX(-50%);
+  background: rgba(217, 178, 106, 0.4);
 }
 
-.wk-el {
-  padding: 0 7px;
-  font: 12px system-ui, sans-serif;
-  text-transform: capitalize;
-  border: 1px solid;
-  border-radius: 10px;
+.cx-lines {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font: italic max(13px, calc(18 * var(--u))) / 1.32 var(--el-body);
+  color: var(--el-muted);
 }
 
-.wk-lines {
-  margin: 4px 0 0 !important;
-  padding-left: 18px !important;
+.cx-lines li + li {
+  margin-top: 2px;
 }
 
-.wk-skillcard {
-  padding: 8px;
-}
-
-.wk-skill-owner {
-  margin: 0 0 4px 2px;
-}
-
-.wk-filters {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.wk-filters > div {
+.cx-applies,
+.cx-refs {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px max(8px, calc(14 * var(--u)));
 }
 
-.wk-filters > div > .muted {
-  width: 58px;
+.cx-applies {
+  margin-top: max(6px, calc(8 * var(--u)));
 }
 
-.wk-overlay .chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.wk-overlay .chip {
-  min-height: 34px;
-  padding: 4px 12px;
-  font: 13px system-ui, sans-serif;
-  text-transform: capitalize;
-  color: var(--w-text);
-  background: #2a1f16;
-  border: 1px solid var(--w-gold-dark);
-  border-radius: 17px;
+/* Bağlantı çipi (ikon + ad): skill, durum, zemin, element, class */
+.cx-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: max(5px, calc(8 * var(--u)));
+  min-height: max(36px, calc(40 * var(--u)));
+  padding: 0 max(4px, calc(8 * var(--u))) 0 2px;
+  font: 600 max(11px, calc(14 * var(--u))) var(--el-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c, var(--el-txt));
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
   cursor: pointer;
+  transition: color 0.18s, border-color 0.18s, text-shadow 0.18s;
 }
 
-.wk-overlay .chip.on {
-  color: #1a1410;
-  background: var(--w-gold);
-  border-color: var(--w-gold-bright);
+.cx-ref:hover {
+  color: var(--el-on);
+  border-bottom-color: var(--el-line3);
+  text-shadow: var(--el-glow);
 }
 
-.wk-status {
+.cx-refpic {
+  width: max(22px, calc(30 * var(--u)));
+  height: max(22px, calc(30 * var(--u)));
+}
+
+.cx-ref.unit {
+  color: var(--el-txt);
+  font-size: inherit;
+}
+
+.cx-role .cx-ref {
+  min-height: 0;
+  font-size: max(12px, calc(17 * var(--u)));
+}
+
+/* Items and gear: yuva siluetleri + nadirlik renkleri */
+.cx-slots,
+.cx-rarities {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: max(8px, calc(14 * var(--u))) max(12px, calc(22 * var(--u)));
 }
 
-/* Büyütülmüş görsel (gallery/dom.ts openLightbox) wiki'nin üstünde */
-.lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
+.cx-slot,
+.cx-rarity {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  background: rgba(5, 3, 2, 0.88);
-  cursor: zoom-out;
+  gap: 4px;
+  min-width: max(54px, calc(80 * var(--u)));
+  font: 600 max(10px, calc(13 * var(--u))) var(--el-display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--el-muted);
 }
 
-.lightbox img {
-  max-width: 90vw;
-  max-height: 80vh;
-  min-width: 256px;
-  background: repeating-conic-gradient(#1c150e 0% 25%, #130d08 0% 50%) 0 0 / 16px 16px;
-  border: 2px solid #9a7438;
+.cx-rarity {
+  color: var(--c);
+  filter: brightness(1.35);
 }
 
-.lightbox img.pixelated {
-  image-rendering: pixelated;
-  width: min(80vw, 80vh);
-  height: min(80vw, 80vh);
+.cx-slotbox {
+  display: grid;
+  place-items: center;
+  width: max(38px, calc(58 * var(--u)));
+  height: max(38px, calc(58 * var(--u)));
+  background: rgba(8, 6, 4, 0.6);
+  border: 1px solid var(--el-line2);
 }
 
-.lightbox-cap {
-  color: #e8c47e;
-  font-family: Georgia, serif;
+.cx-rarity .cx-slotbox {
+  border-color: var(--c);
+  box-shadow: inset 0 0 12px color-mix(in srgb, var(--c) 35%, transparent);
 }
 
-/* --- telefon / dar ekran: tek sütun, tam ekran, yatay kayan menü --- */
-@media (max-width: 900px) {
-  .wk-overlay {
-    padding: 0;
-  }
-
-  .wk-modal {
-    border-radius: 0;
-    border-width: 0;
-  }
-
-  .wk-head {
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 8px 10px;
-  }
-
-  .wk-title {
-    font-size: 20px;
-  }
-
-  .wk-search {
-    order: 3;
-    flex: 1 1 100%;
-    max-width: none;
-    margin-left: 0;
-  }
-
-  .wk-body {
-    flex-direction: column;
-  }
-
-  .wk-nav {
-    flex-direction: row;
-    width: auto;
-    padding: 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-right: 0;
-    border-bottom: 1px solid var(--w-gold-dark);
-  }
-
-  .wk-navbtn {
-    flex: none;
-    min-height: 44px;
-  }
-
-  .wk-content {
-    padding: 12px 10px 24px;
-  }
-
-  .wk-grid,
-  .wk-grid.units,
-  .wk-grid.skills {
-    grid-template-columns: 1fr;
-  }
-
-  .wk-unit {
-    grid-template-columns: 1fr;
-  }
-
-  .wk-unit-art {
-    flex-direction: row;
-    justify-content: center;
-  }
-
-  .wk-sprite {
-    width: auto;
-    max-width: 50%;
-    max-height: 200px;
-  }
-
-  .wk-section h2 {
-    font-size: 22px;
-  }
+.cx-slot-svg {
+  width: 70%;
+  height: 70%;
 }
 
-/* Kısa ekran (JS: html.short; döndürülmüş sahnede de doğru, @media fiziksel görünümü ölçerdi) */
-:root.short .wk-title {
-  font-size: 18px;
-}
-
-/* yatay telefon: başlık + arama tek satır, menü ince; içerik alanı büyür */
-:root.short .wk-head {
-  flex-wrap: nowrap;
-  padding: 4px 10px;
-}
-
-:root.short .wk-search {
-  order: 0;
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-:root.short .wk-nav {
-  padding: 4px 8px;
-}
-
-:root.short .wk-sprite {
-  max-height: 160px;
-}
-
-
-/* AOE shape diagram (any RxC mini grid, same cell-tile look as the battle floor): painted cells are hit, a white frame marks the anchor (pointed cell) */
+/* AOE şekil şeması (savaştaki hücre plakası diliyle): boyalı hücreler vurulur, beyaz çerçeve imlecin gösterdiği (anchor) hücre */
 .wk-shape {
   display: inline-grid;
   grid-template-columns: repeat(var(--cols, 4), 11px);
   gap: 2px;
   padding: 3px;
   vertical-align: middle;
-  background: #0b0806;
-  border: 1px solid var(--w-gold-dark);
-  border-radius: 4px;
+  background: rgba(8, 6, 4, 0.7);
+  border: 1px solid var(--el-line2);
 }
 
 .wk-sc {
@@ -783,12 +1102,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font: bold 8px/1 system-ui, sans-serif;
+  font: bold 8px/1 var(--el-num);
   color: #fff7d6;
   text-shadow: 0 0 2px #2a1405, 0 0 2px #2a1405;
 }
 
-/* Either-side skills (area_any): short note left of the grid */
 .wk-shape-wrap {
   display: inline-flex;
   align-items: center;
@@ -797,17 +1115,17 @@
 }
 
 .wk-shape-note {
-  font: bold 10.5px system-ui, sans-serif;
-  letter-spacing: 0.04em;
+  font: 600 max(10px, calc(12 * var(--u))) var(--el-display);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--w-muted);
+  color: var(--el-dim);
 }
 
 .wk-shapes {
   display: flex;
   flex-wrap: wrap;
   gap: 18px;
-  margin: 8px 0 2px;
+  margin: 10px 0 2px;
 }
 
 .wk-shapes figure {
@@ -819,13 +1137,241 @@
 }
 
 .wk-shapes figcaption {
-  font: 12.5px system-ui, sans-serif;
-  color: var(--w-muted);
+  font: italic max(12px, calc(15 * var(--u))) var(--el-body);
+  color: var(--el-muted);
 }
 
-.wk-chip.test {
-  color: #2a1405;
-  font-weight: bold;
-  background: #ffb347;
-  border-color: #ffb347;
+/* --- Assets / Legacy ve madde altındaki "Play animation", "Art & sounds" parçaları: kit görünümü --- */
+.cx .wk-section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  font: 600 max(18px, calc(30 * var(--u))) var(--el-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--el-on);
+}
+
+.cx .wk-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 8px;
+  font: 600 12px var(--el-display);
+  letter-spacing: 0.06em;
+  color: var(--el-txt);
+  background: rgba(8, 6, 4, 0.55);
+  border: 1px solid var(--el-line2);
+  border-radius: 0;
+  cursor: pointer;
+  transition: color 0.18s, border-color 0.18s;
+}
+
+.cx .wk-chip:hover,
+.cx .wk-chip.on {
+  color: var(--el-on);
+  border-color: var(--el-on);
+}
+
+.cx .wk-playbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px 0 6px;
+  font: 600 max(13px, calc(16 * var(--u))) var(--el-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--el-txt);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  transition: color 0.18s, text-shadow 0.18s;
+}
+
+.cx .wk-playbtn::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 9px solid var(--el-ember);
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+}
+
+.cx .wk-playbtn:hover {
+  color: var(--el-on);
+  text-shadow: var(--el-glow);
+}
+
+.cx .wk-folds {
+  margin-top: max(10px, calc(18 * var(--u)));
+}
+
+.cx .wk-fold > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font: 600 max(11px, calc(14 * var(--u))) var(--el-display);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(217, 178, 106, 0.85);
+  border-bottom: 1px solid var(--el-line1);
+}
+
+.cx .wk-hubcard {
+  padding: 14px 16px;
+  text-align: left;
+  font: max(13px, calc(17 * var(--u))) var(--el-body);
+  color: var(--el-txt);
+  background: linear-gradient(180deg, rgba(34, 25, 16, 0.82), rgba(10, 7, 5, 0.9) 70%);
+  border: 1px solid var(--el-line2);
+  border-radius: 0;
+  transition: border-color 0.2s, transform 0.25s var(--el-ease);
+}
+
+.cx .wk-hubcard b {
+  font: 600 max(12px, calc(16 * var(--u))) var(--el-display);
+  letter-spacing: 0.08em;
+  color: var(--el-on);
+}
+
+.cx .wk-hubcard:hover {
+  border-color: var(--el-gold);
+  transform: translateY(-3px);
+}
+
+.cx .muted {
+  color: var(--el-muted);
+}
+
+.cx .small {
+  font-size: max(12px, calc(15 * var(--u)));
+}
+
+/* Büyütülmüş görsel (gallery/dom.ts openLightbox) Codex'in üstünde */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(5, 3, 2, 0.88);
+  cursor: zoom-out;
+}
+
+.lightbox img {
+  max-width: 90vw;
+  max-height: 80vh;
+  min-width: 256px;
+  background: repeating-conic-gradient(#1c150e 0% 25%, #130d08 0% 50%) 0 0 / 16px 16px;
+  border: 1px solid rgba(217, 178, 106, 0.55);
+}
+
+.lightbox img.pixelated {
+  image-rendering: pixelated;
+  width: min(80vw, 80vh);
+  height: min(80vw, 80vh);
+}
+
+.lightbox-cap {
+  font: italic 18px var(--el-body);
+  color: var(--el-note);
+}
+
+@keyframes cx-fu {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cx-fi {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- kısa / dar sahne (yatay telefon): başlık ince, sütunlar dar, madde paneli en geniş --- */
+:root.short .cx {
+  --cx-top: 48px;
+  --cx-gap: 8px;
+}
+
+:root.short .cx .cx-title {
+  top: calc(var(--et, 0px) + 8px);
+  font-size: 19px;
+}
+
+:root.short .cx .cx-title::before,
+:root.short .cx .cx-title::after {
+  flex-basis: 40px;
+}
+
+:root.short .cx .cx-back {
+  top: var(--et, 0px);
+}
+
+:root.short .cx-body {
+  grid-template-columns: 150px minmax(170px, 0.8fr) minmax(0, 1.6fr);
+}
+
+:root.short .cx-nav {
+  margin-top: 4px;
+}
+
+:root.short .cx-navrow {
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+
+:root.short .cx-navrow.sub {
+  padding-left: 8px;
+  font-size: 10px;
+}
+
+:root.short .cx-navrow .el-dia {
+  display: none;
+}
+
+:root.short .cx-navcount {
+  font-size: 11px;
+}
+
+:root.short .cx-art h1 {
+  font-size: 19px;
+}
+
+:root.short .cx-role {
+  font-size: 14px;
+}
+
+:root.short .cx-tilegrid {
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+}
+
+:root.short .cx-fullsprite {
+  height: 76px;
+}
+
+:root.short .cx-navtitle {
+  white-space: normal;
+  line-height: 1.1;
+}
+
+:root.short .cx-tilename {
+  font-size: 9px;
+  letter-spacing: 0.02em;
 }
