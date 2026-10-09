@@ -218,7 +218,7 @@ function graveGrip(c: VfxCtx, k: VfxKit, t: CombatantView): void {
 // ---------------------------------------------------------------------------------------------------------------- BONE THROW
 
 /**
- * Bone Throw (tek hedef, fiziksel + Slow 2 tur): lich'in avucunda turkuaz ruh ateşi kabarır, kemik kıymıkları avuca toplanıp bir femur olur;
+ * Bone Throw (tek hedef, büyü / dark (2026-10-10) + Slow 2 tur): lich'in avucunda turkuaz ruh ateşi kabarır, kemik kıymıkları avuca toplanıp bir femur olur;
  * femur ruh alevine sarılı, dönerek kavisle hedefe uçar (turkuaz iz + mor duman). Çarpınca kemik paramparça olur (kıymıklar, kemik tozu).
  * Slow tuttuysa yerden iki iskelet eli çıkıp hedefin bileklerini kavrar (ağır pus, geride kalan silik izler). Vampiric Bite: can çalındıysa
  * hedeften lich'e turkuaz ruh akar.

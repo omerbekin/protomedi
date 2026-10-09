@@ -38,7 +38,7 @@
   "watchtower_chief": {
     "name": "The Bandit Chief",
     "units": [
-      { "class": "warrior", "slot": 1, "name": "Bandit Chief", "tier": "elite", "mods": { "hpMult": 1.1, "statMult": 0.9, "powerMult": 0.7 }, "initialCooldownBonus": 1 },
+      { "class": "warrior", "slot": 1, "name": "Bandit Chief", "tier": "elite", "noTierMods": true, "mods": { "hpMult": 1.1, "statMult": 0.9, "powerMult": 0.7 }, "initialCooldownBonus": 1 },
       { "class": "archer", "slot": 6, "mods": { "hpMult": 0.4, "statMult": 0.6, "powerMult": 0.5 }, "lockSkills": ["aimed_shot"] },
       { "class": "archer", "slot": 8, "mods": { "hpMult": 0.4, "statMult": 0.6, "powerMult": 0.5 }, "lockSkills": ["aimed_shot"] }
     ],

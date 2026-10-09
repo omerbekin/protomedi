@@ -6,11 +6,11 @@
     "hard": { "tutorial": [75, 92], "normal": [57, 70], "elite": [42, 55], "boss": [25, 40] }
   },
   "test": {
-    "_not": "Test: Medium zorluk, Medium vekil, seed'li küçük örnek; bant = hedef ± tolerans (örnek küçük olduğu için). Zorluk sıralaması: her kategoride Easy > Medium > Hard.",
+    "_not": "Test: Medium zorluk, Medium vekil, seed'li küçük örnek; bant = hedef ± tolerans (örnek küçük olduğu için). Zorluk sıralaması: her kategoride Easy > Medium > Hard. orderRuns 48 -> 96 (balance-tester 2026-10-10): 48 seferde kategori başına ~40 elit / ~96 boss savaşı var, iki zorluk farkının standart hatası ~7-8 puan; 480 seferlik ölçümde gerçek farklar 13-20 puan iken 48 seferlik örnek boss farkını 1 puan ölçebiliyordu (gürültü). 96 seferde hata payı yarıya iner.",
     "runs": 120,
     "firstSeed": 7001,
     "tolerance": 8,
-    "orderRuns": 48,
+    "orderRuns": 96,
     "orderSeed": 9001
   }
 }

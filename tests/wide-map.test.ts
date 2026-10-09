@@ -74,6 +74,15 @@ describe('Play kartı görsel odağı', () => {
       expect(c.cropH * c.scale).toBeCloseTo(640, 6);
     }
   });
+  it('kart görselleri (assets/cards, 768x1152): genişlik tam, kesit üstten başlar (savaşçılar üstte), yakınlaşma yok denecek kadar az', () => {
+    for (const id of ['quick-battle', 'quick-battle-endless', 'multiplayer']) {
+      const c = focusCrop(768, 1152, 460, 640, focus[id]!);
+      expect(c.cropY).toBeGreaterThanOrEqual(-1e-6);
+      expect(c.cropY).toBeLessThan(2);
+      expect(c.cropW).toBeGreaterThan(767);
+      expect(c.cropY + c.cropH).toBeLessThanOrEqual(1152 + 1e-6);
+    }
+  });
   it('odak yoksa eski davranış: ortalı kaplama', () => {
     const c = focusCrop(2000, 667, 460, 640);
     expect(c.cropX + c.cropW / 2).toBeCloseTo(1000, 6);

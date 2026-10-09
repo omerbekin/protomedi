@@ -349,8 +349,7 @@ export class MpClient {
         else toast(e.message);
         break;
       case 'rematch':
-        if (s.rematch.remote && !s.rematch.local) toast('Your opponent wants a rematch');
-        break;
+        break; // durum sonuç ekranının satırında (src/net/rematch.ts)
       default:
         break;
     }
@@ -408,18 +407,28 @@ export class MpClient {
       },
       result: () => (s.result && s.lockstep === ls ? resultInfo(s.result, s.localSide) : null),
       names: () => this.names(),
+      // Rematch aç/kapa (Cancel rematch), canlı görünüm + durum satırı: src/net/rematch.ts. Back to lobby / Main Menu her durumda çalışır.
       resultActions: () => [
         {
           label: 'Rematch',
           primary: true,
+          repeatable: true,
+          view: () => {
+            const v = s.rematchView();
+            return { label: v.label, enabled: v.enabled };
+          },
           run: () => {
-            if (!s.connected) toast('Your opponent is not connected');
-            s.requestRematch(true);
-            toast('Waiting for your opponent...');
+            const v = s.rematchView();
+            if (v.enabled) s.requestRematch(v.next);
           },
         },
-        { label: 'Back to lobby', run: () => s.backToLobby() },
+        { label: 'Back to lobby', run: () => (this.session === s && s.phase === 'result' ? s.backToLobby() : this.goto(MP_SCENE, {})) },
+        { label: 'Main Menu', run: () => this.goto('MainMenuScene', {}) },
       ],
+      resultStatus: () => {
+        const v = s.rematchView();
+        return { text: v.status, tone: v.tone };
+      },
     };
   }
 

@@ -471,7 +471,7 @@ Not: avatar kırpması yüz için yapılır; kapüşon geriye atılmış olmalı
 | Hexer Evil Eye | 0 MP | 12,6 büyü | ~12,6 | +1,05 Omen ≈ +8,9 (Ö2 sonrası gerçekleşme ~%90 → ~8,0; eski varsayım ~%70 → ~6,2) | **~20,6 etkin** (eski ~18,8) |
 | Gambler Loaded Dice | 0 MP | 20,4 x 1,25 fiziksel | zırh 9'da ~19,0 | - | |
 | Cutthroat Venom Edge | 0 MP | 16,5 fiziksel | ~11-13 (+Hunter's Mark) | Wound | melee |
-| Undead Bone Throw | 0 MP | 15,4 fiziksel | ~10 | Slow | |
+| Undead Bone Throw | 0 MP | 15,4 fiziksel | ~10 | Slow | (tarihî değer; 2026-10-10'dan beri büyü / dark, güç 0,90) |
 | Mage Fire Bolt | 5 MP | 42,75 büyü | ~36 (isabet %82) | - | Hexer'den güçlü, MP harcar |
 | Hexer Withering Curse | 10 MP | 7 / hedef | ~7 / hedef | Wither 8,4 + Omen ~8 → **~23 / hedef**, 2,5 hedefte ~58 (eski ~52) | Blizzard ~75 (14 MP) |
 | Hexer Jinx | 6 MP | 7 | ~7 | Omen ~8 + önlenen hasar (Mage'e ~10-20) | |

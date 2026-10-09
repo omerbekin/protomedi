@@ -10,6 +10,8 @@ import { FakeOpponent } from '../src/net/fake-opponent';
 import { loopbackPair, type Timer } from '../src/net/transport';
 import { deriveSeed, makeNonce, sha256 } from '../src/net/sha256';
 import { sanitizeName } from '../src/net/protocol';
+import { REMATCH_TEXT, rematchView } from '../src/net/rematch';
+import { gateActions } from '../src/game/result-actions';
 
 /** Belirleyici sahte saat + zamanlayıcı: ağ testleri gerçek zamana ve internete çıkmaz. */
 class Clock implements Timer {
@@ -560,5 +562,105 @@ describe('röle modu (Worker üzerinden): az mesaj', () => {
     expect(relay.total).toBeLessThan(direct.total / 2);
     // Ölçüm raporu (docs/design/multiplayer.md > Kota hesabı)
     console.log('[mp-traffic]', JSON.stringify({ direct, relay }));
+  });
+});
+
+describe('sonuç ekranı: rövanş durum makinesi (canlı hata 2026-10-10: Rematch sonrası rakip ayrıldı, Back to lobby tıklanmıyordu)', () => {
+  const base = { inResult: true, connected: true, opponentGone: false, local: false, remote: false };
+  it('rematchView: iste / iptal / rakip istiyor / koptu / ayrıldı', () => {
+    expect(rematchView(base)).toMatchObject({ status: '', label: REMATCH_TEXT.rematch, enabled: true, next: true });
+    expect(rematchView({ ...base, local: true })).toMatchObject({ status: REMATCH_TEXT.waiting, label: REMATCH_TEXT.cancel, enabled: true, next: false });
+    expect(rematchView({ ...base, remote: true })).toMatchObject({ status: REMATCH_TEXT.wants, label: REMATCH_TEXT.rematch, enabled: true, next: true });
+    // Geçici kopma: yeni istek yok, bekleyen istek iptal edilebilir
+    expect(rematchView({ ...base, connected: false })).toMatchObject({ status: REMATCH_TEXT.disconnected, enabled: false });
+    expect(rematchView({ ...base, connected: false, local: true })).toMatchObject({ label: REMATCH_TEXT.cancel, enabled: true, next: false });
+    // Rakip gitti: her durumda kapalı ve net mesaj
+    for (const local of [false, true]) for (const connected of [false, true]) {
+      expect(rematchView({ ...base, opponentGone: true, local, connected })).toMatchObject({ status: 'Opponent left the match', tone: 'error', label: REMATCH_TEXT.rematch, enabled: false });
+    }
+    expect(rematchView({ ...base, inResult: false }).enabled).toBe(false);
+  });
+
+  it('düğme kapısı: Rematch (tekrarlanabilir) Back to lobby / Main Menu düğmesini kilitlemez; ekranı terk eden düğme bir kez çalışır', () => {
+    const log: string[] = [];
+    let enabled = true;
+    const gate = gateActions([
+      { run: () => log.push('rematch'), repeatable: true, view: () => ({ enabled }) },
+      { run: () => log.push('lobby') },
+      { run: () => log.push('menu') },
+    ]);
+    expect(gate.press(0)).toBe(true);
+    expect(gate.press(0)).toBe(true); // Cancel rematch
+    enabled = false; // rakip gitti
+    expect(gate.press(0)).toBe(false);
+    expect(gate.press(1)).toBe(true); // asıl hata: burası eskiden false'tu
+    expect(gate.press(1)).toBe(false); // çift tıklama
+    expect(gate.press(2)).toBe(false);
+    expect(gate.done).toBe(true);
+    expect(log).toEqual(['rematch', 'rematch', 'lobby']);
+    // Main Menu de tek başına çalışır
+    const g2 = gateActions([{ run: () => log.push('rematch'), repeatable: true }, { run: () => log.push('lobby') }, { run: () => log.push('menu') }]);
+    g2.press(0);
+    expect(g2.press(2)).toBe(true);
+    expect(log.at(-1)).toBe('menu');
+  });
+
+  /** Maçı sonuna kadar oynatır (kurucu + sahte rakip). */
+  function finished(seed: number) {
+    const env = hostWithBot(seed);
+    env.bot.connect();
+    env.clock.advance(500, 50, env.tick);
+    env.host.setReady(true);
+    env.clock.advance(600_000, 50, env.tick);
+    expect(env.host.phase).toBe('result');
+    return env;
+  }
+
+  it('Rematch bekliyorken rakip ayrılırsa (leave): sonuç ekranı kalır, "Opponent left the match", Rematch kapalı, Back to lobby çalışır', () => {
+    const { clock, host, bot, tick } = finished(4242);
+    host.requestRematch(true);
+    expect(host.rematchView()).toMatchObject({ label: REMATCH_TEXT.cancel, enabled: true });
+    bot.bot.leave(); // rakip, isteğimizi kabul etmeden çıkar
+    clock.advance(2000, 50, tick);
+    expect(host.phase).toBe('result');
+    expect(host.opponentGone).toBe(true);
+    expect(host.rematch).toEqual({ local: false, remote: false });
+    expect(host.rematchView()).toMatchObject({ status: 'Opponent left the match', enabled: false });
+    host.requestRematch(true); // yok sayılır
+    expect(host.rematch.local).toBe(false);
+    host.backToLobby();
+    expect(host.phase).toBe('lobby');
+    expect(host.opponentGone).toBe(false);
+  });
+
+  it('Rematch bekliyorken rakip sessizce düşerse (sekme kapandı): beklerken iptal edilebilir, 60 sn sonra "Opponent left the match"', () => {
+    const { clock, host, bot, tick } = finished(4242);
+    host.requestRematch(true);
+    bot.stayAway = true;
+    bot.drop();
+    clock.advance(3000, 50, tick);
+    expect(host.rematchView()).toMatchObject({ status: REMATCH_TEXT.disconnected, label: REMATCH_TEXT.cancel, enabled: true, next: false });
+    host.requestRematch(false); // iptal her zaman mümkün
+    expect(host.rematchView()).toMatchObject({ label: REMATCH_TEXT.rematch, enabled: false });
+    clock.advance(65_000, 50, tick);
+    expect(host.phase).toBe('result'); // 60 sn kuralı sonuç ekranını kapatmaz, girişi kilitlemez
+    expect(host.rematchView()).toMatchObject({ status: 'Opponent left the match', enabled: false });
+    host.backToLobby();
+    expect(host.phase).toBe('lobby');
+  });
+
+  it('rakip 60 sn sonra aynı maçın sonuç ekranına geri dönerse rövanş yeniden mümkün; iki taraf isteyince takım seçimi', () => {
+    const { clock, host, bot, tick } = finished(4242);
+    bot.stayAway = true;
+    bot.drop();
+    clock.advance(65_000, 50, tick);
+    expect(host.opponentGone).toBe(true);
+    bot.stayAway = false;
+    bot.connect();
+    clock.advance(1000, 50, tick);
+    expect(host.opponentGone).toBe(false);
+    host.requestRematch(true); // sahte rakip kabul eder
+    clock.advance(2000, 50, tick);
+    expect(['teams', 'battle']).toContain(host.phase);
   });
 });

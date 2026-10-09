@@ -1038,9 +1038,10 @@
     "effects": [
       {
         "type": "damage",
-        "damageType": "physical",
+        "damageType": "magic",
         "scale": "int",
-        "power": 1.12
+        "power": 0.9,
+        "element": "dark"
       },
       {
         "type": "status",

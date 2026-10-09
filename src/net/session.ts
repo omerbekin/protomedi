@@ -9,6 +9,7 @@ import type { ChoiceLike } from '../engine';
 import { createMatchBattle, Lockstep, sideOfRole, type Desync, type MatchSetup } from './lockstep';
 import { CATCHUP_CHUNK, CELLS, encodeMessage, parseMessage, PROTOCOL_VERSION, RateLimiter, type MoveRecord, type NetMessage, type NetSide, type Phase } from './protocol';
 import { ReconnectMachine, SILENCE_TIMEOUT_MS, type LinkStatus, type ServerView } from './reconnect';
+import { rematchView, type RematchView } from './rematch';
 import { deriveSeed, makeNonce, sha256 } from './sha256';
 import { fnv1a } from './state-hash';
 import type { Timer, Transport } from './transport';
@@ -82,6 +83,8 @@ export class MpSession {
   ready = { local: false, remote: false };
   team = { local: null as string[] | null, localReady: false, remote: null as string[] | null, remoteReady: false };
   rematch = { local: false, remote: false };
+  /** Sonuç ekranında rakip ayrıldı (leave) ya da 60 sn içinde dönmedi: rövanş artık mümkün değil (lobiye dönünce sıfırlanır). */
+  opponentGone = false;
   lockstep: Lockstep | null = null;
   result: MatchResult | null = null;
   /** Gelen geçersiz/kötü niyetli mesaj sayısı (debug bilgisi). */
@@ -235,7 +238,10 @@ export class MpSession {
   private onTimeout(phase: 'won' | 'lost' | 'failed'): void {
     const live = this.phase === 'battle' && this.lockstep && !this.result;
     if (live) this.finish({ winner: phase === 'won' ? this.localSide : phase === 'lost' ? this.remoteSide : null, reason: phase === 'failed' ? 'failed' : 'forfeit' });
-    else if (this.phase !== 'result') {
+    else if (this.phase === 'result') {
+      // Sonuç ekranında rakip 60 sn dönmedi: ekran kalır (sonuç görünsün), rövanş kapanır; Back to lobby çalışır
+      this.markOpponentGone();
+    } else {
       this.emit({ type: 'error', code: 'gone', message: phase === 'lost' ? 'Connection lost' : 'Opponent left' });
       this.enterLobby(false);
     }
@@ -351,6 +357,7 @@ export class MpSession {
       case 'leave':
         this.emit({ type: 'peerLeft' });
         if (this.phase === 'battle' && this.lockstep && !this.result) this.finish({ winner: this.localSide, reason: 'left' });
+        if (this.phase === 'result') this.markOpponentGone();
         this.everConnected = false;
         this.machine.reset(this.now());
         if (this.phase !== 'result') this.enterLobby(false);
@@ -402,7 +409,14 @@ export class MpSession {
       if (!seeded) this.newSeedRound();
       if (this.team.local) this.send({ t: 'team', cells: [...this.team.local], ready: this.team.localReady });
     }
-    if (this.phase === 'result') this.send({ t: 'rematch', on: this.rematch.local });
+    if (this.phase === 'result') {
+      // Rakip aynı maçın sonuç ekranına geri döndüyse (60 sn sonrası geç dönüş) rövanş yeniden mümkün; ayrılıp yeniden katıldıysa değil
+      if (this.opponentGone && ls && msg.match === ls.setup.match && msg.phase === 'result') {
+        this.opponentGone = false;
+        this.emit({ type: 'rematch' });
+      }
+      this.send({ t: 'rematch', on: this.rematch.local });
+    }
   }
 
   private sendCatchup(from: number): void {
@@ -499,6 +513,7 @@ export class MpSession {
     this.phase = 'lobby';
     this.ready = { local: false, remote: false };
     this.rematch = { local: false, remote: false };
+    this.opponentGone = false;
     this.team.localReady = false;
     this.team.remoteReady = false;
     this.team.remote = null;
@@ -515,6 +530,7 @@ export class MpSession {
     this.team.remoteReady = false;
     this.team.remote = null;
     this.rematch = { local: false, remote: false };
+    this.opponentGone = false;
     this.lockstep = null;
     this.result = null;
     this.droppedThisMatch = false;
@@ -553,7 +569,14 @@ export class MpSession {
   }
 
   private maybeRematch(): void {
-    if (this.role === 'host' && this.phase === 'result' && this.rematch.local && this.rematch.remote && this.connected) this.enterTeams(true);
+    if (this.role === 'host' && this.phase === 'result' && this.rematch.local && this.rematch.remote && this.connected && !this.opponentGone) this.enterTeams(true);
+  }
+
+  /** Rakip sonuç ekranından gitti: bekleyen istekleri düşür, rövanşı kapat. */
+  private markOpponentGone(): void {
+    this.opponentGone = true;
+    this.rematch = { local: false, remote: false };
+    this.emit({ type: 'rematch' });
   }
 
   private newMatchId(): string {
@@ -619,14 +642,22 @@ export class MpSession {
     return { ok: true };
   }
 
+  /** Rövanş iste (on) ya da isteği geri al (off). İptal her zaman mümkündür; rakip gittiyse ya da bağlantı yoksa yeni istek yok sayılır. */
   requestRematch(on = true): void {
     if (this.phase !== 'result') return;
+    if (on && (this.opponentGone || !this.connected)) return;
     this.rematch.local = on;
     this.send({ t: 'rematch', on });
     this.emit({ type: 'rematch' });
     this.maybeRematch();
   }
 
+  /** Sonuç ekranının düğme/durum görünümü (saf karar: ./rematch.ts). */
+  rematchView(): RematchView {
+    return rematchView({ inResult: this.phase === 'result', connected: this.connected, opponentGone: this.opponentGone, local: this.rematch.local, remote: this.rematch.remote });
+  }
+
+  /** Lobiye dön: her durumda çalışır (bekleyen rövanş isteği, kopuk bağlantı ya da ayrılmış rakip fark etmez). */
   backToLobby(): void {
     this.enterLobby(true);
   }

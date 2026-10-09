@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getMap, latestSave, migrateSaves, readSaves, slotSummaries, type SaveEntry } from '../../campaign';
 import { backgroundKey, hasBackground, loadRestInBackground, preloadAssets } from '../assets';
 import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
+import { cardArt, preloadCardArt } from '../card-art';
 import { blurredTexture, edgeFillers, mapArt } from '../map-art';
 import { coverShift, focusCrop, placeArt } from '../wide-map';
 import layout from '../../../data/battle-layout.json';
@@ -68,7 +69,8 @@ const ITEM_Y0 = LOOK.itemY0;
 const TPAD = ELEGANT ? 18 : 0;
 const SHADOW_DARK = 'rgba(12,8,5,0.95)';
 /** Ana menünün açılışta istediği arka planlar (Play kartları; yedekleriyle). */
-const MENU_BACKGROUNDS = ['proving-grounds-sunny-afternoon', 'castle-hall', 'duelling-ring-moon', 'kings-bridge'];
+/** Play kartları artık kendi görsellerini kullanır (assets/cards, src/game/card-art.ts): menü açılışında arena arka planı yüklenmez. */
+const MENU_BACKGROUNDS: string[] = [];
 /** Quick Battle kartındaki Endless mode anahtarı (localStorage). */
 const ENDLESS_TOGGLE_KEY = 'proto.qbEndless';
 const SHADOW_GLOW = 'rgba(240,140,40,0.85)';
@@ -181,6 +183,7 @@ export class MainMenuScene extends Phaser.Scene {
     // görününce arka planda gelir (loadRestInBackground). İlerleme açılış yükleme ekranına bağlıdır (src/ui/boot-loader.ts).
     preloadAssets(this, { sprites: false, avatars: false, backgrounds: MENU_BACKGROUNDS });
     preloadCampaignArt(this);
+    preloadCardArt(this);
     preloadLogo(this);
   }
 
@@ -560,13 +563,22 @@ export class MainMenuScene extends Phaser.Scene {
     const camp = campaignButtons(!!latest, anySaves);
     const runCamp = (id: 'continue' | 'new' | 'load') => (id === 'continue' && latest ? this.loadSave(latest) : id === 'new' ? this.chooseSlot() : this.loadSlots());
     const focusOf = (key: string | null): readonly [number, number] | null => {
-      const id = key?.startsWith('bg:') ? key.slice(3) : null;
+      const id = key?.startsWith('bg:') ? key.slice(3) : key?.startsWith('card:') ? key.slice(5) : null;
       return (id && (layout.backgrounds.cardFocus as unknown as Record<string, [number, number]>)[id]) || null;
     };
-    const specs: Array<{ name: string; art: string | null; line?: string; endless?: boolean; buttons?: typeof camp; run: () => void }> = [
+    // Kart görselleri (Ömer 2026-10-10): assets/cards (Quick Battle gündüz / Endless mode açıkken alacakaranlık, Multiplayer ay ışığı);
+    // dosya yoksa eski arena arka planları. Kart görseli (`card:`) kart için çizildi: daha az karartılır.
+    const specs: Array<{ name: string; art: string | null; altArt?: string | null; line?: string; endless?: boolean; buttons?: typeof camp; run: () => void }> = [
       { name: 'Campaign', art: campaignArt, buttons: camp, run: () => runCamp(camp[0]!.id) },
-      { name: 'Quick Battle', art: art('proving-grounds-sunny-afternoon') ?? art('castle-hall'), line: 'Pick two teams', endless: true, run: () => (this.endlessOn() ? this.scene.start(ENDLESS_SCENE) : this.scene.start('TeamSelectScene')) },
-      { name: 'Multiplayer', art: art('duelling-ring-moon') ?? art('kings-bridge'), line: 'Fight a friend online', run: () => this.setView('mp') },
+      {
+        name: 'Quick Battle',
+        art: cardArt(this, 'quick-battle') ?? art('proving-grounds-sunny-afternoon') ?? art('castle-hall'),
+        altArt: cardArt(this, 'quick-battle-endless'),
+        line: 'Pick two teams',
+        endless: true,
+        run: () => (this.endlessOn() ? this.scene.start(ENDLESS_SCENE) : this.scene.start('TeamSelectScene')),
+      },
+      { name: 'Multiplayer', art: cardArt(this, 'multiplayer') ?? art('duelling-ring-moon') ?? art('kings-bridge'), line: 'Fight a friend online', run: () => this.setView('mp') },
     ];
     specs.forEach((s, i) => {
       const cx = W / 2 + (i - 1) * (CARD_W + CARD_GAP);
@@ -579,20 +591,40 @@ export class MainMenuScene extends Phaser.Scene {
       const base = this.add.rectangle(0, 0, CARD_W, CARD_H, 0x241a11, 1);
       c.add(base);
       /** Görsel yakınlaşması (elegant hover): kırpma bölgesi merkezde daralır, ölçek aynı oranda büyür (kart dışına taşmaz). */
-      let zoomImg: ((k: number) => void) | null = null;
-      if (s.art) {
-        const img = this.add.image(0, 0, s.art).setAlpha(0.6);
-        // Odak noktası (veri: battle-layout.json > backgrounds.cardFocus) kartın tam ortasında; kart boşluksuz dolar
-        const fc = focusCrop(img.width, img.height, CARD_W, CARD_H, focusOf(s.art));
+      const zooms: Array<(k: number) => void> = [];
+      const zoomImg = (k: number) => zooms.forEach((z) => z(k));
+      /** Kart görseli: odak noktası (battle-layout.json > backgrounds.cardFocus) kartın ortasında, kart boşluksuz dolar. */
+      const addArt = (key: string): Phaser.GameObjects.Image => {
+        const img = this.add.image(0, 0, key).setAlpha(key.startsWith('card:') ? 0.92 : 0.6);
+        const fc = focusCrop(img.width, img.height, CARD_W, CARD_H, focusOf(key));
         img.setCrop(fc.cropX, fc.cropY, fc.cropW, fc.cropH).setScale(fc.scale);
         img.setOrigin((fc.cropX + fc.cropW / 2) / img.width, (fc.cropY + fc.cropH / 2) / img.height);
         c.add(img);
-        zoomImg = (k) => {
+        zooms.push((k) => {
           const w = fc.cropW / k;
           const h = fc.cropH / k;
           img.setCrop(fc.cropX + (fc.cropW - w) / 2, fc.cropY + (fc.cropH - h) / 2, w, h).setScale(fc.scale * k);
-        };
-      }
+        });
+        return img;
+      };
+      const mainImg = s.art ? addArt(s.art) : null;
+      // Endless mode açıkken Quick Battle kartı alacakaranlık görseline yumuşakça geçer (çapraz geçiş)
+      const altImg = s.altArt ? addArt(s.altArt) : null;
+      const baseAlpha = (img: Phaser.GameObjects.Image | null) => (img?.texture.key.startsWith('card:') ? 0.92 : 0.6);
+      const showAlt = (on: boolean, animate: boolean) => {
+        if (!altImg || !mainImg) return;
+        this.tweens.killTweensOf([mainImg, altImg]);
+        const a = on ? baseAlpha(altImg) : 0;
+        const m = on ? 0 : baseAlpha(mainImg);
+        if (!animate) {
+          altImg.setAlpha(a);
+          mainImg.setAlpha(m);
+          return;
+        }
+        this.tweens.add({ targets: altImg, alpha: a, duration: 420, ease: 'Sine.easeInOut' });
+        this.tweens.add({ targets: mainImg, alpha: m, duration: 420, ease: 'Sine.easeInOut' });
+      };
+      if (s.endless) showAlt(this.endlessOn(), false);
       const shadeKey = canvasTex(this, 'mm-cardshade', 4, 256, (ctx) => {
         const g = ctx.createLinearGradient(0, 0, 0, 256);
         g.addColorStop(0.3, 'rgba(10,7,4,0)');
@@ -626,7 +658,10 @@ export class MainMenuScene extends Phaser.Scene {
         // Endless mode anahtarı (kartın altında; açıkken kart Endless dalga koşusunu açar: src/game/endless-session.ts)
         const lineFor = () => (this.endlessOn() ? 'Endless waves - how far can you go?' : s.line!);
         lineText?.setText(lineFor());
-        const tg = this.makeToggle('Endless mode', () => this.endlessOn(), (v) => this.setEndlessOn(v), () => lineText?.setText(lineFor()));
+        const tg = this.makeToggle('Endless mode', () => this.endlessOn(), (v) => this.setEndlessOn(v), () => {
+          lineText?.setText(lineFor());
+          showAlt(this.endlessOn(), true);
+        });
         tg.setY(hh + 46);
         outer.add(tg);
       }
@@ -669,7 +704,7 @@ export class MainMenuScene extends Phaser.Scene {
             look.lift = from.lift + (to.lift - from.lift) * t;
             look.zoom = from.zoom + (to.zoom - from.zoom) * t;
             c.y = look.lift;
-            zoomImg?.(look.zoom);
+            zoomImg(look.zoom);
           },
         });
       };

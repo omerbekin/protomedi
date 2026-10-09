@@ -29,6 +29,8 @@ export interface MpBattleHooks {
   /** Savaş sonu (motorun kazananı ya da diğer sebepler) için sonuç bilgisi. */
   result(): MpResultInfo | null;
   resultActions(): ResultAction[];
+  /** Sonuç ekranı durum satırı (rakip ayrıldı / bekleniyor / rövanş istiyor). */
+  resultStatus(): { text: string; tone: 'info' | 'warn' | 'error' };
   /** Oyuncu adları (boşsa Player 1/2). */
   names(): { local: string; remote: string };
 }

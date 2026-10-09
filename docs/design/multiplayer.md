@@ -18,7 +18,12 @@ Varsayımlar ve sorular: `open-questions.md` madde 268.
 6. Savaş: herkes yalnızca kendi tarafının birimini, kendi sırasında oynar. Rakibin sırasında alt panelde **Opponent's turn**
    yazar ve giriş kilitlidir. Yapay zeka kullanılmaz. (İstisna: hiçbir eylemi kalmayan birim, örn. skill'i kalmayan çağrı, sahibi
    adına otomatik "pas" geçer; bu da normal bir hamle olarak gönderilir.)
-7. Sonuç ekranı: **Rematch** (ikisi de isterse yeniden takım seçimi, önceki takımlar korunur) / **Back to lobby**.
+7. Sonuç ekranı: **Rematch** (ikisi de isterse yeniden takım seçimi, önceki takımlar korunur) / **Back to lobby** / **Main Menu**.
+   Rematch aç/kapa düğmesidir (basınca "Cancel rematch"); Back to lobby ve Main Menu HER durumda çalışır (canlı hata 2026-10-10:
+   Rematch'e basınca ortak "bir kez" kilidi diğer düğmeleri de kilitliyordu; düğme kapısı `src/game/result-actions.ts`). Düğmelerin
+   üstünde durum satırı: "Waiting for your opponent...", "Your opponent wants a rematch", "Opponent disconnected" (geçici kopma:
+   yeni istek yok, bekleyen istek iptal edilebilir), "Opponent left the match" (rakip `leave` gönderdi ya da 60 sn içinde dönmedi:
+   Rematch kapanır, ekran kalır; rakip aynı maçın sonuç ekranına geri dönerse yeniden açılır). Saf karar `src/net/rematch.ts`.
 8. Kopma: savaş duraklar, ekranda geri sayım (60 sn). Kopan oyuncu dönerse kaldığı yerden devam; dönmezse kalan kazanır.
 
 ## 2. Mimari

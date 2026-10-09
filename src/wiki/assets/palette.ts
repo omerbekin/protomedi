@@ -1,6 +1,9 @@
 import type { Catalog, Swatch } from '../../gallery/catalog';
 import { applyFilter, h, searchable, type SectionApi } from '../../gallery/dom';
 
+/** Play ekranı kart görselleri (assets/cards; asıllar assets/source/cards): yeni dosya konunca kendiliğinden listelenir. */
+const CARD_FILES = import.meta.glob('../../../assets/cards/*.{webp,png,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+
 /** UI / PALETTE: oyunda kullanılan renkler ve yazı tipleri. Altın tonları ve serif font ui-frame.ts'den (Phaser) tembel yüklenir. */
 export function mountPalette(cat: Catalog): SectionApi {
   const root = h('section', { class: 'section', attrs: { id: 'palette' } });
@@ -26,6 +29,22 @@ export function mountPalette(cat: Catalog): SectionApi {
     block('Stats', cat.palette.stat, 'stat'),
     block('Class and summon colors', cat.palette.classes, 'class color'),
     goldBlock,
+    h(
+      'div',
+      { class: 'group' },
+      h('div', { class: 'group-head' }, h('h3', { text: 'Play screen card art (assets/cards)' }), h('span', { class: 'muted small', text: `${Object.keys(CARD_FILES).length}` })),
+      h(
+        'div',
+        { class: 'swatches' },
+        ...Object.entries(CARD_FILES).map(([path, url]) => {
+          const name = path.split('/').pop() ?? path;
+          return searchable(
+            h('div', { class: 'swatch-card', title: `assets/cards/${name}` }, h('img', { attrs: { src: url, alt: name, loading: 'lazy' }, style: { width: '120px', height: '180px', 'object-fit': 'cover' } }), h('span', { class: 'mono small muted', text: name })),
+            `card art menu play ${name}`,
+          );
+        }),
+      ),
+    ),
     h('div', { class: 'group' }, h('div', { class: 'group-head' }, h('h3', { text: 'Fonts' })), fontHost),
   );
   root.append(h('div', { class: 'section-head' }, h('h2', { text: 'Palette & UI' }), countEl, h('span', { class: 'muted small', text: 'Click a swatch to copy its hex' })), body);

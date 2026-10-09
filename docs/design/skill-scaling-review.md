@@ -2,6 +2,8 @@
 
 **Ömer'in sorusu:** "Animasyon, tema ve karakter kimliğine bakarak, karakterlerin statlarına dokunmadan, her skill büyü mü fiziksel mi olmalı, STR / DEX / INT / LUCK hangisiyle ölçeklenmeli? Belki toptan değiştiririz ama önce bir tablo yapalım, değer mi görelim."
 
+**Durum (2026-10-10):** Ömer yalnızca Bone Throw değişikliğini onayladı ve uygulandı (büyü / dark, güç 0,90); bölüm 4'teki sorulara kararlar open-questions madde 289 ve combat.md > Hasar ölçekleme kuralı'nda.
+
 **Bu belge yalnızca analizdir.** Hiçbir veri ya da kod değişmedi, simülasyon (sim) koşturulmadı. Denge tahminleri hesapla yapılmış kaba tahminlerdir; uygulanacak her değişiklik `npm run sim` ile doğrulanmalıdır.
 
 ---

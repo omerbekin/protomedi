@@ -590,6 +590,12 @@ describe('Luck primary: Lucky Escape (ölümcül vuruştan kurtulma) savaşta', 
   });
 });
 
+/**
+ * Primary dışı statla ölçeklenen skill'ler: Ömer kararı 2026-10-10 (open-questions madde 289) ile ileride İZİNLİ. Böyle bir skill eklenince
+ * buraya gerekçesiyle yazılır; listedekiler primary uyum payına sayılmaz. Bugün boş (hiçbir skill primary dışı stat kullanmıyor).
+ */
+const OFF_PRIMARY_ALLOWED: { skill: string; reason: string }[] = [];
+
 describe('skill temasına uygun stat (class verisi)', () => {
   it('Undead (Dark Mage, Int primary): hasar/yer etkisi skill\'leri Int ile ölçeklenir', () => {
     for (const id of ['bone_throw', 'wail_of_the_dead']) { // madde 240: Blood Rite kalktı; Dark Bond ölçeksiz (hasar yok)
@@ -599,9 +605,44 @@ describe('skill temasına uygun stat (class verisi)', () => {
     }
   });
 
-  it('her class\'ın hasar/şifa/kalkan skill\'lerinin çoğu primary statıyla ölçeklenir (Str/Int/Dex/Luck uyumu)', () => {
+  it('Bone Throw (Ömer onayı 2026-10-10, skill-scaling-review): büyü hasarı, element dark, INT ölçekli', () => {
+    const dmg = content.skills.bone_throw!.effects.find((e) => e.type === 'damage') as { damageType: string; element?: string; scale: string; power: number };
+    expect(dmg.damageType).toBe('magic');
+    expect(dmg.element).toBe('dark');
+    expect(dmg.scale).toBe('int');
+    expect(dmg.power).toBeGreaterThan(0.8);
+    expect(dmg.power).toBeLessThan(1);
+    // motor: zırh değil büyü zırhı azaltır; olay elementi dark (yüzen yazıda kuru kafa ikonu)
+    const cells = (m: Record<number, string>) => Array.from({ length: 12 }, (_, i) => m[i] ?? '');
+    const b = new Battle(content.battleSetup('random-battle', 3, 'test', { party: cells({ 0: 'undead' }), enemies: cells({ 0: 'warrior' }) }, false));
+    const u = b.combatants.find((c) => c.defId === 'undead')!;
+    const w = b.combatants.find((c) => c.defId === 'warrior')!;
+    const avg = () => previewSkill(b, u.uid, 'bone_throw', w.uid).find((p) => p.uid === w.uid)!.damage!.avg;
+    const base = avg();
+    w.stats.armor = 500;
+    expect(avg()).toBe(base);
+    w.stats.magicArmor = 30;
+    expect(avg()).toBeLessThan(base);
+    w.stats.magicArmor = 0;
+    Object.assign(u.stats, { accuracy: 10 });
+    w.stats.evasion = 0;
+    const r = b.useSkill(u.uid, 'bone_throw', w.uid);
+    expect(r.ok).toBe(true);
+    const hit = r.ok ? r.events.find((e) => e.type === 'damage') : undefined;
+    expect(hit && 'element' in hit ? hit.element : undefined).toBe('dark');
+    expect(hit && 'damageType' in hit ? hit.damageType : undefined).toBe('magic');
+  });
+
+  it('her class\'ın hasar/şifa/kalkan skill\'lerinin çoğu primary statıyla ölçeklenir (Str/Int/Dex/Luck uyumu; açık istisnalar hariç)', () => {
+    for (const x of OFF_PRIMARY_ALLOWED) {
+      expect(content.skills[x.skill], x.skill).toBeDefined(); // bayat giriş yok
+      expect(x.reason.length).toBeGreaterThan(0);
+    }
     for (const def of classes) {
-      const scales = def.skills.flatMap((id) => content.skills[id]!.effects.flatMap((e) => ('scale' in e ? [e.scale] : [])));
+      const scales = def.skills
+        .filter((id) => !OFF_PRIMARY_ALLOWED.some((x) => x.skill === id))
+        .flatMap((id) => content.skills[id]!.effects.flatMap((e) => ('scale' in e ? [e.scale] : [])));
+      if (scales.length === 0) continue;
       const share = scales.filter((s) => s === def.primary).length / scales.length;
       expect(share, def.id).toBeGreaterThanOrEqual(0.5);
     }

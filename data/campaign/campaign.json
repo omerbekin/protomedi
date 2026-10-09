@@ -9,17 +9,17 @@
     "maxSaves": { "normal": 5, "ironman": 1 },
     "slots": 3
   },
-  "_difficulty": "Genel zorluk (Ömer kararı, madde 256): sefer başında seçilir, sonra DEĞİŞMEZ (kayıtta saklanır). ai = düşman yapay zekası (ai.json > difficulty). enemy = seferdeki TÜM düşmanlara eklenen güçlendirme (karşılaşmanın kendi mods'u ile birleşir: çarpanlar çarpılır, düz ekler toplanır; alanlar hpMult, statMult, powerMult, armorAdd, magicArmorAdd). enemyTier = rütbeli birimlere (elite / boss) enemy'nin üstüne ek. rules = bu zorlukta sefer kurallarının üstüne yazılanlar (victoryHeal, reviveRatio, bossVictoryHeal). Karşılaşmalar Medium'a göre ayarlıdır (enemy yok). Sefer dengesi 2026-10-08 (docs/balance.md > Sefer dengesi): Easy = yalnızca hata yapan YZ (ek zayıflatma gerekmedi), Hard = Hard YZ + düşmanlar %12 can / %5 güç, boss'lar ayrıca %10 can / %10 güç. İleride loot vb. alanlar buraya eklenir.",
+  "_difficulty": "Genel zorluk (Ömer kararı, madde 256): sefer başında seçilir, sonra DEĞİŞMEZ (kayıtta saklanır). ai = düşman yapay zekası (ai.json > difficulty). enemy = seferdeki TÜM düşmanlara eklenen güçlendirme (karşılaşmanın kendi mods'u ile birleşir: çarpanlar çarpılır, düz ekler toplanır; alanlar hpMult, statMult, powerMult, armorAdd, magicArmorAdd). enemyTier = rütbeli birimlere (elite / boss) enemy'nin üstüne ek. rules = bu zorlukta sefer kurallarının üstüne yazılanlar (victoryHeal, reviveRatio, bossVictoryHeal). Karşılaşmalar Medium'a göre ayarlıdır (enemy yok). Elit rütbe eki (balance-tester 2026-10-10, sim:campaign 480 sefer): motor statları tam sayıya yuvarlayınca ve item düşman telafisi açılınca Medium elit ilk deneme %55'e (bant 60-70), Hard %42'ye (bant 42-55) düştü; Medium elit lideri can x0,85 / güç x0,9, Hard elit lideri can x0,95 aldı (tutorial'daki Bandit Chief noTierMods ile hariç). Sefer dengesi 2026-10-08 (docs/balance.md > Sefer dengesi): Easy = yalnızca hata yapan YZ (ek zayıflatma gerekmedi), Hard = Hard YZ + düşmanlar %12 can / %5 güç, boss'lar ayrıca %10 can / %10 güç. İleride loot vb. alanlar buraya eklenir.",
   "defaultDifficulty": "medium",
   "difficulties": {
     "easy": { "name": "Easy", "ai": "easy", "text": "Enemies make more mistakes." },
-    "medium": { "name": "Medium", "ai": "medium", "text": "The intended challenge." },
+    "medium": { "name": "Medium", "ai": "medium", "text": "The intended challenge.", "enemyTier": { "elite": { "hpMult": 0.85, "powerMult": 0.9 } } },
     "hard": {
       "name": "Hard",
       "ai": "hard",
       "text": "Enemies play their best and are tougher.",
       "enemy": { "hpMult": 1.12, "powerMult": 1.05 },
-      "enemyTier": { "boss": { "hpMult": 1.1, "powerMult": 1.1 } }
+      "enemyTier": { "elite": { "hpMult": 0.95 }, "boss": { "hpMult": 1.1, "powerMult": 1.1 } }
     }
   },
   "starterPool": ["warrior", "defender", "archer", "cutthroat", "mage", "druid", "paladin", "undead", "antimage", "gambler", "hexer"],

@@ -30,6 +30,8 @@ import { statusBadge } from '../art-registry';
 import { EVENT_FX, eventContextSkill, selectEventFx } from '../event-fx';
 import { UsageRecorder, type SkillUsage } from '../skill-usage';
 import type { VfxCtx } from '../vfx';
+import { HazeTracker, hazeStatuses } from '../linger-haze';
+import { smokeHaze, type HazeView } from '../linger-haze-view';
 import { unitName, tierStyle } from '../unit-label';
 import { skillMiniGrid } from '../../ui/shape-diagram';
 import type { MiniShape } from '../../ui/shape-diagram';
@@ -171,6 +173,9 @@ export class BattleScene extends Phaser.Scene {
   private cellZones: Phaser.GameObjects.Zone[] = [];
   private cellHover: { board: 'party' | 'enemy'; slot: number } | null = null;
   private groundViews = new Map<string, Phaser.GameObjects.Container>();
+  /** Kalıcı alan pusu (Smoke Bomb): etki (Blinded/Shrouded) sürdükçe alanın hücrelerinde soluk duman; linger-haze.ts + linger-haze-view.ts. */
+  private hazes = new HazeTracker();
+  private hazeViews = new Map<string, HazeView>();
   /** Bekleyen telgrafların (Bridge Warden) kalıcı göstergeleri: telgraf id -> çatlak hücreler + (damgada) birim üstü işaret. */
   private telegraphViews = new Map<string, { cells?: { destroy(): void }; mark?: { destroy(): void }; kind: 'span' | 'fall' | 'brand' }>();
   private badgeKeys = new Map<string, string>();
@@ -258,6 +263,8 @@ export class BattleScene extends Phaser.Scene {
     this.cellZones = [];
     this.cellHover = null;
     this.groundViews = new Map();
+    this.hazes = new HazeTracker();
+    this.hazeViews = new Map();
     this.telegraphViews = new Map();
     this.badgeKeys = new Map();
     this.usageRec = new UsageRecorder();
@@ -478,6 +485,7 @@ export class BattleScene extends Phaser.Scene {
 
   update(): void {
     this.refreshBadges();
+    this.refreshLingerHaze();
     this.refreshSpeedBars();
     // Açık birim kartları canlı değer gösterir (hasar, yenilenme, durumlar, seçili skill önizlemesi): birkaç karede bir yenilenir
     if (this.hud && ++this.cardTick % 12 === 0) this.hud.refreshCards((uid) => this.buildCard(uid));
@@ -2164,6 +2172,7 @@ export class BattleScene extends Phaser.Scene {
         // dönüşü (returnHome) doğrudan yeni hücreye gider. Ardından gelen 'moved' (advance) olayı yalnızca dönüş olmadıysa yürütür.
         const adv = this.currentUsage.events.find((x) => x.type === 'moved' && x.advance && x.actor === e.actor);
         if (adv?.type === 'moved' && actor) this.rehome(e.actor, this.cellPos(actor.board, adv.to));
+        this.addLingerHaze(e);
         return this.playSkillMotion(e.actor, e.skill, e.targets, e.anchor ?? e.center, this.skillResults.get(e), e.cells, e.stages, e.board);
       }
       case 'resource': {
@@ -2893,6 +2902,29 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** Pus bırakan alan skill'i (Smoke Bomb): alanın hücrelerine kalıcı soluk duman; atıldığı tahtada (area_any: iki tahtadan biri). */
+  private addLingerHaze(e: { skill: string; targets: string[]; cells?: number[]; board?: 'party' | 'enemy' }): void {
+    const haze = this.hazes.cast(e, hazeStatuses(content.skills[e.skill], e.skill), this.time.now);
+    if (!haze) return;
+    try {
+      this.hazeViews.set(haze.id, smokeHaze(this, haze.board, haze.cells));
+    } catch (err) {
+      console.warn('[haze] pus çizilemedi', err);
+    }
+  }
+
+  /** Her kare: pusa bağlı birimler hâlâ durumu taşıyor mu (canlı savaş durumu, rozetlerle aynı kaynak)? Etkisi biten pus söner. */
+  private refreshLingerHaze(): void {
+    const ended = this.hazes.reconcile((uid, statuses) => {
+      const c = this.battle.get(uid);
+      return !!c && c.hp > 0 && c.statuses.some((st) => statuses.includes(st.kind));
+    }, this.time.now);
+    for (const id of ended) {
+      this.hazeViews.get(id)?.fadeOut();
+      this.hazeViews.delete(id);
+    }
+  }
+
   private removeGroundView(id: string): void {
     const c = this.groundViews.get(id);
     if (!c) return;
@@ -3426,7 +3458,7 @@ export class BattleScene extends Phaser.Scene {
     const info = mpInfo ?? (mp ? mp.result() : null);
     this.resultScreen = showResultScreen(this, {
       victory,
-      ...(mp ? { localSide: this.localSide, headings: mp.names(), actions: mp.resultActions(), ...(info?.title ? { title: info.title } : {}), ...(info?.subtitle ? { subtitle: info.subtitle } : {}) } : {}),
+      ...(mp ? { localSide: this.localSide, headings: mp.names(), actions: mp.resultActions(), status: () => mp.resultStatus(), ...(info?.title ? { title: info.title } : {}), ...(info?.subtitle ? { subtitle: info.subtitle } : {}) } : {}),
       battle: this.battle,
       stats: this.stats,
       avatar: (unit, cx, cy, size) => this.avatarImage(unit, cx, cy, size),

@@ -162,3 +162,14 @@ describe('Wiki sol menüsü: Assets ve Legacy bölümleri', () => {
     for (const target of Object.values(WIKI_ALIASES)) expect(ASSET_NAV.map((n) => n.id) as string[]).toContain(target);
   });
 });
+
+describe('Play kartı görselleri (assets/cards)', () => {
+  it('her kart görseli bağlı: odak verisi var (battle-layout.json > backgrounds.cardFocus) ve aslı assets/source/cards altında', async () => {
+    const layout = (await import('../data/battle-layout.json')).default as unknown as { backgrounds: { cardFocus: Record<string, unknown> } };
+    for (const f of readdirSync('assets/cards')) {
+      const id = f.replace(/\.[^.]+$/, '');
+      expect(layout.backgrounds.cardFocus[id], `${f}: odak yok`).toBeTruthy();
+      expect(existsSync(`assets/source/cards/${f}`), `${f}: aslı yok`).toBe(true);
+    }
+  });
+});

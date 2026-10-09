@@ -4,9 +4,10 @@ import { debugState } from './debug-state';
 import { copyMatchData } from '../ui/match-copy';
 import { fitText } from './menu-ui';
 import { GOLD } from './ui-frame';
-import { EL, elBody, elButton, elPanel, elText } from './elegant-ui';
+import { EL, elBody, elButton, elPanel, elText, type ElButton } from './elegant-ui';
 import { tierStyle, unitName } from './unit-label';
 import { FULL_W, FULL_X0 } from '../ui/viewport';
+import { gateActions } from './result-actions';
 
 /**
  * Savaş sonu ekranı (VICTORY / DEFEAT): koyu vinyet, ortada plaket, altında iki takımın özet paneli, altta düğmeler.
@@ -72,6 +73,8 @@ export interface ResultScreenOptions {
   subtitle?: string;
   /** Multiplayer: sütun başlıkları (yerel ve rakip oyuncunun adı). */
   headings?: { local: string; remote: string };
+  /** Multiplayer: düğmelerin üstündeki canlı durum satırı (ör. 'Opponent left the match'); ~4 kez/sn okunur, '' = gizli. */
+  status?: () => { text: string; tone: 'info' | 'warn' | 'error' };
 }
 
 /** Sonuç ekranının özel düğmesi (sefer bağlamı: src/game/campaign-session.ts). */
@@ -79,6 +82,13 @@ export interface ResultAction {
   label: string;
   primary?: boolean;
   run: () => void;
+  /**
+   * Tekrar basılabilir aç/kapa düğmesi (multiplayer Rematch / Cancel rematch). Diğer düğmeler ekranı terk eder ve yalnızca bir kez
+   * çalışır; tekrarlanabilir düğme onları ASLA kilitlemez (canlı hata 2026-10-10: Rematch'ten sonra Back to lobby tıklanmıyordu).
+   */
+  repeatable?: boolean;
+  /** Canlı görünüm (~4 kez/sn okunur): yazı ve basılabilirlik. Yoksa sabit `label`, hep etkin. */
+  view?: () => { label: string; enabled: boolean };
 }
 
 export interface ResultScreen {
@@ -250,11 +260,12 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
 
   // --- Düğmeler ---
   const by = sy + sh + 80;
-  let done = false;
+  let destroyed = false;
+  // Düğme kapısı (src/game/result-actions.ts): ekranı terk eden düğmeler bir kez çalışır; Rematch (repeatable) kilit koymaz
+  const srcActions = !o.preview && o.actions?.length ? o.actions : [];
+  const gate = gateActions(srcActions);
   const once = (fn: () => void) => () => {
-    if (done) return;
-    done = true;
-    fn();
+    if (gate.close()) fn();
   };
   const newGame = once(() => o.onNewGame());
   const teamSelect = once(() => o.onTeamSelect());
@@ -262,25 +273,49 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   const bw = 400;
   const bh = 84;
   /** Tasarım kiti düğmesi (primary = START dili, secondary = ince çerçeve). */
-  const kitButton = (label: string, run: () => void, x: number, w: number, primary: boolean): Phaser.GameObjects.Container => {
+  const kitButton = (label: string, run: () => void, x: number, w: number, primary: boolean): ElButton => {
     const b = elButton(scene, label, run, { kind: primary ? 'primary' : 'secondary', w, h: primary ? bh : 66, size: primary ? 28 : 22, ready: true });
     b.root.setPosition(x, by);
-    return b.root;
+    return b;
   };
-  // Sefer savaşı: özel düğmeler (yan yana, ortalı); önizlemede yok sayılır
-  const actions = !o.preview && o.actions?.length ? o.actions.map((a) => ({ ...a, run: once(a.run) })) : null;
+  // Sefer / multiplayer: özel düğmeler (yan yana, ortalı); önizlemede yok sayılır
+  const actions = srcActions.length ? srcActions.map((a, i) => ({ ...a, run: () => void gate.press(i) })) : null;
+  /** Canlı görünümlü düğmeler (Rematch) ve durum satırı: ~4 kez/sn tazelenir. */
+  const live: Array<{ b: ElButton; view: () => { label: string; enabled: boolean } }> = [];
   if (actions) {
     const aw = actions.length > 2 ? 360 : bw;
     const gap = 40;
     const x0 = W / 2 - ((actions.length - 1) * (aw + gap)) / 2;
-    actions.forEach((a, i) => buttons.add(kitButton(a.label, a.run, x0 + i * (aw + gap), aw, !!a.primary)));
+    actions.forEach((a, i) => {
+      const b = kitButton(a.label, a.run, x0 + i * (aw + gap), aw, !!a.primary);
+      buttons.add(b.root);
+      if (a.view) live.push({ b, view: a.view });
+    });
   } else if (o.preview) {
-    buttons.add(kitButton('Close preview', () => destroy(), W / 2 - 220, bw, true));
-    buttons.add(kitButton('Team Select', teamSelect, W / 2 + 220, bw, false));
+    buttons.add(kitButton('Close preview', () => destroy(), W / 2 - 220, bw, true).root);
+    buttons.add(kitButton('Team Select', teamSelect, W / 2 + 220, bw, false).root);
   } else {
-    buttons.add(kitButton('New Game', newGame, W / 2 - 220, bw, true));
-    buttons.add(kitButton('Team Select', teamSelect, W / 2 + 220, bw, false));
+    buttons.add(kitButton('New Game', newGame, W / 2 - 220, bw, true).root);
+    buttons.add(kitButton('Team Select', teamSelect, W / 2 + 220, bw, false).root);
   }
+  // Multiplayer durum satırı: düğmelerin hemen üstünde, ortalı (rakip ayrıldı / bekleniyor / rövanş istiyor)
+  const statusText = o.status && !o.preview ? elBody(scene, W / 2, by - bh / 2 - 34, '', 22, EL.MUTED).setOrigin(0.5) : null;
+  if (statusText) buttons.add(statusText);
+  const refresh = () => {
+    if (destroyed) return;
+    for (const { b, view } of live) {
+      const v = view();
+      b.setLabel(v.label);
+      b.setReady(v.enabled && !gate.done);
+    }
+    if (statusText && o.status) {
+      const st = o.status();
+      statusText.setText(st.text);
+      statusText.setColor(st.tone === 'error' ? '#e08a7a' : st.tone === 'warn' ? '#e8c27a' : EL.MUTED);
+    }
+  };
+  refresh();
+  const refreshTimer = live.length || statusText ? scene.time.addEvent({ delay: 250, loop: true, callback: refresh }) : null;
   const hintText = actions ? `Enter: ${actions[0]!.label}` : o.preview ? 'Preview  -  Enter or Esc closes' : 'Enter: New Game     Esc: Team Select';
   // Alt bilgi satırı: ekranın en altında, ortalı, küçük ("Enter: …  ·  Copy match data"); düğmelerle ya da başka bir şeyle çakışmaz
   const footY = Math.max(by + bh / 2 + 34, H - 30);
@@ -317,10 +352,10 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   };
   // Aynı tuş vuruşunu menü/wiki da yakalayabilir: onlar önce çalıştıysa defaultPrevented görürüz
   window.addEventListener('keydown', onKey);
-  let destroyed = false;
   function destroy(): void {
     if (destroyed) return;
     destroyed = true;
+    refreshTimer?.remove(false);
     window.removeEventListener('keydown', onKey);
     scene.tweens.killTweensOf(root.list);
     root.destroy(true);
