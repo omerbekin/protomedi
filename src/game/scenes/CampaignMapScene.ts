@@ -58,6 +58,8 @@ import { EL, diamondPts, elBadge, elBody, elButton, elDiamond, elGo, elIconButto
 import { MAP_ZOOM, canPan, clampMid, clampZoom, wheelAction, type Bounds } from '../map-view';
 import { drawNodeGlyph, openFormation, openHeroPanel } from '../campaign-panels';
 import { openSlotBrowser, type SlotBrowser } from '../campaign-slots-ui';
+import { ensureIcon } from '../icons';
+import { hasUiImage, uiIconName, type UiIconKind } from '../../ui/ui-icons';
 
 /**
  * Sefer haritası, "War table" (Ömer 2026-10-09, taslak 2; tasarım kiti):
@@ -815,7 +817,7 @@ export class CampaignMapScene extends Phaser.Scene {
     const info = `${region ? region.title : ''}  ·  Stop ${stopNumber(s)} / ${this.map.stopsPerRun}  ·  ${s.mode === 'ironman' ? 'Ironman' : 'Normal'}  ·  ${diff}`;
     L.add(elBody(this, title.x + title.width + 4, 42, info, 19, s.mode === 'ironman' ? EL.BAD : EL.MUTED).setOrigin(0, 0.5));
     // Altın
-    L.add(this.coin(left + SIDE.left + 8, 86));
+    L.add(this.coin(left + SIDE.left + 8, 86)); // boyalı altın yığını (assets/ui-icons/gold.png), yoksa kodla çizilen sikke
     L.add(elText(this, left + SIDE.left + 24, 86, `${s.gold}`, 19, EL.ON, { em: 0.04 }).setOrigin(0, 0.5));
     L.add(elBody(this, left + SIDE.left + 24 + String(s.gold).length * 14 + 12, 87, 'gold', 16, EL.MUTED).setOrigin(0, 0.5));
     // Küçük ekranda sağ üstteki DOM simgeleri (Menu, tam ekran, codex) görece büyür: kart onların altından başlar
@@ -836,7 +838,13 @@ export class CampaignMapScene extends Phaser.Scene {
     return c.contains('compact') || c.contains('short');
   }
 
-  private coin(x: number, y: number): Phaser.GameObjects.Graphics {
+  /** Bağlantı düğmesinin ikonu (boyalı arayüz ikonu varsa doku anahtarı; yoksa ikonsuz). */
+  private linkIcon(k: UiIconKind): { icon?: string } {
+    return hasUiImage(k) ? { icon: ensureIcon(this, uiIconName(k), '#e8c47e', false) } : {};
+  }
+
+  private coin(x: number, y: number): Phaser.GameObjects.GameObject {
+    if (hasUiImage('gold')) return this.add.image(x + 2, y, ensureIcon(this, uiIconName('gold'), '#e8c47e', false)).setDisplaySize(26, 26);
     const g = this.add.graphics();
     g.fillStyle(0x3a2a10, 1).fillCircle(x, y, 8);
     g.fillStyle(0xc8902e, 1).fillCircle(x, y, 7);
@@ -892,10 +900,10 @@ export class CampaignMapScene extends Phaser.Scene {
     });
     const ly = y + 44 + team.length * 112 + 16;
     if (team.length) {
-      const f = elLink(this, 'Formation', () => this.openFormationFromHud(), { size: 19 });
+      const f = elLink(this, 'Formation', () => this.openFormationFromHud(), { size: 19, ...this.linkIcon('formation') });
       f.root.setPosition(x - 6, ly);
       const sep = elText(this, x - 6 + f.width + 8, ly, '◆', 12, 'rgba(217,178,106,0.35)', { em: 0 }).setOrigin(0.5);
-      const g = elLink(this, 'Gear', () => this.canOpenSide() && this.openGear(), { size: 19 });
+      const g = elLink(this, 'Gear', () => this.canOpenSide() && this.openGear(), { size: 19, ...this.linkIcon('gear') });
       g.root.setPosition(x - 6 + f.width + 16, ly);
       L.add([f.root, sep, g.root]);
       L.add(elBody(this, x, ly + 40, 'Tap a hero for level, gear and stats.', 16, EL.DIM).setOrigin(0, 0.5));
@@ -993,7 +1001,7 @@ export class CampaignMapScene extends Phaser.Scene {
       by += 64;
     }
     if (formation) {
-      const f = elLink(this, 'Formation', () => !busy() && this.openFormationFromHud(), { size: 19, isBusy: busy });
+      const f = elLink(this, 'Formation', () => !busy() && this.openFormationFromHud(), { size: 19, isBusy: busy, ...this.linkIcon('formation') });
       f.root.setPosition(x - 6, by);
       L.add(f.root);
       by += 46;

@@ -151,27 +151,38 @@ export interface ElLink {
  * Kutusuz yazı düğmesi: hover'da önünde kor elmas belirir, yazı açılır + parlar + 4 px sağa kayar. Kök (0, 0) = sol kenar, dikey orta.
  * `isBusy` true dönerse (ör. sürükleme sürüyor) hover / tık yok sayılır.
  */
-export function elLink(scene: Phaser.Scene, label: string, run: () => void, o: { size?: number; small?: string; enabled?: boolean; isBusy?: () => boolean; onHover?: (on: boolean) => void; sound?: UiSoundKind } = {}): ElLink {
+export function elLink(
+  scene: Phaser.Scene,
+  label: string,
+  run: () => void,
+  o: { size?: number; small?: string; enabled?: boolean; isBusy?: () => boolean; onHover?: (on: boolean) => void; sound?: UiSoundKind; icon?: string | undefined; iconSize?: number } = {},
+): ElLink {
   const size = o.size ?? 21;
   const root = scene.add.container(0, 0);
   const dia = elDiamond(scene, 7).setPosition(11, 0).setAlpha(0).setScale(0.4);
-  const text = elText(scene, 28, 0, label, size, EL.TXT, { em: 0.08, pad: true }).setOrigin(0, 0.5);
+  // isteğe bağlı ikon (doku anahtarı; ör. boyalı arayüz ikonu Gear / Formation): elmasın sağında, yazının solunda
+  const isz = o.iconSize ?? Math.round(size * 1.5);
+  const icon = o.icon ? scene.add.image(28 + isz / 2, 0, o.icon).setDisplaySize(isz, isz) : null;
+  const tx = icon ? 28 + isz + 8 : 28;
+  const text = elText(scene, tx, 0, label, size, EL.TXT, { em: 0.08, pad: true }).setOrigin(0, 0.5);
   const tw = text.width - EL.PAD * 2;
-  let width = 28 + tw + 14;
-  const parts: Phaser.GameObjects.GameObject[] = [dia, text];
+  let width = tx + tw + 14;
+  const parts: Phaser.GameObjects.GameObject[] = icon ? [dia, icon, text] : [dia, text];
   if (o.small) {
-    const s = elBody(scene, 28 + tw + 16, 1, o.small, 17, EL.DIM).setOrigin(0, 0.5);
+    const s = elBody(scene, tx + tw + 16, 1, o.small, 17, EL.DIM).setOrigin(0, 0.5);
     parts.push(s);
     width += 16 + s.width;
   }
   const zone = scene.add.zone(width / 2, 0, width, EL.HIT).setInteractive({ useHandCursor: true });
   root.add([...parts, zone]);
   let enabled = o.enabled !== false;
+  icon?.setAlpha(enabled ? 1 : 0.45);
   const hover = (v: boolean) => {
     const on = v && enabled;
-    scene.tweens.killTweensOf([dia, text]);
+    scene.tweens.killTweensOf(icon ? [dia, text, icon] : [dia, text]);
     scene.tweens.add({ targets: dia, alpha: on ? 1 : 0, scale: on ? 1 : 0.4, duration: 180, ease: EL.EASE });
-    scene.tweens.add({ targets: text, x: (on ? 32 : 28) - EL.PAD, duration: 180, ease: EL.EASE });
+    scene.tweens.add({ targets: text, x: (on ? tx + 4 : tx) - EL.PAD, duration: 180, ease: EL.EASE });
+    if (icon) scene.tweens.add({ targets: icon, x: 28 + isz / 2 + (on ? 4 : 0), alpha: enabled ? 1 : 0.45, duration: 180, ease: EL.EASE });
     text.setColor(!enabled ? EL.DIM : on ? EL.ON : EL.TXT);
     elGlow(text, on);
   };
@@ -229,7 +240,12 @@ export interface ElButton {
  * secondary (Random both dili): 56 px, Cinzel 21, ince soluk çerçeve, içi boş elmaslar. Genişlik verilmezse yazıya göre (`minLabel` en uzun yazı).
  * Kök (0, 0) = düğmenin ortası.
  */
-export function elButton(scene: Phaser.Scene, label: string, run: () => void, o: { kind?: 'primary' | 'secondary'; w?: number; h?: number; size?: number; minLabel?: string; isBusy?: () => boolean; ready?: boolean } = {}): ElButton {
+export function elButton(
+  scene: Phaser.Scene,
+  label: string,
+  run: () => void,
+  o: { kind?: 'primary' | 'secondary'; w?: number; h?: number; size?: number; minLabel?: string; isBusy?: () => boolean; ready?: boolean; icon?: string | undefined; iconSize?: number } = {},
+): ElButton {
   const primary = (o.kind ?? 'primary') === 'primary';
   const size = o.size ?? (primary ? 30 : 21);
   const em = primary ? 0.12 : 0.1;
@@ -241,16 +257,21 @@ export function elButton(scene: Phaser.Scene, label: string, run: () => void, o:
   const breath = scene.add.image(0, 0, ensureGlow(scene)).setTint(EL.EMBER).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(w * 1.35, h * 2.6).setAlpha(0);
   const plate = scene.add.graphics();
   const text = elText(scene, 0, 0, label, size, EL.DIM, { em, pad: true }).setOrigin(0.5);
+  // isteğe bağlı ikon (doku anahtarı; ör. boyalı arayüz ikonu Gear): yazının solunda, ikisi birlikte ortalanır
+  const isz = o.iconSize ?? Math.round(size * 1.6);
+  const icon = o.icon ? scene.add.image(0, 0, o.icon).setDisplaySize(isz, isz) : null;
+  const iconRoom = icon ? isz + 10 : 0;
   // Ortalama: Phaser harf aralığını son harfin sonuna da ekler, yazı sola kayar; yarısı kadar sağa alınır. Sığmayan yazı küçültülür
   // (düğme sabit genişlikliyse yazı taşmaz; elmaslar çerçevenin dışında, iç boşluk iki yanda).
   const fitLabel = () => {
-    text.setScale(1).setX((size * em) / 2);
+    text.setScale(1).setX((size * em) / 2 + iconRoom / 2);
     const inner = text.width - EL.PAD * 2 - size * em;
-    const room = w - (primary ? 64 : 40);
+    const room = w - (primary ? 64 : 40) - iconRoom;
     if (inner > room) text.setScale(room / inner);
+    if (icon) icon.setX(-(Math.min(inner, room) + iconRoom) / 2 + isz / 2);
   };
   fitLabel();
-  const lift = scene.add.container(0, 0, [plate, text]);
+  const lift = scene.add.container(0, 0, icon ? [plate, icon, text] : [plate, text]);
   const zone = scene.add.zone(0, 0, w + 16, Math.max(h + 12, EL.HIT - 6)).setInteractive({ useHandCursor: true });
   root.add([breath, lift, zone]);
   let ready = o.ready ?? !primary;
@@ -290,6 +311,7 @@ export function elButton(scene: Phaser.Scene, label: string, run: () => void, o:
       text.setColor(!ready ? EL.DIM : on ? EL.ON : EL.TXT);
       elGlow(text, on);
     }
+    icon?.setAlpha(ready ? 1 : 0.45);
   };
   const setReady = (r: boolean) => {
     ready = r;

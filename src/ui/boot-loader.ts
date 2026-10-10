@@ -3,6 +3,8 @@
  * sonradan bir sahne eksik dosyalarını yüklerken aynı kutu (kısa yükleyici). Tasarım kiti dili: başlık, ince altın çubuk, yüzde.
  * İlerleme: modüller yüklendi -> ana menünün dosyaları (Phaser yükleyicisi) -> fontlar -> menü hazır (kutu solarak kapanır).
  * Ölçüm: menü hazır olunca performance mark 'menu-ready' (açılış süresi).
+ * Arka plan (Ömer 2026-10-10): savaş masası resmi (public/loading/loading-bg.webp, tools/make-loading-bg.mjs); index.html'deki satır içi betik
+ * bulanık yer tutucunun üstüne solarak açar (`bg-ready`). Kısa yükleyici aynı kutuyu açtığı için aynı arka planı taşır.
  */
 
 let shownAt = 0;

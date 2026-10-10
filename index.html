@@ -13,38 +13,80 @@
     <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <title>Embers of Valdoria</title>
-    <!-- Açılış yükleme ekranı (src/ui/boot-loader.ts): Phaser ve fontlardan önce görünsün diye düz HTML/CSS, satır içi. Tasarım kiti dili. -->
+    <!-- Yükleme ekranı arka planı (public/loading, tools/make-loading-bg.mjs): JS paketinden önce inmeye başlasın -->
+    <link rel="preload" as="image" type="image/webp" href="./loading/loading-bg.webp" fetchpriority="high" />
+    <!-- Açılış yükleme ekranı (src/ui/boot-loader.ts): Phaser ve fontlardan önce görünsün diye düz HTML/CSS, satır içi. Tasarım kiti dili.
+         Arka plan (Ömer 2026-10-10): savaş masası resmi. İlk karede satır içi bulanık yer tutucu (32x21 webp, base64; tools/make-loading-bg.mjs yazar),
+         asıl resim (public/loading/loading-bg.webp) yüklenince üstüne solar; cover ile 16:9-21:9 arası kırpılır, kenar karartması + ortada başlık
+         ve çubuk için koyu alan. Reduced motion: solma ve elmas ışıması yok. -->
     <style>
       html, body { margin: 0; background: #0d0a07; }
-      #boot { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
-        background: radial-gradient(ellipse at 50% 45%, #1a120b 0%, #0d0a07 60%, #050403 100%); color: #d9c8a2; font-family: Georgia, 'Palatino Linotype', serif;
+      #boot { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; overflow: hidden;
+        background: #0d0a07; color: #d9c8a2; font-family: Georgia, 'Palatino Linotype', serif;
         transition: opacity 0.4s ease; -webkit-user-select: none; user-select: none; }
+      #boot > * { position: relative; z-index: 2; }
+      #boot > .boot-bg, #boot > .boot-vig { position: absolute; inset: 0; pointer-events: none; }
+      #boot > .boot-bg { z-index: 0; }
+      #boot > .boot-vig { z-index: 1; }
+      #boot .boot-bg::before, #boot .boot-bg::after { content: ''; position: absolute; background-position: 50% 50%; background-size: cover; background-repeat: no-repeat; }
+      #boot .boot-bg::before { inset: -30px; background-image: /*boot-ph*/url(data:image/webp;base64,UklGRogAAABXRUJQVlA4IHwAAADwBACdASogABUAPuVgpU2pJaOiN/VYASAciWIAqScvwh3d8SZQT+w0T1VaFB27hgAA/vBc9jHO2o0mrS/1EwvXBg8GNHcT4w1Z8nTQ4r13PNqXVI+tkBFCAhEaCf65KtaaETL8ReRPk7ukfZeOKl1wFQOpkPA5/sUOYAAA)/*boot-ph*/; filter: blur(16px) brightness(0.8); }
+      #boot .boot-bg::after { inset: 0; background-image: var(--boot-img, none); opacity: 0; transition: opacity 0.8s ease; }
+      #boot.bg-ready .boot-bg::after { opacity: 1; }
+      /* kenar karartması (21:9'da yanlar, 16:9'da üst/alt) + ortada başlık / çubuk için koyu alan */
+      #boot .boot-vig { background:
+          radial-gradient(ellipse 34% 30% at 50% 50%, rgba(8, 6, 4, 0.62) 0%, rgba(8, 6, 4, 0.38) 60%, rgba(8, 6, 4, 0) 100%),
+          radial-gradient(ellipse 75% 70% at 50% 50%, rgba(5, 4, 3, 0) 45%, rgba(5, 4, 3, 0.55) 80%, rgba(3, 2, 1, 0.9) 100%),
+          linear-gradient(180deg, rgba(5, 4, 3, 0.55) 0%, rgba(5, 4, 3, 0) 18%, rgba(5, 4, 3, 0) 82%, rgba(5, 4, 3, 0.6) 100%); }
+      #boot.boot-rm, #boot.boot-rm .boot-bg::after { transition: none; }
+      #boot.boot-rm .boot-dia { animation: none; }
       #boot.boot-off { opacity: 0; pointer-events: none; }
       #boot.boot-hidden { display: none; }
       #boot .boot-dia { width: 12px; height: 12px; transform: rotate(45deg); background: #e0702a; box-shadow: 0 0 0 1px #ffb35a, 0 0 14px rgba(240, 140, 40, 0.7);
         animation: boot-glow 1.6s ease-in-out infinite; }
       #boot .boot-title { font-size: clamp(22px, 5.2vmin, 46px); font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; text-align: center;
-        background: linear-gradient(180deg, #fbe7b0 0%, #e6c27a 55%, #b88a42 100%); -webkit-background-clip: text; background-clip: text; color: transparent; padding: 0 16px; }
+        background: linear-gradient(180deg, #fbe7b0 0%, #e6c27a 55%, #b88a42 100%); -webkit-background-clip: text; background-clip: text; color: transparent; padding: 0 16px;
+        filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 18px rgba(0, 0, 0, 0.8)); }
       #boot .boot-line { display: flex; align-items: center; gap: 10px; }
       #boot .boot-line i { display: block; width: clamp(40px, 12vmin, 110px); height: 1px; background: linear-gradient(90deg, transparent, rgba(217, 178, 106, 0.6)); }
       #boot .boot-line i:last-child { background: linear-gradient(270deg, transparent, rgba(217, 178, 106, 0.6)); }
       #boot .boot-line b { width: 7px; height: 7px; transform: rotate(45deg); border: 1px solid rgba(217, 178, 106, 0.8); }
-      #boot .boot-bar { position: relative; width: clamp(180px, 42vmin, 360px); height: 2px; background: rgba(217, 178, 106, 0.16); margin-top: 6px; }
+      #boot .boot-bar { position: relative; width: clamp(180px, 42vmin, 360px); height: 2px; background: rgba(217, 178, 106, 0.22); margin-top: 6px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55); }
       #boot .boot-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, rgba(224, 112, 42, 0.8), #f3d999); transition: width 0.25s ease;
         box-shadow: 0 0 8px rgba(240, 140, 40, 0.6); }
-      #boot .boot-meta { display: flex; gap: 14px; font-style: italic; font-size: clamp(13px, 2.6vmin, 18px); color: #a8977a; }
+      #boot .boot-meta { display: flex; gap: 14px; font-style: italic; font-size: clamp(13px, 2.6vmin, 18px); color: #b8a684; text-shadow: 0 1px 3px #000, 0 0 10px #000; }
       #boot .boot-pct { color: #f3d999; font-style: normal; letter-spacing: 0.08em; }
       @keyframes boot-glow { 50% { box-shadow: 0 0 0 1px #ffb35a, 0 0 26px rgba(240, 140, 40, 0.9); } }
     </style>
   </head>
   <body>
     <div id="boot" role="status" aria-live="polite">
+      <div class="boot-bg" aria-hidden="true"></div>
+      <div class="boot-vig" aria-hidden="true"></div>
       <div class="boot-dia"></div>
       <div class="boot-title">Embers of Valdoria</div>
       <div class="boot-line"><i></i><b></b><i></i></div>
       <div class="boot-bar"><div class="boot-fill"></div></div>
       <div class="boot-meta"><span class="boot-label">Loading</span><span class="boot-pct">0%</span></div>
     </div>
+    <script>
+      // Yükleme ekranı arka planı: asıl resim (public/loading) yüklenince bulanık yer tutucunun üstüne solar; Reduced motion (kayıtlı seçim ya da
+      // işletim sistemi, src/ui/motion-pref.ts ile aynı anahtar) açıksa solma ve ışıma yok. Paket beklenmeden, ilk karede çalışır.
+      (function () {
+        var b = document.getElementById('boot');
+        if (!b) return;
+        var rm = false;
+        try {
+          var v = localStorage.getItem('proto.reducedMotion');
+          rm = v === '1' || (v !== '0' && !!window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+        } catch (e) {}
+        if (rm) b.classList.add('boot-rm');
+        var u = new URL('loading/loading-bg.webp', document.baseURI).href;
+        b.style.setProperty('--boot-img', 'url("' + u + '")');
+        var img = new Image();
+        img.onload = function () { b.classList.add('bg-ready'); };
+        img.src = u;
+      })();
+    </script>
     <div id="stage">
       <div id="game"></div>
       <div id="ui-root"></div>

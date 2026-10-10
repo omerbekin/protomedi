@@ -3,6 +3,8 @@ import { ensureGlow } from './menu-ui';
 import { EL } from './elegant-ui';
 import { ITEM_ICON_SIZE, REWARD_ICON, itemIconName, paintItemIcon } from './item-icons';
 import { ITEM_IMAGE_FILES, itemImageKey } from './item-icon-files';
+import { ensureIcon } from './icons';
+import { hasUiImage, uiIconName } from '../ui/ui-icons';
 
 /**
  * Endless ödül / dükkân / kalıntı kartlarının amblemleri. İkonlar piksel art (tek ortak kaynak: src/game/item-icons.ts; Gear ekranı,
@@ -38,8 +40,8 @@ export const itemEmblem = (scene: Phaser.Scene, d: { id?: string; slot: string; 
   return pixelTexture(scene, itemIconName(d), rarityColor);
 };
 
-/** Altın: deri kese ve sikke yığını. */
-export const purseEmblem = (scene: Phaser.Scene): string => pixelTexture(scene, REWARD_ICON.gold);
+/** Altın: boyalı sikke yığını (assets/ui-icons/gold.png: kese, fiyat etiketleri, ödül kartı); görsel yoksa piksel kese ve sikke yığını. */
+export const purseEmblem = (scene: Phaser.Scene): string => (hasUiImage('gold') ? ensureIcon(scene, uiIconName('gold'), '#e8c47e', false) : pixelTexture(scene, REWARD_ICON.gold));
 /** Rest / şifa: kırmızı iksir şişesi. */
 export const healEmblem = (scene: Phaser.Scene): string => pixelTexture(scene, REWARD_ICON.heal);
 /** Hero's Feast: kızarmış kuş ve kadeh. */

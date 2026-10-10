@@ -17,7 +17,8 @@ import itemsJson from '../../data/items.json';
 import { ITEM_IMAGE_FILES } from '../game/item-icon-files';
 import { ICON_KINDS } from '../ui/icon-kinds';
 import { MIGHT_COLOR, STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON, statIconFallback, type StatIconKind } from '../ui/stat-icons';
-import { STAT_IMAGE_FILES } from '../game/icon-image-files';
+import { STAT_IMAGE_FILES, UI_IMAGE_FILES } from '../game/icon-image-files';
+import { UI_ICON_FALLBACK, UI_ICON_KINDS, UI_ICON_LABEL, type UiIconKind } from '../ui/ui-icons';
 import { UI_ICONS } from '../ui/dom-icons';
 import { BACKUP_VFX, VFX_KINDS } from '../ui/vfx-kinds';
 
@@ -503,6 +504,25 @@ export function buildStatArt(): StatArtEntry[] {
   return rows;
 }
 
+/** Boyalı arayüz ikonu (assets/ui-icons/<ad>.png). `url` null = görseli yok (kodla çizilen yedek ya da ikonsuz). */
+export interface UiArtEntry {
+  /** UiIconKind; diskte bir arayüz ikonuna karşılık gelmeyen dosyada dosya adı. */
+  name: string;
+  /** Nerede kullanıldığı. */
+  label: string;
+  url: string | null;
+  /** Kodla çizilen yedek ikon adı ('' = yedeksiz: görsel yoksa o yerde ikon çıkmaz). */
+  fallback: string;
+  unlinked?: boolean;
+}
+
+/** Her arayüz ikonu için satır + bir arayüz ikonuna ait olmayan dosyalar (yeni dosya kendiliğinden listelenir). */
+export function buildUiArt(): UiArtEntry[] {
+  const rows: UiArtEntry[] = UI_ICON_KINDS.map((k) => ({ name: k, label: UI_ICON_LABEL[k], url: UI_IMAGE_FILES[k]?.url ?? null, fallback: UI_ICON_FALLBACK[k] ?? '' }));
+  for (const [k, f] of Object.entries(UI_IMAGE_FILES)) if (!UI_ICON_KINDS.includes(k as UiIconKind)) rows.push({ name: k, label: k, url: f.url, fallback: '', unlinked: true });
+  return rows;
+}
+
 // ---------------------------------------------------------------- hepsi
 
 export interface Catalog {
@@ -518,6 +538,8 @@ export interface Catalog {
   itemIcons: ItemIconEntry[];
   itemArt: ReturnType<typeof buildItemArt>;
   statArt: StatArtEntry[];
+  /** Boyalı arayüz ikonları (assets/ui-icons). */
+  uiArt: UiArtEntry[];
   fxSprites: string[];
   statuses: StatusEntry[];
   grounds: GroundEntry[];
@@ -537,6 +559,7 @@ export function buildCatalog(files: AssetFiles): Catalog {
     itemIcons: buildItemIcons(),
     itemArt: buildItemArt(),
     statArt: buildStatArt(),
+    uiArt: buildUiArt(),
     fxSprites: fxSpriteNames(),
     statuses: buildStatuses(),
     grounds: buildGrounds(),

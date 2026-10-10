@@ -4,7 +4,8 @@ import { Battle, MatchLog, chooseAction, isRatioCost, skillCostAmount, skillCost
 import type { AreaStage, BattleEvent, BattleMode, Combatant, SkillDef, StatKind, Teams, TargetPreview } from '../../engine';
 import { type DamageTags } from '../float-text';
 import { ATTACK_STATS, DEFENSE_STATS, MAIN_STATS, statRowText } from '../stat-columns';
-import { PRIMARY_GOLD, RAGE_COLOR, RAGE_ICON, STAT_COLOR, STAT_LABEL, UI_COLOR, UI_ICON, statIconName } from '../../ui/stat-icons';
+import { PRIMARY_GOLD, RAGE_COLOR, STAT_COLOR, STAT_LABEL, UI_COLOR, statIconName } from '../../ui/stat-icons';
+import { globalIconName, uiIconName } from '../../ui/ui-icons';
 import { avatarTexture, backgroundKey, characterTexture, hasBackground, preloadAssets } from '../assets';
 import { CombatantView, color, slow, textStyle } from '../combatant-view';
 import { preloadVfxSheets } from '../vfx-sheets';
@@ -1747,7 +1748,7 @@ export class BattleScene extends Phaser.Scene {
       rows.push([`${fallenUnit ? unitName(fallenUnit) : 'A fallen ally'} fell here: the cell is reserved for their resurrection`, colors.lethal]);
     }
     rows.push([warn ? 'You cannot move here' : 'Click to move here and end your turn', colors.muted]);
-    this.placeInfoTip(this.makeInfo(warn ? 'Reserved cell' : 'Move here', warn ? colors.lethal : colors.selected, ensureIcon(this, warn ? 'skull' : 'boot', warn ? colors.lethal : colors.selected, true), rows, warn ? 'Reserved' : 'Empty cell'));
+    this.placeInfoTip(this.makeInfo(warn ? 'Reserved cell' : 'Move here', warn ? colors.lethal : colors.selected, ensureIcon(this, warn ? 'skull' : uiIconName('move'), warn ? colors.lethal : colors.selected, true), rows, warn ? 'Reserved' : 'Empty cell'));
   }
 
   /** Global eylem (Rest / Skip / Move) açıklaması: sütundaki öğenin hemen üstünde açılır. */
@@ -1760,7 +1761,7 @@ export class BattleScene extends Phaser.Scene {
     const reason = !can.ok ? can.reason : !this.playerCanAct ? 'Not your turn' : '';
     if (reason) rows.push([reason, colors.lethal]);
     else if (def.kind === 'move') rows.push(['Click, then pick an empty cell (Esc cancels)', colors.targetHighlight]);
-    return this.makeInfo(info.name, colors.text, ensureIcon(this, def.icon, GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e', true, SHARED_KEY), rows, info.targetBadge, [{ text: info.cost, hex: colors.muted }]);
+    return this.makeInfo(info.name, colors.text, ensureIcon(this, globalIconName(def), GLOBAL_ACCENT[def.kind === 'skip' ? 'skip' : def.kind] ?? '#e8c47e', true, SHARED_KEY), rows, info.targetBadge, [{ text: info.cost, hex: colors.muted }]);
   }
 
   /** Çok vuruşlu skill'in sıradaki vuruş animasyonu (VfxCtx.gate): ilgili hasar olayından hemen önce oynar. */
@@ -1903,12 +1904,12 @@ export class BattleScene extends Phaser.Scene {
     const costNow = skillCostAmount(skill.cost, actor); // proportional costs (Wail of the Dead: 20% of current HP) show the real amount right now
     const ratio = isRatioCost(skill.cost);
     if (skill.cost.resource === 'rage' && costNow > 0) {
-      meta.push({ icon: ensureIcon(this, RAGE_ICON, RAGE_COLOR, false), text: `RAGE ${costNow}${ratio ? ` (${skillCostLabel(skill.cost)})` : ''}`, hex: RAGE_COLOR });
+      meta.push({ icon: ensureIcon(this, uiIconName('rage'), RAGE_COLOR, false), text: `RAGE ${costNow}${ratio ? ` (${skillCostLabel(skill.cost)})` : ''}`, hex: RAGE_COLOR });
     } else if (costNow > 0) {
       const kind = skill.cost.resource === 'mp' ? 'mp' : 'hp';
       meta.push({ icon: ensureIcon(this, statIconName(kind), STAT_COLOR[kind], false), text: ratio ? `${costNow} ${skill.cost.resource.toUpperCase()} (${skillCostLabel(skill.cost)})` : info.cost, hex: colors.text });
     } else meta.push({ text: info.cost, hex: colors.muted });
-    if (this.battle.mode === 'turns' && (skill.cooldown ?? 0) > 0) meta.push({ icon: ensureIcon(this, UI_ICON.hourglass, UI_COLOR, false), text: info.cooldown, hex: colors.muted });
+    if (this.battle.mode === 'turns' && (skill.cooldown ?? 0) > 0) meta.push({ icon: ensureIcon(this, uiIconName('cooldown'), UI_COLOR, false), text: info.cooldown, hex: colors.muted });
     if (this.battle.mode === 'turns' && info.initialCooldown && !actor.summoned) rows.push([info.initialCooldown, colors.muted]);
     const wait = this.battle.mode === 'turns' ? (actor.cooldowns[skill.id] ?? 0) : 0;
     if (wait > 0) rows.push([`Ready in ${wait} turn${wait > 1 ? 's' : ''}`, colors.targetHighlight]);
@@ -3329,8 +3330,8 @@ export class BattleScene extends Phaser.Scene {
           ? {
               value: rageVal,
               max: actor.maxRage,
-              iconUrl: this.texUrl(ensureIcon(this, RAGE_ICON, RAGE_COLOR, false)),
-              tip: this.makeInfo('Rage', RAGE_COLOR, ensureIcon(this, RAGE_ICON, RAGE_COLOR, true), [[`Rage ${Math.round(rageVal)} / ${actor.maxRage}`, colors.text], ...describeRage(f).map((l): [string, string?] => [l, colors.muted])], 'Resource'),
+              iconUrl: this.texUrl(ensureIcon(this, uiIconName('rage'), RAGE_COLOR, false)),
+              tip: this.makeInfo('Rage', RAGE_COLOR, ensureIcon(this, uiIconName('rage'), RAGE_COLOR, true), [[`Rage ${Math.round(rageVal)} / ${actor.maxRage}`, colors.text], ...describeRage(f).map((l): [string, string?] => [l, colors.muted])], 'Resource'),
             }
           : null,
       main: MAIN_STATS.map((k) => this.hudStat(k, actor)),
@@ -3339,7 +3340,7 @@ export class BattleScene extends Phaser.Scene {
         { title: 'Attack', stats: ATTACK_STATS.map((k) => this.hudStat(k, actor)) },
         { title: 'Defense', stats: DEFENSE_STATS.map((k) => this.hudStat(k, actor)) },
       ],
-      passive: actor.passive ? { name: actor.passive.name, text: describePassive(actor.passive, actor.stats, f), iconUrl: this.texUrl(ensureIcon(this, actor.passive.icon, actor.color, false, ownerOfUnit(actor.defId))) } : null,
+      passive: actor.passive ? { name: actor.passive.name, text: describePassive(actor.passive, actor.stats, f), iconUrl: this.texUrl(ensureIcon(this, actor.passive.icon || uiIconName('passive'), actor.color, false, ownerOfUnit(actor.defId))) } : null,
       notes,
     };
     const turns = this.battle.mode === 'turns';
@@ -3369,7 +3370,7 @@ export class BattleScene extends Phaser.Scene {
           return {
             id,
             name: g.kind === 'skip' ? 'Skip' : describeGlobalSkill(g, f).name,
-            iconUrl: this.texUrl(ensureIcon(this, g.icon, accent, false, SHARED_KEY)),
+            iconUrl: this.texUrl(ensureIcon(this, globalIconName(g), accent, false, SHARED_KEY)),
             enabled: this.playerCanAct && this.battle.canUseGlobal(actor.uid, id).ok,
             active: g.kind === 'move' && this.moveMode?.actor === actor.uid,
             tip: this.globalTip(actor, id),
@@ -3379,7 +3380,7 @@ export class BattleScene extends Phaser.Scene {
       ? {
           name: actor.passive.name,
           iconUrl: hudActor.passive!.iconUrl,
-          tip: this.makeInfo(actor.passive.name, EL.ON, ensureIcon(this, actor.passive.icon, actor.color, false, ownerOfUnit(actor.defId)), [[describePassive(actor.passive, actor.stats, f), colors.text]], 'Passive'),
+          tip: this.makeInfo(actor.passive.name, EL.ON, ensureIcon(this, actor.passive.icon || uiIconName('passive'), actor.color, false, ownerOfUnit(actor.defId)), [[describePassive(actor.passive, actor.stats, f), colors.text]], 'Passive'),
           lucky: null,
         }
       : null;
@@ -3396,9 +3397,9 @@ export class BattleScene extends Phaser.Scene {
   private skillCostChips(actor: Combatant, skill: SkillDef): HudSkill['cost'] {
     const turns = this.battle.mode === 'turns';
     const out: HudSkill['cost'] = [];
-    const hourglass = this.texUrl(ensureIcon(this, UI_ICON.hourglass, UI_COLOR, false));
+    const hourglass = this.texUrl(ensureIcon(this, uiIconName('cooldown'), UI_COLOR, false));
     const costNow = skillCostAmount(skill.cost, actor);
-    if (costNow > 0 && skill.cost.resource === 'rage') out.push({ iconUrl: this.texUrl(ensureIcon(this, RAGE_ICON, RAGE_COLOR, false)), text: `RAGE ${costNow}`, color: RAGE_COLOR });
+    if (costNow > 0 && skill.cost.resource === 'rage') out.push({ iconUrl: this.texUrl(ensureIcon(this, uiIconName('rage'), RAGE_COLOR, false)), text: `RAGE ${costNow}`, color: RAGE_COLOR });
     else if (costNow > 0) {
       const kind = skill.cost.resource === 'mp' ? 'mp' : 'hp';
       out.push({ iconUrl: this.texUrl(ensureIcon(this, statIconName(kind), STAT_COLOR[kind], false)), text: String(costNow) });

@@ -63,6 +63,7 @@ import { ensureGlow } from '../menu-ui';
 import { feastEmblem, healEmblem, hexNum, itemEmblem, medallion, purseEmblem } from '../endless-emblems';
 import { openEndlessGear } from '../endless-gear';
 import { ensureIcon } from '../icons';
+import { hasUiImage, uiIconName, type UiIconKind } from '../../ui/ui-icons';
 import { onStageResize, stageView } from '../stage';
 import { FULL_W, FULL_X0 } from '../../ui/viewport';
 import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
@@ -541,7 +542,7 @@ export class EndlessScene extends Phaser.Scene {
     this.button(CX - 560, LOOK.buttonY, 280, T.abandonRun, () => this.actAbandon());
     // Gear: torbadaki item'leri istenen kahramana tak (seferin Gear ekranı); yarım savaş varken kilitli (kurulumu değişmesin)
     const lock = gearLockReason(run);
-    this.button(CX - 230, LOOK.buttonY, 300, `${T.gear} · ${T.campBag(bagOf(run).length, endlessBagSize())}`, () => this.actGear(), { enabled: !lock });
+    this.button(CX - 230, LOOK.buttonY, 300, `${T.gear} · ${T.campBag(bagOf(run).length, endlessBagSize())}`, () => this.actGear(), { enabled: !lock, icon: this.uiTex('gear') });
     if (lock) this.add2(this.note(CX - 230, LOOK.buttonY + 50, T.gearLocked, 18, C.dim, true).setOrigin(0.5, 0));
     // Yarım kalan savaş varsa yalnızca ona dönülür (aynı dalgayı baştan başlatmak yok: yeniden deneme hilesi olmasın)
     if (susp) this.button(CX + 330, LOOK.buttonY, 500, resumeLabel(susp.wave, susp.turn), () => this.actResume(), { primary: true });
@@ -971,7 +972,9 @@ export class EndlessScene extends Phaser.Scene {
     // --- sağ: sekmeler + torba ---
     this.shopTabs();
     const bagFull = bagOf(run).length >= endlessBagSize();
-    this.add2(this.note(S.right, 64, T.bagCount(bagOf(run).length, endlessBagSize()), 26, bagFull ? C.warn : C.dim, true).setOrigin(1, 0.5));
+    const bagNote = this.add2(this.note(S.right, 64, T.bagCount(bagOf(run).length, endlessBagSize()), 26, bagFull ? C.warn : C.dim, true).setOrigin(1, 0.5));
+    const bagTex = this.uiTex('bag');
+    if (bagTex) this.add2(this.add.image(S.right - bagNote.width - 22, 62, bagTex).setDisplaySize(36, 36).setAlpha(bagFull ? 1 : 0.85));
     if (this.shopTab === 'buy') this.shopBuyGrid(run);
     else this.shopSellGrid(run);
     this.shopDetail(run);
@@ -1466,7 +1469,12 @@ export class EndlessScene extends Phaser.Scene {
   }
 
   /** Kit düğmesi: primary (START dili) / secondary; pasifken soluk, dokununca sallanır. Merkez (cx, cy). */
-  private button(cx: number, cy: number, w: number, label: string, run: () => void, o: { primary?: boolean; enabled?: boolean; h?: number; size?: number } = {}): ElButton {
+  /** Boyalı arayüz ikonunun doku anahtarı (dosya yoksa undefined: ikonsuz düzen). */
+  private uiTex(k: UiIconKind): string | undefined {
+    return hasUiImage(k) ? ensureIcon(this, uiIconName(k), '#e8c47e', false) : undefined;
+  }
+
+  private button(cx: number, cy: number, w: number, label: string, run: () => void, o: { primary?: boolean; enabled?: boolean; h?: number; size?: number; icon?: string | undefined } = {}): ElButton {
     const enabled = o.enabled ?? true;
     const b = elButton(
       this,
@@ -1476,7 +1484,7 @@ export class EndlessScene extends Phaser.Scene {
         if (!enabled) return b.shake();
         run();
       },
-      { kind: o.primary ? 'primary' : 'secondary', w, h: o.h ?? (o.primary ? 76 : 60), size: o.size ?? (o.primary ? 24 : 19), ready: enabled },
+      { kind: o.primary ? 'primary' : 'secondary', w, h: o.h ?? (o.primary ? 76 : 60), size: o.size ?? (o.primary ? 24 : 19), ready: enabled, ...(o.icon ? { icon: o.icon } : {}) },
     );
     b.root.setPosition(cx, cy);
     this.add2(b.root);

@@ -13,8 +13,9 @@ import { GRID, PxGrid, spriteCells, type Cell } from './pixel-art';
 import { SHARED_KEY, statusOwner, wantsV2 } from './asset-versions';
 import { ICONS_V2 } from './art-v2/icons-index';
 import { V2_DEFAULT_SIZE, isV2Image, type V2Sprite, type V2SpriteEntry } from './art-v2/types';
-import { ICON_IMAGE_SIZE, STAT_IMAGE_TEXTURE, iconImageUrl, statImage } from './icon-image-files';
+import { ICON_IMAGE_SIZE, STAT_IMAGE_TEXTURE, iconImageUrl, statImage, uiImage } from './icon-image-files';
 import { STAT_ICON_PREFIX, statIconFallback } from '../ui/stat-icons';
+import { UI_ICON_PREFIX, uiIconFallback } from '../ui/ui-icons';
 
 export interface ResolvedSprite {
   /** Doku/önbellek anahtarı parçası: v1'de çıplak ad (eski anahtarlar aynen), v2'de `v2:<sahip>:<ad>`. */
@@ -101,6 +102,14 @@ export function resolveSprite(name: string, owner?: string | null): ResolvedSpri
     if (img) return { key: name, version: 'v2', size: STAT_IMAGE_TEXTURE, cells: () => null, image: img.small, domImage: img.url, smooth: true };
     const fb = statIconFallback(kind);
     return fb ? resolveSprite(fb) : { key: name, version: 'v1', size: GRID, cells: () => null };
+  }
+  if (name.startsWith(UI_ICON_PREFIX)) {
+    // arayüz ikonu: boyalı PNG (assets/ui-icons), yoksa kodla çizilen yedek (sahibi verilmişse onun sürümüyle; ör. Rest/Skip/Move Shared)
+    const kind = name.slice(UI_ICON_PREFIX.length);
+    const img = uiImage(kind);
+    if (img) return { key: name, version: 'v2', size: STAT_IMAGE_TEXTURE, cells: () => null, image: img.small, domImage: img.url, smooth: true };
+    const fb = uiIconFallback(kind);
+    return fb ? resolveSprite(fb, owner) : { key: name, version: 'v1', size: GRID, cells: () => null };
   }
   if (name.startsWith('v2:')) {
     const [, o = '', n = ''] = name.split(':');

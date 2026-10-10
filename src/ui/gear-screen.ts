@@ -45,6 +45,8 @@ import { itemDefIcon } from './item-icon-dom';
 import { statIconUrl, statTip } from './stat-tips';
 import { dropAction, isDoubleTap, type DragSource, type DropTarget } from './gear-drop';
 import { dismissOnBackdrop } from './backdrop';
+import { iconUrl } from './dom-icons';
+import { hasUiImage, uiIconName, type UiIconKind } from './ui-icons';
 import type { Stats } from '../engine';
 
 /** Düğümün `anc` içindeki konumu (offset zinciri; döndürülmüş sahnede de doğru, kaydırmalar düşülür). */
@@ -151,6 +153,18 @@ export function campaignGearSource(get: () => CampaignState, set: (s: CampaignSt
     equipBest: (ids) => apply((x) => equipBest(x, ids)),
     emptyText: 'The bag is empty. Victories and chests bring new gear.',
   };
+}
+
+/** Boyalı arayüz ikonu (assets/ui-icons) varsa yazının önüne küçük resim koyar (yoksa yazı aynen kalır). */
+function withUiIcon(e: HTMLElement, k: UiIconKind): void {
+  if (!hasUiImage(k)) return;
+  const img = document.createElement('img');
+  img.className = 'gr-ui-ico';
+  img.alt = '';
+  img.draggable = false;
+  img.src = iconUrl(uiIconName(k));
+  e.classList.add('gr-has-ico');
+  e.prepend(img);
 }
 
 type Selection = { kind: 'bag'; uid: string } | { kind: 'slot'; slot: SlotId } | null;
@@ -436,7 +450,9 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
     panel.replaceChildren();
     // Başlık
     const head = el('div', 'gr-head');
-    head.append(el('div', 'gr-title', 'Gear'), el('div', 'gr-gold', `${src.gold()} gold`));
+    const gold = el('div', 'gr-gold', `${src.gold()} gold`);
+    withUiIcon(gold, 'gold');
+    head.append(el('div', 'gr-title', 'Gear'), gold);
     panel.append(head);
     if (o.tutorial)
       panel.append(el('div', 'gr-hint', 'Your escort left their gear for the new company. Tap an item in the bag, then Equip, or let Equip best choose.'));
@@ -527,8 +543,10 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
     // --- Sağ: torba
     const right = el('div', 'gr-right');
     const bagHead = el('div', 'gr-bag-head');
+    const bagSec = el('div', 'gr-sec', `Bag ${bag.length} / ${src.bagSize}`);
+    withUiIcon(bagSec, 'bag');
     bagHead.append(
-      el('div', 'gr-sec', `Bag ${bag.length} / ${src.bagSize}`),
+      bagSec,
       btn(`gr-chip${usableOnly ? ' on' : ''}`, usableOnly ? `Usable by ${className(hero.class)}` : 'All items', () => {
         usableOnly = !usableOnly;
         render();

@@ -1,4 +1,6 @@
 import './battle-hud.css';
+import { iconUrl } from './dom-icons';
+import { hasUiImage, uiIconName } from './ui-icons';
 
 /**
  * SAVAŞ HUD'ı (Ömer 2026-10-09, taslak public/mockups/battle-hud.html?v=2 "Slim bar, sheet rises"): DOM katmanı, oyun biriminde çizilir ve
@@ -116,6 +118,9 @@ export interface HudPassive {
   /** Luck primary: Lucky Escape (hazır / bu savaşta kullanıldı). */
   lucky: { ready: boolean; tip: TipContent } | null;
 }
+
+/** Boyalı arayüz ikonu (assets/ui-icons) varsa DOM adresi, yoksa '' (kit elması / yazı kalır). */
+const uiImg = (k: 'luckyEscape' | 'combatLog'): string => (hasUiImage(k) ? iconUrl(uiIconName(k)) : '');
 /** Savaş günlüğü satırının parçası: p / e = dost / düşman adı, sk = skill, dm = sayı, cr = kritik sayı, hl = şifa, ko = düştü, n = not. */
 export interface LogPart {
   t: string;
@@ -349,7 +354,7 @@ export class BattleHud {
         return `<span class="bh-buff" ${this.reg(`fx:${i}`, tip)} style="${e.color ? `--c:${e.color}` : ''}">${e.iconUrl ? img(e.iconUrl) : '<i class="bh-dia s"></i>'}</span>`;
       })
       .join('');
-    this.infoBox.innerHTML = `${icons ? `<div class="bh-buffs">${icons}</div>` : ''}<div class="bh-links"><span class="bh-more bh-plink ${this.panel === 'log' ? 'open' : ''}" data-panel="log">Combat log</span></div>`;
+    this.infoBox.innerHTML = `${icons ? `<div class="bh-buffs">${icons}</div>` : ''}<div class="bh-links"><span class="bh-more bh-plink ${uiImg('combatLog') ? 'ico' : ''} ${this.panel === 'log' ? 'open' : ''}" data-panel="log">${img(uiImg('combatLog'), 'bh-ico bh-pl-ico')}Combat log</span></div>`;
   }
 
   private renderLog(): void {
@@ -468,7 +473,7 @@ export class BattleHud {
     const p = this.model.passive;
     this.pasBox.innerHTML = p
       ? `<div class="bh-medal lg" ${this.reg('p:passive', p.tip)}>${img(p.iconUrl)}</div><span class="bh-pasv-n">Passive</span>${
-          p.lucky ? `<span class="bh-lucky ${p.lucky.ready ? '' : 'used'}" ${this.reg('p:lucky', p.lucky.tip)}><i></i></span>` : ''
+          p.lucky ? `<span class="bh-lucky ${uiImg('luckyEscape') ? 'ico' : ''} ${p.lucky.ready ? '' : 'used'}" ${this.reg('p:lucky', p.lucky.tip)}>${uiImg('luckyEscape') ? img(uiImg('luckyEscape')) : '<i></i>'}</span>` : ''
         }`
       : '';
   }

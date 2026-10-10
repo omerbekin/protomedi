@@ -288,3 +288,18 @@ describe('Stat ikonu görselleri (assets/stat-icons) bağlı; asılları assets/
     expect(existsSync('tools/make-stat-icons.mjs')).toBe(true);
   });
 });
+
+describe('Arayüz ikonu görselleri (assets/ui-icons) bağlı; asılları assets/source/ui-icons', () => {
+  it('her dosya bir arayüz ikonuna ait ve Codex > Icons > UI icons ta; small/ eşleri var; asıl sayfa ve kesim aracı duruyor', () => {
+    const onDisk = readdirSync('assets/ui-icons').filter((f) => f.endsWith('.png')).map((f) => f.replace(/\.png$/, '')).sort();
+    expect(onDisk.length).toBe(16);
+    const small = readdirSync('assets/ui-icons/small').filter((f) => f.endsWith('.png')).map((f) => f.replace(/\.png$/, '')).sort();
+    expect(small).toEqual(onDisk);
+    const rows = catalog.uiArt;
+    expect(rows.filter((r) => r.unlinked).map((r) => r.name), 'arayüz ikonuna ait olmayan dosya').toEqual([]);
+    expect(rows.filter((r) => r.url).map((r) => r.name).sort()).toEqual(onDisk);
+    expect(legacyItems.some((i) => /assets\/ui-icons\//.test(`${i.id} ${i.label}`))).toBe(false);
+    expect(existsSync('assets/source/ui-icons/ui-sheet.png'), 'assets/source/ui-icons yok').toBe(true);
+    expect(existsSync('tools/make-ui-icons.mjs')).toBe(true);
+  });
+});

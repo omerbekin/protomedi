@@ -897,3 +897,23 @@ html.short .gr-slot-sub {
     transform: translateX(4px);
   }
 }
+
+/* boyalı arayüz ikonları (assets/ui-icons: altın yığını, torba) başlıktaki altın ve torba sayacının önünde */
+.gr-has-ico {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+}
+
+.gr-ui-ico {
+  flex: none;
+  width: max(20px, calc(32 * var(--u)));
+  height: max(20px, calc(32 * var(--u)));
+  margin: calc(-6 * var(--u)) 0;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.8));
+}
+
+.gr-sec.gr-has-ico .gr-ui-ico {
+  width: max(18px, calc(26 * var(--u)));
+  height: max(18px, calc(26 * var(--u)));
+}

@@ -47,3 +47,24 @@ export const STAT_IMAGE_TEXTURE = 64;
 /** DOM'da boyalı görselin adresine eklenen işaret: style.css `img[src$='#smooth']` pixelated yerine yumuşak küçültür. */
 export const SMOOTH_MARK = '#smooth';
 export const smoothUrl = (url: string): string => (url.endsWith(SMOOTH_MARK) ? url : `${url}${SMOOTH_MARK}`);
+
+// ---------------------------------------------------------------- ARAYÜZ ikonları (boyalı PNG, Ömer 2026-10-10)
+
+/**
+ * Arayüz ikonları: assets/ui-icons/<ad>.png (128, DOM) + assets/ui-icons/small/<ad>.png (64, Phaser dokusu). <ad> = UiIconKind
+ * (src/ui/ui-icons.ts: rest, skip, move, cooldown, rage, luckyEscape, passive, combatLog, gold, bag, gear, formation, codex, settings,
+ * fullscreen, menu). Asıl sayfa assets/source/ui-icons/ui-sheet.png; kesim `node tools/make-ui-icons.mjs`. Tek giriş `uiIconName(ad)` ->
+ * art-registry 'ui:<ad>'; dosya yoksa kodla çizilen yedek (UI_ICON_FALLBACK) ya da hiç ikon.
+ */
+const uiFiles = import.meta.glob('../../assets/ui-icons/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const uiSmall = import.meta.glob('../../assets/ui-icons/small/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+
+/** Arayüz ikonu -> { url (128, DOM), small (64, Phaser; yoksa url) }. */
+export const UI_IMAGE_FILES: Readonly<Record<string, { url: string; small: string }>> = (() => {
+  const big = byName(uiFiles);
+  const small = byName(uiSmall);
+  return Object.fromEntries(Object.entries(big).map(([k, url]) => [k, { url, small: small[k] ?? url }]));
+})();
+
+/** Arayüz ikonunun görseli (dosya yoksa null). */
+export const uiImage = (kind: string): { url: string; small: string } | null => UI_IMAGE_FILES[kind] ?? null;

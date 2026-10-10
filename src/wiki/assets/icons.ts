@@ -1,5 +1,6 @@
 import { iconUrl } from '../../ui/dom-icons';
 import { statIconName, type StatIconKind } from '../../ui/stat-icons';
+import { uiIconName, type UiIconKind } from '../../ui/ui-icons';
 import { itemIconUrl } from '../../ui/item-icon-dom';
 import itemsJson from '../../../data/items.json';
 import type { Catalog, IconEntry } from '../../gallery/catalog';
@@ -130,6 +131,26 @@ export function mountIcons(cat: Catalog): SectionApi {
     );
   }
 
+  // Boyalı arayüz ikonları (assets/ui-icons/<ad>.png): Rest / Skip / Move, cooldown, Rage, Lucky Escape, Combat log, altın, torba, Gear, Formation...
+  const uis = h('div', { class: 'cards icons' });
+  for (const a of cat.uiArt) {
+    const url = a.url ? iconUrl(uiIconName(a.name as UiIconKind)) : a.fallback ? iconUrl(a.fallback, '#e8c47e') : '';
+    uis.append(
+      searchable(
+        h(
+          'article',
+          { class: 'card icon-card' },
+          url ? h('img', { class: a.url ? 'bigicon' : 'bigicon pixelated', attrs: { src: url, alt: a.name, loading: 'lazy' }, title: 'Click to enlarge', on: { click: () => openLightbox(url, a.name, !a.url) } }) : h('div', { class: 'bigicon' }),
+          h('div', { class: 'card-title mono', text: a.name }),
+          h('div', { class: 'tags' }, h('span', { class: a.unlinked ? 'badge' : a.url ? 'badge ok' : 'badge', text: a.unlinked ? 'Unlinked' : a.url ? 'UI art' : a.fallback ? 'Pixel fallback' : 'No icon' })),
+          h('div', { class: 'small', text: a.label }),
+          h('div', { class: 'small muted', text: a.unlinked ? 'no UI icon with this name' : a.url ? (a.fallback ? `fallback: ${a.fallback}` : 'no fallback: hidden without the image') : 'no image yet' }),
+        ),
+        `ui art image ${a.name} ${a.label}`,
+      ),
+    );
+  }
+
   // Nadirlik: aynı nesne, yalnızca taş / kenar ayrıntısı nadirlik renginde
   const tints = h('div', { class: 'cards icons' });
   for (const name of ['amulet', 'sword', 'mail']) {
@@ -145,6 +166,7 @@ export function mountIcons(cat: Catalog): SectionApi {
     applyFilter(items, query);
     applyFilter(art, query);
     applyFilter(stats, query);
+    applyFilter(uis, query);
     applyFilter(tints, query);
     countEl.textContent = `${n} / ${cat.icons.length}`;
     return n;
@@ -161,6 +183,9 @@ export function mountIcons(cat: Catalog): SectionApi {
     h('h3', { class: 'sub', text: `Stat icons (${cat.statArt.filter((a) => a.url).length} / ${cat.statArt.filter((a) => !a.unlinked).length})` }),
     h('p', { class: 'note', text: 'Painted stat icons (assets/stat-icons, cut by tools/make-stat-icons.mjs from assets/source/stat-icons). The battle HUD, Gear, Endless cards, team select and the Codex all show these; a stat without an image falls back to its pixel icon (Stat chip above).' }),
     stats,
+    h('h3', { class: 'sub', text: `UI icons (${cat.uiArt.filter((a) => a.url).length} / ${cat.uiArt.filter((a) => !a.unlinked).length})` }),
+    h('p', { class: 'note', text: 'Painted UI icons (assets/ui-icons, cut by tools/make-ui-icons.mjs from assets/source/ui-icons). Battle HUD actions, cooldown and Rage chips, the Lucky Escape pip, the Combat log toggle, gold and bag counters, and the Gear / Formation buttons use these; without an image they fall back to the pixel icon or show no icon.' }),
+    uis,
     h('h3', { class: 'sub', text: `Item art (${cat.itemArt.art.length})` }),
     h('p', { class: 'note', text: `Painted item icons (assets/items, cut by tools/make-item-icons.mjs from assets/source/item-icons). An item with art shows it everywhere; the rest fall back to the pixel icons above${cat.itemArt.missing.length ? ` (still pixel: ${cat.itemArt.missing.join(', ')})` : ''}.` }),
     art,
