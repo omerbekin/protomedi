@@ -7,13 +7,13 @@
   "role": "Curse Caster",
   "frontPriority": 6.5,
   "attributes": {
-    "str": 8,
-    "int": 5,
-    "dex": 3,
-    "luck": 14
+    "str": 16,
+    "int": 10,
+    "dex": 6,
+    "luck": 28
   },
   "primary": "luck",
-  "armor": 4,
+  "armor": 8,
   "magicArmor": 0,
   "ai": "hexer",
   "skills": [

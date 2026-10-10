@@ -358,3 +358,39 @@ export function validateItems(data: ItemsData = ITEMS): string[] {
   }
   return errors;
 }
+
+// ------------------------------------------------------------ x2 stat ölçeği kayıt göçü (Ömer onayı 2026-10-10)
+
+/** x2 ölçekli item statları: STR/DEX/INT/LUCK, zırh, büyü zırhı, hız (katalog ve zar değerleri eskinin 2 katı). */
+export const SCALED_ITEM_STATS: readonly ItemStatId[] = ['str', 'dex', 'int', 'luck', 'armor', 'magicArmor', 'spd'];
+
+/**
+ * Eski (x1 ölçekli) kayıttaki item örneklerinin zarlarını x2 ölçeğe taşır: kayıt ağacında `uid` + `id` + `rolls` taşıyan her nesnenin ölçekli
+ * stat zarları 2 ile çarpılır (yerinde). Diğer zarlar (can, MP, kritik...) değişmez. Taşınan örnek sayısını döndürür. Sefer ve Endless kaydı kullanır.
+ */
+export function migrateRollsX2(root: unknown): number {
+  let n = 0;
+  const walk = (o: unknown): void => {
+    if (Array.isArray(o)) {
+      for (const x of o) walk(x);
+      return;
+    }
+    if (!o || typeof o !== 'object') return;
+    const rec = o as Record<string, unknown>;
+    if (typeof rec.uid === 'string' && typeof rec.id === 'string' && rec.rolls && typeof rec.rolls === 'object') {
+      const rolls = rec.rolls as Record<string, unknown>;
+      let touched = false;
+      for (const k of SCALED_ITEM_STATS) {
+        const v = rolls[k];
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          rolls[k] = v * 2;
+          touched = true;
+        }
+      }
+      if (touched) n++;
+    }
+    for (const v of Object.values(rec)) walk(v);
+  };
+  walk(root);
+  return n;
+}

@@ -9,13 +9,13 @@
   "hidden": true,
   "frontPriority": 7,
   "attributes": {
-    "str": 3,
-    "int": 17,
-    "dex": 5,
-    "luck": 5
+    "str": 6,
+    "int": 34,
+    "dex": 10,
+    "luck": 10
   },
   "primary": "int",
-  "armor": 4,
+  "armor": 8,
   "magicArmor": 0,
   "ai": "aggressive",
   "skills": [

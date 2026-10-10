@@ -23,7 +23,8 @@ export interface PrimaryBonusInfo {
 }
 
 const pct = (v: number, digits = 0) => `${(v * 100).toFixed(digits)}%`;
-const num = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0$/, ''));
+// 3 basamağa kadar (x2 stat ölçeği: puan başı 0,125 / 0,165 gibi katsayılar tam görünsün), sondaki sıfırlar atılır
+const num = (v: number) => (Number.isInteger(v) ? String(v) : String(Number(v.toFixed(3))));
 const num1 = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1).replace(/\.0$/, ''));
 
 /** Bir stat'ın ne işe yaradığını ve şu anki etkisini anlatan tooltip metni (İngilizce). */

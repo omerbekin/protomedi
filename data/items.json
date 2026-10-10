@@ -94,43 +94,43 @@
   "stats": {
     "str": {
       "name": "STR",
-      "ip": 5,
+      "ip": 2.5,
       "engine": true,
       "integer": true,
-      "step": 1
+      "step": 2
     },
     "dex": {
       "name": "DEX",
-      "ip": 5,
+      "ip": 2.5,
       "engine": true,
       "integer": true,
-      "step": 1
+      "step": 2
     },
     "int": {
       "name": "INT",
-      "ip": 5,
+      "ip": 2.5,
       "engine": true,
       "integer": true,
-      "step": 1
+      "step": 2
     },
     "luck": {
       "name": "LUCK",
-      "ip": 5,
+      "ip": 2.5,
       "engine": true,
       "integer": true,
-      "step": 1
+      "step": 2
     },
     "armor": {
       "name": "Armor",
-      "ip": 0.8,
+      "ip": 0.4,
       "engine": true,
-      "step": 1
+      "step": 2
     },
     "magicArmor": {
       "name": "Magic Armor",
-      "ip": 0.5,
+      "ip": 0.25,
       "engine": true,
-      "step": 1
+      "step": 2
     },
     "might": {
       "name": "Might",
@@ -178,9 +178,9 @@
     },
     "spd": {
       "name": "Speed",
-      "ip": 5.5,
+      "ip": 2.75,
       "engine": true,
-      "step": 0.5
+      "step": 1
     },
     "mp": {
       "name": "Max MP",
@@ -279,8 +279,8 @@
     "crit": 15,
     "accuracy": 10,
     "evasion": 10,
-    "spd": 1.5,
-    "spdPerItem": 0.5
+    "spd": 3,
+    "spdPerItem": 1
   },
   "weaponFamilies": [
     {
@@ -374,7 +374,7 @@
       "rarity": "rare",
       "ilvl": 9,
       "stats": {
-        "str": 1,
+        "str": 2,
         "might": 1,
         "crit": 1
       }
@@ -414,7 +414,7 @@
       "ilvl": 6,
       "stats": {
         "might": 5,
-        "armor": 1
+        "armor": 2
       }
     },
     {
@@ -426,7 +426,7 @@
       "ilvl": 10,
       "stats": {
         "might": 6,
-        "armor": 2,
+        "armor": 4,
         "hp": 3
       }
     },
@@ -461,7 +461,7 @@
       "rarity": "rare",
       "ilvl": 10,
       "stats": {
-        "dex": 1,
+        "dex": 2,
         "might": 1,
         "accuracy": 1
       }
@@ -533,7 +533,7 @@
       "rarity": "rare",
       "ilvl": 10,
       "stats": {
-        "int": 1,
+        "int": 2,
         "might": 1,
         "mp": 5
       }
@@ -583,7 +583,7 @@
       "rarity": "rare",
       "ilvl": 10,
       "stats": {
-        "luck": 1,
+        "luck": 2,
         "might": 1,
         "crit": 1
       }
@@ -595,7 +595,7 @@
       "rarity": "common",
       "ilvl": 3,
       "stats": {
-        "armor": 2
+        "armor": 4
       }
     },
     {
@@ -605,7 +605,7 @@
       "rarity": "common",
       "ilvl": 4,
       "stats": {
-        "armor": 2
+        "armor": 4
       }
     },
     {
@@ -615,7 +615,7 @@
       "rarity": "uncommon",
       "ilvl": 4,
       "stats": {
-        "armor": 2,
+        "armor": 4,
         "evasion": 1
       }
     },
@@ -626,7 +626,7 @@
       "rarity": "uncommon",
       "ilvl": 8,
       "stats": {
-        "armor": 2,
+        "armor": 4,
         "hp": 4
       }
     },
@@ -637,7 +637,7 @@
       "rarity": "rare",
       "ilvl": 10,
       "stats": {
-        "armor": 3,
+        "armor": 6,
         "hp": 2,
         "evasion": 3
       }
@@ -649,8 +649,8 @@
       "rarity": "rare",
       "ilvl": 9,
       "stats": {
-        "armor": 3,
-        "magicArmor": 3,
+        "armor": 6,
+        "magicArmor": 6,
         "hp": 2
       }
     },
@@ -661,9 +661,9 @@
       "rarity": "epic",
       "ilvl": 10,
       "stats": {
-        "armor": 2,
+        "armor": 4,
         "hp": 3,
-        "magicArmor": 1
+        "magicArmor": 2
       },
       "effect": "wardens_oath"
     },
@@ -694,7 +694,7 @@
       "rarity": "uncommon",
       "ilvl": 5,
       "stats": {
-        "magicArmor": 2,
+        "magicArmor": 4,
         "mp": 5
       }
     },
@@ -706,7 +706,7 @@
       "ilvl": 8,
       "stats": {
         "hp": 3,
-        "armor": 1
+        "armor": 2
       }
     },
     {
@@ -717,7 +717,7 @@
       "ilvl": 9,
       "stats": {
         "hp": 4,
-        "armor": 1,
+        "armor": 2,
         "accuracy": 1
       }
     },
@@ -729,8 +729,8 @@
       "ilvl": 10,
       "stats": {
         "hp": 1,
-        "armor": 1,
-        "magicArmor": 1
+        "armor": 2,
+        "magicArmor": 2
       },
       "effect": "iron_will"
     },
@@ -773,7 +773,7 @@
       "ilvl": 8,
       "stats": {
         "crit": 5,
-        "armor": 1
+        "armor": 2
       }
     },
     {
@@ -784,7 +784,7 @@
       "ilvl": 9,
       "stats": {
         "crit": 5,
-        "armor": 1,
+        "armor": 2,
         "critDmg": 15
       }
     },
@@ -829,7 +829,7 @@
       "ilvl": 4,
       "stats": {
         "evasion": 1,
-        "armor": 1
+        "armor": 2
       }
     },
     {
@@ -851,7 +851,7 @@
       "ilvl": 9,
       "stats": {
         "evasion": 3,
-        "armor": 1,
+        "armor": 2,
         "hp": 1
       }
     },
@@ -863,7 +863,7 @@
       "ilvl": 10,
       "stats": {
         "evasion": 2,
-        "armor": 1,
+        "armor": 2,
         "hp": 1
       },
       "effect": "quick_start"
@@ -908,7 +908,7 @@
       "ilvl": 8,
       "stats": {
         "mp": 10,
-        "magicArmor": 2
+        "magicArmor": 4
       }
     },
     {
@@ -919,7 +919,7 @@
       "ilvl": 9,
       "stats": {
         "mpRegen": 1,
-        "magicArmor": 1,
+        "magicArmor": 2,
         "hp": 1
       }
     },
@@ -932,7 +932,7 @@
       "stats": {
         "mp": 10,
         "hp": 1,
-        "magicArmor": 1
+        "magicArmor": 2
       },
       "effect": "ember_heart"
     },

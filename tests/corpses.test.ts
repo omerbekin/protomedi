@@ -89,10 +89,12 @@ describe('Raise Dead: kendi tarafına çağrı + ceset tüketimi', () => {
     const s = ofType(ev, 'summon')[0]!;
     expect(s.empowered).toBe(false);
     expect(s.combatant.empowered).toBe(false);
-    const unfed = applySummonVariant(skeletonDef, 'unfed').stats;
+    const unfed = applySummonVariant(skeletonDef, 'unfed', content.formulas).stats;
     expect(s.combatant.maxHp).toBe(Math.round(skeletonDef.stats.hp * variants.unfed.mult));
     expect(s.combatant.maxHp).toBe(unfed.hp);
-    expect(s.combatant.stats.str).toBe(Math.round(skeletonDef.stats.str * variants.unfed.mult * 10) / 10);
+    // 0,1'e yuvarlanır (x2 ölçekte 0,2'ye: statScale katı; eskisiyle birebir)
+    const S = content.formulas.statScale ?? 1;
+    expect(s.combatant.stats.str).toBe((Math.round((skeletonDef.stats.str * variants.unfed.mult * 10) / S) / 10) * S);
     expect(variants.unfed.mult).toBeCloseTo(0.67, 5);
   });
 
@@ -111,7 +113,7 @@ describe('Raise Dead: kendi tarafına çağrı + ceset tüketimi', () => {
     expect(s.combatant.stats.str).toBe(skeletonDef.stats.str);
     expect(s.combatant.stats.armor).toBe(skeletonDef.stats.armor);
     // beslenmiş / beslenmemiş oranı veriyle tutarlı (~+%50)
-    const unfed = applySummonVariant(skeletonDef, 'unfed').stats;
+    const unfed = applySummonVariant(skeletonDef, 'unfed', content.formulas).stats;
     expect(s.combatant.maxHp / unfed.hp).toBeGreaterThan(1.45);
     expect(s.combatant.maxHp / unfed.hp).toBeLessThan(1.55);
   });
@@ -190,7 +192,7 @@ describe('Raise Dead: kendi tarafına çağrı + ceset tüketimi', () => {
     expect(info.lines.join(' ')).toContain('Choose a fallen foe to consume, then choose where the Skeleton rises');
     expect(info.lines.join(' ')).toContain('can no longer be revived');
     expect(info.lines.join(' ')).toContain(`HP ${skeletonDef.stats.hp}`);
-    expect(info.lines.join(' ')).toContain(`HP ${applySummonVariant(skeletonDef, 'unfed').stats.hp}`);
+    expect(info.lines.join(' ')).toContain(`HP ${applySummonVariant(skeletonDef, 'unfed', content.formulas).stats.hp}`);
   });
 });
 

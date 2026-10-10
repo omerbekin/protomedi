@@ -142,14 +142,14 @@ describe('kalıntı etkileri', () => {
     a.forEach((c, i) => expect(b[i]!.stats.critChance).toBeCloseTo(c.stats.critChance + 0.05));
   });
 
-  it('Iron Oath: zırh ve büyü zırhı +2 (item zırhıyla toplanır)', () => {
+  it('Iron Oath: zırh ve büyü zırhı +4 (x2 stat ölçeği; eski +2; item zırhıyla toplanır)', () => {
     const a = heroes(battleFor(wavePlan(fresh())));
     const b = heroes(battleFor(wavePlan(fresh(['iron_oath']))));
     a.forEach((c, i) => {
-      expect(b[i]!.stats.armor).toBe(c.stats.armor + 2);
-      expect(b[i]!.stats.magicArmor).toBe(c.stats.magicArmor + 2);
+      expect(b[i]!.stats.armor).toBe(c.stats.armor + 4);
+      expect(b[i]!.stats.magicArmor).toBe(c.stats.magicArmor + 4);
     });
-    expect(withRelics({ modifiers: { armorAdd: 3 } }, ['iron_oath']).modifiers).toEqual({ armorAdd: 5, magicArmorAdd: 2 });
+    expect(withRelics({ modifiers: { armorAdd: 6 } }, ['iron_oath']).modifiers).toEqual({ armorAdd: 10, magicArmorAdd: 4 }); // x2 stat ölçeği (eski 3 + 2)
   });
 
   it('Banner of the Bridge: her kahramanın ilk eyleminde hasar x1,15; sonra normal', () => {
@@ -194,7 +194,7 @@ describe('kalıntı etkileri', () => {
   });
 
   it('kalıntılar birleşir: ekler toplanır, zafer şifası en yüksek', () => {
-    expect(relicEffects(ALL)).toEqual({ startShieldRatio: 0.08, victoryHeal: 0.3, critAdd: 0.05, openingDamageMult: 1.15, fallAllyHealRatio: 0.15, armorAdd: 2, magicArmorAdd: 2 });
+    expect(relicEffects(ALL)).toEqual({ startShieldRatio: 0.08, victoryHeal: 0.3, critAdd: 0.05, openingDamageMult: 1.15, fallAllyHealRatio: 0.15, armorAdd: 4, magicArmorAdd: 4 });
   });
 });
 

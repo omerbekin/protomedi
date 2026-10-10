@@ -22,13 +22,14 @@ describe('mana ekonomisi', () => {
     }
   });
 
-  it('int başına mana artışı (mpPerInt) aynı: 2', () => {
-    expect(a.mpPerInt).toBe(2);
+  it('int başına mana artışı (mpPerInt) aynı: eski puan başına 2 (x2 stat ölçeğinde 1)', () => {
+    expect(a.mpPerInt * (content.formulas.statScale ?? 1)).toBe(2);
   });
 
   it('INT başına MP yenilenmesi ~0,33 (eski 0,25\'ten arttı); yenilenme = round(INT x mpRegenPerInt)', () => {
-    expect(a.mpRegenPerInt).toBeGreaterThan(0.3);
-    expect(a.mpRegenPerInt).toBeLessThan(0.36);
+    const S = content.formulas.statScale ?? 1; // x2 stat ölçeği: katsayı eski puan başına ~0,33
+    expect(a.mpRegenPerInt * S).toBeGreaterThan(0.3);
+    expect(a.mpRegenPerInt * S).toBeLessThan(0.36);
     for (const [id, def] of Object.entries(content.classes)) expect(def.stats.mpRegen, id).toBe(Math.round(def.attributes.int * a.mpRegenPerInt));
   });
 

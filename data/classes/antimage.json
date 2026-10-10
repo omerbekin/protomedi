@@ -7,14 +7,14 @@
   "role": "Mana Hunter",
   "frontPriority": 3.5,
   "attributes": {
-    "str": 5,
-    "int": 15,
-    "dex": 7,
-    "luck": 3
+    "str": 10,
+    "int": 30,
+    "dex": 14,
+    "luck": 6
   },
   "primary": "int",
-  "armor": 6,
-  "magicArmor": 20,
+  "armor": 12,
+  "magicArmor": 40,
   "ai": "antimage",
   "skills": [
     "mana_burn",

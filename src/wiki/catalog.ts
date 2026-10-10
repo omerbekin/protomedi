@@ -268,8 +268,8 @@ function buildUnit(kind: WikiUnit['kind'], def: CombatantDef, files: WikiFiles):
     ...(sub ? { sub } : {}),
   });
   // Ceset tüketen çağrının iki hâli (Skeleton): beslenmiş (taban) ve beslenmemiş can/STR (stats.ts > applySummonVariant)
-  const unfed = def.variants ? applySummonVariant(def, 'unfed').stats : null;
-  const fed = def.variants ? applySummonVariant(def, 'fed').stats : null;
+  const unfed = def.variants ? applySummonVariant(def, 'unfed', content.formulas).stats : null;
+  const fed = def.variants ? applySummonVariant(def, 'fed', content.formulas).stats : null;
   const derived: WikiStatRow[] = [
     // Çok hâlli değer kısa yazılır (105 / 70), hâllerin adı altında küçük satırda: satır taşmaz, yan sütunla çakışmaz
     row('hp', 'HP', fed && unfed ? `${fed.hp} / ${unfed.hp}` : String(st.hp), fed && unfed ? 'empowered / unfed' : undefined),
@@ -556,7 +556,7 @@ export function buildMechanics(): WikiArticle[] {
     article('damage-formula', 'Damage', 'Damage formula', 'sword', [
       p('Damage = skill power x attribute x scaling, plus any extra the skill adds, then reduced by armor, then multiplied by weakness, then by the crit.'),
       list(
-        `Power and attribute: every skill names the attribute it scales with (STR, INT, DEX or LUCK). A power of 120% with 20 INT is 24 base damage. Scaling per attribute: ${(['str', 'int', 'dex', 'luck'] as const).map((s) => `${STAT_LABEL[s]} x${num(f.scaling[s])}`).join(', ')}.`,
+        `Power and attribute: every skill names the attribute it scales with (STR, INT, DEX or LUCK). A power of 60% with 40 INT is 24 base damage. Scaling per attribute: ${(['str', 'int', 'dex', 'luck'] as const).map((s) => `${STAT_LABEL[s]} x${num(f.scaling[s])}`).join(', ')}.`,
         `Variance: every hit rolls within plus or minus ${pct(f.damage.variance)}; damage is never below ${f.damage.minDamage}.`,
         `Armor: physical damage is reduced by Armor, every other element by Magic armor. Reduction = armor / (armor + ${k}), so ${k} armor blocks 50% and more armor gives less and less. Some skills ignore a share of armor (the description says so).`,
         `Weaknesses: ${wk.join(' ')} See the Elements section.`,

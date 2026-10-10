@@ -270,8 +270,8 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
       const life = e.lifespan ? ` for ${e.lifespan} turns` : '';
       if (e.consumeCorpse && unit) {
         // Ceset tüketen çağrı (Raise Dead): iki hâlin can ve hasar statı veriden (applySummonVariant)
-        const fed = applySummonVariant(unit, 'fed');
-        const unfed = applySummonVariant(unit, 'unfed');
+        const fed = applySummonVariant(unit, 'fed', formulas);
+        const unfed = applySummonVariant(unit, 'unfed', formulas);
         const statOf = (d: CombatantDef) => (d.stats.int > d.stats.str ? `INT ${d.stats.int}` : `STR ${d.stats.str}`);
         const boost = unfed.stats.hp > 0 ? Math.round(((fed.stats.hp / unfed.stats.hp - 1) * 100) / 5) * 5 : 0;
         add(`Choose a fallen foe to consume, then choose where the ${unit.name} rises (on your side${life}). The consumed corpse can no longer be revived and the ${unit.name} is empowered (+${boost}%). With no fallen foe, you only choose the cell.`);

@@ -39,7 +39,7 @@
       { "id": "whetstone_of_ashford", "name": "Whetstone of Ashford", "icon": "burst", "color": "#e8c47e", "text": "Every hero has +5% critical chance.", "effect": { "critAdd": 0.05 } },
       { "id": "banner_of_the_bridge", "name": "Banner of the Bridge", "icon": "warcry", "color": "#e0643c", "text": "Each hero deals +15% damage with their first action of every wave.", "effect": { "openingDamageMult": 1.15 } },
       { "id": "last_rites", "name": "Last Rites", "icon": "ankh", "color": "#cfd8e8", "text": "When a hero falls, the remaining heroes recover 15% of their max health.", "effect": { "fallAllyHealRatio": 0.15 } },
-      { "id": "iron_oath", "name": "Iron Oath", "icon": "shield", "color": "#9cbde6", "text": "Every hero has +2 armor and +2 magic armor.", "effect": { "armorAdd": 2, "magicArmorAdd": 2 } }
+      { "id": "iron_oath", "name": "Iron Oath", "icon": "shield", "color": "#9cbde6", "text": "Every hero has +4 armor and +4 magic armor.", "effect": { "armorAdd": 4, "magicArmorAdd": 4 } }
     ]
   },
   "difficulty": "medium",

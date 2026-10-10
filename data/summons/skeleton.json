@@ -9,17 +9,17 @@
     "undead"
   ],
   "attributes": {
-    "str": 15,
+    "str": 30,
     "int": 0,
     "dex": 0,
     "luck": 0
   },
-  "armor": 3,
+  "armor": 6,
   "magicArmor": 0,
   "overrides": {
     "hp": 105,
     "mp": 0,
-    "spd": 6
+    "spd": 12
   },
   "variants": {
     "_not": "Raise Dead ceset tüketirse fed (beslenmiş = bu dosyadaki taban can/STR), tüketemezse unfed (can ve STR x0,67, ~-%33). Çarpan maks cana, str/int ve Str düz can yenilenmesine uygulanır (stats.ts > applySummonVariant).",

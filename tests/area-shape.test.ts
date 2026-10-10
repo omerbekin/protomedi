@@ -125,7 +125,7 @@ describe('Geometer (aoe_tester) test karakteri', () => {
     expect(c.role).toBe('AOE Test');
     expect(c.testOnly).toBe(true);
     expect(c.primary).toBe('int');
-    expect(Object.values(c.attributes).reduce((a, b) => a + b, 0)).toBe(30);
+    expect(Object.values(c.attributes).reduce((a, b) => a + b, 0)).toBe(30 * (content.formulas.statScale ?? 1)); // x2 stat ölçeği: 60
     const shapes = c.skills.map((id) => content.skills[id]!.area!.shape);
     expect(shapes).toEqual(['row', 'column', 'rect', 'plus']);
     for (const id of c.skills) {
@@ -135,7 +135,7 @@ describe('Geometer (aoe_tester) test karakteri', () => {
       const e = s.effects[0] as { scale: string; power: number; element: string };
       expect(e.scale).toBe('int');
       expect(e.element).toBe('arcane');
-      expect(e.power).toBe(0.9);
+      expect(e.power).toBe(0.45); // x2 stat ölçeği (eski 0,9)
       expect(s.cooldown).toBe(2);
       expect(isShapeArea(s.area)).toBe(true);
     }

@@ -51,7 +51,7 @@ describe('Gambler: class verisi', () => {
 
   it('dört stat toplamı 30, primary luck ve en yüksek stat; Lucky Escape aktif', () => {
     const a = g.attributes;
-    expect(a.str + a.int + a.dex + a.luck).toBe(30);
+    expect(a.str + a.int + a.dex + a.luck).toBe(30 * (content.formulas.statScale ?? 1)); // x2 stat ölçeği: 60
     expect(g.primary).toBe('luck');
     expect(a.luck).toBe(Math.max(...ATTRS.map((k) => a[k])));
     expect(g.stats.primaryActive).toBe(true);

@@ -73,10 +73,10 @@ describe('nadirlik = stat sayısı + güç', () => {
 
 describe('stat zarları', () => {
   it('aralık: katalog değeri ± %15, adıma yuvarlanır, en az bir adım; metin "+4 Max HP (3–5)"', () => {
-    const mail = itemDef('riveted_mail')!; // +2 Armor, +4 Max HP
+    const mail = itemDef('riveted_mail')!; // +4 Armor (x2 stat ölçeği; eski +2), +4 Max HP
     expect(statRange(mail, 'hp')).toEqual([3, 5]);
-    expect(statRange(mail, 'armor')).toEqual([1, 3]); // en az bir adım (değer >= 2 adım)
-    expect(statRange(itemDef('arming_sword')!, 'str')).toEqual([1, 1]); // tek adım: aralık yok
+    expect(statRange(mail, 'armor')).toEqual([2, 6]); // en az bir adım (adım 2; değer >= 2 adım; eski [1, 3])
+    expect(statRange(itemDef('arming_sword')!, 'str')).toEqual([2, 2]); // tek adım: aralık yok (x2 ölçek: +2 STR, adım 2)
     expect(statRange(itemDef('work_gloves')!, 'crit')).toEqual([2.5, 3.5]); // yüzde statlar 0,5 adımlı
     expect(statLine('hp', 4, [3, 5])).toBe('+4 Max HP (3–5)');
     expect(statLine('armor', 2, [2, 2])).toBe('+2 Armor');
@@ -111,9 +111,9 @@ describe('stat zarları', () => {
 
   it('eski örnek (zarsız) = katalog değeri (aralığın ortası); aralık dışı zar sıkıştırılır; güç katmanı zarı kullanır', () => {
     expect(instanceStats({ id: 'riveted_mail' })).toEqual(itemDef('riveted_mail')!.stats);
-    expect(instanceStats({ id: 'riveted_mail', rolls: { hp: 99, armor: 2 } }).hp).toBe(5);
-    expect(instanceLines({ uid: 'x', id: 'riveted_mail', rolls: { armor: 2, hp: 3 } })).toEqual(['+2 Armor (1–3)', '+3 Max HP (3–5)']);
-    expect(loadout({ class: 'warrior', equipment: { armor: { uid: 'x', id: 'riveted_mail', rolls: { armor: 2, hp: 3 } } } }).modifiers?.hpAdd).toBe(3);
+    expect(instanceStats({ id: 'riveted_mail', rolls: { hp: 99, armor: 4 } }).hp).toBe(5);
+    expect(instanceLines({ uid: 'x', id: 'riveted_mail', rolls: { armor: 4, hp: 3 } })).toEqual(['+4 Armor (2–6)', '+3 Max HP (3–5)']);
+    expect(loadout({ class: 'warrior', equipment: { armor: { uid: 'x', id: 'riveted_mail', rolls: { armor: 4, hp: 3 } } } }).modifiers?.hpAdd).toBe(3);
   });
 });
 

@@ -6,13 +6,13 @@
   "logo": "skull",
   "frontPriority": 4,
   "attributes": {
-    "str": 12,
-    "int": 14,
-    "dex": 2,
-    "luck": 2
+    "str": 24,
+    "int": 28,
+    "dex": 4,
+    "luck": 4
   },
   "primary": "int",
-  "armor": 8,
+  "armor": 16,
   "magicArmor": 0,
   "ai": "darkmage",
   "skills": [

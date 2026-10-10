@@ -7,9 +7,9 @@
   "logo": "wardenlogo",
   "frontPriority": 0,
   "role": "Boss · Siege Giant",
-  "attributes": { "str": 25, "int": 6, "dex": 1, "luck": 4 },
-  "armor": 12,
-  "magicArmor": 6,
+  "attributes": { "str": 50, "int": 12, "dex": 2, "luck": 8 },
+  "armor": 24,
+  "magicArmor": 12,
   "overrides": { "hp": 432, "hpRegen": 0 },
   "ai": "bridge_warden",
   "skills": ["anchor_smash", "breaking_span", "chain_hook", "ash_brand", "fall_of_kings_bridge"],
@@ -19,7 +19,7 @@
       { "at": 0.66, "banner": "The Ember wakes." },
       { "at": 0.33, "banner": "The span fails.", "actionsPerTurn": 3, "powerMult": 1.15, "armorMult": 0.5, "breakAnchors": true, "telegraphOnEnter": "fall_of_kings_bridge" }
     ],
-    "anchor": { "unit": "iron_mooring", "armorAdd": 5, "magicArmorAdd": 5, "stagger": true, "cancel": ["breaking_span"] },
+    "anchor": { "unit": "iron_mooring", "armorAdd": 10, "magicArmorAdd": 10, "stagger": true, "cancel": ["breaking_span"] },
     "unyielding": { "stunToStagger": false, "debuffDurationDelta": -1, "immuneDisplacement": true },
     "afterResolve": { "skills": ["breaking_span", "fall_of_kings_bridge"], "status": "overextended", "turns": 1 },
     "passives": [

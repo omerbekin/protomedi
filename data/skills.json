@@ -16,13 +16,13 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.8
+        "power": 0.4
       },
       {
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.8
+        "power": 0.4
       }
     ],
     "vfx": "doublestrike",
@@ -50,7 +50,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.38
+        "power": 0.69
       }
     ],
     "vfx": "whirlwind",
@@ -76,7 +76,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.9,
+        "power": 0.45,
         "element": "holy"
       }
     ],
@@ -104,14 +104,14 @@
       {
         "type": "heal",
         "scale": "int",
-        "power": 0.9,
+        "power": 0.45,
         "missingHpBonus": 0.5
       },
       {
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.85,
+        "power": 0.425,
         "element": "holy"
       }
     ],
@@ -145,7 +145,7 @@
         "ground": "holy_fire",
         "turns": 2,
         "scale": "int",
-        "power": 0.56
+        "power": 0.28
       }
     ],
     "vfx": "judgment",
@@ -171,7 +171,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 2,
+        "power": 1,
         "element": "fire"
       }
     ],
@@ -206,7 +206,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.42,
+        "power": 0.71,
         "element": "ice"
       }
     ],
@@ -239,7 +239,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.22,
+        "power": 0.61,
         "element": "fire"
       },
       {
@@ -247,7 +247,7 @@
         "ground": "burning",
         "turns": 2,
         "scale": "int",
-        "power": 0.7
+        "power": 0.35
       }
     ],
     "skyCenter": true,
@@ -282,7 +282,7 @@
       {
         "type": "shield",
         "scale": "int",
-        "power": 1.7,
+        "power": 0.85,
         "onAbsorb": {
           "giveMana": 3
         }
@@ -344,7 +344,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.22,
+        "power": 0.61,
         "element": "dark"
       },
       {
@@ -352,7 +352,7 @@
         "ground": "poison",
         "turns": 2,
         "scale": "int",
-        "power": 0.4
+        "power": 0.2
       }
     ],
     "vfx": "wail",
@@ -377,7 +377,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 0.62
+        "power": 0.31
       },
       {
         "type": "status",
@@ -414,7 +414,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 1.35,
+        "power": 0.675,
         "falloff": 0.7
       }
     ],
@@ -449,7 +449,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 0.88
+        "power": 0.44
       }
     ],
     "vfx": "arrowrain",
@@ -476,7 +476,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 2.85,
+        "power": 1.425,
         "ignoreDefense": 0.5
       }
     ],
@@ -508,7 +508,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.72,
+        "power": 0.86,
         "element": "nature"
       },
       {
@@ -540,12 +540,12 @@
       {
         "type": "heal",
         "scale": "int",
-        "power": 1.35
+        "power": 0.675
       },
       {
         "type": "hot",
         "scale": "int",
-        "power": 0.45,
+        "power": 0.225,
         "turns": 3
       }
     ],
@@ -605,7 +605,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.12,
+        "power": 0.56,
         "element": "nature"
       }
     ],
@@ -685,7 +685,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 1.55,
+        "power": 0.775,
         "element": "arcane"
       },
       {
@@ -731,7 +731,7 @@
             "damageType": "magic",
             "element": "arcane",
             "scale": "int",
-            "power": 1.45
+            "power": 0.725
           }
         }
       }
@@ -762,7 +762,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 3.15,
+        "power": 1.575,
         "bonusPerMissingMana": 1,
         "element": "arcane"
       }
@@ -793,7 +793,7 @@
       {
         "type": "shield",
         "scale": "int",
-        "power": 0.3,
+        "power": 0.15,
         "shieldType": "magic",
         "bonusPerMana": 0.6,
         "onAbsorb": {
@@ -824,7 +824,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "int",
-        "power": 1.15
+        "power": 0.575
       }
     ],
     "vfx": "rootfall",
@@ -858,7 +858,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.45,
+        "power": 0.225,
         "element": "nature"
       },
       {
@@ -921,7 +921,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.15
+        "power": 0.575
       }
     ],
     "vfx": "bonestrike",
@@ -945,7 +945,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.9
+        "power": 0.45
       }
     ],
     "splash": {
@@ -980,7 +980,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.35
+        "power": 0.675
       },
       {
         "type": "status",
@@ -1035,7 +1035,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.9,
+        "power": 0.45,
         "element": "dark"
       },
       {
@@ -1069,11 +1069,11 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.36,
+        "power": 0.18,
         "bonusScale": [
           {
             "stat": "armor",
-            "pct": 0.1
+            "pct": 0.05
           }
         ]
       },
@@ -1111,11 +1111,11 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.42,
+        "power": 0.71,
         "bonusScale": [
           {
             "stat": "armor",
-            "pct": 0.1
+            "pct": 0.05
           }
         ]
       }
@@ -1177,7 +1177,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.55,
+        "power": 0.775,
         "repeatChance": 0.25
       }
     ],
@@ -1204,7 +1204,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 2.2,
+        "power": 1.1,
         "bet": {
           "resource": "hp",
           "ratio": 0.15,
@@ -1238,7 +1238,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.3
+        "power": 0.65
       },
       {
         "type": "randomStatus",
@@ -1285,7 +1285,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "luck",
-        "power": 1.98,
+        "power": 0.99,
         "bet": {
           "resource": "mp",
           "ratio": 1,
@@ -1326,7 +1326,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.9,
+        "power": 0.45,
         "element": "arcane"
       }
     ],
@@ -1358,7 +1358,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.9,
+        "power": 0.45,
         "element": "arcane"
       }
     ],
@@ -1390,7 +1390,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.9,
+        "power": 0.45,
         "element": "arcane"
       }
     ],
@@ -1425,7 +1425,7 @@
         "type": "damage",
         "damageType": "magic",
         "scale": "int",
-        "power": 0.9,
+        "power": 0.45,
         "element": "arcane"
       }
     ],
@@ -1456,7 +1456,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 2
+        "power": 1
       },
       {
         "type": "status",
@@ -1492,7 +1492,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 0.9
+        "power": 0.45
       }
     ],
     "vfx": "saltire",
@@ -1563,7 +1563,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "dex",
-        "power": 3.05,
+        "power": 1.525,
         "guaranteedCrit": true
       }
     ],
@@ -1592,7 +1592,7 @@
         "damageType": "magic",
         "element": "dark",
         "scale": "luck",
-        "power": 1.3
+        "power": 0.65
       },
       {
         "type": "omen",
@@ -1632,13 +1632,13 @@
         "damageType": "magic",
         "element": "dark",
         "scale": "luck",
-        "power": 0.45
+        "power": 0.225
       },
       {
         "type": "dot",
         "status": "wither",
         "scale": "luck",
-        "power": 0.2,
+        "power": 0.1,
         "turns": 3
       },
       {
@@ -1672,7 +1672,7 @@
         "damageType": "magic",
         "element": "dark",
         "scale": "luck",
-        "power": 1.1,
+        "power": 0.55,
         "critBonus": 0.25
       },
       {
@@ -1713,7 +1713,7 @@
         "damageType": "magic",
         "element": "dark",
         "scale": "luck",
-        "power": 1
+        "power": 0.5
       },
       {
         "type": "omen",
@@ -1752,7 +1752,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.5
+        "power": 0.75
       }
     ],
     "vfx": "anchorsmash",
@@ -1792,14 +1792,14 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 2.6
+        "power": 1.3
       },
       {
         "type": "ground",
         "ground": "flooded_planks",
         "turns": 2,
         "scale": "str",
-        "power": 0.2
+        "power": 0.1
       }
     ],
     "vfx": "breakingspan",
@@ -1828,7 +1828,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.1
+        "power": 0.55
       },
       {
         "type": "pull",
@@ -1867,7 +1867,7 @@
         "damageType": "magic",
         "element": "fire",
         "scale": "str",
-        "power": 1.6
+        "power": 0.8
       }
     ],
     "vfx": "ashbrand",
@@ -1900,7 +1900,7 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 2.8
+        "power": 1.4
       }
     ],
     "vfx": "fallofthebridge",

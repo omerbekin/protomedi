@@ -166,7 +166,7 @@ describe('stat dağılımı ve taban isabet', () => {
     for (const c of classes) expect(c.attributes.dex, c.id).toBeGreaterThanOrEqual(1);
     for (const c of classes) {
       const a = c.attributes;
-      expect(a.str + a.int + a.dex + a.luck, c.id).toBe(30);
+      expect(a.str + a.int + a.dex + a.luck, c.id).toBe(30 * (content.formulas.statScale ?? 1)); // x2 stat ölçeği: 60
       expect(a[c.primary!], c.id).toBe(Math.max(a.str, a.int, a.dex, a.luck));
     }
   });

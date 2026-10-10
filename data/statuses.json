@@ -87,7 +87,7 @@
     "critDeltaPerStack": -0.03,
     "doom": {
       "scale": "luck",
-      "powerPerStack": 1,
+      "powerPerStack": 0.5,
       "damageType": "magic",
       "element": "dark",
       "expireMult": 1

@@ -3,6 +3,7 @@
 import { CELL_COUNT, classes } from '../engine/content';
 import type { EndlessRun, ScoreEntry } from './data';
 import { validSuspended } from './replay';
+import { migrateRollsX2 } from '../progression/items';
 
 export interface KV {
   getItem(key: string): string | null;
@@ -12,7 +13,13 @@ export interface KV {
 
 export const RUN_KEY = 'protomedi.endless.v1';
 export const SCORES_KEY = 'protomedi.endless.scores.v1';
-export const SAVE_VERSION = 1;
+/**
+ * Koşu kaydı sürümü. 2: x2 stat ölçeği (Ömer 2026-10-10): sürüm 1 okunurken item zarlarının ölçekli statları x2 (progression > migrateRollsX2) ve
+ * yarım kalmış savaş (suspended) atılır (durum özeti eski ölçekte; dalga baştan başlar, koşunun geri kalanı aynen kalır).
+ */
+export const SAVE_VERSION = 2;
+/** Skor listesi sürümü (statsız; x2 dönüşümünden etkilenmez). */
+export const SCORES_VERSION = 1;
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
@@ -22,7 +29,11 @@ export function parseRun(raw: string | null): EndlessRun | null {
   try {
     const data = JSON.parse(raw) as { version?: number; run?: EndlessRun };
     const r = data?.run;
-    if (data?.version !== SAVE_VERSION || !r || r.version !== 1 || r.preview) return null;
+    if ((data?.version !== SAVE_VERSION && data?.version !== 1) || !r || r.version !== 1 || r.preview) return null;
+    if (data.version === 1) {
+      migrateRollsX2(r);
+      delete r.suspended;
+    }
     if (!isNum(r.seed) || !isNum(r.wave) || r.wave < 1 || !isNum(r.gold) || !isNum(r.nextItem)) return null;
     if (!['ready', 'relic', 'reward', 'shop', 'over'].includes(r.phase)) return null;
     if (!Array.isArray(r.heroes) || !r.heroes.length) return null;
@@ -89,7 +100,7 @@ export function loadScores(kv: KV | null): ScoreEntry[] {
     const raw = kv?.getItem(SCORES_KEY);
     if (!raw) return [];
     const data = JSON.parse(raw) as { version?: number; scores?: ScoreEntry[] };
-    if (data?.version !== SAVE_VERSION || !Array.isArray(data.scores)) return [];
+    if (data?.version !== SCORES_VERSION || !Array.isArray(data.scores)) return [];
     return data.scores.filter((e) => e && isNum(e.wave) && isNum(e.cleared) && isNum(e.turns) && isNum(e.kills) && Array.isArray(e.classes) && typeof e.date === 'string');
   } catch {
     return [];
@@ -99,7 +110,7 @@ export function loadScores(kv: KV | null): ScoreEntry[] {
 export function saveScores(kv: KV | null, scores: ScoreEntry[]): boolean {
   if (!kv) return false;
   try {
-    kv.setItem(SCORES_KEY, JSON.stringify({ version: SAVE_VERSION, scores }));
+    kv.setItem(SCORES_KEY, JSON.stringify({ version: SCORES_VERSION, scores }));
     return true;
   } catch {
     return false;

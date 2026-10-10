@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyUnitModifiers, Battle, battleSummary, chooseAction, content, damageRange, deriveStats, previewSkill, unitLabel } from '../src/engine';
+import { applyUnitModifiers, Battle, battleSummary, chooseAction, content, damageRange, deriveStats, previewSkill, roundStat, unitLabel } from '../src/engine';
 import type { BattleEvent, BattleMode, CombatantData, Teams, UnitSetup } from '../src/engine';
 
 // Savaş kurulum seçenekleri (sefer için; docs/design/combat.md > Savaş kurulum seçenekleri): birim güçlendirmesi, özel ad, başlangıç canı/MP,
@@ -69,7 +69,7 @@ describe('modifiers: güçlendirme / zayıflatma', () => {
     const def = content.classes.warrior!;
     const m = applyUnitModifiers(def, { statMult: 1.15, hpMult: 1.8 }, f);
     const a = def.attributes;
-    const r = Math.round;
+    const r = (v: number) => roundStat(v, f); // x2 stat ölçeği: statScale katına (eski tam sayının 2 katı)
     expect(m.attributes).toEqual({ str: r(a.str * 1.15), int: r(a.int * 1.15), dex: r(a.dex * 1.15), luck: r(a.luck * 1.15) });
     const A = f.attributes;
     const baseHp = Math.round(A.hpBase + A.hpPerStr * m.attributes.str);
@@ -88,15 +88,15 @@ describe('modifiers: güçlendirme / zayıflatma', () => {
       for (const mods of modsList) {
         const m = applyUnitModifiers(def!, mods, f);
         for (const k of ATTR) {
-          expect(Number.isInteger(m.attributes[k]), `${def!.id} ${k} ${JSON.stringify(mods)}`).toBe(true);
+          expect(Number.isInteger(m.attributes[k] / (f.statScale ?? 1)), `${def!.id} ${k} ${JSON.stringify(mods)}`).toBe(true); // eski ölçekte tam sayı
           const raw = def!.attributes[k] * (mods.statMult ?? 1) * ((mods as { attrMult?: Partial<Record<string, number>> }).attrMult?.[k] ?? 1) + ((mods as { attrAdd?: Partial<Record<string, number>> }).attrAdd?.[k] ?? 0);
-          expect(m.attributes[k]).toBe(Math.max(0, Math.round(raw)));
+          expect(m.attributes[k]).toBe(Math.max(0, roundStat(raw, f)));
         }
       }
     }
-    // örnek: 5 x 1,1 = 5,5 -> 6; 15 x 1,1 = 16,5 -> 17 (eskiden 5,5 / 16,5)
-    const fake = { ...content.classes.warrior!, attributes: { str: 5, int: 15, dex: 15, luck: 4 } };
-    expect(applyUnitModifiers(fake, { statMult: 1.1 }, f).attributes).toEqual({ str: 6, int: 17, dex: 17, luck: 4 });
+    // örnek (x2 ölçek): 10 x 1,1 = 11 -> 12; 30 x 1,1 = 33 -> 34; 8 x 1,1 = 8,8 -> 8 (eski ölçekte 5,5 -> 6, 16,5 -> 17, 4,4 -> 4)
+    const fake = { ...content.classes.warrior!, attributes: { str: 10, int: 30, dex: 30, luck: 8 } };
+    expect(applyUnitModifiers(fake, { statMult: 1.1 }, f).attributes).toEqual({ str: 12, int: 34, dex: 34, luck: 8 });
   });
 
   it('veri overrides korunur (Defender sabit canı statMult ile değişmez, hpMult ile değişir)', () => {

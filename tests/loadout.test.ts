@@ -66,9 +66,9 @@ describe('güç katmanı: item -> modifiers', () => {
   it('statlar toplanır: STR/DEX/INT/LUCK -> attrAdd, Armor -> armorAdd, Might % -> powerMult, yüzdeler oran; zarsız örnek = katalog değeri, zarlı örnek = zar', () => {
     const eq = { ...emptyEquipment(), weapon: { uid: 'i1', id: 'arming_sword' }, armor: { uid: 'i2', id: 'riveted_mail' }, gloves: { uid: 'i3', id: 'archers_bracer' } };
     const r = loadout({ class: 'warrior', equipment: eq });
-    // Arming Sword +1 STR +1% Might +1% Crit; Riveted Mail +2 Armor +4 Max HP; Archer's Bracer +2% Accuracy +2% Crit
-    expect(r.modifiers).toEqual({ attrAdd: { str: 1 }, armorAdd: 2, powerMult: 1.01, hpAdd: 4, critAdd: 0.03, accuracyAdd: 0.02 });
-    const rolled = loadout({ class: 'warrior', equipment: { ...eq, armor: { uid: 'i2', id: 'riveted_mail', rolls: { armor: 2, hp: 5 } } } });
+    // Arming Sword +2 STR +1% Might +1% Crit; Riveted Mail +4 Armor +4 Max HP (x2 stat ölçeği: eski +1 STR, +2 Armor); Archer's Bracer +2% Accuracy +2% Crit
+    expect(r.modifiers).toEqual({ attrAdd: { str: 2 }, armorAdd: 4, powerMult: 1.01, hpAdd: 4, critAdd: 0.03, accuracyAdd: 0.02 });
+    const rolled = loadout({ class: 'warrior', equipment: { ...eq, armor: { uid: 'i2', id: 'riveted_mail', rolls: { armor: 4, hp: 5 } } } });
     expect(rolled.modifiers?.hpAdd).toBe(5);
   });
 

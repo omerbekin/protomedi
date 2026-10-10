@@ -126,21 +126,21 @@ describe('skill hasarı hangi özelliğe bağlıysa onunla ölçeklenir', () => 
 
   it('Archer (DEX): dex artınca hasar artar, str/int artınca değişmez', () => {
     const base = damageWith('archer', 'quick_shot', 'dex', content.classes.archer!.attributes.dex);
-    expect(damageWith('archer', 'quick_shot', 'dex', 45)).toBeGreaterThan(base * 2);
+    expect(damageWith('archer', 'quick_shot', 'dex', 90)).toBeGreaterThan(base * 2);
     expect(damageWith('archer', 'quick_shot', 'str', 99)).toBe(base);
     expect(damageWith('archer', 'quick_shot', 'int', 99)).toBe(base);
   });
 
   it('Mage (INT): int artınca hasar artar, str/dex artınca değişmez', () => {
     const base = damageWith('mage', 'fire_bolt', 'int', content.classes.mage!.attributes.int);
-    expect(damageWith('mage', 'fire_bolt', 'int', 75)).toBeGreaterThan(base * 2);
+    expect(damageWith('mage', 'fire_bolt', 'int', 150)).toBeGreaterThan(base * 2);
     expect(damageWith('mage', 'fire_bolt', 'str', 99)).toBe(base);
     expect(damageWith('mage', 'fire_bolt', 'dex', 99)).toBe(base);
   });
 
   it('Warrior (STR): str artınca hasar artar, int/dex artınca değişmez', () => {
     const base = damageWith('warrior', 'melee_attack', 'str', content.classes.warrior!.attributes.str);
-    expect(damageWith('warrior', 'melee_attack', 'str', 48)).toBeGreaterThan(base * 2);
+    expect(damageWith('warrior', 'melee_attack', 'str', 96)).toBeGreaterThan(base * 2);
     expect(damageWith('warrior', 'melee_attack', 'int', 99)).toBe(base);
     expect(damageWith('warrior', 'melee_attack', 'dex', 99)).toBe(base);
   });

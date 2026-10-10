@@ -7,6 +7,18 @@ export function isPrimaryActive(attrs: Attributes, primary: Attribute | undefine
 }
 
 /** Kaçınma (evasion): tam sayı adımlı (her dexPerEvasionStep Dex = +evasionPerStep), evasionMax üst sınırlı. */
+/**
+ * Ölçekli bir değeri statScale katına yuvarlar (x2 dönüşümü: eski "tam sayıya yuvarla"nın aynısı; statScale 1 iken Math.round). Kayan noktada TAM:
+ * v / 2 ve x 2 üs kaydırmadır, yani sonuç eski ölçekteki yuvarlamanın birebir 2 katıdır.
+ */
+export function roundStat(v: number, formulas: Pick<Formulas, 'statScale'>, step = 1): number {
+  const s = (formulas.statScale ?? 1) * step;
+  return Math.round(v / s) * s;
+}
+
+/** Ölçekli birimlerin (hız) alt sınırı: eski 1'in statScale katı. */
+export const statMin = (formulas: Pick<Formulas, 'statScale'>): number => formulas.statScale ?? 1;
+
 export function evasionOf(dex: number, formulas: Formulas): number {
   const a = formulas.attributes;
   const steps = Math.floor(Math.max(0, dex) / a.dexPerEvasionStep);
@@ -51,7 +63,7 @@ export function deriveStats(data: CombatantData, formulas: Formulas): Stats {
     luck,
     hp: Math.round(a.hpBase + a.hpPerStr * str),
     mp: Math.round(a.mpBase + a.mpPerInt * int),
-    spd: Math.max(1, Math.round(a.spdBase + a.spdPerDex * dex)),
+    spd: Math.max(statMin(formulas), roundStat(a.spdBase + a.spdPerDex * dex, formulas)),
     mpRegen: Math.round(a.mpRegenPerInt * int),
     hpRegen: a.hpRegenPerStr * str,
     armor: data.armor,
@@ -133,7 +145,7 @@ export function applyUnitModifiers(def: CombatantDef, mods: UnitModifiers | unde
   // Türev değerler (can, MP, kritik...) aşağıda bu tam sayı statlardan formüllerle türetilir.
   for (const k of ATTRS) {
     const v = def.attributes[k] * (mods.statMult ?? 1) * (mods.attrMult?.[k] ?? 1) + (mods.attrAdd?.[k] ?? 0);
-    attributes[k] = Math.max(0, Math.round(v));
+    attributes[k] = Math.max(0, roundStat(v, formulas));
   }
   const derived = deriveStats(
     {
@@ -160,7 +172,7 @@ export function applyUnitModifiers(def: CombatantDef, mods: UnitModifiers | unde
     ...derived,
     hp: Math.max(1, Math.round(derived.hp * (mods.hpMult ?? 1)) + Math.round(mods.hpAdd ?? 0)),
     mp: plus('mpAdd', derived.mp, (v) => Math.max(0, Math.round(v))),
-    spd: plus('spdAdd', derived.spd, (v) => Math.max(1, v)),
+    spd: plus('spdAdd', derived.spd, (v) => Math.max(statMin(formulas), v)),
     critChance: plus('critAdd', derived.critChance, (v) => Math.max(0, r4(v))),
     critMult: plus('critMultAdd', derived.critMult, (v) => Math.max(1, r4(v))),
     accuracy: plus('accuracyAdd', derived.accuracy, (v) => Math.max(0, r4(v))),
@@ -184,10 +196,12 @@ export function variantMult(def: CombatantDef, variant: keyof SummonVariants | u
  * yenilenmesi `mult` ile çarpılır; diğer her şey (zırh, hız, isabet, skill'ler, hasar azaltma) aynen kalır. mult 1 ise tanım aynen döner.
  * Motor (çağrı anı), skill açıklaması, wiki ve maç kaydı bu tek fonksiyonu kullanır.
  */
-export function applySummonVariant(def: CombatantDef, variant: keyof SummonVariants | undefined): CombatantDef {
+export function applySummonVariant(def: CombatantDef, variant: keyof SummonVariants | undefined, formulas: Pick<Formulas, 'statScale'>): CombatantDef {
   const mult = variantMult(def, variant);
   if (mult === 1) return def;
-  const r1 = (v: number) => Math.round(v * mult * 10) / 10;
+  // STR/INT 0,1'e yuvarlanır (x2 ölçekte 0,2'ye: statScale katı; eskisiyle birebir)
+  const S = formulas.statScale ?? 1;
+  const r1 = (v: number) => (Math.round((v * mult * 10) / S) / 10) * S;
   const stats: Stats = { ...def.stats, hp: Math.max(1, Math.round(def.stats.hp * mult)), str: r1(def.stats.str), int: r1(def.stats.int), hpRegen: def.stats.hpRegen * mult };
   return { ...def, attributes: { ...def.attributes, str: stats.str, int: stats.int }, stats };
 }

@@ -7,13 +7,13 @@
   "role": "Assassin",
   "frontPriority": 3,
   "attributes": {
-    "str": 5,
-    "int": 5,
-    "dex": 15,
-    "luck": 5
+    "str": 10,
+    "int": 10,
+    "dex": 30,
+    "luck": 10
   },
   "primary": "dex",
-  "armor": 5,
+  "armor": 10,
   "magicArmor": 0,
   "ai": "assassin",
   "skills": [

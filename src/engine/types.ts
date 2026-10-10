@@ -815,6 +815,11 @@ export interface ScreenCell {
 }
 
 export interface Formulas {
+  /**
+   * Stat ölçeği (x2 dönüşümü, Ömer 2026-10-10; yoksa 1): STR/DEX/INT/LUCK, zırh, büyü zırhı ve hız bu kat. Tam sayıya yuvarlanan ölçekli değerler
+   * (hız, güçlendirilmiş statlar, çağrı varyantı STR/INT, zırh çarpanı, hazır tur payı) bu sayının katlarına yuvarlanır (stats.ts > roundStat).
+   */
+  statScale?: number;
   attributes: {
     hpBase: number;
     hpPerStr: number;

@@ -40,7 +40,7 @@ describe('Cutthroat class verisi', () => {
     expect(ct.name).toBe('Cutthroat');
     expect(ct.role).toBe('Assassin');
     const a = ct.attributes;
-    expect(a.str + a.int + a.dex + a.luck).toBe(30);
+    expect(a.str + a.int + a.dex + a.luck).toBe(30 * (content.formulas.statScale ?? 1)); // x2 stat ölçeği: 60
     expect(ct.primary).toBe('dex');
     expect(a.dex).toBe(Math.max(a.str, a.int, a.dex, a.luck));
     expect(ct.stats.primaryActive).toBe(true);

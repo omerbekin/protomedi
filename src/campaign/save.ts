@@ -1,7 +1,7 @@
 import { CONFIG, MAPS } from './data';
 import { findNode } from './graph';
 import { activeHeroes, stopNumber } from './state';
-import { emptyEquipment, SLOT_IDS, type ItemInstance } from '../progression/items';
+import { emptyEquipment, migrateRollsX2, SLOT_IDS, type ItemInstance } from '../progression/items';
 import type { CampaignMode, CampaignState, Difficulty, Hero } from './types';
 
 /**
@@ -16,7 +16,8 @@ import type { CampaignMode, CampaignState, Difficulty, Hero } from './types';
 
 export const SAVE_KEY = 'protomedi.campaign.v1';
 /** Kayıt dosyası sürümü. 3 (madde 278): sefer durumu v2 (kahraman level/XP/ekipman, torba, altın); 2 ve 1 okunurken taşınır. */
-export const SAVE_VERSION = 3;
+/** 4: x2 stat ölçeği (Ömer 2026-10-10): 2 ve 3 okunurken item zarlarının ölçekli statları x2 (progression > migrateRollsX2). */
+export const SAVE_VERSION = 4;
 export const SLOT_COUNT = CONFIG.rules.slots;
 
 export interface KV {
@@ -207,8 +208,11 @@ export function readSaves(kv: KV | null): { file: SaveFile; corrupt: boolean; mi
       return { file: m.file, corrupt: m.dropped, migrated: true };
     }
     // Sürüm 2 (yuvalar, sefer durumu v1) ile 3 aynı dosya düzeni; 2'nin durumları cleanEntry > normalizeState ile v2'ye taşınır
-    if ((parsed.version !== SAVE_VERSION && parsed.version !== 2) || !Array.isArray(parsed.slots)) return { file: empty(), corrupt: true, migrated: false };
+    if ((parsed.version !== SAVE_VERSION && parsed.version !== 2 && parsed.version !== 3) || !Array.isArray(parsed.slots)) return { file: empty(), corrupt: true, migrated: false };
     const fromV2 = parsed.version === 2;
+    // x2 stat ölçeği (sürüm 4): eski kayıttaki item zarları (STR/DEX/INT/LUCK, zırh, hız) x2
+    const scaled = parsed.version !== SAVE_VERSION;
+    if (scaled) migrateRollsX2(parsed.slots);
     const file = empty();
     file.counter = counter;
     let corrupt = false;
@@ -224,7 +228,7 @@ export function readSaves(kv: KV | null): { file: SaveFile; corrupt: boolean; mi
       file.slots[i] = { ...sd, difficulty: DIFFS.includes(sd.difficulty) ? sd.difficulty : CONFIG.defaultDifficulty, saves };
     }
     file.lastSlot = typeof parsed.lastSlot === 'number' && file.slots[parsed.lastSlot] ? parsed.lastSlot : null;
-    return { file, corrupt, migrated: fromV2 };
+    return { file, corrupt, migrated: fromV2 || scaled };
   } catch {
     return { file: empty(), corrupt: true, migrated: false };
   }

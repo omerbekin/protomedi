@@ -43,7 +43,7 @@ describe('Spell Ward (Anti-Mage): dosta ya da kendine, kancalar', () => {
   it('hedef türü single_ally, excludeSelf YOK: hem kendine hem dosta atılır; kalkan formülü aynı (Int x 0,3 + kalan MP x 0,6)', () => {
     expect(S.spell_ward!.target).toBe('single_ally');
     expect(S.spell_ward!.excludeSelf).toBeUndefined();
-    expect(ward).toMatchObject({ scale: 'int', power: 0.3, shieldType: 'magic', bonusPerMana: 0.6 });
+    expect(ward).toMatchObject({ scale: 'int', power: 0.15, shieldType: 'magic', bonusPerMana: 0.6 }); // x2 stat ölçeği: eski Int x 0,3
     expect(wardHook).toEqual({ burnMana: 8, dispelChance: 0.25 });
     const b = mk({ 0: 'warrior', 1: 'antimage' }, { 0: 'mage' });
     const am = at(b, 'party', 1);
@@ -184,7 +184,7 @@ describe('Spell Ward (Anti-Mage): dosta ya da kendine, kancalar', () => {
 describe('Mana Barrier (Mage): debuff siler, emdikçe MP verir', () => {
   it('atıldığı dostun TÜM debuff\'larını siler (statusEnd dispelled), buff\'lara dokunmaz; kalkan aynı (Int x 1,7)', () => {
     expect(S.mana_barrier!.effects[0]).toEqual({ type: 'dispel', status: 'debuff' });
-    expect(barrier).toMatchObject({ scale: 'int', power: 1.7, onAbsorb: { giveMana: 3 } });
+    expect(barrier).toMatchObject({ scale: 'int', power: 0.85, onAbsorb: { giveMana: 3 } }); // x2 stat ölçeği: eski Int x 1,7
     const b = mk({ 0: 'warrior', 1: 'mage' }, { 0: 'warrior' });
     const w = at(b, 'party', 0);
     const mage = at(b, 'party', 1);

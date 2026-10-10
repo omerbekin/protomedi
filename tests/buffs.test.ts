@@ -327,10 +327,10 @@ describe('sınıf verisi (bu turun düzenlemeleri)', () => {
     expect(content.skills.thorn_whip!.motion).toBe('whip');
   });
 
-  it('Treant ve iskelet: can 105 (iskelette beslenmiş hâl); Treant hasar statı INT 13,5 (madde 222: eski STR 13,5 çıktısı korunur); Treant türü nature', () => {
+  it('Treant ve iskelet: can 105 (iskelette beslenmiş hâl); Treant hasar statı INT 27 (x2 ölçek; eski 13,5; madde 222: eski STR 13,5 çıktısı korunur); Treant türü nature', () => {
     expect(content.summons.skeleton!.stats.hp).toBe(105);
     expect(content.summons.treant!.stats.hp).toBe(105);
-    expect(content.summons.treant!.stats.int).toBe(13.5);
+    expect(content.summons.treant!.stats.int).toBe(27); // x2 stat ölçeği (eski 13,5)
     expect(content.summons.treant!.tags).toContain('nature');
   });
 

@@ -7,13 +7,13 @@
   "role": "Tank",
   "frontPriority": 0,
   "attributes": {
-    "str": 15,
-    "int": 10,
-    "dex": 3,
-    "luck": 2
+    "str": 30,
+    "int": 20,
+    "dex": 6,
+    "luck": 4
   },
   "primary": "str",
-  "armor": 19,
+  "armor": 38,
   "magicArmor": 0,
   "ai": "tank",
   "skills": [

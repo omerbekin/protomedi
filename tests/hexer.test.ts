@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, chooseAction, content, describePassive, describeSkill, explainChoice, MatchLog, previewSkill } from '../src/engine';
+import { Battle, chooseAction, content, describePassive, describeSkill, explainChoice, MatchLog, previewSkill, roundStat } from '../src/engine';
 import type { AiConfig, BattleEvent, Combatant, CombatantDef, Status } from '../src/engine';
 import { shapeCells } from '../src/engine/area-shape';
 import { buildWiki } from '../src/wiki/catalog';
@@ -57,8 +57,8 @@ describe('Hexer class verisi', () => {
     expect(hx.role).toBe('Curse Caster');
     expect(hx.color).toBe('#6a2f5f');
     const a = hx.attributes;
-    expect([a.str, a.int, a.dex, a.luck]).toEqual([8, 5, 3, 14]); // madde 261 denge turu: str 6 -> 8, int 7 -> 5
-    expect(a.str + a.int + a.dex + a.luck).toBe(30);
+    expect([a.str, a.int, a.dex, a.luck]).toEqual([16, 10, 6, 28]); // x2 stat ölçeği (eski 8/5/3/14; madde 261 denge turu: str 6 -> 8, int 7 -> 5)
+    expect(a.str + a.int + a.dex + a.luck).toBe(60);
     expect(hx.primary).toBe('luck');
     expect(a.luck).toBe(Math.max(a.str, a.int, a.dex, a.luck));
     expect(hx.stats.primaryActive).toBe(true);
@@ -66,11 +66,11 @@ describe('Hexer class verisi', () => {
     const f = content.formulas.attributes;
     expect(hx.stats.hp).toBe(f.hpBase + f.hpPerStr * a.str); // 56
     expect(hx.stats.mp).toBe(f.mpBase + f.mpPerInt * a.int); // 44
-    expect(hx.stats.spd).toBe(Math.round(f.spdBase + f.spdPerDex * a.dex)); // 8
+    expect(hx.stats.spd).toBe(roundStat(f.spdBase + f.spdPerDex * a.dex, content.formulas)); // 16 (x2 ölçek)
     expect(hx.stats.accuracy).toBeCloseTo(f.accuracyBase + f.accuracyPerLuck * a.luck); // %94
     expect(hx.stats.critChance).toBeCloseTo(f.critChanceBase + f.critChancePerLuck * a.luck); // %12
-    expect([hx.stats.hp, hx.stats.mp, hx.stats.spd]).toEqual([78, 40, 8]); // madde 261: can tabanı 30, str 8
-    expect(hx.stats.armor).toBe(4);
+    expect([hx.stats.hp, hx.stats.mp, hx.stats.spd]).toEqual([78, 40, 16]); // madde 261: can tabanı 30, str 8; x2 stat ölçeği: hız 16 (eski 8)
+    expect(hx.stats.armor).toBe(8); // x2 ölçek (eski 4)
     expect(hx.stats.magicArmor).toBe(0);
     expect(hx.spriteId).toBe('hexer');
     expect(hx.skills).toEqual(['evil_eye', 'withering_curse', 'jinx', 'doom_mark']);

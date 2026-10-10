@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import defenderRaw from '../data/classes/defender.json';
-import { Rng, armorReduction, attributePower, content, damageRange, deriveStats, hitChance, rollCrit, rollHit } from '../src/engine';
+import { Rng, armorReduction, attributePower, content, damageRange, deriveStats, hitChance, rollCrit, rollHit, roundStat } from '../src/engine';
 import type { CombatantData, DamageSpec, Stats } from '../src/engine';
 
 const f = content.formulas;
@@ -24,7 +24,7 @@ describe('4 temel özellik ve türev stat\'lar', () => {
     const s = stats({ str: 20, int: 30, dex: 8 });
     expect(s.hp).toBe(f.attributes.hpBase + f.attributes.hpPerStr * 20);
     expect(s.mp).toBe(f.attributes.mpBase + f.attributes.mpPerInt * 30);
-    expect(s.spd).toBe(Math.round(f.attributes.spdBase + f.attributes.spdPerDex * 8));
+    expect(s.spd).toBe(roundStat(f.attributes.spdBase + f.attributes.spdPerDex * 8, f));
   });
 
   it('her özellik yalnızca kendi türevini değiştirir', () => {
@@ -106,7 +106,7 @@ describe('zırh: yüzdesel ve azalan getirili', () => {
 
   it('hasar düz değil YÜZDESEL düşer: aynı zırh büyük vuruşta da küçük vuruşta da aynı oranı azaltır', () => {
     const attacker = stats({ str: 10 });
-    const defender = stats({}, { armor: 30 }); // %50
+    const defender = stats({}, { armor: f.armor.k }); // %50 (x2 stat ölçeği: k = 60)
     const dmg = (power: number): number => {
       const spec: DamageSpec = { damageType: 'physical', scale: 'str', power };
       return damageRange(attacker, defender, spec, f).avg / damageRange(attacker, stats({}, { armor: 0 }), spec, f).avg;

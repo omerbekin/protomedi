@@ -7,13 +7,13 @@
   "role": "Marksman",
   "frontPriority": 8,
   "attributes": {
-    "str": 6,
-    "int": 8,
-    "dex": 14,
-    "luck": 2
+    "str": 12,
+    "int": 16,
+    "dex": 28,
+    "luck": 4
   },
   "primary": "dex",
-  "armor": 5,
+  "armor": 10,
   "magicArmor": 0,
   "ai": "sniper",
   "skills": [

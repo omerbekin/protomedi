@@ -7,13 +7,13 @@
   "role": "Holy Healer",
   "frontPriority": 2,
   "attributes": {
-    "str": 12,
-    "int": 13,
-    "dex": 2,
-    "luck": 3
+    "str": 24,
+    "int": 26,
+    "dex": 4,
+    "luck": 6
   },
   "primary": "int",
-  "armor": 11,
+  "armor": 22,
   "magicArmor": 0,
   "ai": "healer",
   "skills": [
@@ -29,7 +29,7 @@
     "text": "At the start of your turn, heal the most wounded ally.",
     "effect": {
       "type": "divineLight",
-      "power": 0.45,
+      "power": 0.225,
       "scale": "int"
     }
   }

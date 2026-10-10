@@ -6,32 +6,32 @@ import { emptyEquipment, loadout, primaryBonusLost, primaryCheck } from '../src/
 // göre kapanır. Bunu yapacak bir değişiklik ÖNCEDEN bilinir (primaryCheck / primaryBonusLost: kuşanma ekranı ve skill ağacı uyarısı).
 
 const f = content.formulas;
-const paladin = content.classes.paladin!; // STR 12 / INT 13, primary INT (Mana Echo)
+const paladin = content.classes.paladin!; // STR 24 / INT 26 (x2 stat ölçeği; eski 12 / 13), primary INT (Mana Echo)
 
 describe('primary bonusu: normal kural + önceden uyarı', () => {
-  it('+2 STR alan Paladin Mana Echo kaybeder (motor kuralı değişmedi)', () => {
+  it('+4 STR (x2 ölçek; eski +2) alan Paladin Mana Echo kaybeder (motor kuralı değişmedi)', () => {
     expect(paladin.stats.primaryActive).toBe(true);
-    const m = applyUnitModifiers(paladin, { attrAdd: { str: 2 } }, f);
+    const m = applyUnitModifiers(paladin, { attrAdd: { str: 4 } }, f);
     expect(m.stats.primaryActive).toBe(false);
     expect(m.stats.manaEcho).toBe(0);
   });
 
   it('yardımcı bunu önceden söyler: hangi stat geçiyor; eşitlikte bonus açık kalır', () => {
     const hero = { class: 'paladin', equipment: emptyEquipment() };
-    const c = primaryCheck(hero, { attrDelta: { str: 2 } });
+    const c = primaryCheck(hero, { attrDelta: { str: 4 } });
     expect(c).toMatchObject({ primary: 'int', activeNow: true, activeAfter: false, lost: true, gained: false, overtakenBy: ['str'] });
-    expect(primaryBonusLost(hero, { attrDelta: { str: 1 } })).toBe(false); // 13 = 13: eşitlik açık
-    expect(primaryBonusLost(hero, { attrDelta: { int: 5 } })).toBe(false);
+    expect(primaryBonusLost(hero, { attrDelta: { str: 2 } })).toBe(false); // 26 = 26: eşitlik açık
+    expect(primaryBonusLost(hero, { attrDelta: { int: 10 } })).toBe(false);
   });
 
   it("item ile: DEX item'i Archer'ı bozmaz; dengeli puan bonusu korur; Gambler'a STR uyarısı", () => {
     const archer = { class: 'archer', equipment: emptyEquipment() };
     expect(primaryBonusLost(archer, { equip: { uid: 'i1', id: 'bracers_of_the_fox' } })).toBe(false);
-    const broken = primaryCheck({ class: 'paladin' }, { attrDelta: { str: 3 } });
+    const broken = primaryCheck({ class: 'paladin' }, { attrDelta: { str: 6 } });
     expect(broken.lost).toBe(true);
-    const back = primaryCheck({ class: 'paladin' }, { attrDelta: { str: 3, int: 3 } });
+    const back = primaryCheck({ class: 'paladin' }, { attrDelta: { str: 6, int: 6 } });
     expect(back.lost).toBe(false);
-    const g = primaryCheck({ class: 'gambler' }, { attrDelta: { str: 5, luck: 0 } });
+    const g = primaryCheck({ class: 'gambler' }, { attrDelta: { str: 10, luck: 0 } });
     expect([g.lost, g.overtakenBy]).toEqual([true, ['str']]);
   });
 

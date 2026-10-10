@@ -7,13 +7,13 @@
   "role": "Nature Summoner",
   "frontPriority": 5,
   "attributes": {
-    "str": 8,
-    "int": 16,
-    "dex": 5,
-    "luck": 1
+    "str": 16,
+    "int": 32,
+    "dex": 10,
+    "luck": 2
   },
   "primary": "int",
-  "armor": 8,
+  "armor": 16,
   "magicArmor": 0,
   "ai": "support",
   "skills": [
@@ -29,7 +29,7 @@
     "text": "Whenever you summon, all allies are healed.",
     "effect": {
       "type": "verdantBlessing",
-      "power": 0.6,
+      "power": 0.3,
       "scale": "int"
     }
   }

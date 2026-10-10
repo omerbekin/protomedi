@@ -39,7 +39,7 @@ describe('kayıt v3: kahraman kaydı ve geçiş', () => {
   it('yeni sefer: sürüm 2 durum, kahraman level 1 / XP 0 / 6 boş yuva, torba boş, altın 0', () => {
     const s = played();
     expect(s.version).toBe(2);
-    expect(SAVE_VERSION).toBe(3);
+    expect(SAVE_VERSION).toBe(4); // 4: x2 stat ölçeği (item zarları göçü)
     expect(s.roster[0]).toMatchObject({ level: 1, xp: 0, equipment: emptyEquipment() });
     expect(Object.keys(s.roster[0]!.equipment)).toEqual(['weapon', 'helm', 'armor', 'gloves', 'boots', 'trinket']);
     expect([s.inventory, s.gold, s.nextItemId]).toEqual([[], 0, 1]);
@@ -60,7 +60,7 @@ describe('kayıt v3: kahraman kaydı ve geçiş', () => {
     expect(got).toEqual(s); // v1'den gelen durum, bugünkü yeni seferle birebir aynı (eksikler varsayılanla)
     expect(battlePlan(got)).toEqual(battlePlan(s));
     expect(migrateSaves(kv)).toBe(true);
-    expect(JSON.parse(kv.getItem(SAVE_KEY)!).version).toBe(3);
+    expect(JSON.parse(kv.getItem(SAVE_KEY)!).version).toBe(4);
     expect(readSaves(kv).migrated).toBe(false);
     expect(latestSave(kv)!.state).toEqual(s);
   });

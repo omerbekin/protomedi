@@ -7,13 +7,13 @@
   "role": "Elemental Mage",
   "frontPriority": 7,
   "attributes": {
-    "str": 6,
-    "int": 19,
-    "dex": 3,
-    "luck": 2
+    "str": 12,
+    "int": 38,
+    "dex": 6,
+    "luck": 4
   },
   "primary": "int",
-  "armor": 6,
+  "armor": 12,
   "magicArmor": 0,
   "ai": "caster",
   "skills": [

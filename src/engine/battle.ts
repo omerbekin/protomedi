@@ -7,7 +7,7 @@ import { betMultipliers, betStake } from './gamble';
 import { burnAmountFor, emptyProcApplies } from './mana-burn';
 import { Rng } from './rng';
 import { bonusScaleRaw, damageSpecFor, type DamageEffect } from './spec';
-import { applySummonVariant, applyUnitModifiers, armorReduction, attributePower, hitOutcome } from './stats';
+import { applySummonVariant, applyUnitModifiers, armorReduction, attributePower, hitOutcome, roundStat, statMin } from './stats';
 import type { Attribute, Corpse, CorpseChoice, CorpseState, DamageOrigin, Element } from './types';
 import { advanceTurn, predictQueue, turnProgress, type TurnSlot } from './turn-order';
 import type { ActionInfo, ItemEffects, AreaDef, AreaStage, BattleAction, BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GlobalSkillDef, GroundDef, GroundEffect, ShieldHook, Side, SkillDef, SkillEffect, Status, StatusDef, Telegraph, UnitSetup } from './types';
@@ -531,7 +531,7 @@ export class Battle {
 
   /** Destek HARİÇ hız: stat x durum çarpanları (Slow/Haste). */
   baseSpeedOf(c: Combatant): number {
-    return Math.max(1, Math.round(c.stats.spd * this.statusMult(c, 'speedMult')));
+    return Math.max(statMin(this.setup.formulas), roundStat(c.stats.spd * this.statusMult(c, 'speedMult'), this.setup.formulas));
   }
 
   /**
@@ -541,7 +541,7 @@ export class Battle {
   speedOf(c: Combatant): number {
     const boost = this.speedBoostOf(c.uid);
     if (boost <= 0) return this.baseSpeedOf(c);
-    return Math.max(1, Math.round(c.stats.spd * (this.statusMult(c, 'speedMult') + boost)));
+    return Math.max(statMin(this.setup.formulas), roundStat(c.stats.spd * (this.statusMult(c, 'speedMult') + boost), this.setup.formulas));
   }
 
   /** Dex-primary Hunter's Mark: saldıran hedefinden daha HIZLIYSA (geçerli hız, Slow/Haste dahil; geçici Skip desteği hariç) hasar çarpanı 1 + hunterMark; değilse 1. */
@@ -766,8 +766,9 @@ export class Battle {
       c.stats = {
         ...c.stats,
         spellPowerMult: (c.stats.spellPowerMult ?? 1) * (def.powerMult ?? 1),
-        armor: Math.round(c.stats.armor * (def.armorMult ?? 1) * 10) / 10,
-        magicArmor: Math.round(c.stats.magicArmor * (def.armorMult ?? 1) * 10) / 10,
+        // 0,1'e yuvarlanır (x2 ölçekte 0,2'ye: statScale katı)
+        armor: roundStat(c.stats.armor * (def.armorMult ?? 1) * 10, this.setup.formulas) / 10,
+        magicArmor: roundStat(c.stats.magicArmor * (def.armorMult ?? 1) * 10, this.setup.formulas) / 10,
       };
     }
     emit({ type: 'phase', actor: c.uid, phase, hp: c.hp, maxHp: c.maxHp, banner: def.banner });
@@ -1378,7 +1379,8 @@ export class Battle {
     const cfg = this.setup.formulas.corpseDanger ?? { hpRef: 100, reviverMult: 1.5, revivableMult: 1.5 };
     const f = this.setup.formulas;
     const r1 = (n: number) => Math.round(n * 10) / 10;
-    const threat = Math.max(unit.stats.str, unit.stats.int, unit.stats.dex) + unit.stats.spd;
+    // tehdit eski ölçekte (stat + hız statScale kat büyük; en iyi skill değeri değişmez)
+    const threat = (Math.max(unit.stats.str, unit.stats.int, unit.stats.dex) + unit.stats.spd) / (this.setup.formulas.statScale ?? 1);
     let best = 0;
     let bestName = '';
     for (const id of unit.skills) {
@@ -1440,7 +1442,7 @@ export class Battle {
     if (!effect.consumeCorpse) return { unit: def ?? null, empowered: undefined, corpse: null, slot: spot };
     const chosen = corpseUid && this.corpseChoices(actorUid, skillId).some((c) => c.uid === corpseUid) ? this.corpseOf(corpseUid) : null;
     const corpse = chosen ?? this.corpseToConsume(actorUid, skillId);
-    return { unit: def ? applySummonVariant(def, corpse ? 'fed' : 'unfed') : null, empowered: !!corpse, corpse, slot: spot };
+    return { unit: def ? applySummonVariant(def, corpse ? 'fed' : 'unfed', this.setup.formulas) : null, empowered: !!corpse, corpse, slot: spot };
   }
 
   /**
@@ -2339,7 +2341,7 @@ export class Battle {
               emit({ type: 'corpseConsumed', uid: corpse.uid, by: actor.uid, slot: corpse.slot, side: corpse.side });
             }
           }
-          const def = empowered === undefined ? baseDef : applySummonVariant(baseDef, empowered ? 'fed' : 'unfed');
+          const def = empowered === undefined ? baseDef : applySummonVariant(baseDef, empowered ? 'fed' : 'unfed', this.setup.formulas);
           const summoned = createCombatant(def, actor.side, spot, `${actor.side}-s${this.summonCount++}`);
           summoned.board = board;
           summoned.owner = actor.uid;
@@ -3305,7 +3307,7 @@ function createSetupCombatant(baseDef: CombatantDef, side: Side, slot: number, u
   if (ie && Object.keys(ie).length > 0) {
     c.itemEffects = JSON.parse(JSON.stringify(ie)) as ItemEffects;
     if (finite(ie.startShieldRatio) && ie.startShieldRatio > 0) c.shield += Math.round(c.maxHp * ie.startShieldRatio);
-    if (finite(ie.startCharge) && ie.startCharge > 0) c.turnCounter = Math.round(formulas.turn.threshold * Math.min(0.99, ie.startCharge));
+    if (finite(ie.startCharge) && ie.startCharge > 0) c.turnCounter = roundStat(formulas.turn.threshold * Math.min(0.99, ie.startCharge), formulas);
   }
   // Hazır çağrı (ör. düşman Skeleton): çağrı kuralları, sahipsiz ve süresiz
   if (unit.summoned) c.summoned = true;

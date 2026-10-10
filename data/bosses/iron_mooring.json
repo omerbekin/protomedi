@@ -8,9 +8,9 @@
   "frontPriority": 9,
   "role": "Boss · Anchor",
   "attributes": { "str": 0, "int": 0, "dex": 0, "luck": 0 },
-  "armor": 10,
+  "armor": 20,
   "magicArmor": 0,
-  "overrides": { "hp": 55, "mp": 0, "spd": 1, "hpRegen": 0, "mpRegen": 0 },
+  "overrides": { "hp": 55, "mp": 0, "spd": 2, "hpRegen": 0, "mpRegen": 0 },
   "inert": true,
   "skills": []
 }
