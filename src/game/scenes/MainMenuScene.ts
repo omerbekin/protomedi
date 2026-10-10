@@ -54,6 +54,8 @@ const COL_X = MENU_COL_X; // sol sütunun yazı başlangıcı (ayarlar ekranı D
 const COL_W = 560; // ana menü yazı satırlarının genişliği
 const PANEL_W = 760; // Settings / Multiplayer satırlarının genişliği (sağda değer/denetim)
 const SHADE_W = 980; // soldan sağa açılan gölge
+/** Settings açıkken sahnenin genel koyuluğu (settings-backdrop v2; DOM .st-overlay ile aynı). */
+const SETTINGS_DARK = 0.52;
 /**
  * Görünüm stili (src/ui/menu-style.ts): 'classic' bugünkü menü; 'elegant' ilk taslağın zarif stili (?menu=new önizleme). Onaylanınca
  * yalnızca DEFAULT_MENU_STYLE değişir; aşağıdaki ölçüler aynı kalır (önizleme = onaylanan görünüm).
@@ -778,6 +780,9 @@ export class MainMenuScene extends Phaser.Scene {
     }
     if (!kind) return;
     const p = (this.panel = this.add.container(this.colX, 0).setDepth(25));
+    // Settings zemini (Ömer 2026-10-10, taslak settings-backdrop v2 "Darkening everywhere"): her yerde aynı, bulanıklık yok; sahne
+    // %52 kararır + sütunun arkasında soldan sağa açılan gölge (oyun içi DOM Settings'le aynı: style.css > .st-overlay)
+    if (kind === 'settings') p.add(this.add.rectangle(FULL_X0 - this.colX - 200, 0, FULL_W + 400, H, 0x000000, SETTINGS_DARK).setOrigin(0, 0));
     p.add([this.shadeExtension(), this.columnShade()]);
     p.add(this.titleText(COL_X, LOOK.titleY, kind === 'settings' ? 'Settings' : 'Multiplayer', LOOK.titleSize, 3).setOrigin(0, 0.5));
     if (kind === 'settings') this.buildSettings(p);

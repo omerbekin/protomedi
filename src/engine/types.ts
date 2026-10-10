@@ -1007,7 +1007,18 @@ export interface StatusDef {
   attackAttrPct?: Partial<Record<Attribute, number>>;
   /** true: süre turla azalmaz; durum onu koyan kural kaldırana kadar sürer (Ash Brand: telgraf çözülünce/iptal olunca; Anchored: Mooring sayısı, Staggered: kaybedilen eylem). */
   untilResolved?: boolean;
+  /**
+   * Aynı durum yeniden uygulanınca ne olur (Ömer 2026-10-10, "aynı debuff üst üste binmesin"; src/engine/status-stack.ts):
+   * - 'refresh-strongest' (debuff varsayılanı): birimde her durumdan TEK örnek; süre = max(kalan, yeni uygulamanın süresi); güç (DoT `amount`)
+   *   yenisi daha güçlüyse yenisinin (kaynağıyla), değilse eskisi kalır.
+   * - 'stack' (`maxStacks`'li durumların varsayılanı ve tek anlamı: Omen): yığın sayacı (addStacks); bu alan yalnızca bunu belgeler.
+   * - 'replace' (buff varsayılanı, eski davranış): yeni örnek eskisinin yerine geçer (süre ve kaynak yeninin). Ash Brand: damga telgrafına bağlı.
+   */
+  stack?: StatusStackMode;
 }
+
+/** statuses.json > stack değerleri. */
+export type StatusStackMode = 'refresh-strongest' | 'stack' | 'replace';
 
 /** data/grounds.json girişi: yerde kalan etki türü. */
 export interface GroundDef {

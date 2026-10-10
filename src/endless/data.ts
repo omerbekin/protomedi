@@ -147,7 +147,7 @@ export interface EndlessRun {
   /** Ortak nadir düşüş (madde 297): düşüşsüz zafer sayacı (eski kayıtta yok = 0). */
   rarePity?: number;
   /** Son nadir düşüş (ödül ekranında altın-turuncu duyuru; `wave` = kazanılan dalga). */
-  rareDrop?: { itemId: string; wave: number };
+  rareDrop?: { itemId: string; wave: number; pending?: boolean; rolls?: ItemRolls };
   startedAt: string;
   /** Koşu bitince: nasıl bitti. */
   end?: 'defeat' | 'abandoned';

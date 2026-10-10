@@ -15,6 +15,7 @@ import layout from '../../data/battle-layout.json';
 import { applySummonVariant, content, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, TARGET_TEXT } from '../engine';
 import { TARGET_BADGE } from '../engine/skill-info';
 import { isAccuracyCritDebuff } from '../engine/cc-immunity';
+import { statusStackMode } from '../engine/status-stack';
 import type { Attribute, CombatantDef, Element, Formulas, SkillDef, StatKind, Stats } from '../engine';
 import { primaryBonusInfo, primaryBonusLines } from '../engine/stat-info';
 import { buildGrounds, buildStatuses, skillOwner, searchText, avatarMap, groupByDir } from '../gallery/catalog';
@@ -379,6 +380,7 @@ export function buildGettingStarted(): WikiArticle[] {
       p(`Every unit has a SPD (speed) stat: ${num(a.spdBase)} + ${num(a.spdPerDex)} per point of Dexterity. Each tick, every unit's action counter fills by its SPD; the first one to reach ${f.turn.threshold} acts, then its counter restarts.`),
       p(`Faster units therefore act more often, not just first. The bar at the top shows the next ${f.turn.queueLength} units in order, and it updates live when speed changes (for example Haste or Slow).`),
       p('A stunned unit skips its next turn. Status durations count down on the turns of the unit that carries them.'),
+      p(debuffStackingText()),
     ]),
     article('formation', 'Basics', 'Formation and rows', 'team', [
       p(`Each side stands on a ${rows} x ${lanes} grid: ${rows} rows deep and ${lanes} lanes wide (${rows * lanes} cells). A normal team of ${teamSize()} leaves cells empty; a side of ${rows * lanes} fills the whole grid. Empty cells matter: a unit can step onto one with the Move action (see Actions in the Mechanics section).`),
@@ -486,6 +488,12 @@ function multiplayerArticle(): WikiArticle {
   ]);
 }
 
+/** Debuff'ların yığılmaması (Ömer 2026-10-10): kural statuses.json > stack'ten; yığılan istisnalar (Omen) adıyla sayılır. */
+function debuffStackingText(): string {
+  const stacking = Object.values(content.statuses).filter((d) => d.type === 'debuff' && statusStackMode(d) === 'stack').map((d) => d.name);
+  return `The same debuff never stacks: a unit carries at most one of each. Applying it again sets its duration to the longer of what is left and the new duration, and keeps only the strongest one (for damage over time, the bigger amount).${stacking.length ? ` Exception: ${stacking.join(', ')} stacks on purpose.` : ''}`;
+}
+
 /**
  * "Curses" makalesi (Hexer; docs/design/classes/hexer.md 8.7): Omen yığını, Doom, süre bitimi, Misfortune, Withering, Jinxed ve Ill Omen. Sayılar
  * data/statuses.json ve skill/pasif verisinden. Yığılan durum (maxStacks + doom) yoksa makale yok.
@@ -523,7 +531,7 @@ function curseArticles(): WikiArticle[] {
         'Two cursers on the same side fill the same Omen stack.',
       ].filter((x) => x !== '')),
       ...(dots.length > 0
-        ? [p(`${dots.map((d) => d.name).join(', ')}: the cursed unit takes ${dots.map((d) => d.dot!.element).join('/')} damage at the start of each of its own turns, right after ground effects. The amount is fixed when the curse lands; it cannot miss or crit, armor of its kind reduces it, and guard never takes it. Casting it again renews the duration and keeps the stronger amount.`)]
+        ? [p(`${dots.map((d) => d.name).join(', ')}: the cursed unit takes ${dots.map((d) => d.dot!.element).join('/')} damage at the start of each of its own turns, right after ground effects. The amount is fixed when the curse lands; it cannot miss or crit, armor of its kind reduces it, and guard never takes it. Casting it again does not add a second curse: the duration becomes the longer of what is left and the new duration, and the stronger amount stays.`)]
         : []),
       ...(jinx.length > 0 ? [p(`${jinx.map((d) => `${d.name}: ${d.text}`).join('. ')}. It ends after the unit's next damaging skill (every hit of that skill is affected) or when its time runs out. Hits that are always critical stay critical.`)] : []),
       ...(passives.length > 0 ? [list(...passives.map((c) => `${c.name}, ${c.passive!.name}: ${describePassive(c.passive!, c.stats, f)}`))] : []),

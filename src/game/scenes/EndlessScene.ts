@@ -3,7 +3,7 @@ import { uiSound, type UiSoundKind } from '../../ui/ui-sound';
 import layout from '../../../data/battle-layout.json';
 import { content } from '../../engine';
 import type { CombatantDef } from '../../engine/types';
-import {
+import { rewardBlockedReason, takeRareDrop,
   ENDLESS,
   UI_TEXT as T,
   bestHeroFor,
@@ -364,6 +364,16 @@ export class EndlessScene extends Phaser.Scene {
     if (next === run) return;
     commit(next);
     this.go(endlessView(next));
+  }
+
+  /** Bekleyen nadir düşüşü torbaya al (yer açıldıysa). */
+  private actTakeRare(): void {
+    const run = endless.run;
+    if (!run) return;
+    const next = takeRareDrop(run);
+    if (next === run) return uiSound('error');
+    commit(next);
+    this.render();
   }
 
   private actChooseRelic(run: EndlessRun, id: string): void {
@@ -851,12 +861,18 @@ export class EndlessScene extends Phaser.Scene {
     const w = Math.min(LOOK.card.maxW, (1760 - (n - 1) * LOOK.card.gap) / n);
     run.offer.forEach((card, i) => this.rewardCard(run, card, i, CX + (i - (n - 1) / 2) * (w + LOOK.card.gap), w, special));
     this.add2(this.note(CX, LOOK.card.top + LOOK.card.h + 26, T.cardHint, 19, C.dim, true).setOrigin(0.5, 0));
-    // Nadir düşüş duyurusu (madde 297): altın-turuncu parlayan satır (item torbada)
-    const rare = run.rareDrop && run.rareDrop.wave === run.stats.cleared ? itemDef(run.rareDrop.itemId) : undefined;
-    if (rare) {
-      const t = this.add2(this.note(CX, LOOK.card.top - 34, `Rare drop: ${rare.name} (in your bag)`, 26, '#f0a830', false).setOrigin(0.5, 1));
+    // Nadir düşüş duyurusu (madde 297): altın-turuncu parlayan satır. Torba doluyken düştüyse BEKLER: yer açılınca "Take", alınmadan devam = kaybolur
+    const rd = run.rareDrop && run.rareDrop.wave === run.stats.cleared ? run.rareDrop : undefined;
+    const rare = rd ? itemDef(rd.itemId) : undefined;
+    if (rd && rare) {
+      const t = this.add2(this.note(CX, LOOK.card.top - 34, rd.pending ? T.rareDropWaiting(rare.name) : T.rareDrop(rare.name), 26, '#f0a830', false).setOrigin(0.5, 1));
       this.tweens.add({ targets: t, alpha: { from: 0.35, to: 1 }, scale: { from: 1.12, to: 1 }, duration: 520, yoyo: true, repeat: 2, ease: 'Sine.easeInOut', onComplete: () => t.setAlpha(1).setScale(1) });
     }
+    // Torba: ödül seçerken açılır (Gear: at / tak; Ömer 2026-10-10); bekleyen nadir düşüş için Take (yer varsa)
+    const bagN = bagOf(run).length;
+    const max = endlessBagSize();
+    this.button(rd?.pending ? CX - 230 : CX, 1000, 300, T.openBag(bagN, max), () => this.actGear(), { icon: this.uiTex('bag') });
+    if (rd?.pending && rare) this.button(CX + 230, 1000, 380, T.takeRare(rare.name), () => this.actTakeRare(), { primary: true, enabled: bagN < max });
   }
 
   /**
@@ -866,11 +882,18 @@ export class EndlessScene extends Phaser.Scene {
    * sağ üst köşe (ör. "Sell: 55") `corner` ile çizilir.
    */
   private choiceCard(
-    o: { index: number; cx: number; w: number; rich: boolean; accent: number; tint: number; kicker: string; take: () => void; rarity?: boolean },
+    o: { index: number; cx: number; w: number; rich: boolean; accent: number; tint: number; kicker: string; take: () => void; rarity?: boolean; blocked?: string | null },
     draw: (k: CardCtx) => void,
   ): void {
     const { top, h } = LOOK.card;
     const c = this.add2(this.add.container(o.cx, top + h / 2));
+    // Engelli kart (Ömer 2026-10-10: torba doluyken item ödülü alınmaz): soluk, altta kısa ipucu; dokunuş = hata sesi + ipucu
+    if (o.blocked) {
+      const why = o.blocked;
+      o = { ...o, take: () => {
+        this.toast?.(why, 'error');
+      } };
+    }
     // Kart kabı kartın ortasında: basma / kalkma ölçeği ortadan; çizimler dünya koordinatından kaba göre kaydırılır
     const ox = -o.cx;
     const oy = -(top + h / 2);
@@ -921,6 +944,13 @@ export class EndlessScene extends Phaser.Scene {
     });
     this.cards[o.index] = { setState: (hv, sel) => setState(hv && hover, sel), take: o.take };
     if (this.cardSel === o.index) setState(false, true);
+    if (o.blocked) {
+      // Kart soluk (ad ve statlar okunur: atmaya değer mi?); ipucu altta "Usable by" satırının üstünde koyu şeritte, tam opak
+      c.setAlpha(0.5);
+      const y = top + h - 62;
+      this.add2(this.add.rectangle(o.cx, y, o.w - 8, 64, 0x0b0806, 0.86).setStrokeStyle(1, 0xe8806a, 0.35));
+      this.add2(this.note(o.cx, y, o.blocked, 22, '#f09a80', false).setOrigin(0.5, 0.5).setWordWrapWidth(o.w - 40).setAlign('center'));
+    }
   }
 
   /** Kahramanın şimdiki statları ve item (zarlarıyla) takılırsa statları (ipucunda önce -> sonra; takamıyorsa yalnızca şimdiki). */
@@ -1034,7 +1064,7 @@ export class EndlessScene extends Phaser.Scene {
     const d = card.kind === 'item' ? itemDef(card.itemId) : undefined;
     const accent = d ? hexNum(rarityColor(d)) : card.kind === 'gold' ? 0xecc878 : card.kind === 'feast' ? 0xf0b860 : 0xd96a5a;
     const tint = EndlessScene.TINT[card.kind];
-    this.choiceCard({ index, cx, w, rich, accent, tint, kicker, take: () => this.actTakeReward(run, index), rarity: !!d }, (k) => {
+    this.choiceCard({ index, cx, w, rich, accent, tint, kicker, take: () => this.actTakeReward(run, index), rarity: !!d, blocked: rewardBlockedReason(run, card) }, (k) => {
       const emblem = d ? itemEmblem(this, d, rarityColor(d)) : card.kind === 'gold' ? purseEmblem(this) : card.kind === 'feast' ? feastEmblem(this) : healEmblem(this);
       const m = medallion(this, emblem, accent, R, { rich });
       m.setPosition(k.cx, k.top + R + 18);

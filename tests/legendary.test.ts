@@ -245,6 +245,8 @@ describe('10 etki (motor)', () => {
     expect(strider.a.statuses.some((s) => s.kind === 'fleet')).toBe(true);
     expect(strider.b.effectiveStats(strider.a).evasion).toBeCloseTo(strider.a.stats.evasion + 0.1, 9);
     expect(passives(strider.b, 'pilgrims_stride')).toBe(1);
+    expect((ITEMS.effects.pilgrims_stride!.value as { turns: number }).turns).toBe(3); // Ömer 2026-10-10: 2 -> 3 tur
+    expect(strider.a.statuses.find((s) => s.kind === 'fleet')!.turns).toBe(2); // Move turunun sonunda 1 düşer: Move turu + sonraki 2 tur = 3 tur
     expect(normal.a.statuses.some((s) => s.kind === 'fleet')).toBe(false);
     void strider.spent;
     void normal.spent;

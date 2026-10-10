@@ -97,6 +97,8 @@ export class CombatantView {
   private readonly realSprite: boolean;
   private homeX: number;
   private readonly hpY: number;
+  /** Ad yazısı (rozet yerleşimi engel olarak okur: badgeGeometry). */
+  private nameText!: Phaser.GameObjects.Text;
   private readonly shieldY: number;
   private previewItems: Phaser.GameObjects.GameObject[] = [];
   /** Ad, can / MP / hız çubukları, durum ikonları, işaretler: sonuç ekranında birlikte söner (`setOverlayHidden`). */
@@ -182,6 +184,7 @@ export class CombatantView {
       nameStyle.shadow = { offsetX: 0, offsetY: 0, color: '#f0a43a', blur: 10, stroke: true, fill: true };
     }
     const name = scene.add.text(0, this.hpY - hpBar.height - 4, unitName(combatant), nameStyle).setOrigin(0.5, 1);
+    this.nameText = name;
     if (isBoss) {
       // Çok uzunsa iki satıra böl (orta boşluktan), hâlâ taşıyorsa ORANI KORUYARAK küçült
       const maxBossW = hpBar.width * 2.2;
@@ -410,24 +413,44 @@ export class CombatantView {
    * Can çubuğunun yanındaki rozetler: durumlar (buff/debuff), üzerinde durulan yer etkileri (zehir, yanan zemin, holy fire)
    * ve zırh aurası gibi etkilerden gelen zırh bonusu. Her rozet ikon + kalan tur / değer.
    */
-  setBadges(badges: Array<{ icon: string; owner?: string; color: string; text: string; debuff: boolean; turns: boolean }>): void {
+  setBadges(badges: Array<{ icon: string; owner?: string; color: string; text: string; debuff: boolean; turns: boolean }>, sizes: { left: number; right: number } = { left: layout.statusIcon.size, right: layout.statusIcon.size }, perRow = 4): void {
     this.statusBox.removeAll(true);
-    const size = layout.statusIcon.size;
+    const gapBar = layout.statusIcon.gapBar;
+    const gapItem = layout.statusIcon.gapItem;
     const hourglass = ensureIcon(this.scene, 'hourglass', '#d9c9a3', false);
-    // Buffs on the left of the HP bar, debuffs (and harmful ground effects) on the right; 4 per row
+    // Buffs on the left of the HP bar, debuffs (and harmful ground effects) on the right; `perRow` per row (desktop 4, phone one row)
     for (const debuff of [false, true]) {
       badges
         .filter((bd) => bd.debuff === debuff)
         .forEach((bd, i) => {
           const dir = debuff ? 1 : -1;
-          const cx = dir * (hpBar.width / 2 + 8 + size / 2 + (i % 4) * (size + 6));
-          const cy = Math.floor(i / 4) * (size + 4);
+          const size = debuff ? sizes.right : sizes.left; // telefonda büyüyen rozet (badge-layout.ts): yazı ve kum saati de aynı oranda
+          const k = size / layout.statusIcon.size;
+          const cx = dir * (hpBar.width / 2 + gapBar + size / 2 + (i % perRow) * (size + gapItem));
+          const cy = Math.floor(i / perRow) * (size + 4) + (size - layout.statusIcon.size) / 2; // büyüyen rozet aşağı uzar (üst kenar yerinde: adın altında)
           const icon = this.scene.add.image(cx, cy, ensureIcon(this.scene, bd.icon, bd.color, false, bd.owner ?? SHARED_KEY)).setDisplaySize(size, size); // durum/zemin rozeti: sahibi (sınıfa özgü durum) ya da Shared sürümü
-          const label = this.scene.add.text(cx + size / 2, cy + size / 2, bd.text, numStyle(18, bd.color)).setOrigin(1, 0.5);
+          const label = this.scene.add.text(cx + size / 2, cy + size / 2, bd.text, numStyle(Math.round(18 * k), bd.color)).setOrigin(1, 0.5);
           this.statusBox.add([icon, label]);
-          if (bd.turns) this.statusBox.add(this.scene.add.image(label.x - label.width - 8, label.y, hourglass).setDisplaySize(15, 15));
+          if (bd.turns) this.statusBox.add(this.scene.add.image(label.x - label.width - 8 * k, label.y, hourglass).setDisplaySize(15 * k, 15 * k));
         });
     }
+  }
+
+  /**
+   * Rozet yerleşimi için geometri (sahne koordinatı, birimin DURAN konumundan; badge-layout.ts): can çubuğu ortası, çubuğun yarı genişliği, kendi
+   * çubuğu (+ MP / hız çubukları), adı ve gövde çekirdeği (sprite kutusunun orta %60'ı: boyalı figürün kendisi; kutunun saydam kenarları değil).
+   */
+  badgeGeometry(): { x: number; barY: number; barHalfW: number; ownBar: { x0: number; y0: number; x1: number; y1: number }; parts: Array<{ x0: number; y0: number; x1: number; y1: number }> } {
+    const x = this.homeX;
+    const barY = this.baseY + this.hpY;
+    const ownBar = { x0: x - hpBar.width / 2 - 3, y0: barY - hpBar.height / 2 - 3, x1: x + hpBar.width / 2 + 3, y1: barY + hpBar.height / 2 + hpBar.mpHeight + hpBar.speedHeight + 9 };
+    // ad: yazı kutusu değil harflerin kendisi (alt boşluk = inen harf payı ~%22 + gölge; kenar kalınlığının yarısı dahil)
+    const n = this.nameText;
+    const fs = parseFloat(String(n.style.fontSize)) || 26;
+    const stroke = n.style.strokeThickness / 2;
+    const name = { x0: x - n.displayWidth / 2, y0: this.baseY + n.y - n.displayHeight, x1: x + n.displayWidth / 2, y1: this.baseY + n.y - fs * 0.22 + stroke };
+    const body = { x0: x - this.w * 0.3, y0: this.baseY - this.h, x1: x + this.w * 0.3, y1: this.baseY };
+    return { x, barY, barHalfW: hpBar.width / 2, ownBar, parts: [ownBar, name, body] };
   }
 
   /**

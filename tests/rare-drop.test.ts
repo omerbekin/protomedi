@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Rng } from '../src/engine';
 import { activeHeroes, applyBattle, debugTeleport, newCampaign, normalizeState, pickHero, type CampaignState } from '../src/campaign';
 import { ITEMS, RARE, itemDef, itemValue, legendaryPool, rareChance, rollRareDrop, type RareDropConfig } from '../src/progression';
-import { applyOutcome, newRun, shopStock, wavePlan } from '../src/endless';
+import { ENDLESS, applyOutcome, chooseReward, newRun, shopStock, takeRareDrop, wavePlan, type EndlessRun } from '../src/endless';
 import { parseRun } from '../src/endless/save';
 
 // Ortak nadir düşüş zarı (Ömer onayı 2026-10-10, madde 297): şans, kötü şans koruması, set kancası, Valdoria yarılama, Endless dalga kapısı, tüccar.
@@ -94,6 +94,8 @@ describe('sefer ve Endless bağlantısı, kayıt', () => {
   afterEach(() => {
     RARE.chance.battle = 0.01;
     RARE.endless.merchant.chance = 0.1;
+    RARE.chance.elite = 0.03;
+    RARE.chance.boss = 0.06;
   });
 
   it('sefer: her savaş zaferinde zar; sayaç kayıtta; eski kayıtta yoksa 0', () => {
@@ -137,5 +139,34 @@ describe('sefer ve Endless bağlantısı, kayıt', () => {
     const early = { ...run, wave: 10, stats: { ...run.stats, cleared: 9 } };
     expect(shopStock(early).some((e) => itemDef(e.itemId)!.rarity === 'legendary')).toBe(false);
     void ITEMS;
+  });
+
+  it('Endless: torba doluyken nadir düşüş BEKLER; yer açılınca alınır, alınmadan ödül seçilirse kaybolur (Ömer 2026-10-10)', () => {
+    RARE.chance.battle = 1;
+    RARE.chance.elite = 1;
+    RARE.chance.boss = 1;
+    let hit: EndlessRun | null = null;
+    for (let seed = 1; seed < 200 && !hit; seed++) {
+      const r0 = newRun(seed, ['warrior', 'archer', 'mage', 'druid'], 't');
+      const full = { ...r0, wave: 12, stats: { ...r0.stats, cleared: 11 }, bag: Array.from({ length: ENDLESS.bagSize! }, (_, i) => ({ uid: `x${i}`, id: 'leather_coif' })) };
+      const r1 = applyOutcome(full, wavePlan(full), { victory: true, units: full.heroes.map((h) => ({ heroId: h.id, hpRatio: 1, alive: true })), kills: 3, turns: 10 });
+      if (r1.rareDrop) hit = r1;
+    }
+    expect(hit).not.toBeNull();
+    const run = hit!;
+    expect(run.rareDrop!.pending).toBe(true);
+    expect(run.rareDrop!.rolls).toBeDefined();
+    expect(run.bag).toHaveLength(ENDLESS.bagSize!); // altına çevrilmedi, torbaya da girmedi
+    expect(takeRareDrop(run)).toBe(run); // yer yok
+    const freed = { ...run, bag: run.bag!.slice(1) };
+    const took = takeRareDrop(freed);
+    expect(took.bag!.at(-1)).toMatchObject({ id: run.rareDrop!.itemId, rolls: run.rareDrop!.rolls });
+    expect(took.rareDrop).toEqual({ itemId: run.rareDrop!.itemId, wave: run.rareDrop!.wave });
+    const gold = run.offer!.findIndex((c) => c.kind !== 'item');
+    if (gold >= 0) {
+      const left = chooseReward(run, gold);
+      expect(left.rareDrop).toBeUndefined(); // bırakıldı = kayboldu
+      expect(left.bag!.some((i) => i.id === run.rareDrop!.itemId)).toBe(false);
+    }
   });
 });

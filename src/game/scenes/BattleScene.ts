@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { solveBadgeSizes, type SideSizes } from '../badge-layout';
 import { classLogoName, paintedOr } from '../../ui/misc-icons';
 import layout from '../../../data/battle-layout.json';
 import { Battle, MatchLog, chooseAction, isRatioCost, skillCostAmount, skillCostLabel, content, explainChoice, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, primaryBonusInfo, previewSkill, armorReduction } from '../../engine';
@@ -398,8 +399,26 @@ export class BattleScene extends Phaser.Scene {
     this.showResult(info.victory, false, info);
   }
 
+  private badgeMemo: { key: string; sizes: Map<string, SideSizes> } | null = null;
+
+  /** Telefon boyutunda (html.short / html.compact) birim başına rozet boyu; masaüstünde null (bugünkü sabit düzen). Girdi değişmedikçe yeniden hesaplanmaz. */
+  private badgeSizes(units: Array<{ view: CombatantView; left: number; right: number }>): Map<string, SideSizes> | null {
+    const cls = document.documentElement.classList;
+    if (!cls.contains('short') && !cls.contains('compact')) return null;
+    const si = layout.statusIcon;
+    const input = units.map(({ view, left, right }) => ({ id: view.combatant.uid, left, right, ...view.badgeGeometry() }));
+    // anahtar geometriyi de içerir: yazı tipi geç yüklenip ad genişliği değişince yeniden çözülür
+    const key = JSON.stringify(input.map((u) => [u.id, u.left, u.right, u.parts.map((p) => [p.x0, p.y0, p.x1, p.y1].map(Math.round))]));
+    if (this.badgeMemo?.key === key) return this.badgeMemo.sizes;
+    const sizes = solveBadgeSizes(input, { base: si.size, max: si.size * si.phoneScale, gapBar: si.gapBar, gapItem: si.gapItem, margin: si.margin });
+    this.badgeMemo = { key, sizes };
+    return sizes;
+  }
+
   /** Per-unit badge refresh (statuses, ground effects underfoot, armor from auras): cheap, only redraws when something changed. */
   private refreshBadges(): void {
+    type BadgeList = Array<{ icon: string; owner?: string; color: string; text: string; debuff: boolean; turns: boolean }>;
+    const lists: Array<{ view: CombatantView; c: Combatant; list: BadgeList; seals: { stacks: number; max: number; turns: number; color: string } | null }> = [];
     for (const view of this.views.values()) {
       const c = this.battle.get(view.combatant.uid);
       if (!c || c.hp <= 0) continue;
@@ -424,10 +443,16 @@ export class BattleScene extends Phaser.Scene {
       }
       const bonus = this.battle.effectiveStats(c).armor - c.stats.armor;
       if (Math.round(bonus) > 0) list.push({ icon: 'shield', color: '#c9d1dc', text: `+${Math.round(bonus)}`, debuff: false, turns: false });
-      const key = JSON.stringify([list, seals]);
+      lists.push({ view, c, list, seals });
+    }
+    // Telefonda rozetler büyür ama hiçbir şeye binmez (src/game/badge-layout.ts; masaüstünde bugünkü düzen: sabit boy, satırda 4)
+    const sizes = this.badgeSizes(lists.map(({ view, list }) => ({ view, left: list.filter((b) => !b.debuff).length, right: list.filter((b) => b.debuff).length })));
+    for (const { view, c, list, seals } of lists) {
+      const size = sizes?.get(c.uid) ?? { left: layout.statusIcon.size, right: layout.statusIcon.size };
+      const key = JSON.stringify([list, seals, size, !!sizes]);
       if (this.badgeKeys.get(c.uid) === key) continue;
       this.badgeKeys.set(c.uid, key);
-      view.setBadges(list);
+      view.setBadges(list, size, sizes ? 99 : 4);
       view.setSeals(seals);
     }
   }

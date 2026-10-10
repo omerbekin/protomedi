@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { content } from '../src/engine';
 import {
   ENDLESS,
+  rewardBlockedReason,
   RUN_KEY,
   SCORES_KEY,
   abandonRun,
@@ -43,7 +44,7 @@ import {
   type ScoreEntry,
   type WaveOutcome,
 } from '../src/endless';
-import { ITEMS, canEquip, itemIP, itemValue, loadoutSetup, sellValue, type ItemDef } from '../src/progression';
+import { ITEMS, canEquip, itemIP, itemValue, loadoutSetup, type ItemDef } from '../src/progression';
 
 // Endless Lite (roadmap.md bölüm 3, open-questions madde 281): saf mantık testleri. Item kataloğu Item MVP ile değiştiği için testler
 // sabit item id'lerine değil, verilen küçük bir test kataloğuna dayanır.
@@ -255,7 +256,7 @@ describe('endless: ödül kartları ve dükkân', () => {
     expect(chooseReward(run, 5)).toBe(run); // geçersiz kart
   });
 
-  it("item kartı item'i TORBAYA koyar (takmaz); torba doluysa altına çevrilir", () => {
+  it("item kartı item'i TORBAYA koyar (takmaz); torba doluysa item kartı SEÇİLEMEZ (altına çevirme yok, Ömer 2026-10-10)", () => {
     const run = afterWave(1);
     const d = ITEMS.items[0]!;
     run.offer = [{ kind: 'item', itemId: d.id, heroId: run.heroes[0]!.id }];
@@ -265,9 +266,12 @@ describe('endless: ödül kartları ve dükkân', () => {
     expect(next.heroes).toEqual(run.heroes); // kimseye takılmadı
     expect(next.nextItem).toBe(run.nextItem + 1);
     const full = { ...run, bag: Array.from({ length: ENDLESS.bagSize! }, (_, i) => ({ uid: `x${i}`, id: d.id })) };
-    const sold = chooseReward(full, 0);
-    expect(sold.bag).toHaveLength(ENDLESS.bagSize!);
-    expect(sold.gold).toBe(run.gold + sellValue(d));
+    expect(rewardBlockedReason(full, full.offer![0]!)).toBe('Bag full: discard an item first');
+    expect(rewardBlockedReason(run, run.offer[0]!)).toBeNull();
+    expect(rewardBlockedReason(full, { kind: 'gold', amount: 5 })).toBeNull(); // item olmayan ödül seçilebilir
+    expect(chooseReward(full, 0)).toBe(full);
+    const freed = { ...full, bag: full.bag.slice(1) }; // Gear'dan bir item atıldı
+    expect(chooseReward(freed, 0).bag).toHaveLength(ENDLESS.bagSize!);
   });
 
   it('her 5 dalgada ödülden sonra dükkân; satın alma altın düşer, yetmezse olmaz', () => {

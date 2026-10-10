@@ -6,6 +6,7 @@ import { pickSideNeighbors } from './formation';
 import { betMultipliers, betStake } from './gamble';
 import { burnAmountFor, emptyProcApplies } from './mana-burn';
 import { Rng } from './rng';
+import { mergeRefreshStrongest, statusStackMode } from './status-stack';
 import { bonusScaleRaw, damageSpecFor, type DamageEffect } from './spec';
 import { applySummonVariant, applyUnitModifiers, armorReduction, attributePower, hitOutcome, roundStat, statMin } from './stats';
 import type { Attribute, Corpse, CorpseChoice, CorpseState, DamageOrigin, Element } from './types';
@@ -2347,13 +2348,12 @@ export class Battle {
           break;
         }
         case 'dot': {
-          // Karakter üstü DoT (Wither): miktar uygulama anında sabitlenir; yeniden uygulanınca süre yenilenir, büyük miktar kalır
+          // Karakter üstü DoT (Wither): miktar uygulama anında sabitlenir; yeniden uygulanınca süre max(kalan, yeni), büyük miktar (ve kaynağı) kalır
           const hasDamage = skill.effects.some((e) => e.type === 'damage');
           const amount = Math.round(attributePower(actor.stats, effect.scale, f) * effect.power);
           for (const r of hasDamage ? ts.filter((c) => hit.has(c.uid)) : ts) {
             if (r.hp <= 0) continue;
-            const old = r.statuses.find((s) => s.kind === effect.status)?.amount ?? 0;
-            this.addStatus(r, { kind: effect.status, turns: effect.turns, source: actor.uid, amount: Math.max(amount, old) }, emit);
+            this.addStatus(r, { kind: effect.status, turns: effect.turns, source: actor.uid, amount }, emit); // en güçlü miktar addStatus'ta kalır
           }
           break;
         }
@@ -2756,6 +2756,12 @@ export class Battle {
     // Yüklü durum (attackCharges): kalan yük `turns` alanında, her uygulamada tam yükle başlar (yığılmaz, tazelenir)
     const charges = this.statusDef(status.kind)?.attackCharges;
     if (charges) status = { ...status, turns: charges };
+    // Debuff yığılmaz (Ömer 2026-10-10; statuses.json > stack 'refresh-strongest'): birimde TEK örnek; süre max(kalan, yeni), güç (DoT miktarı) ve
+    // kaynak en güçlü uygulamanın. Resilience / Unyielding kısaltması yeni uygulamaya yukarıda işlendi (zar her uygulamada atılır, akış aynı).
+    if (statusStackMode(this.statusDef(status.kind)) === 'refresh-strongest') {
+      const old = target.statuses.find((s) => s.kind === status.kind);
+      if (old) status = mergeRefreshStrongest(old, status);
+    }
     // Aynı türden durum yenisiyle değişir; tur bazlı şifa (regen) ve Dark Bond kopyası kaynağa göre ayrı tutulur (iki farklı Undead aynı dostu bağlayabilir)
     const perSource = status.kind === 'regen' || status.kind === 'dark_bond';
     target.statuses = target.statuses.filter((s) => !(s.kind === status.kind && (!perSource || s.source === status.source)));
@@ -3004,12 +3010,11 @@ export class Battle {
       emit({ type: 'passive', actor: actor.uid, passive: 'bloodletter', name: 'Bloodletter' });
       this.applyHeal(actor, actor, Math.max(1, Math.round(hpLoss * exe.ratio)), false, emit);
     }
-    // Emberbrand (onHitDot): isabet eden vuruş hedefe DoT bırakır (miktar uygulamada sabitlenir; yenisi süreyi tazeler, büyük miktar kalır)
+    // Emberbrand (onHitDot): isabet eden vuruş hedefe DoT bırakır (miktar uygulamada sabitlenir; yenisi süreyi max(kalan, yeni) yapar, büyük miktar kalır)
     const burn = actor.itemEffects?.onHitDot;
     if (burn && hpLoss > 0 && target.hp > 0 && this.statusDef(burn.status)) {
       const amount = Math.max(1, Math.round(attributePower(this.attackStats(actor), effect.scale, f) * burn.power));
-      const old = target.statuses.find((s) => s.kind === burn.status)?.amount ?? 0;
-      this.addStatus(target, { kind: burn.status as Status['kind'], turns: burn.turns, source: actor.uid, amount: Math.max(amount, old) }, emit, 'emberbrand');
+      this.addStatus(target, { kind: burn.status as Status['kind'], turns: burn.turns, source: actor.uid, amount }, emit, 'emberbrand'); // en güçlü miktar addStatus'ta kalır
     }
     // Heart of the Forge (critHealAlly): kritik vuruşta en yaralı dost iyileşir
     const forge = actor.itemEffects?.critHealAlly;

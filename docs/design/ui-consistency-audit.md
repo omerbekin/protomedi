@@ -122,7 +122,7 @@ Kaynak `data/ui-motion.json`; okuyan modül `src/ui/motion.ts`. "Reduced motion"
 ## 4. Ömer'in kararları (2026-10-10) ve durum
 
 - **Öneri 1 (harita Menu'sü + oyun içi Menu birleşmesi):** hâlâ konuşuluyor; değişiklik yok.
-- **Öneri 2 (Settings zemini):** karşılaştırma taslağı hazır: `public/mockups/settings-backdrop.html?v=1` her yerde bulanık, `?v=2` her yerde yalnızca koyulaştırma. Her sürümde iki ekran var: Settings ana menünün üstünde ve bir savaşın üstünde. Arka planlar oyunun gerçek görsellerinden. Ömer seçecek.
+- **Öneri 2 (Settings zemini): UYGULANDI (Ömer 2026-10-10, v2 "Darkening everywhere").** Settings her yerde (ana menü, savaş, harita, Endless) yalnızca koyulaştırma: sahne %52 kararır + sütunun arkasında soldan sağa açılan gölge, bulanıklık yok (`src/style.css > .st-overlay`, `MainMenuScene > SETTINGS_DARK`). Taslak sayfası silindi.
 - **Öneri 3 (sonuç ekranı):** yapıldı.
   - Kademeli giriş süreleri `data/ui-motion.json > result` ön ayarından geliyor; Reduced motion açıkken anında.
   - Başlık ölçüleri `type` ölçeğinden: hero 84, section 20. Pencere başlıkları `TYPE.modal` (40).

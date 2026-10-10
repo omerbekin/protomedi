@@ -674,13 +674,12 @@ body {
   inset: 0;
   z-index: 19;
   color: var(--st-text);
-  /* sahne kararır + bulanıklaşır; soldan sağa açılan gölge sütunun arkasında */
+  /* Ömer 2026-10-10 (taslak settings-backdrop v2 "Darkening everywhere"): sahne yalnızca kararır (%52, bulanıklık YOK; ana menü
+     Settings sütunu da aynı: MainMenuScene > SETTINGS_DARK); soldan sağa açılan gölge sütunun arkasında */
   background:
     linear-gradient(90deg, rgba(8, 6, 4, 0.85) 0, rgba(8, 6, 4, 0.85) calc(var(--el) + var(--menu-x, 140px) - 140 * var(--u)),
       rgba(8, 6, 4, 0.55) calc(var(--el) + var(--menu-x, 140px) + 546 * var(--u)), rgba(8, 6, 4, 0) calc(var(--el) + var(--menu-x, 140px) + 840 * var(--u))),
-    rgba(0, 0, 0, 0.45);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+    rgba(0, 0, 0, 0.52);
 }
 
 .st-col {

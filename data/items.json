@@ -1289,13 +1289,13 @@
     },
     "pilgrims_stride": {
       "name": "Pilgrim's Stride",
-      "text": "Move costs half a turn and grants Fleet (+10% evasion) until the end of your next turn.",
+      "text": "Move costs half a turn and grants Fleet (+10% evasion) for {turns} turns.",
       "ip": 3,
       "hook": "moveStride",
       "value": {
         "turnCost": 0.5,
         "status": "fleet",
-        "turns": 2
+        "turns": 3
       },
       "legendary": true
     },

@@ -1,6 +1,6 @@
 // Endless koşu durumu ve kuralları (saf; her fonksiyon yeni durum döner, girdiyi değiştirmez). Sayılar data/endless.json'dan.
 import { classes } from '../engine/content';
-import { BAG_SIZE, ITEMS, RARITY_IDS, canEquip, legendaryConflict, instanceIP, itemDef, itemIP, itemValue, rollStats, sellValue, type ItemDef, type ItemInstance, type RarityId, type SlotId } from '../progression/items';
+import { BAG_SIZE, ITEMS, RARITY_IDS, canEquip, legendaryConflict, instanceIP, itemDef, itemIP, itemValue, rollStats, type ItemDef, type ItemInstance, type RarityId, type SlotId } from '../progression/items';
 import { bestMoves } from '../progression/equip';
 import { RARE, legendaryPool, rollRareDrop } from '../progression/rare';
 import { emptyEquipment } from '../progression/items';
@@ -121,7 +121,13 @@ export function applyOutcome(run: EndlessRun, plan: Pick<WavePlan, 'wave'>, out:
   const wk = waveKind(run.wave, cfg);
   const rr = rollRareDrop({ rng: rngFor(s.seed, run.wave, 'rare'), kind: wk === 'normal' ? 'battle' : wk, misses: s.rarePity ?? 0, wave: run.wave });
   s.rarePity = rr.misses;
-  if (rr.item && addToBag(s, rr.item, catalog, cfg).ok) s.rareDrop = { itemId: rr.item, wave: run.wave };
+  if (rr.item) {
+    // Torba doluysa nadir item BEKLER (ödül ekranında: yer açılınca alınır, alınmadan devam edilirse kaybolur); zarlar şimdi atılır
+    const d = defIn(catalog, rr.item);
+    const rolls = d ? rollStats(d, rngFor(s.seed, run.wave, 'rare-roll')) : undefined;
+    if (addToBag(s, rr.item, catalog, cfg, rolls).ok) s.rareDrop = { itemId: rr.item, wave: run.wave };
+    else s.rareDrop = { itemId: rr.item, wave: run.wave, pending: true, ...(rolls ? { rolls } : {}) };
+  }
   s.phase = 'reward';
   s.offer = rewardOffer(s, cfg, catalog);
   // Boss zaferi: önce kalıntı seçimi (sahip olunmayan yoksa atlanır), sonra ödül kartları
@@ -299,6 +305,7 @@ export function shopStock(run: EndlessRun, cfg: EndlessConfig = ENDLESS, catalog
 /** Ödülden sonra: dükkân dalgasıysa dükkân, değilse kamp. */
 function afterReward(s: EndlessRun, cfg: EndlessConfig, catalog: ItemDef[]): EndlessRun {
   s.offer = undefined;
+  if (s.rareDrop?.pending) delete s.rareDrop; // alınmadan bırakılan nadir düşüş kaybolur
   const shopWave = cfg.shop.every > 0 && s.stats.cleared > 0 && s.stats.cleared % cfg.shop.every === 0;
   const stock = shopWave ? shopStock(s, cfg, catalog) : [];
   if (stock.length) {
@@ -318,24 +325,41 @@ export const endlessBagSize = (cfg: EndlessConfig = ENDLESS): number => cfg.bagS
 
 export const bagOf = (run: EndlessRun): ItemInstance[] => run.bag ?? [];
 
+/** Torbada yer var mı (Ömer 2026-10-10: torba doluyken item alınmaz; önce bir item atılır)? */
+export const bagHasRoomRun = (run: EndlessRun, cfg: EndlessConfig = ENDLESS): boolean => bagOf(run).length < endlessBagSize(cfg);
+
+/** Torba dolu iken item ödülü kartının ipucu (yoksa null). */
+export const rewardBlockedReason = (run: EndlessRun, card: RewardCard, cfg: EndlessConfig = ENDLESS): string | null =>
+  card.kind === 'item' && !bagHasRoomRun(run, cfg) ? 'Bag full: discard an item first' : null;
+
 /**
- * Item'i torbaya koyar (yeni örnek uid'i). Torba doluysa satış değerine (`sellValue`) çevrilir (kaybolmaz). Bilinmeyen item: ok false.
+ * Item'i torbaya koyar (yeni örnek uid'i). Torba doluysa ALINMAZ (ok false; Ömer 2026-10-10: otomatik altına çevirme kaldırıldı, oyuncu önce
+ * Gear'dan bir item atar). Bilinmeyen item: ok false.
  */
-function addToBag(s: EndlessRun, itemId: string, catalog: ItemDef[], cfg: EndlessConfig, rolls?: ItemRolls): { ok: boolean; sold: number } {
+function addToBag(s: EndlessRun, itemId: string, catalog: ItemDef[], cfg: EndlessConfig, rolls?: ItemRolls): { ok: boolean } {
   const d = defIn(catalog, itemId);
-  if (!d) return { ok: false, sold: 0 };
+  if (!d) return { ok: false };
   const bag = (s.bag ??= []);
-  if (bag.length >= endlessBagSize(cfg)) {
-    const sold = sellValue(d);
-    s.gold += sold;
-    return { ok: true, sold };
-  }
+  if (bag.length >= endlessBagSize(cfg)) return { ok: false };
   // Stat zarları koşu seed'inden (Ömer 2026-10-10): aynı koşu + aynı uid = aynı değerler; kayda yazılır
   const uid = `e${s.nextItem}`;
   // Teklifte / tezgâhta zarlanmışsa aynı değerler (görünen = alınan); yoksa (eski kayıt, debug) burada zarlanır
   bag.push({ uid, id: d.id, rolls: rolls ? { ...rolls } : rollStats(d, rngFor(s.seed, 'roll', uid)) });
   s.nextItem += 1;
-  return { ok: true, sold: 0 };
+  return { ok: true };
+}
+
+/**
+ * Bekleyen nadir düşüşü torbaya al (torba doluyken düşen; madde 297 + Ömer 2026-10-10): yer yoksa durum aynen döner. Ödül seçilip ödül
+ * ekranından çıkılınca alınmamış nadir düşüş kaybolur.
+ */
+export function takeRareDrop(run: EndlessRun, cfg: EndlessConfig = ENDLESS, catalog: ItemDef[] = ITEMS.items): EndlessRun {
+  const rd = run.rareDrop;
+  if (!rd?.pending || !bagHasRoomRun(run, cfg)) return run;
+  const s = clone(run);
+  if (!addToBag(s, rd.itemId, catalog, cfg, rd.rolls).ok) return run;
+  s.rareDrop = { itemId: rd.itemId, wave: rd.wave };
+  return s;
 }
 
 /** Debug "Give item": torbaya bir item (verilmezse koşu seed'iyle değil, katalogdaki sıradaki rastgele olmayan seçim: torbada olmayan ilki). */
@@ -436,7 +460,7 @@ export function chooseReward(run: EndlessRun, index: number, cfg: EndlessConfig 
     for (const h of s.heroes) h.hpRatio = 1;
     s.blessing = { hpMult: card.hpMult, waves: card.waves };
   }
-  else if (!addToBag(s, card.itemId, catalog, cfg, card.rolls).ok) return run; // item torbaya (Gear ekranında takılır)
+  else if (!addToBag(s, card.itemId, catalog, cfg, card.rolls).ok) return run; // item torbaya (Gear ekranında takılır); torba doluysa seçilemez
   return afterReward(s, cfg, catalog);
 }
 

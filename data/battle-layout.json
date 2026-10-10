@@ -259,7 +259,12 @@
     "maxArmor": 40
   },
   "statusIcon": {
-    "size": 28
+    "_not": "Savaş durum rozetleri (can çubuğunun iki yanı). size = masaüstü boyu; telefonda (html.short / html.compact) phoneScale kadar büyür ama komşu birimin çubuğuna, adına, gövdesine ve rozetlerine binmeyecek kadar (src/game/badge-layout.ts), sığmazsa size'a iner. gapBar = çubukla ilk rozet arası, gapItem = rozetler arası, margin = engellerle en az boşluk.",
+    "size": 28,
+    "phoneScale": 1.45,
+    "gapBar": 8,
+    "gapItem": 6,
+    "margin": 3
   },
   "teamSelect": {
     "slotWidth": 200,
