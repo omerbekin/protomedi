@@ -1,5 +1,6 @@
 import type { Battle } from './battle';
 import { previewForTargets } from './preview';
+import { bonusScaleRaw } from './spec';
 import { attributePower } from './stats';
 import type { Combatant, SkillDef } from './types';
 
@@ -49,6 +50,19 @@ export interface AiValueConfig {
   manaHorizonMult: number;
   /** advanceToFront (Charge) sonrası ön sıraya geçiş: melee yeteneği kazanılırsa birimin tur değeri x bu pay (madde 271; yoksa 0,5). */
   advanceMeleeShare?: number;
+  /**
+   * Boşuna çağrı öldürme (Undead aynası tıkanması, 2026-10-10): çağrının tarafında onu ufuk içinde YENİDEN çağırabilecek canlı bir çağırıcı varsa
+   * (skill'i cooldown'dan çıkıyor, MP'si yetiyor) o çağrıyı öldürmenin/ona baskının değeri bu payla çarpılır; hedef seçimi çağırıcıya kayar. Yoksa 1 (eski davranış).
+   */
+  resummonShare?: number;
+  /**
+   * Tıkanma sinyali (2026-10-10): savaşın toplam tur sayısı (battle.turnsTaken) `stallTurns`'ü geçince sinyal 0'dan 1'e `stallRamp` turda yükselir
+   * (saf, belirleyici; normal savaşlar ortalama ~37 turda biter, sinyal onlara dokunmaz). Sinyal arttıkça: çağrılar cooldown'dan bağımsız olarak
+   * resummonShare kadar "yerine yenisi gelebilir" sayılır ve çağrı olmayan düşmana baskı x (1 + sinyal x stallFocus) olur (odak ateşi çağırıcıya / şifacıya).
+   */
+  stallTurns?: number;
+  stallRamp?: number;
+  stallFocus?: number;
   /** advanceToFront: yakın dövüşle gelecek beklenen ek hasar x bu pay x (2 - can oranı) bedeli (madde 271; yoksa 0,5). */
   advanceRiskShare?: number;
 }
@@ -108,7 +122,7 @@ const ATTACK_TARGETS = ['single_enemy', 'area_enemies', 'all_enemies', 'random_e
 export function skillRawValue(battle: Battle, stats: Combatant['stats'], skill: SkillDef): number {
   let v = 0;
   for (const e of skill.effects) {
-    if (e.type === 'damage' || e.type === 'heal') v += attributePower(stats, e.scale, battle.formulas) * e.power;
+    if (e.type === 'damage' || e.type === 'heal') v += attributePower(stats, e.scale, battle.formulas) * e.power + (e.type === 'damage' ? bonusScaleRaw(e.bonusScale, stats) * (stats.spellPowerMult ?? 1) : 0);
     else if (e.type === 'hot') v += attributePower(stats, e.scale, battle.formulas) * e.power * e.turns;
     else if (e.type === 'shield') v += attributePower(stats, e.scale, battle.formulas) * e.power * 0.5;
   }
@@ -149,6 +163,7 @@ export class ValueContext {
   readonly round = new Map<string, number>();
   readonly roundMagic = new Map<string, number>();
   readonly before = new Map<string, number>();
+  private readonly rs = new Map<string, number>();
   private readonly ticks: number;
   /** Zorluk kuralları (chooseAction doldurur; Medium = boş). */
   diff: AiDifficultyConfig = {};
@@ -212,6 +227,44 @@ export class ValueContext {
     const H = this.vc.horizon;
     const n = this.battle.mode === 'turns' ? (Math.max(1, spd) * this.ticks) / this.battle.formulas.turn.threshold : H;
     return Math.max(0, Math.min(n, cap, H * 3));
+  }
+
+  /**
+   * Çağrıyı öldürmenin değer payı (vc.resummonShare): çağrının tarafındaki canlı bir çağırıcı aynı birimi ufuk içinde yeniden çağırabiliyorsa (cooldown'u
+   * ufukta bitiyor ve MP'si o zamana yetiyor) pay, değilse 1. Saf: yalnızca savaş durumunu okur.
+   */
+  resummonShare(f: Combatant): number {
+    const share = this.vc.resummonShare;
+    if (share === undefined || share >= 1 || !f.summoned || f.hp <= 0) return 1;
+    let v = this.rs.get(f.uid);
+    if (v !== undefined) return v;
+    // Tıkanmada çağrı cooldown'dan bağımsız olarak kısmen "yerine yenisi gelir" sayılır (sinyalle doğrusal)
+    v = 1 - this.stall() * (1 - share);
+    const b = this.battle;
+    for (const s of b.living(f.side)) {
+      if (s.summoned || v <= share) continue;
+      for (const id of s.skills) {
+        const sk = b.skill(id);
+        if (!sk || !sk.effects.some((e) => e.type === 'summon' && e.unit === f.defId)) continue;
+        const cd = b.mode === 'turns' && !b.noCooldowns ? Math.max(0, s.cooldowns[id] ?? 0) : 0;
+        if (cd >= this.turnsWithin(s)) continue; // ufukta hazır olmuyor
+        const mp = s.mp + (b.mode === 'turns' ? s.stats.mpRegen * cd : 0);
+        if (sk.cost.resource === 'mp' && !b.freeMp && mp < sk.cost.amount) continue;
+        if (sk.cost.resource === 'rage' && !b.freeRage && (s.rage ?? 0) < sk.cost.amount) continue;
+        v = Math.min(v, share);
+        break;
+      }
+    }
+    this.rs.set(f.uid, v);
+    return v;
+  }
+
+  /** Tıkanma sinyali 0-1 (vc.stallTurns / stallRamp; yoksa 0): uzun süredir bitmeyen savaş. */
+  stall(): number {
+    const start = this.vc.stallTurns;
+    if (start === undefined) return 0;
+    const ramp = Math.max(1, this.vc.stallRamp ?? 1);
+    return Math.min(1, Math.max(0, (this.battle.turnsTaken - start) / ramp));
   }
 
   /** Kalan katkı: tur başına değer x ufuk içindeki tur sayısı. */

@@ -427,7 +427,7 @@
   padding: calc(16px + var(--et, 0px)) calc(16px + var(--er, 0px)) calc(16px + var(--eb, 0px)) calc(16px + var(--el, 0px));
   background: rgba(5, 3, 2, 0.62);
   z-index: 18;
-  animation: el-fade 0.16s ease-out;
+  animation: el-m-fade var(--m-modal-in, 200ms) var(--m-ease, ease-out) both;
 }
 
 .el-dialog > .el-panel {
@@ -477,4 +477,67 @@
   color: #fff4f0;
   background: #93382a;
   border-color: #e39a88;
+}
+
+/* --- Ortak hareket (Ömer 2026-10-10; süreler data/ui-motion.json -> src/ui/motion.ts -> --m-* değişkenleri; Reduced motion = 0) ---
+     .el-modal          pencere zemini: açılışta solar (gm-overlay, st-overlay, gr-overlay, el-dialog)
+     .el-modal-panel    pencerenin kutusu: açılışta 'rise' px aşağıdan yükselir
+     .el-closing        kapanış: zemin ve panel solar (src/ui/motion.ts > closeDom) */
+.el-modal {
+  animation: el-m-fade var(--m-modal-in, 200ms) var(--m-ease, ease-out) both;
+}
+
+.el-modal .el-modal-panel,
+.el-modal-panel.el-modal-self {
+  animation: el-m-rise var(--m-modal-in, 200ms) var(--m-ease, ease-out) both;
+}
+
+.el-modal.el-closing {
+  animation: el-m-fade-out var(--m-modal-out, 140ms) ease-in both;
+  pointer-events: none;
+}
+
+.el-modal.el-closing .el-modal-panel {
+  animation: el-m-sink var(--m-modal-out, 140ms) ease-in both;
+}
+
+@keyframes el-m-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes el-m-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes el-m-rise {
+  from {
+    transform: translateY(var(--m-modal-rise, 10px));
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes el-m-sink {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(calc(var(--m-modal-rise, 10px) * -0.6));
+  }
+}
+
+html.reduced-motion .el-modal,
+html.reduced-motion .el-modal .el-modal-panel {
+  animation: none !important;
 }

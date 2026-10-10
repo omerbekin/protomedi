@@ -1,6 +1,7 @@
 import { INTERNAL_TOKEN_VALUES, shadeColor } from '../game/pixel-art';
 import { resolveSprite, statusBadge } from '../game/art-registry';
 import { onVersionsChange, ownerOfLogo } from '../game/asset-versions';
+import { smoothUrl } from '../game/icon-image-files';
 
 /**
  * Arayüz (DOM) için ikon: piksel art motorunun çizimini bir resme (data URL) çevirir; CSS'te `image-rendering: pixelated` ile gösterilir.
@@ -11,7 +12,7 @@ const cache = new Map<string, string>();
 
 export function iconUrl(name: string, accent = '#ffffff', owner?: string | null): string {
   const art = resolveSprite(name, owner);
-  if (art.image) return art.image; // görsel v2 ikonu (hazır PNG): doğrudan dosya; CSS pixelated ile keskin
+  if (art.image) return art.smooth ? smoothUrl(art.domImage ?? art.image) : art.image; // hazır PNG: doğrudan dosya (piksel v2 ikonu pixelated, boyalı stat ikonu #smooth)
   const key = `${art.key}:${accent}`;
   const hit = cache.get(key);
   if (hit) return hit;

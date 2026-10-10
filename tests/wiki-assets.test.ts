@@ -51,6 +51,15 @@ describe('Wiki > Assets: ortak katalog (src/gallery/catalog.ts)', () => {
       for (const k of sk.sfx ?? []) expect(catalog.sounds.find((s) => s.id === k)?.usedBy.map((u) => u.id), `${sk.id} -> ${k}`).toContain(sk.id);
   });
 
+  it('data/audio-ui.json içindeki TÜM menü sesleri Sounds sayfasında (UI grubu) listelenir', async () => {
+    const ui = (await import('../data/audio-ui.json')).default as { sfx: Record<string, unknown> };
+    expect(catalog.uiSounds.map((s) => s.id).sort()).toEqual(Object.keys(ui.sfx).sort());
+    for (const s of catalog.uiSounds) {
+      expect(s.duration, s.id).toBeGreaterThan(0);
+      expect(s.desc?.length, s.id).toBeGreaterThan(0);
+    }
+  });
+
   it('her skill için animasyon satırı vardır; her vfx türü listelenir', () => {
     expect(catalog.animations.map((a) => a.skillId).sort()).toEqual(Object.keys(content.skills).sort());
     for (const a of catalog.animations) expect(a.vfxMissing, `${a.skillId} vfx tanımsız`).toBe(false);
@@ -262,5 +271,20 @@ describe('Item ikon görselleri (assets/items) bağlı; asılları assets/source
     expect(itemImageUrl({ id: 'no_such_item' })).toBeNull();
     expect(existsSync('assets/source/item-icons'), 'assets/source/item-icons yok').toBe(true);
     expect(existsSync('tools/make-item-icons.mjs')).toBe(true);
+  });
+});
+
+describe('Stat ikonu görselleri (assets/stat-icons) bağlı; asılları assets/source/stat-icons', () => {
+  it('her dosya bir stat a ait ve Codex > Icons > Stat icons ta; small/ eşleri var; asıl sayfa ve kesim aracı duruyor', () => {
+    const onDisk = readdirSync('assets/stat-icons').filter((f) => f.endsWith('.png')).map((f) => f.replace(/\.png$/, '')).sort();
+    expect(onDisk.length).toBe(16);
+    const small = readdirSync('assets/stat-icons/small').filter((f) => f.endsWith('.png')).map((f) => f.replace(/\.png$/, '')).sort();
+    expect(small).toEqual(onDisk);
+    const rows = catalog.statArt;
+    expect(rows.filter((r) => r.unlinked).map((r) => r.stat), 'stat e ait olmayan dosya').toEqual([]);
+    expect(rows.filter((r) => r.url).map((r) => r.stat).sort()).toEqual(onDisk);
+    expect(legacyItems.some((i) => /assets\/stat-icons\//.test(`${i.id} ${i.label}`))).toBe(false);
+    expect(existsSync('assets/source/stat-icons/stat-sheet.png'), 'assets/source/stat-icons yok').toBe(true);
+    expect(existsSync('tools/make-stat-icons.mjs')).toBe(true);
   });
 });

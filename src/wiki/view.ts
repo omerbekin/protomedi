@@ -7,12 +7,13 @@
  * İkonlar oyunun kendi ikonlarıdır: skill ikonları sahibinin seçili sürümüyle (v2 varsayılan), durum rozetleri art-registry > statusBadge,
  * element ikonları yüzen hasar yazısındakiyle aynı, statlar alt bar / tooltip ikonları (stat-icons.ts), item yuvaları Gear ekranı siluetleri.
  */
+import { uiSound } from '../ui/ui-sound';
 import layout from '../../data/battle-layout.json';
 import castleHall from '../../assets/backgrounds/castle-hall.webp?url';
 import { h, isolateKeys, openLightbox } from '../gallery/dom';
 import { bindIcon, bindStatusIcon } from '../ui/dom-icons';
 import { SHARED_KEY, ownerOfLogo, ownerOfSkill, ownerOfUnit } from '../game/asset-versions';
-import { STAT_COLOR, STAT_ICON } from '../ui/stat-icons';
+import { STAT_COLOR, statIconName } from '../ui/stat-icons';
 import type { MiniShape } from '../ui/shape-diagram';
 import { buildWiki, elementIcon } from './catalog';
 import type { WikiArticle, WikiBlock, WikiCatalog, WikiElement, WikiGround, WikiSkill, WikiSkillRef, WikiStatus, WikiUnit } from './catalog';
@@ -181,7 +182,7 @@ export class WikiPanel {
     const navEl = h('nav', { class: 'cx-nav', attrs: { 'aria-label': 'Codex sections' } });
     const addNav = (item: NavInit): void => {
       const count = h('small', { class: 'cx-navcount' });
-      const row = h('button', { class: `cx-navrow${item.sub ? ' sub' : ''}`, attrs: { type: 'button' }, on: { click: () => this.show(item.id) } },
+      const row = h('button', { class: `cx-navrow${item.sub ? ' sub' : ''}`, attrs: { type: 'button' }, on: { click: () => (uiSound('tab'), this.show(item.id)) } },
         h('i', { class: 'el-dia' }),
         pic(item.icon, GOLD, 'cx-navicon', SHARED_KEY),
         h('span', { class: 'cx-navtitle', text: item.title }),
@@ -507,7 +508,7 @@ export class WikiPanel {
     const attrs = h('div', { class: 'cx-attrs' }, ...u.attributes.map((a) =>
       h('div', { class: `cx-attr${a.primary ? ' primary' : ''}`, title: a.primary ? `${a.label} ${a.value} (primary)` : `${a.label} ${a.value}` }, pic(a.icon, a.color, 'cx-ico small'), h('small', { text: a.label }), h('b', { text: String(a.value) }))));
     const bonus = u.primary && u.primaryBonus
-      ? h('div', { class: 'cx-bonus' }, pic(STAT_ICON[u.primary], STAT_COLOR[u.primary], 'cx-ico small'), h('div', {}, h('b', { text: `${u.primaryBonus.name}` }), h('span', { class: 'cx-dim', text: ` ${u.primaryBonus.detail}` }), h('div', { class: 'cx-note', text: u.primaryBonus.text })))
+      ? h('div', { class: 'cx-bonus' }, pic(statIconName(u.primary), STAT_COLOR[u.primary], 'cx-ico small'), h('div', {}, h('b', { text: `${u.primaryBonus.name}` }), h('span', { class: 'cx-dim', text: ` ${u.primaryBonus.detail}` }), h('div', { class: 'cx-note', text: u.primaryBonus.text })))
       : null;
     const stats = h('div', { class: 'cx-stats' }, ...u.derived.map((d) => h('div', { class: 'cx-stat' }, pic(d.icon, d.color, 'cx-ico tiny'), h('span', { text: d.label }), d.sub ? h('b', { class: 'multi' }, h('i', { text: d.value }), h('small', { text: d.sub })) : h('b', { text: d.value }))));
     const passive = u.passive

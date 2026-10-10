@@ -58,7 +58,7 @@ describe('motor: toplamsal ekler (UnitModifiers)', () => {
     const r = loadout({ class: 'gambler', equipment: { ...emptyEquipment(), gloves: { uid: 'i1', id: 'hawkeye_gloves' }, boots: { uid: 'i2', id: 'swift_sabatons' }, armor: { uid: 'i3', id: 'coat_of_plates' } } });
     const g = itemDef('hawkeye_gloves')!.stats;
     expect(r.unsupported).toEqual([]);
-    expect(r.modifiers).toMatchObject({ critAdd: g.crit! / 100, accuracyAdd: g.accuracy! / 100, critMultAdd: g.critDmg! / 100, spdAdd: 0.5, hpRegenAdd: 1 });
+    expect(r.modifiers).toMatchObject({ critAdd: g.crit! / 100, critMultAdd: g.critDmg! / 100, magicArmorAdd: itemDef('coat_of_plates')!.stats.magicArmor! });
   });
 });
 

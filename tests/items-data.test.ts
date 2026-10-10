@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { content, Rng } from '../src/engine';
-import { BAG_SIZE, ITEMS, RARITY_IDS, SLOT_IDS, canEquip, rollLoot, classWeaponFamilies, itemDef, itemIP, itemValue, targetIP, validateItems, type ItemsData } from '../src/progression';
+import { BAG_SIZE, effectIP, ITEMS, RARITY_IDS, SLOT_IDS, canEquip, rollLoot, classWeaponFamilies, itemDef, itemIP, itemValue, targetIP, validateItems, type ItemsData } from '../src/progression';
 
 // data/items.json şeması (docs/design/progression/items.md 5.3; Ömer kararları bölüm 7). Aşama 0: şema + 3 örnek item.
 
@@ -29,7 +29,7 @@ describe('items.json şeması', () => {
   it('örnek item IP / değer: bütçe formülü (yuva x B(ilvl) x nadirlik), altın = 10 x IP', () => {
     for (const d of ITEMS.items) {
       const t = targetIP(d);
-      expect(Math.abs(itemIP(d) - t), d.id).toBeLessThanOrEqual(t * ITEMS.budget.tolerance + 1e-9);
+      expect(Math.abs(itemIP(d) - effectIP(d) - t), d.id).toBeLessThanOrEqual(t * ITEMS.budget.tolerance + 1e-9);
       expect(itemValue(d)).toBe(Math.max(ITEMS.budget.minValue, Math.round(ITEMS.budget.goldPerIP * itemIP(d))));
     }
     expect(itemValue(itemDef('woodcutters_axe')!)).toBe(15); // items.md 1.9 tablosu

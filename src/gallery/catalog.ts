@@ -10,12 +10,14 @@ import { content, TARGET_TEXT } from '../engine';
 import type { Attributes, CombatantDef, PassiveDef, SkillDef } from '../engine';
 import type { Layer, SfxDef } from '../game/audio';
 import { SFX } from '../game/audio';
+import { UI_SFX, UI_SOUND_KINDS } from '../ui/ui-sound';
 import { PIXEL_FX } from '../game/pixel-fx';
 import { FAMILY_ICON, ITEM_ICON_LABEL, ITEM_ICON_NAMES, REWARD_ICON, SLOT_ICON, itemIconName } from '../game/item-icons';
 import itemsJson from '../../data/items.json';
 import { ITEM_IMAGE_FILES } from '../game/item-icon-files';
 import { ICON_KINDS } from '../ui/icon-kinds';
-import { STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON } from '../ui/stat-icons';
+import { MIGHT_COLOR, STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON, statIconFallback, type StatIconKind } from '../ui/stat-icons';
+import { STAT_IMAGE_FILES } from '../game/icon-image-files';
 import { UI_ICONS } from '../ui/dom-icons';
 import { BACKUP_VFX, VFX_KINDS } from '../ui/vfx-kinds';
 
@@ -66,6 +68,8 @@ export interface SoundEntry {
   /** Filtre grubu: kullanan tek class/çağrı adı, "Shared" (birden çok) ya da "Unused / UI". */
   group: string;
   def: SfxDef;
+  /** Arayüz seslerinde: gerçek hayattaki karşılığı (data/audio-ui.json > desc). */
+  desc?: string;
 }
 
 /** Bir katmanın başlangıç gecikmesi dahil bitiş süresi (sn). */
@@ -117,6 +121,31 @@ export function buildSounds(): SoundEntry[] {
       usedBy,
       group: owners.length === 0 ? 'Unused / UI' : owners.length === 1 ? owners[0]! : 'Shared',
       def,
+    };
+  });
+}
+
+/** Arayüz grubu adı (Codex > Sounds). */
+export const UI_SOUND_GROUP = 'UI (menus)';
+
+/** Menü / arayüz sesleri (data/audio-ui.json; src/ui/ui-sound.ts). Skill sesleri listesinden ayrı: Legacy'ye düşmezler. */
+export function buildUiSounds(): SoundEntry[] {
+  return UI_SOUND_KINDS.map((id) => {
+    const def = UI_SFX[id];
+    const counts = new Map<string, number>();
+    for (const l of def.layers) counts.set(l.type, (counts.get(l.type) ?? 0) + 1);
+    return {
+      id,
+      label: def.label,
+      gain: def.gain,
+      duration: sfxDuration(def),
+      layerCount: def.layers.length,
+      layers: def.layers.map(describeLayer),
+      summary: [...counts].map(([t, n]) => `${n} ${t}`).join(', '),
+      usedBy: [],
+      group: UI_SOUND_GROUP,
+      def,
+      desc: def.desc,
     };
   });
 }
@@ -447,10 +476,39 @@ export function buildItemArt(): { art: ItemArtEntry[]; missing: string[] } {
   return { art, missing };
 }
 
+/** Boyalı stat ikonu (assets/stat-icons/<stat>.png; src/game/icon-image-files.ts). `url` null = görseli yok, kodla çizilen yedek gösterilir. */
+export interface StatArtEntry {
+  /** StatKind ya da 'might'; diskte stat'a karşılık gelmeyen dosyada dosya adı. */
+  stat: string;
+  label: string;
+  color: string;
+  url: string | null;
+  /** Kodla çizilen yedek ikon adı (görsel yoksa ekranda bu çıkar); bağlantısız dosyada ''. */
+  fallback: string;
+  /** Dosya bir stat'a ait değil (yanlış ad). */
+  unlinked?: boolean;
+}
+
+/** Her stat (+ Might) için boyalı ikon satırı + bir stat'a ait olmayan dosyalar (yeni dosya kendiliğinden listelenir). */
+export function buildStatArt(): StatArtEntry[] {
+  const kinds: StatIconKind[] = [...(Object.keys(STAT_ICON) as StatIconKind[]), 'might'];
+  const rows: StatArtEntry[] = kinds.map((k) => ({
+    stat: k,
+    label: k === 'might' ? 'Might' : STAT_LABEL[k],
+    color: k === 'might' ? MIGHT_COLOR : STAT_COLOR[k],
+    url: STAT_IMAGE_FILES[k]?.url ?? null,
+    fallback: statIconFallback(k) ?? '',
+  }));
+  for (const [k, f] of Object.entries(STAT_IMAGE_FILES)) if (!kinds.includes(k as StatIconKind)) rows.push({ stat: k, label: k, color: '#e8c47e', url: f.url, fallback: '', unlinked: true });
+  return rows;
+}
+
 // ---------------------------------------------------------------- hepsi
 
 export interface Catalog {
   sounds: SoundEntry[];
+  /** Menü / arayüz sesleri (data/audio-ui.json). */
+  uiSounds: SoundEntry[];
   soundtracks: string[];
   animations: AnimEntry[];
   vfxKinds: VfxKindEntry[];
@@ -459,6 +517,7 @@ export interface Catalog {
   icons: IconEntry[];
   itemIcons: ItemIconEntry[];
   itemArt: ReturnType<typeof buildItemArt>;
+  statArt: StatArtEntry[];
   fxSprites: string[];
   statuses: StatusEntry[];
   grounds: GroundEntry[];
@@ -468,6 +527,7 @@ export interface Catalog {
 export function buildCatalog(files: AssetFiles): Catalog {
   return {
     sounds: buildSounds(),
+    uiSounds: buildUiSounds(),
     soundtracks: buildSoundtracks(),
     animations: buildAnimations(),
     vfxKinds: buildVfxKinds(),
@@ -476,6 +536,7 @@ export function buildCatalog(files: AssetFiles): Catalog {
     icons: buildIcons(),
     itemIcons: buildItemIcons(),
     itemArt: buildItemArt(),
+    statArt: buildStatArt(),
     fxSprites: fxSpriteNames(),
     statuses: buildStatuses(),
     grounds: buildGrounds(),

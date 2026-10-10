@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { loadUiSoundLevel, onUiSoundLevelChange, previewUiSound, setUiSoundLevel } from '../../ui/ui-sound';
 import { getMap, latestSave, migrateSaves, readSaves, slotSummaries, type SaveEntry } from '../../campaign';
 import { backgroundKey, hasBackground, loadRestInBackground, preloadAssets } from '../assets';
 import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
@@ -10,26 +11,26 @@ import { coverShift, focusCrop, placeArt } from '../wide-map';
 import layout from '../../../data/battle-layout.json';
 import { onStageResize, stageView, worldXY } from '../stage';
 import { FULL_W, FULL_X0, MENU_COL_X, menuColumnShift } from '../../ui/viewport';
-import { H, W, type Modal } from '../campaign-ui';
-import { MAP_SCENE, loadEntry, startNewCampaign, storage } from '../campaign-session';
-import { ensureGlow, fitText, goldText, serif } from '../menu-ui';
+import type { Modal } from '../campaign-ui';
+import { storage } from '../kv-storage';
+import { ensureGlow, fitText, goldText, serif } from '../menu-text';
 import { GOLD } from '../ui-frame';
 import { mp, MP_SCENE } from '../mp-client';
 import { addLogo, hasLogo, preloadLogo } from '../branding';
 import { loadVolume, setSettingsVolume } from '../../ui/settings';
-import { openDebugMenu } from '../../ui/debug-menu';
+import { openDebugMenu } from '../../ui/debug-entry';
 import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from '../../ui/fullscreen';
 import { isInputLocked, lockInput, unlockInput } from '../../ui/input-lock';
 import { promptCode, promptName } from '../../ui/mp-overlay';
 import { normalizeLobbyCode } from '../../net/lobby-code';
 import { sanitizeName } from '../../net/protocol';
-import { openWiki } from '../../wiki/view';
+import { openWiki } from '../../wiki/open';
 import { BODY_FONT, DISPLAY_FONT, menuStyle } from '../../ui/menu-style';
 import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
 import { markBootReady, setBootProgress } from '../../ui/boot-loader';
-import { EL, elButton, elDiamond, elGlow, elLink, elText, elBody } from '../elegant-ui';
-import { openSlotBrowser } from '../campaign-slots-ui';
-import { ENDLESS_SCENE } from '../endless-session';
+import { EL, elButton, elDiamond, elGlow, elGo, elLink, elScreenIn, elText, elBody } from '../elegant-ui';
+import { trackChunkLoad } from '../../ui/boot-loader';
+import type { LazySceneKey } from '../lazy-scenes';
 import { MAIN_ITEMS, backTarget, backdropFor, campaignButtons, initialView, moveSelection, type MenuItemKey, type MenuView } from '../main-menu-flow';
 
 export interface MainMenuData {
@@ -40,6 +41,15 @@ export interface MainMenuData {
 }
 
 // --- Yerleşim (1920x1080) ---
+// Oyun birimi (1920x1080; src/game/campaign-ui.ts ile aynı, onu içe aktarmadan: hızlı açılış)
+const W = layout.width;
+const H = layout.height;
+// Sahne anahtarları (sahnelerin kodu ayrı parçalarda: src/game/lazy-scenes.ts)
+const MAP_SCENE: LazySceneKey = 'CampaignMapScene';
+const ENDLESS_SCENE: LazySceneKey = 'EndlessScene';
+/** Sefer yuva ekranı + sefer oturumu (ayrı kod parçası; ilk kullanımda indirilir). */
+const loadCampaignUi = () =>
+  trackChunkLoad(Promise.all([import('../campaign-slots-ui'), import('../campaign-session')]).then(([slots, session]) => ({ slots, session })));
 const COL_X = MENU_COL_X; // sol sütunun yazı başlangıcı (ayarlar ekranı DOM sütunu da aynı: src/ui/viewport.ts)
 const COL_W = 560; // ana menü yazı satırlarının genişliği
 const PANEL_W = 760; // Settings / Multiplayer satırlarının genişliği (sağda değer/denetim)
@@ -205,7 +215,7 @@ export class MainMenuScene extends Phaser.Scene {
       return;
     }
     migrateSaves(storage()); // eski tek-liste kayıtlar Slot 1'e taşınır
-    if (mp.active) mp.leave(); // ana menüye dönmek multiplayer lobisinden ayrılmaktır
+    if (mp.active || mp.state === 'connecting') mp.leave(); // ana menüye dönmek multiplayer lobisinden ayrılmaktır (ağ kodu inerken de)
     this.buildMenuColumn();
     this.buildCards();
     this.buildBack();
@@ -228,6 +238,7 @@ export class MainMenuScene extends Phaser.Scene {
     if (this.startView !== 'menu') this.setView(this.startView, true);
     if (this.openOnStart === 'load' && slotSummaries(storage()).some((x) => x && x.saveCount > 0)) this.loadSlots();
     if (this.openOnStart === 'new') this.chooseSlot();
+    elScreenIn(this); // ortak ekran geçişi (data/ui-motion.json > screen)
     markBootReady(); // açılış yükleme ekranı kapanır (ilk menü hazır; ölçüm: performance 'menu-ready')
     // menü görününce kalan avatar / sprite / arka planlar (sahne saati font beklemesinden sonraki yeniden kuruluşta hemen işlemeyebiliyor: tarayıcı zamanlayıcısı)
     window.setTimeout(() => this.sys.isActive() && loadRestInBackground(this), 400);
@@ -593,7 +604,7 @@ export class MainMenuScene extends Phaser.Scene {
         altArt: cardArt(this, 'quick-battle-endless'),
         line: 'Pick two teams',
         endless: true,
-        run: () => (this.endlessOn() ? this.scene.start(ENDLESS_SCENE) : this.scene.start('TeamSelectScene')),
+        run: () => (this.endlessOn() ? elGo(this, ENDLESS_SCENE) : elGo(this, 'TeamSelectScene')),
       },
       { name: 'Multiplayer', art: cardArt(this, 'multiplayer') ?? art('duelling-ring-moon') ?? art('kings-bridge'), line: 'Fight a friend online', run: () => this.setView('mp') },
     ];
@@ -792,6 +803,65 @@ export class MainMenuScene extends Phaser.Scene {
     return row;
   }
 
+  /** 0-10 seviye satırı (− [kaydırıcı] + değer): Sound volume ile aynı görünüm ve dokunma alanları. */
+  private levelRow(p: Phaser.GameObjects.Container, label: string, initial: number, apply: (n: number, preview: boolean) => void, fmt: (n: number) => string, onChange?: (fn: (n: number) => void) => () => void): void {
+    let level = initial;
+    const trackX = 440;
+    const trackW = 200;
+    const g = this.add.graphics();
+    const value = this.valueText(PANEL_W - 6, 0, fmt(level), TXT_ON).setOrigin(1, 0.5);
+    const draw = () => {
+      g.clear();
+      g.fillStyle(0x120c07, 0.9).fillRect(trackX, -5, trackW, 10);
+      g.fillStyle(0xd9b26a, 1).fillRect(trackX, -5, (trackW * level) / 10, 10);
+      g.lineStyle(1, GOLD.edge, 1).strokeRect(trackX - 0.5, -5.5, trackW + 1, 11);
+      g.fillStyle(0xf3d999, 1).fillCircle(trackX + (trackW * level) / 10, 0, 13);
+      g.lineStyle(2, 0x5a3a10, 1).strokeCircle(trackX + (trackW * level) / 10, 0, 13);
+      value.setText(fmt(level));
+    };
+    const set = (v: number, preview: boolean) => {
+      const n = Math.min(10, Math.max(0, Math.round(v)));
+      if (n === level && !preview) return;
+      level = n;
+      apply(n, preview);
+      draw();
+    };
+    const step = (t: string, x: number, d: number) => {
+      const tx = this.valueText(x, 0, t, TXT_ON, LOOK.stepSize).setOrigin(0.5);
+      const z = this.add.zone(x, 0, 64, ROW_H - 8).setInteractive({ useHandCursor: true });
+      z.on('pointerup', () => set(level + d, true));
+      return [tx, z];
+    };
+    const track = this.add.zone(trackX + trackW / 2, 0, trackW + 40, ROW_H - 8).setInteractive({ useHandCursor: true });
+    const fromPointer = (ptr: Phaser.Input.Pointer) => {
+      const root = track.parentContainer;
+      const lx = worldXY(this, ptr).x - (root?.x ?? 0) - (root?.parentContainer?.x ?? 0) - trackX;
+      set((lx / trackW) * 10, false);
+    };
+    let dragging = false;
+    track.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+      dragging = true;
+      fromPointer(ptr);
+    });
+    track.on('pointermove', (ptr: Phaser.Input.Pointer) => dragging && ptr.isDown && fromPointer(ptr));
+    const stopDrag = () => {
+      if (dragging) apply(level, true); // bırakınca deneme sesi
+      dragging = false;
+    };
+    track.on('pointerup', stopDrag);
+    track.on('pointerout', stopDrag);
+    draw();
+    if (onChange) {
+      const off = onChange((n) => {
+        if (!g.active) return;
+        level = n;
+        draw();
+      });
+      this.cleanups.push(off);
+    }
+    this.addPanelRow(p, label, () => undefined, { right: [g, ...step('−', trackX - 46, -1), track, ...step('+', trackX + trackW + 42, 1), value], adjust: (d) => set(level + d, true) });
+  }
+
   /** Ayarlar: mevcut ayar ekranındakilerin aynısı (ses seviyesi 0-10, tam ekran); değer aynı yerde saklanır. */
   private buildSettings(p: Phaser.GameObjects.Container): void {
     // --- Sound volume: − [kaydırıcı] + değer ---
@@ -842,6 +912,12 @@ export class MainMenuScene extends Phaser.Scene {
     track.on('pointerout', stopDrag);
     draw();
     this.addPanelRow(p, 'Sound volume', () => undefined, { right: [g, ...step('−', trackX - 46, -1), track, ...step('+', trackX + trackW + 42, 1), value], adjust: (d) => set(level + d, true) });
+
+    // --- UI sounds: menü sesleri 0-10 (0 = kapalı; DOM Settings satırının aynısı: src/ui/ui-sound.ts) ---
+    this.levelRow(p, 'UI sounds', loadUiSoundLevel(), (n, preview) => {
+      setUiSoundLevel(n);
+      if (preview) previewUiSound('select');
+    }, (n) => (n === 0 ? 'Off' : String(n)), onUiSoundLevelChange);
 
     // --- Reduced motion: ana menü sahnesinde paralaks ve parçacık yok (src/ui/motion-pref.ts; kayıt yoksa işletim sistemi tercihi) ---
     const motion = this.valueText(PANEL_W - 6, 0, reducedMotion() ? 'On' : 'Off', TXT_ON).setOrigin(1, 0.5);
@@ -951,19 +1027,47 @@ export class MainMenuScene extends Phaser.Scene {
   }
 
   private loadSave(entry: SaveEntry): void {
-    loadEntry(entry);
-    this.scene.start(MAP_SCENE);
+    void loadCampaignUi().then(({ session }) => {
+      session.loadEntry(entry);
+      elGo(this, MAP_SCENE);
+    });
   }
 
   /** Sefer yuvaları "Column" ekranı (src/game/campaign-slots-ui.ts): New = yuva -> mod + zorluk, Load = yuva -> kayıtlar. */
   private openSlots(flow: 'new' | 'load'): void {
     this.closeModal();
+    // yuva ekranı ve sefer oturumu ayrı kod parçasında (hızlı açılış): menü hazır olunca arka planda iner, yoksa burada (kısa yükleyici)
+    void loadCampaignUi().then(({ slots, session }) => {
+      if (this.scene.isActive() && !this.modal) this.showSlots(flow, slots.openSlotBrowser, session.startNewCampaign);
+    });
+  }
+
+  private showSlots(
+    flow: 'new' | 'load',
+    openSlotBrowser: typeof import('../campaign-slots-ui').openSlotBrowser,
+    startNewCampaign: typeof import('../campaign-session').startNewCampaign,
+  ): void {
+    // Yuva ekranı menü sahnesinin üstünde yarı saydam açılır (Ömer 2026-10-10): arkadaki kartlar / menü sütunu / Back o sürece çekilir
+    const wasPlay = this.view === 'play';
+    const colShown = this.menuCol.visible;
+    if (wasPlay) this.showCards(false, false);
+    this.back.setVisible(false);
+    this.menuCol.setVisible(false);
+    const restore = () => {
+      if (!this.sys.isActive()) return;
+      if (wasPlay && this.view === 'play') this.showCards(true, false);
+      this.back.setVisible(this.view !== 'menu');
+      this.menuCol.setVisible(colShown);
+    };
     const b = openSlotBrowser(this, this.modalLayer, {
       flow,
-      onClose: () => this.closeModal(),
+      onClose: () => {
+        this.closeModal();
+        restore();
+      },
       onStart: (mode, diff, slot) => {
         startNewCampaign(mode, diff, slot);
-        this.scene.start(MAP_SCENE);
+        elGo(this, MAP_SCENE);
       },
       onLoad: (e) => this.loadSave(e),
       onChanged: () => this.refreshCards(),
@@ -982,7 +1086,7 @@ export class MainMenuScene extends Phaser.Scene {
 
   /** Kayıt silinince Campaign kartındaki Continue / Load durumu yenilensin. */
   private refreshCards(): void {
-    const shown = this.view === 'play';
+    const shown = this.view === 'play' && !this.modal; // yuva ekranı açıkken kartlar arkada gizli kalır
     for (const { c } of this.cards) c.destroy(true);
     this.cards = [];
     this.buildCards();

@@ -1,4 +1,6 @@
 import { MENU_LABELS, menuItems, type FlowContext, type MenuItemId } from '../game/session-flow';
+import './motion';
+import { uiSound } from './ui-sound';
 import { dismissOnBackdrop } from './backdrop';
 import { isSettingsOpen, setSettingsOpen } from './settings';
 import { lockInput, unlockInput } from './input-lock';
@@ -72,11 +74,11 @@ export class GameMenu {
   ) {
     this.toggle = mountMenuToggle(root, () => this.setOpen(!this.open), 'game-menu-toggle');
     this.toggle.hidden = true;
-    this.overlay = el('div', 'gm-overlay');
+    this.overlay = el('div', 'gm-overlay el-modal'); // ortak pencere hareketi (elegant.css > .el-modal)
     this.overlay.hidden = true;
     this.overlay.setAttribute('role', 'dialog');
     this.overlay.setAttribute('aria-label', 'Menu');
-    const box = el('div', 'gm-box el-panel corners');
+    const box = el('div', 'gm-box el-panel corners el-modal-panel');
     box.append(el('div', 'gm-title el-title', 'Menu'));
     this.list = el('div', 'gm-list');
     this.confirmBox = el('div', 'gm-confirm');
@@ -90,7 +92,7 @@ export class GameMenu {
       if (action) this.run(action);
     });
     no.addEventListener('click', () => this.hideConfirm());
-    answers.append(yes, no);
+    answers.append(no, yes); // kit kuralı: ikincil solda, birincil eylem en sağda
     this.confirmBox.append(this.confirmText, answers);
     box.append(this.list, this.confirmBox);
     this.overlay.append(box);
@@ -153,6 +155,7 @@ export class GameMenu {
     const spec = open ? menuItems(this.hooks.context()) : null;
     if (open && !spec) return;
     this.open = open;
+    uiSound(open ? 'open' : 'close');
     this.overlay.hidden = !open;
     if (open) lockInput('game-menu');
     else unlockInput('game-menu');
@@ -177,6 +180,7 @@ export class GameMenu {
   }
 
   private pick(id: MenuItemId, confirm: string | undefined): void {
+    if (id !== 'resume') uiSound('select');
     switch (id) {
       case 'resume':
         return this.setOpen(false);

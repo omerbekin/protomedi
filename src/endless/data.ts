@@ -81,7 +81,8 @@ export interface EndlessHero {
 
 export type RewardCard =
   /** heroId: yalnızca ipucu (bu item'den en çok kim yararlanır); item torbaya girer. */
-  | { kind: 'item'; itemId: string; heroId: string }
+  /** `rolls`: kartta gösterilen stat zarları (alınınca torbadaki örnek AYNEN bu değerleri taşır; eski kayıtta yok = alınırken zarlanır). */
+  | { kind: 'item'; itemId: string; heroId: string; rolls?: ItemRolls }
   | { kind: 'gold'; amount: number }
   | { kind: 'heal'; ratio: number }
   /** Boss sonrası: tam can + sonraki `waves` dalga boyunca maks can x hpMult. */
@@ -98,7 +99,12 @@ export interface ShopEntry {
   heroId: string;
   price: number;
   sold?: boolean;
+  /** Tezgâhta gösterilen stat zarları (satın alınan örnek bunları taşır; eski kayıtta yok = alınırken zarlanır). */
+  rolls?: ItemRolls;
 }
+
+/** Item örneğinin stat zarları (progression ItemInstance.rolls). */
+export type ItemRolls = ItemInstance['rolls'];
 
 /** Tüccarda satılan (bu ziyarette geri alınabilir) item: aynı örnek (uid korunur) + satıldığı fiyat. */
 export interface BuybackEntry {

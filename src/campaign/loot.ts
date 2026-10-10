@@ -1,6 +1,6 @@
 // Seferde loot'un duruma yazılması (saf; durumu YERİNDE değiştirir, çağıran klonlamış olmalı: state.ts > applyBattle / completeSimple).
 // Zar: hash(seed, harita, düğüm, 'loot', tür, oynama sayısı): yenilgi/deneme sayısı ve Retreat loot'u DEĞİŞTİRMEZ (save-scum yok, items.md 3.4).
-import { BAG_SIZE, itemDef, rollLoot, type ItemInstance, type LootKind } from '../progression';
+import { BAG_SIZE, itemDef, makeItem, rollLoot, type ItemInstance, type LootKind } from '../progression';
 import { chapterOf, nodeIlvl } from './power';
 import { rngFor } from './seed';
 import type { CampaignState, Hero, LootDrop } from './types';
@@ -28,20 +28,27 @@ export function grantLoot(t: CampaignState, nodeId: string, kind: LootKind, part
   t.lootState.clears[key] = replay + 1;
   const items: ItemInstance[] = [];
   const left: string[] = [];
-  for (const id of res.items) {
+  const leftRolls: Array<ItemInstance['rolls']> = [];
+  res.items.forEach((id, i) => {
+    // Stat zarları loot seed'inden (Ömer 2026-10-10): aynı düşüş = aynı değerler; kayda yazılır, yüklemede yeniden atılmaz
+    const rolled = makeItem(id, '', rngFor(t.seed, t.mapId, nodeId, 'roll', kind, replay, i));
     if (t.inventory.length < BAG_SIZE) {
-      const inst: ItemInstance = { uid: `i${t.nextItemId++}`, id };
+      const inst: ItemInstance = { ...rolled, uid: `i${t.nextItemId++}` };
       t.inventory.push(inst);
       items.push(inst);
-    } else left.push(id); // torba dolu: Spoils kartında "geride kalan" (madde 280)
-  }
+    } else {
+      left.push(id); // torba dolu: Spoils kartında "geride kalan" (madde 280)
+      leftRolls.push(rolled.rolls);
+    }
+  });
   t.gold += res.gold;
-  const drop: LootDrop = { node: nodeId, kind, items: items.map((i) => i.uid), gold: res.gold, ...(left.length ? { left } : {}) };
+  const drop: LootDrop = { node: nodeId, kind, items: items.map((i) => i.uid), gold: res.gold, ...(left.length ? { left, leftRolls } : {}) };
   // Aynı düğümde savaş + sandık (korunan hazine): tek kartta birleşir
   const prev = t.pendingLoot;
   if (prev && prev.node === nodeId) {
     const allLeft = [...(prev.left ?? []), ...left];
-    t.pendingLoot = { node: nodeId, kind, items: [...prev.items, ...drop.items], gold: prev.gold + drop.gold, ...(allLeft.length ? { left: allLeft } : {}) };
+    const allRolls = [...(prev.left ?? []).map((_, i) => prev.leftRolls?.[i]), ...leftRolls];
+    t.pendingLoot = { node: nodeId, kind, items: [...prev.items, ...drop.items], gold: prev.gold + drop.gold, ...(allLeft.length ? { left: allLeft, leftRolls: allRolls } : {}) };
   } else {
     // Önceki kart hiç kapatılmadıysa onun geride kalanları burada kaybolur (normal akışta kart her zaman önce kapanır)
     t.pendingLoot = drop;
@@ -57,12 +64,18 @@ export function takeLeftover(s: CampaignState, index: number): CampaignState {
   const id = left[index];
   if (id === undefined || s.inventory.length >= BAG_SIZE || !itemDef(id)) return s;
   const t = JSON.parse(JSON.stringify(s)) as CampaignState;
-  const inst: ItemInstance = { uid: `i${t.nextItemId++}`, id };
-  t.inventory.push(inst);
   const pl = t.pendingLoot!;
+  // Zarlar düşüş anında atılmıştı (leftRolls); eski kartta yoksa katalog değeri
+  const rolls = pl.leftRolls?.[index];
+  const inst: ItemInstance = { uid: `i${t.nextItemId++}`, id, ...(rolls ? { rolls } : {}) };
+  t.inventory.push(inst);
   pl.items.push(inst.uid);
   pl.left = left.filter((_, i) => i !== index);
-  if (!pl.left.length) delete pl.left;
+  if (pl.leftRolls) pl.leftRolls = pl.leftRolls.filter((_, i) => i !== index);
+  if (!pl.left.length) {
+    delete pl.left;
+    delete pl.leftRolls;
+  }
   return t;
 }
 

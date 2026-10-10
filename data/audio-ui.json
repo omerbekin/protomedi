@@ -1,0 +1,133 @@
+{
+  "_not": "ARAYÜZ (menü) SESLERİ - Ömer 2026-10-10 onayı. data/audio.json ile aynı katman dili (tone/noise/pluck/voice; src/game/audio.ts synthSfx). Hepsi kısa (40-250 ms), kısık ve tekrarda yormaz: deri/parşömen hışırtısı, yumuşak ahşap/demir tık, boğuk gümleme, kumaş fırçası, kese sallama (çınlayan sikke YOK), deri toka şakırtısı, boğuk ahşap vuruş. Çan/sinüs çınlaması YOK; sinüs yalnızca alçak darbe gövdesi. master = arayüz seslerinin genel kısıklığı (oyunun ana ses ayarı ve Settings > UI sounds ile çarpılır). throttleMs = aynı tür sesin en kısa tekrar aralığı (hover fare hızlı gezinince yağmasın); hoverQuietMs = tık/açılış sonrası hover susar. vary = her çalışta frekans/kazanç küçük sapması (aynı ses makineli tüfek gibi tekrarlanmasın). Sayılar kulakla ayarlanır: Codex > Assets > Sounds > UI.",
+  "master": 0.75,
+  "defaultLevel": 5,
+  "throttleMs": { "default": 45, "hover": 90, "toast": 250 },
+  "hoverQuietMs": 140,
+  "vary": { "freq": 0.06, "gain": 0.12 },
+  "sfx": {
+    "open": {
+      "label": "Open",
+      "desc": "Leather flap lifted, parchment unrolled: crinkly paper rustle over a soft leather body.",
+      "gain": 0.9,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 1700, "f1": 3200, "q": 0.8, "attack": 0.035, "decay": 0.13, "gain": 0.45, "tremHz": 38, "tremDepth": 0.7 },
+        { "type": "noise", "filter": "lowpass", "f0": 900, "f1": 450, "q": 0.7, "attack": 0.008, "decay": 0.08, "gain": 0.3 },
+        { "type": "tone", "wave": "sine", "f0": 120, "f1": 75, "attack": 0.003, "decay": 0.05, "gain": 0.14 }
+      ]
+    },
+    "close": {
+      "label": "Close",
+      "desc": "Parchment rolled shut and the leather flap settles: falling rustle, then a soft low pat.",
+      "gain": 0.9,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 3000, "f1": 1400, "q": 0.8, "attack": 0.02, "decay": 0.1, "gain": 0.4, "tremHz": 34, "tremDepth": 0.65 },
+        { "type": "noise", "filter": "lowpass", "f0": 600, "f1": 200, "q": 0.7, "attack": 0.003, "decay": 0.06, "gain": 0.35, "at": 0.1 },
+        { "type": "tone", "wave": "sine", "f0": 110, "f1": 60, "attack": 0.003, "decay": 0.06, "gain": 0.22, "at": 0.1 }
+      ]
+    },
+    "select": {
+      "label": "Select",
+      "desc": "Soft wooden click: a short knuckle-on-oak tick with a small hollow body.",
+      "gain": 0.8,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 2200, "f1": 1700, "q": 3.5, "attack": 0.001, "decay": 0.028, "gain": 0.55 },
+        { "type": "tone", "wave": "triangle", "f0": 560, "f1": 400, "attack": 0.001, "decay": 0.04, "gain": 0.14, "filter": { "type": "lowpass", "f": 1400, "q": 0.7 } },
+        { "type": "noise", "filter": "lowpass", "f0": 500, "f1": 250, "q": 0.7, "attack": 0.001, "decay": 0.03, "gain": 0.2 }
+      ]
+    },
+    "confirm": {
+      "label": "Confirm",
+      "desc": "Iron latch dropping into a wooden keeper: a firm tick, a smaller catch and a dull body.",
+      "gain": 0.85,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 1600, "f1": 1300, "q": 3, "attack": 0.001, "decay": 0.03, "gain": 0.6 },
+        { "type": "noise", "filter": "bandpass", "f0": 2700, "f1": 2400, "q": 4.5, "attack": 0.001, "decay": 0.022, "gain": 0.35, "at": 0.045 },
+        { "type": "tone", "wave": "sine", "f0": 180, "f1": 90, "attack": 0.002, "decay": 0.06, "gain": 0.3 },
+        { "type": "noise", "filter": "lowpass", "f0": 700, "f1": 250, "q": 0.7, "attack": 0.001, "decay": 0.05, "gain": 0.25, "at": 0.045 }
+      ]
+    },
+    "back": {
+      "label": "Back",
+      "desc": "Lower muted thud: a closed book set down on a cloth-covered table.",
+      "gain": 0.8,
+      "layers": [
+        { "type": "tone", "wave": "sine", "f0": 120, "f1": 55, "attack": 0.003, "decay": 0.1, "gain": 0.55 },
+        { "type": "noise", "filter": "lowpass", "f0": 500, "f1": 170, "q": 0.7, "attack": 0.002, "decay": 0.08, "gain": 0.4 },
+        { "type": "noise", "filter": "bandpass", "f0": 1400, "f1": 900, "q": 0.9, "attack": 0.004, "decay": 0.03, "gain": 0.12 }
+      ]
+    },
+    "hover": {
+      "label": "Hover",
+      "desc": "Very quiet cloth brush: a sleeve passing over leather. Throttled.",
+      "gain": 0.45,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 2600, "f1": 1800, "q": 0.7, "attack": 0.016, "decay": 0.045, "gain": 0.3 },
+        { "type": "noise", "filter": "lowpass", "f0": 900, "f1": 600, "q": 0.6, "attack": 0.012, "decay": 0.035, "gain": 0.12 }
+      ]
+    },
+    "error": {
+      "label": "Error / deny",
+      "desc": "Muted double knock on a heavy wooden door: no buzzer, no ring.",
+      "gain": 0.8,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 900, "f1": 700, "q": 2.5, "attack": 0.001, "decay": 0.045, "gain": 0.55 },
+        { "type": "tone", "wave": "triangle", "f0": 240, "f1": 180, "attack": 0.002, "decay": 0.05, "gain": 0.25, "filter": { "type": "lowpass", "f": 800, "q": 0.7 } },
+        { "type": "noise", "filter": "bandpass", "f0": 850, "f1": 650, "q": 2.5, "attack": 0.001, "decay": 0.045, "gain": 0.45, "at": 0.11 },
+        { "type": "tone", "wave": "triangle", "f0": 225, "f1": 170, "attack": 0.002, "decay": 0.05, "gain": 0.2, "filter": { "type": "lowpass", "f": 800, "q": 0.7 }, "at": 0.11 }
+      ]
+    },
+    "toast": {
+      "label": "Toast / notice",
+      "desc": "A note slid across a desk: short paper slide ending in a light tap.",
+      "gain": 0.7,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 2600, "f1": 4200, "q": 1, "attack": 0.045, "decay": 0.07, "gain": 0.32 },
+        { "type": "noise", "filter": "bandpass", "f0": 1500, "f1": 1200, "q": 2.5, "attack": 0.001, "decay": 0.025, "gain": 0.3, "at": 0.11 },
+        { "type": "tone", "wave": "sine", "f0": 160, "f1": 90, "attack": 0.002, "decay": 0.04, "gain": 0.12, "at": 0.11 }
+      ]
+    },
+    "tab": {
+      "label": "Page / tab",
+      "desc": "Turning a heavy vellum page: a swish that ends with the page flapping down.",
+      "gain": 0.75,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 1200, "f1": 3400, "q": 0.9, "attack": 0.05, "decay": 0.09, "gain": 0.4, "tremHz": 24, "tremDepth": 0.5 },
+        { "type": "noise", "filter": "lowpass", "f0": 1300, "f1": 500, "q": 0.7, "attack": 0.002, "decay": 0.035, "gain": 0.3, "at": 0.13 }
+      ]
+    },
+    "equip": {
+      "label": "Equip",
+      "desc": "Dull leather buckle snap: a strap creaks taut, then the iron tongue seats with a muffled snap.",
+      "gain": 0.85,
+      "layers": [
+        { "type": "noise", "filter": "bandpass", "f0": 700, "f1": 950, "q": 2, "attack": 0.02, "decay": 0.05, "gain": 0.35, "tremHz": 60, "tremDepth": 0.8 },
+        { "type": "noise", "filter": "bandpass", "f0": 1800, "f1": 1500, "q": 2.5, "attack": 0.001, "decay": 0.022, "gain": 0.6, "at": 0.07 },
+        { "type": "tone", "wave": "sine", "f0": 150, "f1": 80, "attack": 0.002, "decay": 0.05, "gain": 0.3, "at": 0.07 },
+        { "type": "noise", "filter": "lowpass", "f0": 600, "f1": 250, "q": 0.7, "attack": 0.002, "decay": 0.04, "gain": 0.22, "at": 0.07 }
+      ]
+    },
+    "buy": {
+      "label": "Buy (purse)",
+      "desc": "Cloth coin purse shaken and handed over: muffled metal jostle inside the bag, then a soft set-down. No ringing coin.",
+      "gain": 0.8,
+      "layers": [
+        { "type": "noise", "filter": "lowpass", "f0": 1400, "f1": 900, "q": 0.8, "attack": 0.01, "decay": 0.16, "gain": 0.45, "tremHz": 22, "tremDepth": 0.9 },
+        { "type": "noise", "filter": "bandpass", "f0": 2300, "f1": 2000, "q": 1.4, "attack": 0.006, "decay": 0.12, "gain": 0.18, "tremHz": 31, "tremDepth": 0.9 },
+        { "type": "tone", "wave": "sine", "f0": 100, "f1": 60, "attack": 0.003, "decay": 0.055, "gain": 0.28, "at": 0.16 },
+        { "type": "noise", "filter": "lowpass", "f0": 650, "f1": 250, "q": 0.7, "attack": 0.002, "decay": 0.05, "gain": 0.28, "at": 0.16 }
+      ]
+    },
+    "sell": {
+      "label": "Sell (purse)",
+      "desc": "A heavier purse dropped on the counter: a brief muffled shake, then a dull cloth-and-metal thump.",
+      "gain": 0.8,
+      "layers": [
+        { "type": "noise", "filter": "lowpass", "f0": 1200, "f1": 800, "q": 0.8, "attack": 0.008, "decay": 0.09, "gain": 0.4, "tremHz": 26, "tremDepth": 0.9 },
+        { "type": "tone", "wave": "sine", "f0": 130, "f1": 55, "attack": 0.003, "decay": 0.09, "gain": 0.45, "at": 0.09 },
+        { "type": "noise", "filter": "lowpass", "f0": 800, "f1": 250, "q": 0.7, "attack": 0.002, "decay": 0.07, "gain": 0.38, "at": 0.09 },
+        { "type": "noise", "filter": "bandpass", "f0": 1900, "f1": 1500, "q": 1.4, "attack": 0.002, "decay": 0.06, "gain": 0.12, "at": 0.09, "tremHz": 40, "tremDepth": 0.8 }
+      ]
+    }
+  }
+}

@@ -346,12 +346,13 @@ describe('Defender: Taunt, Guard, Fist Crush', () => {
     expect(b.validTargets(unit(b, 'party', 'archer').uid, 'quick_shot').map((c) => c.defId)).toEqual(['defender']);
   });
 
-  it('Taunt kendine bir miktar kalkan da verir ve süreli: turns kadar sonra biter', () => {
+  it('Taunt kalkan VERMEZ (Ömer 2026-10-10, Defender Seçenek A) ve süreli: turns kadar sonra biter', () => {
     const b = make(TD, { mode: 'turns' });
     const defender = unit(b, 'enemy', 'defender');
     skipUntil(b, defender.uid);
     const events = act(b, defender.uid, 'taunt');
-    expect(defender.shield).toBeGreaterThan(0);
+    expect(defender.shield).toBe(0);
+    expect(ofType(events, 'shield')).toHaveLength(0);
     expect(ofType(events, 'status')[0]).toMatchObject({ status: 'taunt', turns: 2 });
     // Defender'ın sonraki iki turunun başında süre azalır; ikincisinde biter
     let ended = false;

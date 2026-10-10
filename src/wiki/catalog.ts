@@ -5,6 +5,7 @@
  * Elle yazılan tek şey, mekanik açıklamalarının CÜMLELERİdir (şablon): yeni mekanik/özel kural/pasif eklenince
  * Mechanics bölümündeki ilgili metin güncel mi kontrol edilmelidir (CLAUDE.md kuralı).
  */
+import { statName } from '../ui/stat-name';
 import { sortByPrimary } from '../game/class-order';
 import campaignConfig from '../../data/campaign/campaign.json';
 import campaignMap from '../../data/campaign/valdoria.json';
@@ -17,7 +18,7 @@ import type { Attribute, CombatantDef, Element, Formulas, SkillDef, StatKind, St
 import { primaryBonusInfo, primaryBonusLines } from '../engine/stat-info';
 import { buildGrounds, buildStatuses, skillOwner, searchText, avatarMap, groupByDir } from '../gallery/catalog';
 import type { GroundEntry, Owner, StatusEntry } from '../gallery/catalog';
-import { STAT_COLOR, STAT_ICON, STAT_LABEL } from '../ui/stat-icons';
+import { STAT_COLOR, STAT_LABEL, statIconName } from '../ui/stat-icons';
 import { shapeMiniGrid, skillMiniGrid } from '../ui/shape-diagram';
 import type { MiniShape } from '../ui/shape-diagram';
 
@@ -261,7 +262,7 @@ function buildUnit(kind: WikiUnit['kind'], def: CombatantDef, files: WikiFiles):
   const row = (key: StatKind | 'mpRegen' | 'hpRegen', label: string, value: string, sub?: string): WikiStatRow => ({
     key,
     label,
-    icon: key === 'mpRegen' ? STAT_ICON.mp : key === 'hpRegen' ? STAT_ICON.hp : STAT_ICON[key],
+    icon: statIconName(key),
     color: key === 'mpRegen' ? STAT_COLOR.mp : key === 'hpRegen' ? STAT_COLOR.hp : STAT_COLOR[key],
     value,
     ...(sub ? { sub } : {}),
@@ -301,7 +302,7 @@ function buildUnit(kind: WikiUnit['kind'], def: CombatantDef, files: WikiFiles):
     melee: content.skills[def.skills[0] ?? '']?.motion === 'melee',
     primary,
     primaryBonus: primary && bonus ? { name: bonus.name, detail: bonus.detail, text: bonusText } : null,
-    attributes: ATTRS.map((a) => ({ key: a, label: STAT_LABEL[a], value: def.attributes[a] ?? 0, primary: a === primary, icon: STAT_ICON[a], color: STAT_COLOR[a] })),
+    attributes: ATTRS.map((a) => ({ key: a, label: STAT_LABEL[a], value: def.attributes[a] ?? 0, primary: a === primary, icon: statIconName(a), color: STAT_COLOR[a] })),
     derived,
     passive,
     skills,
@@ -385,7 +386,7 @@ export function buildGettingStarted(): WikiArticle[] {
       p('Melee classes are placed in front. A melee unit only stands in a back row once the rows before it are full, so fighters in front, archers and mages behind is the normal picture.'),
       p('Area skills hit a group of cells around the cell you pick, in a fixed shape (a whole row, a whole column, a block or a cross; see Area shapes in the Mechanics section). You can pick an empty cell too, as long as the shape still covers an enemy.'),
     ]),
-    article('mana', 'Basics', 'MP and cooldowns', 'droplet', [
+    article('mana', 'Basics', 'MP and cooldowns', statIconName('mp'), [
       p(`Skills cost MP. Every unit has ${a.mpBase} base MP (the same for all classes) plus ${a.mpPerInt} per point of Intelligence. At the start of its own turn, every unit regains MP equal to Intelligence x ${num(a.mpRegenPerInt)} (rounded; 0 Intelligence regains nothing) and HP equal to Strength x ${num(a.hpRegenPerStr)}. The Rest action restores extra MP on demand.`),
       p('Strong skills also have a cooldown: after you use one, you cannot use it again for that many of your own turns. The skill button shows the turns left.'),
       p(`Some powerful skills (usually the fourth one) start the battle on cooldown: they are not ready until the unit has taken up to ${f.cooldown.maxInitial} turns. The skill description says "Opens on cooldown" for these. Summoned units do not have this delay.`),
@@ -410,14 +411,14 @@ export function stripNow(line: string): string {
     .trim();
 }
 
-const statTitle = (title: string): string => title.replace(/\s[\d.]+%?$/, '');
+const statTitle = (title: string): string => statName(title);
 
 /** Genel stat açıklaması: motorun stat-info metinleri, ilk class'ın statlarıyla üretilir ve sayı içeren "şimdi" kısımları atılır. */
 function statArticle(kind: StatKind, group: string, only?: number[]): WikiArticle {
   const sample = Object.values(content.classes)[0]!.stats;
   const info = describeStat(kind, { ...sample, primary: undefined, primaryActive: false }, f);
   const lines = info.lines.filter((_, i) => !only || only.includes(i)).map(stripNow);
-  return article(`stat-${kind}`, group, statTitle(info.title), STAT_ICON[kind], [list(...lines)], STAT_COLOR[kind]);
+  return article(`stat-${kind}`, group, statTitle(info.title), statIconName(kind), [list(...lines)], STAT_COLOR[kind]);
 }
 
 function bonusArticle(kind: Attribute): WikiArticle {
@@ -426,7 +427,7 @@ function bonusArticle(kind: Attribute): WikiArticle {
   const holders = Object.values(content.classes)
     .filter((c) => c.primary === kind)
     .map((c) => c.name);
-  return article(`bonus-${kind}`, 'Primary bonuses', b.name, STAT_ICON[kind], [
+  return article(`bonus-${kind}`, 'Primary bonuses', b.name, statIconName(kind), [
     p(`Primary stat: ${names[kind]}. ${b.detail}.`),
     ...primaryBonusLines(kind, f).map(p),
     p(`The bonus only works while the primary stat is also the unit's highest stat (a tie counts).${holders.length ? ` Primary ${STAT_LABEL[kind]} classes: ${holders.join(', ')}.` : ''}`),
@@ -563,7 +564,7 @@ export function buildMechanics(): WikiArticle[] {
         `Summoned units take x${num(f.summon.damageTakenMultiplier)} damage.`,
       ),
     ]),
-    article('hit-chance', 'Damage', 'Accuracy, evasion and hit chance', 'blast', [
+    article('hit-chance', 'Damage', 'Accuracy, evasion and hit chance', statIconName('accuracy'), [
       p(`Every damaging hit (physical and magic) first rolls to hit: hit chance = attacker accuracy - target evasion, never above ${pct(f.hit.max)}. It can drop to 0%. One roll decides the outcome: a hit, a Dodge or a Miss.`),
       list(
         `Accuracy = ${pct(a.accuracyBase)} + ${pct(a.accuracyPerLuck, 1)} per Luck.`,
@@ -685,6 +686,10 @@ export function buildMechanics(): WikiArticle[] {
       list(...allSkills().flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'bond' }> => e.type === 'bond').map((e) => `${s.name}: bond for ${e.turns} turns; the ally heals ${e.ratio === 1 ? 'the same amount' : pct(e.ratio)} of every life steal heal.`))),
       p(`Life steal passives: ${Object.values(content.classes).filter((c) => c.passive?.effect.type === 'soulDrain').map((c) => `${c.name} (${c.passive!.name}, ${pct((c.passive!.effect as { ratio: number }).ratio)})`).join(', ') || 'none'}.`),
     ], '#b0304f'),
+    article('hybrid-scaling', 'Special rules', 'Skills that scale with two stats', 'tremor2', [
+      p('Most damage is a share of one stat. A few skills add a share of a second value on top, such as the attacker\'s armor. The bonus uses the attacker\'s current value, so armor from auras and items counts. It is added before the target\'s armor and grows with the same bonuses as the main part.'),
+      list(...allSkills().flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'damage' }> => e.type === 'damage' && !!e.bonusScale?.length).map((e) => `${s.name}: ${pct(e.power)} ${e.scale.toUpperCase()} + ${e.bonusScale!.map((b) => `${pct(b.pct)} ${b.stat === 'armor' ? 'Armor' : b.stat === 'magicArmor' ? 'Magic armor' : b.stat.toUpperCase()}`).join(' + ')}.`))),
+    ], '#b9c8dc'),
     article('low-hp-heal', 'Special rules', 'Heals that favour the wounded', 'radiance', [
       p('Some heals grow with how much health the ally is missing. The bonus is worked out for each ally on its own, just before the heal lands: an ally at full health gets no bonus, an ally with half its health gets half of the bonus, and an ally close to death gets nearly all of it. The heal is rolled and can crit as usual; the bonus is applied on top.'),
       list(...allSkills().flatMap((s) => s.effects.filter((e): e is Extract<typeof e, { type: 'heal' }> => e.type === 'heal' && !!e.missingHpBonus).map((e) => `${s.name}: up to +${pct(e.missingHpBonus!)} healing on a nearly dead ally.`))),
@@ -738,7 +743,8 @@ function itemsArticleBody(): WikiArticle {
   return article('items', 'Campaign', 'Items and gear', 'helm', [
     p(`Heroes in the campaign wear gear in ${itemsJson.slots.length} slots: ${itemsJson.slots.map((x) => x.name).join(', ')}. Items only raise stats (STR, DEX, INT, LUCK, HP, armor, Might = skill power, crit, accuracy, evasion, speed, MP and regeneration); they never add flat damage. Quick Battle and multiplayer do not use items.`),
     list(
-      `Rarity: ${itemsJson.rarities.map((x) => x.name).join(', ')}. Rarer items and higher item levels carry more power; an item's gold value follows its power (${itemsJson.budget.goldPerIP} gold per power point).`,
+      `Rarity sets how many stats an item has and how strong it is: ${itemsJson.rarities.filter((x) => x.id !== 'legendary').map((x) => `${x.name} ${x.statCount} stat${x.statCount > 1 ? 's' : ''}`).join(', ')}. Every item carries its slot's main stat. Higher item levels carry more power; an item's gold value follows its power (${itemsJson.budget.goldPerIP} gold per power point).`,
+      `Each stat is rolled within a small range when the item drops (shown as e.g. "+4 Max HP (3–5)"); the roll is kept for good.`,
       `Weapons come in families and each class uses only its own: ${fams}. Every other slot fits everyone.`,
       `Loot: a victory drops about ${L.perPartyMember.battle} items per hero in the fight (elites ${L.perPartyMember.elite}, bosses ${L.perPartyMember.boss} with at least one Rare), chests at least one Rare. Drops are the same on every difficulty. Winning the same battle again gives less (${L.repeat.map((x) => `${Math.round(x.items * 100)}%`).join(' / ')}).`,
       `The bag holds ${itemsJson.bag} items. When it is full, loot that does not fit waits on the Spoils card: discard something to make room and take it, or it is left behind when you continue. You can discard items in the Gear screen too (Rare and better ask first). Open Gear from the Party window or in a town; Equip best picks the strongest usable items for you.`,

@@ -7,15 +7,9 @@ import { mapArt } from '../map-art';
 import { getMap } from '../../campaign';
 import { W, H } from '../campaign-ui';
 import { buildBackdrop } from '../menu-ui';
-import { mp, MP_SCENE } from '../mp-client';
-import { EL, elBack, elBody, elButton, elHeading, elPanel, elText } from '../elegant-ui';
+import { mp, MP_SCENE, takeMultiplayerBoot } from '../mp-client';
+import { EL, elBack, elBody, elButton, elGo, elHeading, elPanel, elScreenIn, elText } from '../elegant-ui';
 import { debugState } from '../debug-state';
-
-/** Sayfa açılışında bir kez: davet linki (?lobby=KOD) ya da yenilenen sekmenin yarım kalan lobisi. main.ts ayarlar. */
-let bootIntent: { join: string } | { rejoin: true } | null = null;
-export const setMultiplayerBoot = (v: typeof bootIntent): void => {
-  bootIntent = v;
-};
 
 /**
  * Multiplayer ekranı (docs/design/multiplayer.md): Host lobby / Join lobby menüsü, bağlanma, lobi (büyük kod, Copy code,
@@ -35,6 +29,7 @@ export class MultiplayerScene extends Phaser.Scene {
   }
 
   create(): void {
+    elScreenIn(this); // ortak ekran geçişi (data/ui-motion.json > screen; Reduced motion = anında)
     const art = mapArt(this, getMap('valdoria')); // geniş harita görseli varsa o (eski 16:9 bölgesi eski yerinde)
     buildBackdrop(this, W, H, art?.key ?? null, art?.region);
     this.layer = this.add.container(0, 0).setDepth(100);
@@ -46,8 +41,7 @@ export class MultiplayerScene extends Phaser.Scene {
       this.off?.();
       this.off = null;
     });
-    const boot = bootIntent;
-    bootIntent = null;
+    const boot = takeMultiplayerBoot();
     if (boot && !mp.active) {
       if ('join' in boot) mp.join(boot.join);
       else {
@@ -68,7 +62,7 @@ export class MultiplayerScene extends Phaser.Scene {
     }
     if (mp.state === 'connecting') return mp.leave();
     if (mp.active) mp.leave();
-    this.scene.start('MainMenuScene', { view: 'play' });
+    elGo(this, 'MainMenuScene', { view: 'play' });
   }
 
   /** Yazı (tasarım kiti): `bold: false` = EB Garamond italik açıklama, diğerleri Cinzel. */
@@ -177,10 +171,11 @@ export class MultiplayerScene extends Phaser.Scene {
     if (mp.channelMode === 'relay') L.add(this.kt(W / 2, 590, 'Connected through the server (direct link was not possible)', 18, '#9cc4ff', { bold: false, stroke: 2 }).setOrigin(0.5));
     this.nameLine(W / 2, 1010);
     L.add(this.kt(W / 2, 800, s.connected ? 'Both players press Ready to choose teams (4 champions each).' : 'Share the code or the invite link with your friend.', 22, '#a8977a', { bold: false, stroke: 2 }).setOrigin(0.5));
-    this.button(W / 2 - 230, 900, 400, s.ready.local ? 'Not ready' : 'Ready', () => s.setReady(!s.ready.local), !s.ready.local, s.connected || s.ready.local);
-    this.button(W / 2 + 230, 900, 400, 'Leave', () => {
+    // Kit kuralı: ikincil (Leave) solda, birincil (Ready) en sağda
+    this.button(W / 2 - 230, 900, 400, 'Leave', () => {
       mp.leave();
-      this.scene.start('MainMenuScene');
+      elGo(this, 'MainMenuScene');
     });
+    this.button(W / 2 + 230, 900, 400, s.ready.local ? 'Not ready' : 'Ready', () => s.setReady(!s.ready.local), !s.ready.local, s.connected || s.ready.local);
   }
 }

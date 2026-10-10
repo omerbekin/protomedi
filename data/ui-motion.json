@@ -1,0 +1,12 @@
+{
+  "_not": "Arayüz hareket ön ayarları (Ömer 2026-10-10, tek ortak yapı; src/ui/motion.ts, Phaser: elegant-ui.ts > elScreenIn / elGo / elModalIn / elModalOut / elToast, DOM: elegant.css > .el-modal / .el-modal-panel / .el-closing, CSS değişkenleri --m-*). Süreler ms. 'Reduced motion' açıkken (src/ui/motion-pref.ts) tüm süreler 0: ekranlar ve pencereler anında açılır / kapanır.",
+  "screen": { "_not": "Ekran geçişi (sahne değişimi: kararıp açılma).", "inMs": 320, "outMs": 220, "color": [6, 3, 1] },
+  "modal": { "_not": "Pencere açılış / kapanış: zemin solar, panel 'rise' px aşağıdan yükselir.", "inMs": 200, "outMs": 140, "rise": 10 },
+  "panel": { "_not": "Görünüm / panel değişimi (aynı ekranda: Endless görünümleri, menü sütunu, kart sırası): yumuşak geçiş, 'offset' px kayma.", "ms": 260, "offset": 18 },
+  "toast": { "_not": "Kısa bildirim bandı: aşağıdan belirir, bekler, yukarı söner.", "inMs": 250, "holdMs": 1700, "outMs": 250, "rise": 10 },
+  "tooltip": { "inMs": 140 },
+  "result": { "_not": "Sonuç ekranının kademeli girişi (zemin, başlık plaketi, özet tablosu, satırlar, düğmeler); Reduced motion = anında.", "dimMs": 360, "plaqueMs": 520, "plaqueDelayMs": 120, "summaryMs": 480, "summaryDelayMs": 380, "rowMs": 340, "rowDelayMs": 640, "rowStaggerMs": 70, "buttonsMs": 420, "buttonsDelayMs": 1000 },
+  "type": { "_not": "Başlık ölçeği (Cinzel 600, oyun birimi): hero = büyük ekran başlığı (sonuç ekranı Victory / Defeat), screen = ekran başlığı (Settings sütunu, Endless), modal = pencere başlığı (elHeading), section = bölüm başlığı.", "hero": 84, "screen": 52, "modal": 40, "section": 20 },
+  "dim": { "_not": "Pencere zemininin koyuluğu (Phaser ve DOM ortak).", "modal": 0.62 },
+  "ease": { "phaser": "Cubic.easeOut", "css": "cubic-bezier(0.33, 1, 0.68, 1)" }
+}

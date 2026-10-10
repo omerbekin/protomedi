@@ -1,6 +1,8 @@
 import { lockInput, unlockInput } from './input-lock';
+import './motion';
 import { onReducedMotionChange, reducedMotion, setReducedMotion } from './motion-pref';
-import { openDebugMenu } from './debug-menu';
+import { openDebugMenu } from './debug-entry';
+import { loadUiSoundLevel, onUiSoundLevelChange, previewUiSound, setUiSoundLevel } from './ui-sound';
 import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from './fullscreen';
 
 /**
@@ -9,7 +11,7 @@ import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFulls
  * kutusuz serif satırlar (seçili satırın önünde kor rengi elmas + hafif parıltı), sağda değer/denetim, sol üstte "◂ Back".
  * Ölçüler oyun birimiyle (--gu: 1 mantıksal birimin CSS pikseli) ve sütun konumu ana menüyle aynı (--menu-x; src/ui/viewport.ts).
  * Klavye: yukarı/aşağı satır, sol/sağ ses, Enter seçer, Esc / Back kapatır; altta açık olan menü yeniden görünür. Açıkken sahne girişi kilitli.
- * İçerik: ses seviyesi (0-10, tarayıcıda saklanır) + tam ekran. Oyun akışı eylemleri menüdedir (`src/ui/game-menu.ts`).
+ * İçerik: ses seviyesi (0-10, tarayıcıda saklanır), UI sounds (menü sesleri 0-10, 0 = kapalı), Reduced motion + tam ekran. Oyun akışı eylemleri menüdedir (`src/ui/game-menu.ts`).
  */
 export interface SettingsHooks {
   /** Ses seviyesi değişti (0..10). */
@@ -62,11 +64,11 @@ export class SettingsScreen {
   readonly applyVolume: (level: number, preview: boolean) => void;
 
   constructor(root: HTMLElement, hooks: SettingsHooks) {
-    this.overlay = el('div', 'st-overlay');
+    this.overlay = el('div', 'st-overlay el-modal'); // ortak pencere hareketi (elegant.css > .el-modal)
     this.overlay.hidden = true;
     this.overlay.setAttribute('role', 'dialog');
     this.overlay.setAttribute('aria-label', 'Settings');
-    const col = el('div', 'st-col');
+    const col = el('div', 'st-col el-modal-panel');
     col.append(el('div', 'st-title', 'Settings'));
 
     // --- Sound volume: − [kaydırıcı] + değer (ana menüdeki satırın aynısı) ---
@@ -100,6 +102,38 @@ export class SettingsScreen {
     minus.addEventListener('click', () => apply(Number(slider.value) - 1, true));
     plus.addEventListener('click', () => apply(Number(slider.value) + 1, true));
     this.addRow(col, 'Sound volume', () => undefined, [minus, slider, plus, value], (d) => apply(Number(slider.value) + d, true));
+
+    // --- UI sounds: menü sesleri (deri, parşömen, ahşap tık; src/ui/ui-sound.ts, data/audio-ui.json). 0 = kapalı; ana ses seviyesiyle çarpılır ---
+    const uiMinus = el('button', 'st-step', '−');
+    uiMinus.type = 'button';
+    uiMinus.setAttribute('aria-label', 'Lower UI sounds');
+    const uiSlider = el('input', 'st-slider');
+    uiSlider.type = 'range';
+    uiSlider.min = '0';
+    uiSlider.max = '10';
+    uiSlider.step = '1';
+    uiSlider.value = String(loadUiSoundLevel());
+    uiSlider.setAttribute('aria-label', 'UI sounds volume');
+    const uiPlus = el('button', 'st-step', '+');
+    uiPlus.type = 'button';
+    uiPlus.setAttribute('aria-label', 'Raise UI sounds');
+    const uiValue = el('span', 'st-value');
+    const paintUi = (v: number): void => {
+      uiSlider.value = String(v);
+      uiValue.textContent = v === 0 ? 'Off' : String(v);
+      uiSlider.style.setProperty('--fill', `${v * 10}%`);
+    };
+    paintUi(Number(uiSlider.value));
+    onUiSoundLevelChange(paintUi);
+    const applyUi = (lvl: number, preview: boolean): void => {
+      setUiSoundLevel(lvl);
+      if (preview) previewUiSound('select');
+    };
+    uiSlider.addEventListener('input', () => applyUi(Number(uiSlider.value), false));
+    uiSlider.addEventListener('change', () => previewUiSound('select'));
+    uiMinus.addEventListener('click', () => applyUi(Number(uiSlider.value) - 1, true));
+    uiPlus.addEventListener('click', () => applyUi(Number(uiSlider.value) + 1, true));
+    this.addRow(col, 'UI sounds', () => undefined, [uiMinus, uiSlider, uiPlus, uiValue], (d) => applyUi(Number(uiSlider.value) + d, true));
 
     // --- Reduced motion (ana menü sahnesi: paralaks ve parçacık yok; kayıt yoksa işletim sistemi tercihi; src/ui/motion-pref.ts) ---
     const motion = el('span', 'st-value', reducedMotion() ? 'On' : 'Off');

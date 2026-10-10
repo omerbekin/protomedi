@@ -405,3 +405,7 @@ Hızlı savaşta oyuncu seçer (varsayılan Medium) ve seferde düğüm başına
 | Doom Mark öncesi Omen | 0: %31, 1: %33, 2: %36 |
 | Treant çağrısı | Druid'in ilk turunda (savaş turu 3-5) |
 | All In | ortalama savaş turu 29, %76 öldürme |
+
+## Boşuna çağrı ve tıkanma sinyali (2026-10-10, open-questions madde 291)
+- **`value.resummonShare` (0,4):** çağrının tarafında onu ufuk içinde yeniden çağırabilecek canlı bir çağırıcı varsa, o çağrıya giden hasar / öldürme / baskı ve ona verilen şifa / Dark Bond bu payla sayılır (`futile` terimi). Hedef seçimi çağırıcıya kayar.
+- **Tıkanma sinyali (`value.stallTurns` 150, `stallRamp` 50, `stallFocus` 3):** savaşın toplam tur sayacından (`battle.turnsTaken`) türetilir, YZ saf kalır. Sinyal arttıkça çağrılar cooldown'dan bağımsız olarak kısmen değersizleşir, çağrı olmayan düşmana hasar/baskı ek ağırlık alır (`stall` terimi). Normal savaşlar (~37 tur) etkilenmez.

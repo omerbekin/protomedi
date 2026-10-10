@@ -85,7 +85,11 @@ export function registerDebugTools({ game, debug }: Ctx): void {
   // Endless Lite: Setup > Endless bölümü
   registerEndlessDebug(game, debug);
   /** The battle scene, only while a battle is actually running (not on the team selection screen). */
-  const battle = (): BattleScene | null => (game.scene.isActive(BattleScene.KEY) ? (game.scene.getScene(BattleScene.KEY) as BattleScene) : null);
+  // (yer tutucu sahne açıkken, src/game/lazy-scenes.ts, gerçek savaş yok sayılır)
+  const battle = (): BattleScene | null => {
+    const s = game.scene.isActive(BattleScene.KEY) ? game.scene.getScene(BattleScene.KEY) : null;
+    return s && !('isLoading' in s) ? (s as BattleScene) : null;
+  };
   const applyFlags = (): void => {
     const b = battle();
     if (b) Object.assign(b.battle.debug, debugState.flags);

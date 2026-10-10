@@ -12,6 +12,8 @@ export interface DamageSpec {
   extra?: number;
   /** Hedefin aldığı hasar çarpanı (çağrılan birimler için 2). */
   takenMultiplier?: number;
+  /** Hibrit ölçek eki (damage.bonusScale): ham can-eşdeğer miktar, skill gücü çarpanları uygulanmış; skill gücü çarpanı (spellPowerMult) ayrıca çarpar. */
+  bonus?: number;
 }
 
 export interface Range {
@@ -26,7 +28,7 @@ export interface Range {
  */
 function baseDamage(attacker: Stats, defender: Stats, spec: DamageSpec, formulas: Formulas): number {
   const armor = (spec.damageType === 'physical' ? defender.armor : defender.magicArmor) * (1 - (spec.ignoreDefense ?? 0));
-  const raw = attributePower(attacker, spec.scale, formulas) * spec.power + (spec.extra ?? 0);
+  const raw = attributePower(attacker, spec.scale, formulas) * spec.power + (spec.bonus ?? 0) * (attacker.spellPowerMult ?? 1) + (spec.extra ?? 0);
   return raw * (1 - armorReduction(armor, formulas)) * (spec.takenMultiplier ?? 1);
 }
 

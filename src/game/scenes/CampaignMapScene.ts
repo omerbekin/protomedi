@@ -53,8 +53,8 @@ import { debugState } from '../debug-state';
 import { isSettingsOpen, setSettingsOpen } from '../../ui/settings';
 import { mountMenuToggle } from '../../ui/game-menu';
 import { openGearScreen, showHandover, showSpoils } from '../../ui/gear-screen';
-import { openWiki } from '../../wiki/view';
-import { EL, diamondPts, elBadge, elBody, elButton, elDiamond, elIconButton, elLink, elPanel, elText, elToast, fadeLine, fitW, hGradient, vGradient } from '../elegant-ui';
+import { openWiki } from '../../wiki/open';
+import { EL, diamondPts, elBadge, elBody, elButton, elDiamond, elGo, elIconButton, elLink, elPanel, elScreenIn, elText, elToast, fadeLine, fitW, hGradient, vGradient } from '../elegant-ui';
 import { MAP_ZOOM, canPan, clampMid, clampZoom, wheelAction, type Bounds } from '../map-view';
 import { drawNodeGlyph, openFormation, openHeroPanel } from '../campaign-panels';
 import { openSlotBrowser, type SlotBrowser } from '../campaign-slots-ui';
@@ -159,6 +159,7 @@ export class CampaignMapScene extends Phaser.Scene {
   }
 
   create(): void {
+    elScreenIn(this); // ortak ekran geçişi (data/ui-motion.json > screen; Reduced motion = anında)
     if (!current()) {
       // ?campaign=1 (geliştirme) ya da kayıtsız açılış: yeni Normal sefer
       setState(newCampaign({ mode: 'normal', seed: Math.floor(Date.now() % 1_000_000_000) }));
@@ -265,7 +266,7 @@ export class CampaignMapScene extends Phaser.Scene {
         setSettingsOpen(true, () => m.root.active && m.root.setVisible(true));
       },
     });
-    items.push({ label: 'Main Menu', run: () => this.scene.start(MENU_SCENE) });
+    items.push({ label: 'Main Menu', run: () => elGo(this, MENU_SCENE) });
     const m = openModal(this, this.ui, { title: 'Menu', width: 620, height: 170 + items.length * 88, onDismiss: () => this.closeMenu() });
     items.forEach((it, i) => {
       const b = elButton(this, it.label, it.run, { kind: it.primary ? 'primary' : 'secondary', w: 440, h: it.primary ? 70 : 60, size: it.primary ? 24 : 19, ready: true });
@@ -1213,8 +1214,8 @@ export class CampaignMapScene extends Phaser.Scene {
           text: `${CONFIG.texts.complete}\n\n${s.stats.victories} victories, ${s.stats.defeats} defeats.`,
           height: 520,
           buttons: [
-            { label: 'Main Menu', primary: true, run: () => this.scene.start(MENU_SCENE) },
             { label: 'Stay on the map', run: () => this.closeModal() },
+            { label: 'Main Menu', primary: true, run: () => elGo(this, MENU_SCENE) },
           ],
         });
         return;
@@ -1291,8 +1292,8 @@ export class CampaignMapScene extends Phaser.Scene {
       text: `${node(this.map, id).name}. The other roads will close for this journey.`,
       fit: true,
       buttons: [
-        { label: 'Yes', primary: true, run: () => this.march(id) },
         { label: 'No', run: () => this.closeModal() },
+        { label: 'Yes', primary: true, run: () => this.march(id) },
       ],
       onDismiss: () => this.closeModal(), // onay: zemin = No
     });

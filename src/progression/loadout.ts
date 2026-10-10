@@ -2,8 +2,8 @@
 // gücü TEK fonksiyonda toplanır ve motorun mevcut kapısına (UnitSetup.modifiers) çevrilir. Sefer ve endless aynı fonksiyonu kullanır;
 // Quick Battle / multiplayer kullanmaz (Ömer kararı 2026-10-09: QB/MP dokunulmaz).
 // Kural: hiçbir şey takılı değilse modifiers YOK (undefined) => savaş bugünküyle birebir aynı (tests/loadout.test.ts determinizm testi).
-import type { Attribute, UnitModifiers, UnitSetup } from '../engine/types';
-import { ITEMS, SLOT_IDS, STAT_IDS, itemDef, type Equipment, type ItemStatId, type ItemStats } from './items';
+import type { Attribute, ItemEffects, UnitModifiers, UnitSetup } from '../engine/types';
+import { ITEMS, SLOT_IDS, STAT_IDS, instanceStats, itemDef, type EffectDef, type Equipment, type ItemStatId, type ItemStats } from './items';
 
 /** Güç katmanının girdisi: sefer kahramanı (campaign Hero) ve endless kahramanı bu şekle uyar. */
 export interface LoadoutSource {
@@ -40,8 +40,10 @@ export function sumEquipment(equipment: Partial<Equipment> | undefined): { stats
       missing.push(inst.id);
       continue;
     }
+    // Zarlanmış değerler (Ömer 2026-10-10); zarı olmayan eski örnek = katalog değeri (aralığın ortası)
+    const st = instanceStats(inst);
     for (const k of STAT_IDS) {
-      const v = d.stats[k];
+      const v = st[k];
       if (v) stats[k] = r3((stats[k] ?? 0) + v);
     }
   }
@@ -79,8 +81,39 @@ export function loadout(src: LoadoutSource): LoadoutResult {
   return { modifiers: mods, stats, unsupported, missing };
 }
 
-/** Kahramanın savaş kurulumu (UnitSetup) parçası; güç yoksa boş nesne. Çağıran başka alanlarla (startHpRatio...) birleştirir. */
-export function loadoutSetup(src: LoadoutSource): Pick<UnitSetup, 'modifiers'> {
+/**
+ * Takılı item'lerin Epic etkileri -> motor kancaları (UnitSetup.itemEffects; madde 292). effectRules.stack kapalıysa (varsayılan) aynı etki
+ * iki item'den gelse de bir kez uygulanır (en yüksek değer); açıksa sayısal değerler toplanır. Etki yoksa undefined.
+ */
+export function equipmentEffects(equipment: Partial<Equipment> | undefined): ItemEffects | undefined {
+  const out: Record<string, unknown> = {};
+  const stack = !!ITEMS.effectRules?.stack;
+  for (const slot of SLOT_IDS) {
+    const inst = equipment?.[slot];
+    const id = inst ? itemDef(inst.id)?.effect : undefined;
+    const e: EffectDef | undefined = id ? ITEMS.effects[id] : undefined;
+    if (!e) continue;
+    out[e.hook] = mergeEffect(out[e.hook], e.value, stack);
+  }
+  return Object.keys(out).length ? (out as ItemEffects) : undefined;
+}
+
+/** İki etki değerini birleştirir: sayı (en yüksek ya da toplam), boolean (ya da), nesne (alan alan aynı kural; eşik alanları değişmez). */
+function mergeEffect(prev: unknown, next: EffectDef['value'], stack: boolean): unknown {
+  if (prev === undefined) return typeof next === 'object' ? { ...next } : next;
+  if (typeof next === 'boolean') return !!prev || next;
+  if (typeof next === 'number') return stack ? (prev as number) + next : Math.max(prev as number, next);
+  const p = prev as Record<string, number>;
+  const thresholds = new Set(['below', 'above', 'cap']);
+  return Object.fromEntries(Object.entries(next).map(([k, v]) => [k, thresholds.has(k) ? v : stack ? (p[k] ?? 0) + v : Math.max(p[k] ?? 0, v)]));
+}
+
+/**
+ * Kahramanın savaş kurulumu (UnitSetup) parçası: statlar (modifiers) + Epic etkileri (itemEffects); yoksa boş nesne. Çağıran başka alanlarla
+ * (startHpRatio...) birleştirir. `effects: false` = etkiler verilmez (Endless'ta effectRules.endless kapalıysa).
+ */
+export function loadoutSetup(src: LoadoutSource, o: { effects?: boolean } = {}): Pick<UnitSetup, 'modifiers' | 'itemEffects'> {
   const m = loadout(src).modifiers;
-  return m ? { modifiers: m } : {};
+  const fx = o.effects === false ? undefined : equipmentEffects(src.equipment);
+  return { ...(m ? { modifiers: m } : {}), ...(fx ? { itemEffects: fx } : {}) };
 }

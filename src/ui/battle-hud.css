@@ -195,8 +195,9 @@
 }
 
 .bh-num .bh-ico {
-  width: 16px;
-  height: 16px;
+  /* boyalı stat ikonu (assets/stat-icons) küçükte ezilmesin: 16 -> 18 (satır yüksekliği değişmez) */
+  width: 18px;
+  height: 18px;
 }
 
 .bh-num .of,
@@ -461,8 +462,9 @@
 }
 
 .bh-st .bh-ico {
-  width: 19px;
-  height: 19px;
+  /* boyalı stat ikonu (assets/stat-icons) küçükte ezilmesin: 19 -> 20 (satır yüksekliği değişmez) */
+  width: 20px;
+  height: 20px;
 }
 
 .bh-st .l {
@@ -574,8 +576,9 @@
 }
 
 .bh-srow .bh-ico {
-  width: 20px;
-  height: 20px;
+  /* boyalı stat ikonu (assets/stat-icons) küçükte ezilmesin: 20 -> 24 (satır yüksekliği değişmez) */
+  width: 24px;
+  height: 24px;
 }
 
 .bh-srow .l {
@@ -1678,4 +1681,37 @@
   height: 3px;
   border-radius: 50%;
   background: rgba(var(--gold), 0.5);
+}
+
+/* Telefon (kısa ekran, html.short): Rest / Skip / Move yan yana ikon düğmeleri; her biri 122 oyun birimi kare = 844x390'da ~44 px
+   dokunma alanı (CLAUDE.md: en az 44 px). Ad ve açıklama tooltip'te (dokununca). */
+html.short .bh-gcol {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+html.short .bh-gl {
+  width: 122px;
+  height: 122px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+  box-shadow: inset 0 0 0 1px rgba(var(--gold), 0.3);
+  background: radial-gradient(circle at 50% 40%, rgba(46, 33, 20, 0.85), rgba(10, 7, 5, 0.9) 75%);
+}
+
+html.short .bh-gl::before,
+html.short .bh-gl > span {
+  display: none;
+}
+
+html.short .bh-gl .bh-ico {
+  width: 64px;
+  height: 64px;
+}
+
+html.short .bh-gl.on,
+html.short .bh-gl:hover {
+  box-shadow: inset 0 0 0 1.5px var(--on), 0 0 14px rgba(240, 140, 40, 0.45);
 }

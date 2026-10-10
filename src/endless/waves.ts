@@ -3,6 +3,7 @@ import { CELL_COUNT, bosses, classes, randomCells, randomPool } from '../engine/
 import { Rng } from '../engine/rng';
 import type { UnitModifiers, UnitSetup } from '../engine/types';
 import { loadoutSetup } from '../progression/loadout';
+import { ITEMS } from '../progression/items';
 import { ENDLESS, encounter, type EndlessConfig, type EndlessRun, type WaveKind } from './data';
 import { withRelics } from './relics';
 import { heroSlots } from './formation';
@@ -112,7 +113,7 @@ export function wavePlan(run: EndlessRun, cfg: EndlessConfig = ENDLESS): WavePla
     placed.push({ id: h.id, slot });
     // Güç katmanı (item; ileride level/ağaç) + can taşıma
     // Güç: item (loadout) + kalıntılar (koşu boyu; kalkan / ilk eylem / düşünce şifa kancaları + kritik / zırh ekleri)
-    const setup: UnitSetup = withRelics({ ...loadoutSetup(h) }, run.relics, cfg);
+    const setup: UnitSetup = withRelics({ ...loadoutSetup(h, { effects: ITEMS.effectRules.endless }) }, run.relics, cfg); // Epic etkileri: madde 292 (c)
     // Hero's Feast (boss ödülü): kalan dalgalarda maks can çarpanı (item güçlendirmesiyle birleşir)
     if (run.blessing && run.blessing.waves > 0 && run.blessing.hpMult !== 1)
       setup.modifiers = { ...(setup.modifiers ?? {}), hpMult: r3((setup.modifiers?.hpMult ?? 1) * run.blessing.hpMult) };

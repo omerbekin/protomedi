@@ -1,8 +1,8 @@
 // Endless tüccarı (Odo the Peddler; Ömer 2026-10-09, taslak v1 "Travelling cart"): satış, bu ziyaretin geri alımı, malları yenileme ve
 // detay panelinin saf hesapları (kim kullanır, en büyük yükseltme kimde, takılıyla stat farkı). Saf; her fonksiyon yeni durum döner.
 // Satın alma run.ts > buyItem, ayrılma run.ts > leaveShop. Ekran: src/game/scenes/EndlessScene.ts > drawShop. Sayılar data/endless.json > shop.
-import { ITEMS, STAT_IDS, canEquip, itemDef, itemIP, sellValue, type ItemDef, type ItemStatId } from '../progression/items';
-import { ENDLESS, type EndlessConfig, type EndlessHero, type EndlessRun } from './data';
+import { ITEMS, STAT_IDS, canEquip, instanceStats, itemDef, sellValue, statRange, statsIP, type ItemDef, type ItemStats, type ItemStatId } from '../progression/items';
+import { ENDLESS, type EndlessConfig, type EndlessHero, type EndlessRun, type ItemRolls } from './data';
 import { bagOf, endlessBagSize, heroOf, ilvlCap, newRun, shopStock, suspendedOf } from './run';
 import { randomTeam } from '../engine/content';
 import { rngFor } from './waves';
@@ -90,31 +90,58 @@ export interface StatDelta {
   diff: number;
 }
 
-/** Takılıyla karşılaştırma: iki item'de geçen her stat (veri sırasıyla). */
-export function statDelta(run: EndlessRun, heroId: string, d: ItemDef, catalog: ItemDef[] = ITEMS.items): StatDelta[] {
+/**
+ * Örneğin gerçek statları (stat zarlarıyla; Ömer 2026-10-10): items.json'daki item'de `instanceStats` (zar yoksa katalog değeri), katalog dışı
+ * (test) item'de katalog değeri.
+ */
+export function rolledStats(d: ItemDef, rolls?: ItemRolls): ItemStats {
+  return itemDef(d.id) ? instanceStats({ id: d.id, rolls }) : { ...d.stats };
+}
+
+/** Stat satırı: zarlanmış değer + aralık (satır yazısı `statLine(stat, value, range)`: "+4 Max HP (3–5)"). */
+export interface StatRow {
+  stat: ItemStatId;
+  value: number;
+  range: [number, number];
+}
+
+/** Item'in stat satırları (veri sırasıyla): zarlanmış değer ve zar aralığı. */
+export function itemStatRows(d: ItemDef, rolls?: ItemRolls): StatRow[] {
+  const st = rolledStats(d, rolls);
+  return STAT_IDS.filter((k) => st[k]).map((k) => ({ stat: k, value: st[k]!, range: statRange(d, k) }));
+}
+
+/** Kahramanın o yuvadaki örneğinin statları (zarlarıyla; boş yuva: {}). */
+function equippedStats(run: EndlessRun, heroId: string, d: ItemDef, catalog: ItemDef[]): ItemStats {
+  const inst = heroOf(run, heroId)?.equipment[d.slot];
   const cur = equippedFor(run, heroId, d, catalog);
+  return inst && cur ? rolledStats(cur, inst.rolls) : {};
+}
+
+/** Takılıyla karşılaştırma: iki örnekte geçen her stat (veri sırasıyla; zarlanmış değerlerle). */
+export function statDelta(run: EndlessRun, heroId: string, d: ItemDef, catalog: ItemDef[] = ITEMS.items, rolls?: ItemRolls): StatDelta[] {
+  const curSt = equippedStats(run, heroId, d, catalog);
+  const newSt = rolledStats(d, rolls);
   const out: StatDelta[] = [];
   for (const k of STAT_IDS) {
-    const now = cur?.stats[k] ?? 0;
-    const next = d.stats[k] ?? 0;
+    const now = curSt[k] ?? 0;
+    const next = newSt[k] ?? 0;
     if (!now && !next) continue;
     out.push({ stat: k, now, next, diff: Math.round((next - now) * 100) / 100 });
   }
   return out;
 }
 
-/** IP kazancı (yeni item IP - takılı item IP; boş yuva 0). */
-export const ipGain = (run: EndlessRun, heroId: string, d: ItemDef, catalog: ItemDef[] = ITEMS.items): number => {
-  const cur = equippedFor(run, heroId, d, catalog);
-  return itemIP(d) - (cur ? itemIP(cur) : 0);
-};
+/** IP kazancı (yeni örnek IP - takılı örnek IP; boş yuva 0; zarlarıyla). */
+export const ipGain = (run: EndlessRun, heroId: string, d: ItemDef, catalog: ItemDef[] = ITEMS.items, rolls?: ItemRolls): number =>
+  statsIP(rolledStats(d, rolls)) - statsIP(equippedStats(run, heroId, d, catalog));
 
 /** "BEST": item'i takabilenler içinde en büyük IP kazancı olan kahraman (kazanç yoksa null). Eşitlikte takım sırası. */
-export function bestHeroFor(run: EndlessRun, d: ItemDef, catalog: ItemDef[] = ITEMS.items): string | null {
+export function bestHeroFor(run: EndlessRun, d: ItemDef, catalog: ItemDef[] = ITEMS.items, rolls?: ItemRolls): string | null {
   let best: string | null = null;
   let gain = 0;
   for (const h of usableHeroes(run, d)) {
-    const g = ipGain(run, h.id, d, catalog);
+    const g = ipGain(run, h.id, d, catalog, rolls);
     if (g > gain + 1e-9) {
       gain = g;
       best = h.id;

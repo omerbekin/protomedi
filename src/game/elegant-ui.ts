@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import { BODY_FONT, DISPLAY_FONT } from '../ui/menu-style';
-import { ensureGlow } from './menu-ui';
+import { ensureGlow } from './menu-text';
 import { drawMiniShape, miniShapeSize } from './shape-draw';
 import type { MiniShape } from '../ui/shape-diagram';
 import { onStageResize, stageView } from './stage';
 import { FULL_W, FULL_X0 } from '../ui/viewport';
 import { isBackdropTap } from '../ui/backdrop';
+import { motion, MOTION } from '../ui/motion';
+import { uiSound, type UiSoundKind } from '../ui/ui-sound';
 
 /**
  * ZARİF TASARIM KİTİ (Phaser tarafı; Ömer 2026-10-09: ana menü + Quick Battle "Twin Formations" dili HER ekranda).
@@ -149,7 +151,7 @@ export interface ElLink {
  * Kutusuz yazı düğmesi: hover'da önünde kor elmas belirir, yazı açılır + parlar + 4 px sağa kayar. Kök (0, 0) = sol kenar, dikey orta.
  * `isBusy` true dönerse (ör. sürükleme sürüyor) hover / tık yok sayılır.
  */
-export function elLink(scene: Phaser.Scene, label: string, run: () => void, o: { size?: number; small?: string; enabled?: boolean; isBusy?: () => boolean; onHover?: (on: boolean) => void } = {}): ElLink {
+export function elLink(scene: Phaser.Scene, label: string, run: () => void, o: { size?: number; small?: string; enabled?: boolean; isBusy?: () => boolean; onHover?: (on: boolean) => void; sound?: UiSoundKind } = {}): ElLink {
   const size = o.size ?? 21;
   const root = scene.add.container(0, 0);
   const dia = elDiamond(scene, 7).setPosition(11, 0).setAlpha(0).setScale(0.4);
@@ -176,6 +178,7 @@ export function elLink(scene: Phaser.Scene, label: string, run: () => void, o: {
   zone.on('pointerover', () => {
     if (o.isBusy?.()) return;
     hover(true);
+    if (enabled) uiSound('hover');
     o.onHover?.(true);
   });
   zone.on('pointerout', () => {
@@ -184,6 +187,7 @@ export function elLink(scene: Phaser.Scene, label: string, run: () => void, o: {
   });
   zone.on('pointerup', () => {
     if (o.isBusy?.() || !enabled) return;
+    uiSound(o.sound ?? 'select');
     run();
   });
   return {
@@ -202,7 +206,7 @@ export function elLink(scene: Phaser.Scene, label: string, run: () => void, o: {
  * Esc tuşunu çağıran sahne bağlar (aynı `run`). CLAUDE.md > "Geri / Menu kuralı".
  */
 export function elBack(scene: Phaser.Scene, run: () => void, o: { label?: string; isBusy?: () => boolean; depth?: number } = {}): ElLink {
-  const l = elLink(scene, `◂ ${o.label ?? 'Back'}`, run, { small: 'Esc', isBusy: o.isBusy });
+  const l = elLink(scene, `◂ ${o.label ?? 'Back'}`, run, { small: 'Esc', isBusy: o.isBusy, sound: 'back' });
   l.root.setDepth(o.depth ?? 40).setY(56);
   const place = () => l.root.setX(stageView.left + 48);
   place();
@@ -298,6 +302,7 @@ export function elButton(scene: Phaser.Scene, label: string, run: () => void, o:
   zone.on('pointerover', () => {
     if (o.isBusy?.()) return;
     hover = true;
+    if (ready) uiSound('hover');
     draw();
     if (ready) scene.tweens.add({ targets: lift, y: primary ? -3 : -2, duration: 250, ease: EL.EASE });
   });
@@ -310,6 +315,7 @@ export function elButton(scene: Phaser.Scene, label: string, run: () => void, o:
   zone.on('pointerup', () => {
     scene.tweens.add({ targets: lift, scale: 1, duration: 120, ease: EL.EASE });
     if (o.isBusy?.()) return;
+    uiSound(primary ? 'confirm' : 'select');
     run();
   });
   setReady(ready);
@@ -591,13 +597,19 @@ export function elConfirm(scene: Phaser.Scene, o: { title?: string; text: string
     closed = true;
     confirmOpen.delete(scene);
     scene.input.keyboard?.off('keydown-ESC', onEsc);
-    scene.tweens.add({ targets: root, alpha: 0, duration: 140, onComplete: () => root.destroy() });
+    const off = (o: Phaser.GameObjects.GameObject): void => {
+      if (o.input) o.disableInteractive();
+      if (o instanceof Phaser.GameObjects.Container) o.each(off);
+    };
+    off(root); // kapanırken düğmeler ikinci kez basılmasın
+    elModalOut(scene, root, () => root.destroy());
   };
   const by = y0 + h - 34 - 32;
   const yes = elButton(scene, o.yes ?? 'Yes', () => (close(), o.onYes()), { kind: 'primary', h: 64, size: 24, w: 220, ready: true });
   const no = elButton(scene, o.no ?? 'No', () => (close(), o.onNo?.()), { kind: 'secondary', h: 64, size: 22, w: 220 });
-  yes.root.setPosition(960 - 130, by);
-  no.root.setPosition(960 + 130, by);
+  // Düğme sırası (kit kuralı): ikincil (No / Cancel) solda, birincil eylem en sağda
+  no.root.setPosition(960 - 130, by);
+  yes.root.setPosition(960 + 130, by);
   root.add([yes.root, no.root]);
   const onEsc = () => {
     close();
@@ -606,9 +618,50 @@ export function elConfirm(scene: Phaser.Scene, o: { title?: string; text: string
   scene.input.keyboard?.on('keydown-ESC', onEsc);
   // Zemine dokunmak = No (iptal); panelin içinde başlayan sürükleme kapatmaz
   elBackdropTap(scene, shade, { x: 960 - w / 2, y: y0, w, h }, () => (close(), o.onNo?.()));
-  root.setAlpha(0);
-  scene.tweens.add({ targets: root, alpha: 1, duration: 160, ease: EL.EASE });
+  elModalIn(scene, root);
   return { close };
+}
+
+// --- Ortak hareket (Ömer 2026-10-10; data/ui-motion.json, src/ui/motion.ts; Reduced motion = anında) ---
+
+/** Ekrana giriş: sahne kararıktan açılır (her sahnenin create() sonunda; ekran geçişi ön ayarı). */
+export function elScreenIn(scene: Phaser.Scene): void {
+  const m = motion('screen');
+  const [r, g, b] = MOTION.screen.color as [number, number, number];
+  if (m.inMs > 0) scene.cameras.main.fadeIn(m.inMs, r, g, b);
+}
+
+/** Ekrandan çıkış: sahne kararır, sonra `key` sahnesi açılır (yeni sahne elScreenIn ile açılır). Azaltılmış harekette hemen. */
+export function elGo(scene: Phaser.Scene, key: string, data?: object): void {
+  const m = motion('screen');
+  const [r, g, b] = MOTION.screen.color as [number, number, number];
+  const go = () => scene.sys.isActive() && scene.scene.start(key, data);
+  if (m.outMs <= 0 || scene.cameras.main.fadeEffect.isRunning) return void go();
+  scene.input.enabled = false; // kararırken ikinci tık başka yere gitmesin
+  scene.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, go);
+  scene.cameras.main.fadeOut(m.outMs, r, g, b);
+}
+
+/** Pencere açılışı: kök solarak belirir, `panel` (yoksa kök) 'rise' px aşağıdan yükselir. */
+export function elModalIn(scene: Phaser.Scene, root: Phaser.GameObjects.Container, panel?: Phaser.GameObjects.Container): void {
+  uiSound('open');
+  const m = motion('modal');
+  if (m.inMs <= 0) return void root.setAlpha(1);
+  root.setAlpha(0);
+  scene.tweens.add({ targets: root, alpha: 1, duration: m.inMs, ease: MOTION.ease.phaser });
+  const p = panel ?? root;
+  const y = p.y;
+  p.y = y + m.rise;
+  scene.tweens.add({ targets: p, y, duration: m.inMs, ease: MOTION.ease.phaser });
+}
+
+/** Pencere kapanışı: kök söner, sonra `done` (azaltılmış harekette hemen). */
+export function elModalOut(scene: Phaser.Scene, root: Phaser.GameObjects.Container, done: () => void): void {
+  uiSound('close');
+  const m = motion('modal');
+  if (m.outMs <= 0) return done();
+  scene.tweens.killTweensOf(root);
+  scene.tweens.add({ targets: root, alpha: 0, duration: m.outMs, ease: 'Sine.easeIn', onComplete: done });
 }
 
 // --- Rozet, bildirim ---
@@ -654,14 +707,15 @@ export function elBadge(scene: Phaser.Scene, tone: ElBadgeTone, r = 12): { c: Ph
 }
 
 /** Üst ortada kısa bildirim (iki yana saydamlaşan koyu bant, EB Garamond italik); dönen fonksiyon mesajı gösterir. */
-export function elToast(scene: Phaser.Scene, y = 145, parent?: Phaser.GameObjects.Container): (msg: string) => void {
+export function elToast(scene: Phaser.Scene, y = 145, parent?: Phaser.GameObjects.Container): (msg: string, sound?: UiSoundKind | null) => void {
   const band = scene.add.graphics();
   const text = elBody(scene, 0, 0, '', 23, EL.ON).setOrigin(0.5);
   const root = scene.add.container(960, y, [band, text]).setDepth(5500).setAlpha(0);
   parent?.add(root); // ör. iki kameralı sahnede arayüz katmanı
   let timer: Phaser.Time.TimerEvent | undefined;
-  return (msg: string) => {
+  return (msg: string, sound: UiSoundKind | null = 'toast') => {
     if (!msg) return;
+    if (sound) uiSound(sound);
     text.setText(msg);
     const w = text.width + 208;
     band.clear();
@@ -671,10 +725,11 @@ export function elToast(scene: Phaser.Scene, y = 145, parent?: Phaser.GameObject
       [0.82, 0.92],
       [1, 0],
     ]);
+    const m = motion('toast');
     scene.tweens.killTweensOf(root);
-    root.setY(y - 10);
-    scene.tweens.add({ targets: root, alpha: 1, y, duration: 250, ease: EL.EASE });
+    root.setY(y - m.rise);
+    scene.tweens.add({ targets: root, alpha: 1, y, duration: Math.max(1, m.inMs), ease: EL.EASE });
     timer?.remove();
-    timer = scene.time.delayedCall(1700, () => scene.tweens.add({ targets: root, alpha: 0, y: y - 10, duration: 250, ease: EL.EASE }));
+    timer = scene.time.delayedCall(m.holdMs, () => scene.tweens.add({ targets: root, alpha: 0, y: y - m.rise, duration: Math.max(1, m.outMs), ease: EL.EASE }));
   };
 }

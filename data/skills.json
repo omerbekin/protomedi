@@ -634,11 +634,6 @@
         "turns": 2,
         "breakRatio": 0.25,
         "allyDamageMult": 0.9
-      },
-      {
-        "type": "shield",
-        "scale": "str",
-        "power": 0.3
       }
     ],
     "vfx": "taunt2",
@@ -1074,7 +1069,13 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 0.36
+        "power": 0.36,
+        "bonusScale": [
+          {
+            "stat": "armor",
+            "pct": 0.1
+          }
+        ]
       },
       {
         "type": "status",
@@ -1110,7 +1111,13 @@
         "type": "damage",
         "damageType": "physical",
         "scale": "str",
-        "power": 1.42
+        "power": 1.42,
+        "bonusScale": [
+          {
+            "stat": "armor",
+            "pct": 0.1
+          }
+        ]
       }
     ],
     "vfx": "fistcrush2",

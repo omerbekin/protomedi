@@ -517,7 +517,8 @@ export class BattleHud {
     this.pasBox.style.left = `${sx - 100}px`;
     const gx = sx + SKW + 22;
     this.globBox.style.left = `${gx}px`;
-    const rx = gx + 170;
+    // Sağ alt alan global sütunun ölçülen genişliğinden sonra (telefonda globaller yatay, büyük dokunma alanlı: battle-hud.css > html.short)
+    const rx = gx + Math.max(150, this.globBox.offsetWidth) + 20;
     this.rightSlot.style.left = `${rx}px`;
     this.rightSlot.style.width = `${Math.max(0, W - rx - 28)}px`;
     this.cards.enemy.style.left = `${W - 384 - 40}px`;

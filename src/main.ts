@@ -1,17 +1,11 @@
 import Phaser from 'phaser';
 import layout from '../data/battle-layout.json';
-import { audioSettings, playSfxOn } from './game/audio';
-import { BattleScene } from './game/scenes/BattleScene';
-import { TeamSelectScene } from './game/scenes/TeamSelectScene';
+import type { BattleScene } from './game/scenes/BattleScene';
 import { MainMenuScene } from './game/scenes/MainMenuScene';
-import { CampaignMapScene } from './game/scenes/CampaignMapScene';
-import { MultiplayerScene, setMultiplayerBoot } from './game/scenes/MultiplayerScene';
-import { EndlessScene } from './game/scenes/EndlessScene';
-import { mp } from './game/mp-client';
-import { prepareMerchant } from './game/endless-session';
+import { gateScene, prefetchScenes, sceneList } from './game/lazy-scenes';
+import { loadNet, mp, setMultiplayerBoot } from './game/mp-client';
 import { lobbyFromSearch } from './net/lobby-code';
-import { DebugMenu } from './ui/debug-menu';
-import { DEBUG_INFO_TAB, DEBUG_TABS, registerDebugTools } from './ui/debug-tools';
+import { installDebugEntry } from './ui/debug-entry';
 import { flowContext, startMainMenu, startNewGame, startTeamSelect } from './game/session-flow';
 import { SettingsScreen } from './ui/settings';
 import { GameMenu, isGameMenuOpen } from './ui/game-menu';
@@ -19,12 +13,12 @@ import { lockInput, onInputLockChange, unlockInput } from './ui/input-lock';
 import { createFullscreenButton } from './ui/fullscreen';
 import { installViewport, parseRotateMode } from './ui/viewport';
 import { installStage, setStageMetrics } from './game/stage';
-import { WikiPanel } from './wiki/view';
+import { installWiki, openWiki } from './wiki/open';
 import { debugState } from './game/debug-state';
 import { menuStyle } from './ui/menu-style';
 import { whenMenuFontsReady } from './ui/menu-fonts';
 import './style.css';
-import { markBootReady, setBootProgress } from './ui/boot-loader';
+import { markBootReady, setBootProgress, whenBootReady } from './ui/boot-loader';
 
 // Modüller yüklendi: açılış ekranı ilerler (sonraki adımlar: ana menünün dosyaları, fontlar; src/ui/boot-loader.ts)
 setBootProgress(0.12);
@@ -47,7 +41,8 @@ const openCampaign = !skipSelect && params.has('campaign');
 // ?merchant=1 doğrudan Endless tüccarını açar (bekleyen gerçek koşuda; yoksa kaydedilmeyen önizleme koşusu: src/game/endless-session.ts > prepareMerchant)
 const openMerchantShortcut = !skipSelect && !openCampaign && params.has('merchant');
 const openEndless = !skipSelect && !openCampaign && (params.has('endless') || openMerchantShortcut);
-if (openMerchantShortcut) prepareMerchant();
+// (Endless sahnesi ayrı kod parçasında: tüccar hazırlığı bitmeden sahne başlamaz)
+if (openMerchantShortcut) gateScene('EndlessScene', import('./game/endless-session').then((m) => m.prepareMerchant()));
 // Multiplayer: davet linki (?lobby=KOD) lobiye katılır; yenilenen sekme yarım kalan lobisine döner (docs/design/multiplayer.md)
 const lobbyCode = skipSelect || openCampaign || openEndless ? null : lobbyFromSearch(window.location.search);
 const rejoin = !skipSelect && !openCampaign && !openEndless && !lobbyCode && !!mp.pendingRejoin();
@@ -56,8 +51,21 @@ if (lobbyCode) {
   params.delete('lobby'); // yenilemede tekrar katılmaya çalışmasın (yarım kalan lobi sessionStorage'dan döner)
   window.history.replaceState(null, '', `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`);
 } else if (rejoin) setMultiplayerBoot({ rejoin: true });
-const otherScenes = [TeamSelectScene, BattleScene, MainMenuScene, CampaignMapScene, MultiplayerScene, EndlessScene];
-const firstScene = skipSelect ? BattleScene : openCampaign ? CampaignMapScene : openEndless ? EndlessScene : lobbyCode || rejoin ? MultiplayerScene : MainMenuScene;
+// Hızlı açılış: ana menü dışındaki sahnelerin kodu ilk gerektiğinde indirilir (src/game/lazy-scenes.ts); doğrudan bağlantıda o sahne ilk sırada
+const firstScene = skipSelect ? 'BattleScene' : openCampaign ? 'CampaignMapScene' : openEndless ? 'EndlessScene' : lobbyCode || rejoin ? 'MultiplayerScene' : 'menu';
+
+// Ses modülü (sentez tarifleri, ~190 kB) savaş parçasıyla ortak ayrı parçadadır: açılışta indirilmez. Kayıtlı ses seviyesi modül inince
+// uygulanır: menü hazır olunca (arka plan indirmesiyle) ya da doğrudan bağlantıda ilk sahne başlamadan önce.
+let volumeLevel: number | null = null;
+let audioReady = false;
+const withAudio = () =>
+  import('./game/audio').then((a) => {
+    audioReady = true;
+    if (volumeLevel !== null) a.audioSettings.volume = volumeLevel / 10;
+    return a;
+  });
+if (firstScene !== 'menu') gateScene(firstScene, withAudio());
+whenBootReady(() => void withAudio().catch(() => undefined));
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -72,17 +80,16 @@ const game = new Phaser.Game({
   // Bir sahnenin preload'u 32'den fazla dosya kuyruğa alınca ilk 32'den sonra yükleme takılabiliyordu (açılışta ~45 sn siyah ekran);
   // tek partide hepsi istenir. Ana menü artık yalnızca kendi ihtiyacını yükler (src/game/assets.ts > preloadAssets).
   loader: { maxParallelDownloads: 64 },
-  scene: [firstScene, ...otherScenes.filter((sc) => sc !== firstScene)],
+  scene: sceneList(firstScene, MainMenuScene),
 });
 
 mp.attachGame(game);
 
 // Açılış yükleme ekranı: ana menü kendisi kapatır (fontlar hazır, menü çizildi); doğrudan başka sahneyle açılışta (?seed=, ?campaign=1,
-// ?endless=1, lobi linki) o sahne kurulunca kapanır. Güvenlik ağı: bir şey takılırsa 25 sn sonra yine kalkar.
-game.events.once(Phaser.Core.Events.READY, () => {
-  for (const sc of game.scene.scenes) if (sc.scene.key !== MainMenuScene.KEY) sc.events.once(Phaser.Scenes.Events.CREATE, () => markBootReady());
-});
+// ?endless=1, lobi linki) o sahnenin kodu inip sahne kurulunca kapanır (src/game/lazy-scenes.ts). Güvenlik ağı: bir şey takılırsa 25 sn sonra yine kalkar.
 window.setTimeout(markBootReady, 25000);
+// Menü hazır olunca diğer sahnelerin kodu arka planda indirilir (ilk Quick Battle / sefer geçişinde bekleme olmasın)
+whenBootReady(() => window.setTimeout(() => void prefetchScenes(game).then(() => loadNet()).catch(() => undefined), 600));
 
 // Dev / local test only: lets the browser console inspect the running game (window.__game; also in a local production build on localhost)
 if (import.meta.env.DEV || ['localhost', '127.0.0.1'].includes(window.location.hostname)) (window as unknown as { __game: Phaser.Game }).__game = game;
@@ -93,8 +100,8 @@ if (import.meta.env.DEV || ['localhost', '127.0.0.1'].includes(window.location.h
 installStage(game);
 installViewport(game, document.getElementById('stage')!, parseRotateMode(window.location.search), setStageMetrics);
 
-// --- Debug menu ---
-const debug = new DebugMenu(document.getElementById('ui-root')!, DEBUG_TABS, DEBUG_INFO_TAB);
+// --- Debug menu (gizli girişler; menünün kodu ilk açılışta indirilir: src/ui/debug-entry.ts) ---
+installDebugEntry(game, document.getElementById('ui-root')!);
 
 // --- DOM katmanları (ayarlar, Menu, wiki) açıkken alttaki sahne tıklama almaz (src/ui/input-lock.ts) ---
 onInputLockChange((locked) => {
@@ -104,17 +111,22 @@ onInputLockChange((locked) => {
 // --- Settings screen (Ömer 2026-10-08: no gear; opened from a menu: main menu > Settings, campaign Menu > Settings, battle Menu > Settings) ---
 new SettingsScreen(document.getElementById('ui-root')!, {
   onVolume: (level) => {
-    audioSettings.volume = level / 10;
+    volumeLevel = level;
+    if (audioReady) void withAudio();
   },
-  preview: () => playSfxOn((game.sound as unknown as { context?: AudioContext }).context, 'stunChime'),
+  preview: () => void withAudio().then((a) => a.playSfxOn((game.sound as unknown as { context?: AudioContext }).context, 'stunChime')),
 });
 
 // --- Fullscreen button (top right, next to the wiki); hidden where the browser has no Fullscreen API (iPhone: shows an Add to Home Screen hint) ---
 createFullscreenButton(document.getElementById('ui-root')!);
 
-// --- Wiki (top right): opens over the game; the battle is paused while it is open ---
-const battleNow = (): BattleScene | null => (game.scene.isActive(BattleScene.KEY) ? (game.scene.getScene(BattleScene.KEY) as BattleScene) : null);
-const wiki = new WikiPanel(document.getElementById('ui-root')!, {
+// --- Wiki / Codex: opens over the game; the battle is paused while it is open (code + catalog load on first open: src/wiki/open.ts) ---
+/** Açık savaş sahnesi (kodu henüz inmemiş yer tutucu sahne sayılmaz: src/game/lazy-scenes.ts). */
+const battleNow = (): BattleScene | null => {
+  const s = game.scene.isActive('BattleScene') ? game.scene.getScene('BattleScene') : null;
+  return s && !('isLoading' in s) ? (s as BattleScene) : null;
+};
+installWiki(document.getElementById('ui-root')!, {
   onOpen: () => {
     lockInput('wiki');
     debugState.uiPaused = true;
@@ -134,7 +146,7 @@ new GameMenu(document.getElementById('ui-root')!, {
   newGame: () => startNewGame(game),
   teamSelect: () => startTeamSelect(game),
   mainMenu: () => startMainMenu(game),
-  codex: () => wiki.setOpen(true),
+  codex: () => openWiki(),
   retreat: () => battleNow()?.campaign?.retreat?.(),
   retreatLabel: () => battleNow()?.campaign?.retreatLabel,
   onOpen: () => {
@@ -146,12 +158,7 @@ new GameMenu(document.getElementById('ui-root')!, {
     battleNow()?.applyDebugTiming();
   },
 });
-registerDebugTools({ game, debug });
-debug.registerMenuControls();
 
 // Derin bağlantı: ?wiki=<bölüm> wiki'yi o bölümde açar (assets, sounds, animations, icons, art, palette, legacy, classes, skills...); ?wiki= boşsa başlangıç
 const wikiParam = new URLSearchParams(window.location.search).get('wiki');
-if (wikiParam !== null) {
-  wiki.show(wikiParam);
-  wiki.setOpen(true);
-}
+if (wikiParam !== null) openWiki(wikiParam || undefined);

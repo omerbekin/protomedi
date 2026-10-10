@@ -66,18 +66,21 @@ export function setStageMetrics(m: StageMetrics): void {
 /** main.ts: her sahne kurulunca (create sonrası) kamera + yazı keskinliği + ilk yerleşim. */
 export function installStage(game: Phaser.Game): void {
   gameRef = game;
-  const hook = (): void => {
-    for (const scene of game.scene.scenes) {
-      const ev = scene.sys.events;
-      if ((ev as unknown as { __stage?: boolean }).__stage) continue;
-      (ev as unknown as { __stage?: boolean }).__stage = true;
-      ev.on(Phaser.Scenes.Events.ADDED_TO_SCENE, (obj: Phaser.GameObjects.GameObject) => {
-        if (stageView.zoom > 1) sharpenText(obj);
-      });
-      ev.on(Phaser.Scenes.Events.CREATE, () => applyScene(scene));
-      if (scene.sys.isActive()) applyScene(scene); // önyüklemede create'i bu kancadan önce bitmiş sahne
-    }
-  };
+  const hook = (): void => hookStageScenes(game);
   if (game.isBooted && game.scene.scenes.length) hook();
   game.events.once(Phaser.Core.Events.READY, hook);
+}
+
+/** Henüz bağlanmamış sahnelere kancaları takar (açılışta; sonradan eklenen sahneler için src/game/lazy-scenes.ts da çağırır). */
+export function hookStageScenes(game: Phaser.Game): void {
+  for (const scene of game.scene.scenes) {
+    const ev = scene.sys.events;
+    if ((ev as unknown as { __stage?: boolean }).__stage) continue;
+    (ev as unknown as { __stage?: boolean }).__stage = true;
+    ev.on(Phaser.Scenes.Events.ADDED_TO_SCENE, (obj: Phaser.GameObjects.GameObject) => {
+      if (stageView.zoom > 1) sharpenText(obj);
+    });
+    ev.on(Phaser.Scenes.Events.CREATE, () => applyScene(scene));
+    if (scene.sys.isActive()) applyScene(scene); // önyüklemede create'i bu kancadan önce bitmiş sahne
+  }
 }

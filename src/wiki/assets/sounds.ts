@@ -1,6 +1,7 @@
 import { audioSettings, playSfxOn, synthSfx } from '../../game/audio';
 import { iconUrl } from '../../ui/dom-icons';
-import { MASTER_GAIN, type Catalog, type SoundEntry } from '../../gallery/catalog';
+import { MASTER_GAIN, UI_SOUND_GROUP, type Catalog, type SoundEntry } from '../../gallery/catalog';
+import { previewUiSound, UI_AUDIO, type UiSoundKind } from '../../ui/ui-sound';
 import { applyFilter, chipBar, fmtSec, h, isolateKeys, searchable, type SectionApi } from '../../gallery/dom';
 
 /** Galerinin tek AudioContext'i: ilk tıklamada başlar (tarayıcı kilidi). */
@@ -20,12 +21,23 @@ export function playSound(id: string, card?: HTMLElement | null): void {
   window.setTimeout(() => card.classList.remove('playing'), Math.min(dur, 2500));
 }
 
-/** Sesi çevrimdışı çalıp tepe genliğini ölçer (0..1, ana ses dahil). */
+const isUi = (s: SoundEntry): boolean => s.group === UI_SOUND_GROUP;
+
+/** Codex kartındaki ▶: arayüz sesi ui-sound üzerinden (seyreltmesiz, UI seviyesi kapalı olsa da duyulur), diğerleri oyunun skill sesi. */
+function playEntry(s: SoundEntry, card?: HTMLElement | null): void {
+  if (!isUi(s)) return playSound(s.id, card);
+  previewUiSound(s.id as UiSoundKind, audioContext(), true);
+  if (!card) return;
+  card.classList.add('playing');
+  window.setTimeout(() => card.classList.remove('playing'), Math.max(200, s.duration * 1000));
+}
+
+/** Sesi çevrimdışı çalıp tepe genliğini ölçer (0..1, ana ses dahil; arayüz seslerinde UI master x varsayılan seviye). */
 async function measurePeak(entry: SoundEntry): Promise<number> {
   const rate = 44100;
   const off = new OfflineAudioContext(1, Math.ceil((entry.duration + 0.4) * rate), rate);
   const master = off.createGain();
-  master.gain.value = MASTER_GAIN;
+  master.gain.value = isUi(entry) ? UI_AUDIO.master * (UI_AUDIO.defaultLevel / 10) : MASTER_GAIN;
   master.connect(off.destination);
   synthSfx(off, master, entry.def, 0);
   const buf = await off.startRendering();
@@ -45,11 +57,12 @@ export function mountSounds(cat: Catalog): SectionApi {
   const cards = new Map<string, HTMLElement>();
   const peakEls = new Map<string, HTMLElement>();
 
+  const all = [...cat.sounds, ...cat.uiSounds];
   const groups = new Map<string, SoundEntry[]>();
-  for (const s of cat.sounds) groups.set(s.group, [...(groups.get(s.group) ?? []), s]);
-  // Önce class/çağrı grupları (alfabetik), sonra Shared, en sonda kullanılmayanlar
+  for (const s of all) groups.set(s.group, [...(groups.get(s.group) ?? []), s]);
+  // Önce arayüz (menü) sesleri, sonra class/çağrı grupları (alfabetik), sonra Shared, en sonda kullanılmayanlar
   const order = [...groups.keys()].sort((a, b) => {
-    const rank = (g: string): number => (g === 'Unused / UI' ? 2 : g === 'Shared' ? 1 : 0);
+    const rank = (g: string): number => (g === UI_SOUND_GROUP ? -1 : g === 'Unused / UI' ? 2 : g === 'Shared' ? 1 : 0);
     return rank(a) - rank(b) || a.localeCompare(b);
   });
 
@@ -65,8 +78,8 @@ export function mountSounds(cat: Catalog): SectionApi {
   measure.addEventListener('click', async () => {
     measure.disabled = true;
     let i = 0;
-    for (const s of cat.sounds) {
-      status.textContent = `Measuring ${++i}/${cat.sounds.length}...`;
+    for (const s of all) {
+      status.textContent = `Measuring ${++i}/${all.length}...`;
       const peak = await measurePeak(s);
       const el = peakEls.get(s.id);
       if (el) {
@@ -89,7 +102,7 @@ export function mountSounds(cat: Catalog): SectionApi {
 
   const countEl = h('span', { class: 'count' });
   root.append(
-    h('div', { class: 'section-head' }, h('h2', { text: 'Sounds' }), countEl, h('span', { class: 'muted small', text: 'WebAudio synthesis from data/audio.json' })),
+    h('div', { class: 'section-head' }, h('h2', { text: 'Sounds' }), countEl, h('span', { class: 'muted small', text: 'WebAudio synthesis from data/audio.json (menu sounds: data/audio-ui.json)' })),
     h('div', { class: 'toolbar' }, h('label', { class: 'inline' }, volLabel, vol), measure, status),
     chips,
   );
@@ -111,7 +124,7 @@ export function mountSounds(cat: Catalog): SectionApi {
         if (token !== stopToken) break;
         const card = cards.get(s.id);
         if (card?.hidden) continue; // süzgeçle gizlenen ses atlanır
-        playSound(s.id, card);
+        playEntry(s, card);
         await new Promise((r) => setTimeout(r, Math.min(s.duration, 2.5) * 1000 + 250));
       }
       delete playAll.dataset['running'];
@@ -121,7 +134,9 @@ export function mountSounds(cat: Catalog): SectionApi {
     for (const s of list) {
       const peak = h('span', { class: 'peak muted small', text: 'peak -' });
       peakEls.set(s.id, peak);
-      const users = s.usedBy.length
+      const users = isUi(s)
+        ? [h('span', { class: 'muted small', text: `Menu sound: ${s.desc ?? ''}` })]
+        : s.usedBy.length
         ? s.usedBy.map((u) => h('span', { class: 'tag', title: `${u.name} (${u.owner.name})` }, h('img', { class: 'tag-icon pixelated', attrs: { src: iconUrl(u.icon, '#e8c47e'), alt: '' } }), `${u.name}`))
         : [h('span', { class: 'muted small', text: 'Not used by any skill (backup / UI)' })];
       const card = searchable(
@@ -131,7 +146,7 @@ export function mountSounds(cat: Catalog): SectionApi {
           h(
             'div',
             { class: 'row' },
-            h('button', { class: 'play', text: '▶', title: `Play ${s.id}`, attrs: { type: 'button', 'aria-label': `Play ${s.label}` }, on: { click: () => playSound(s.id, card) } }),
+            h('button', { class: 'play', text: '▶', title: `Play ${s.id}`, attrs: { type: 'button', 'aria-label': `Play ${s.label}` }, on: { click: () => playEntry(s, card) } }),
             h('div', { class: 'grow' }, h('div', { class: 'card-title', text: s.label }), h('div', { class: 'muted small mono', text: s.id })),
             h('div', { class: 'right small' }, h('div', { text: fmtSec(s.duration) }), peak),
           ),
@@ -159,13 +174,13 @@ export function mountSounds(cat: Catalog): SectionApi {
 
   const refresh = (): number => {
     const n = applyFilter(body, query, group);
-    countEl.textContent = `${n} / ${cat.sounds.length}`;
+    countEl.textContent = `${n} / ${all.length}`;
     return n;
   };
   return {
     id: 'sounds',
     title: 'Sounds',
-    total: cat.sounds.length,
+    total: all.length,
     root,
     setQuery: (q) => {
       query = q;

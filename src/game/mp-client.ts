@@ -6,15 +6,42 @@
 import type Phaser from 'phaser';
 import type { ChoiceLike } from '../engine';
 import { resolveSignalingUrl, iceServersFor } from '../net/config';
-import { FakeOpponent } from '../net/fake-opponent';
 import { generateLobbyCode, generatePeerId, inviteLink, isValidLobbyCode, isValidPeerId } from '../net/lobby-code';
-import { MpSession, type MatchResult, type Role, type SessionEvent } from '../net/session';
+import type { FakeOpponent } from '../net/fake-opponent';
+import type { MatchResult, MpSession, Role, SessionEvent } from '../net/session';
 import { sanitizeName } from '../net/protocol';
-import { WebRtcLink, type LinkError } from '../net/webrtc-link';
+import type { LinkError, WebRtcLink } from '../net/webrtc-link';
 import { setBanner, toast } from '../ui/mp-overlay';
 import type { MpBattleHooks, MpResultInfo, MpTeamHooks } from './mp-hooks';
 
 export const MP_SCENE = 'MultiplayerScene';
+
+/** Sayfa açılışında bir kez: davet linki (?lobby=KOD) ya da yenilenen sekmenin yarım kalan lobisi. main.ts ayarlar, MultiplayerScene bir kez
+ *  alır (sahnenin kodu ayrı parçada sonradan yüklendiği için burada durur). */
+export type MultiplayerBoot = { join: string } | { rejoin: true } | null;
+let bootIntent: MultiplayerBoot = null;
+export const setMultiplayerBoot = (v: MultiplayerBoot): void => {
+  bootIntent = v;
+};
+export const takeMultiplayerBoot = (): MultiplayerBoot => {
+  const v = bootIntent;
+  bootIntent = null;
+  return v;
+};
+/** Ağ katmanının ağır kısmı ayrı kod parçasında (src/game/mp-net.ts): ilk Host / Join'de (ya da menü hazır olunca arka planda) yüklenir. */
+type NetModule = typeof import('./mp-net');
+let net: NetModule | null = null;
+let netLoading: Promise<NetModule> | null = null;
+export function loadNet(): Promise<NetModule> {
+  if (!netLoading) {
+    netLoading = import('./mp-net').then((m) => (net = m));
+    netLoading.catch(() => {
+      netLoading = null;
+    });
+  }
+  return netLoading;
+}
+
 const SCENES = ['BattleScene', 'TeamSelectScene', 'CampaignMapScene', 'MainMenuScene', MP_SCENE];
 const STORE_KEY = 'protomedi.mp';
 /** Yenilenen sekme bu süre içinde aynı lobiye kendiliğinden döner. */
@@ -127,6 +154,8 @@ export class MpClient {
   private endedCbs = new Set<(r: MpResultInfo) => void>();
   private teamCbs = new Set<() => void>();
   private statusCbs = new Set<() => void>();
+  /** Ağ kodu beklenirken verilen son kurma isteği (eskisi iptal). */
+  private netTicket = 0;
 
   attachGame(game: Phaser.Game): void {
     this.game = game;
@@ -199,7 +228,27 @@ export class MpClient {
     this.begin(s.role, s.code, true);
   }
 
+  /** Ağ kodu henüz inmediyse: 'connecting' gösterilir, kod inince istek sürer (arada Leave / başka kurma olduysa çalışmaz). */
+  private withNet(run: () => void): boolean {
+    if (net) return false;
+    const ticket = ++this.netTicket;
+    this.reset();
+    this.state = 'connecting';
+    this.changed();
+    loadNet().then(
+      () => {
+        if (ticket === this.netTicket && this.state === 'connecting' && !this.session) run();
+      },
+      () => {
+        if (ticket === this.netTicket && this.state === 'connecting' && !this.session) this.fail('Connection error');
+      },
+    );
+    return true;
+  }
+
   private begin(role: Role, code: string, recovering: boolean): void {
+    if (this.withNet(() => this.begin(role, code, recovering))) return;
+    this.netTicket++;
     this.reset();
     const url = this.serverUrl();
     if (!url) {
@@ -212,7 +261,7 @@ export class MpClient {
     this.state = 'connecting';
     this.makeSession(role, recovering);
     this.channelMode = null;
-    const link = new WebRtcLink(url, code, role, this.peerId, iceServersFor(url), {
+    const link = new net!.WebRtcLink(url, code, role, this.peerId, iceServersFor(url), {
       onWelcome: () => {
         this.state = 'lobby';
         writeStore({ code: this.code, role, peerId: this.peerId, at: Date.now() });
@@ -245,12 +294,14 @@ export class MpClient {
 
   /** Debug: sunucusuz, aynı sekmede sahte rakiple lobi. */
   hostWithFake(): void {
+    if (this.withNet(() => this.hostWithFake())) return;
+    this.netTicket++;
     this.reset();
     this.role = 'host';
     this.code = 'LOCAL';
     this.state = 'lobby';
     const s = this.makeSession('host', false);
-    const fake = new FakeOpponent(s, { thinkMs: 900, returnAfterMs: 10_000 });
+    const fake = new net!.FakeOpponent(s, { thinkMs: 900, returnAfterMs: 10_000 });
     fake.setLatency(this.latencyMs);
     fake.stayAway = this.fakeStaysAway;
     this.fake = fake;
@@ -259,7 +310,7 @@ export class MpClient {
   }
 
   private makeSession(role: Role, recovering: boolean): MpSession {
-    const s = new MpSession({ role, random: cryptoRandom, recovering, name: loadName() });
+    const s = new net!.MpSession({ role, random: cryptoRandom, recovering, name: loadName() });
     this.session = s;
     this.offSession = s.on((e) => this.onSession(e));
     this.timer = window.setInterval(() => {
@@ -279,7 +330,15 @@ export class MpClient {
 
   /** Bilerek ayrıl (Leave / Main Menu): rakibe ve sunucuya haber verilir. */
   leave(): void {
-    if (!this.session) return;
+    if (!this.session) {
+      // ağ kodu inerken vazgeçildi: bekleyen kurma iptal
+      if (this.state === 'connecting') {
+        this.netTicket++;
+        this.state = 'idle';
+        this.changed();
+      }
+      return;
+    }
     this.session.leave();
     writeStore(null);
     // Bağlantı 'leave' mesajı gittikten sonra kapanır

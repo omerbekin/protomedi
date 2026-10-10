@@ -1115,12 +1115,21 @@ function scoreOption(ctx: ValueContext, profile: AiProfile, o: Option): void {
         if (f && keep(f) < 1) add('overkill', -d * (1 - keep(f)));
       }
     }
+    // Boşuna çağrı hasarı (vc.resummonShare): çağırıcısı ufukta yeniden çağırabilen çağrıya giden hasar ilerleme sayılmaz, yalnızca payı kalır
+    for (const [uid, d] of Object.entries(o.dmgBy)) {
+      const f = get(uid);
+      if (!f || f.side === actor.side || d <= 0) continue;
+      const share = ctx.resummonShare(f);
+      if (share < 1) add('futile', -d * (1 - share));
+      // Tıkanmada çağrı olmayan düşmana giden hasar ek ağırlık alır (odak ateşi: çağırıcı / şifacı ayakta kaldıkça savaş bitmez)
+      else if (!f.summoned && ctx.stall() > 0) add('stall', d * ctx.stall() * (vc.stallFocus ?? 0));
+    }
     // Öldürme: ihtimal x hedefin kalan katkısı (ufuk); öldürülen düşman tehlikedeki bir dostu öldürecek olandıysa kurtarma değeri de (K2)
     for (const [uid, p] of Object.entries(o.killP)) {
       const f = get(uid);
       if (!f || p <= 0) continue;
       if (rules.killMinChance !== undefined && p < rules.killMinChance) continue; // Easy: yalnızca kesin öldürme
-      add('kill', p * vc.killWeight * ctx.contribution(f) * keep(f));
+      add('kill', p * vc.killWeight * ctx.contribution(f) * ctx.resummonShare(f) * keep(f));
       for (const i of ctx.hits) {
         if (i.foe !== uid || !i.before) continue;
         const a = get(i.target);
@@ -1133,8 +1142,8 @@ function scoreOption(ctx: ValueContext, profile: AiProfile, o: Option): void {
       const f = get(uid);
       if (!f || f.side === actor.side || d <= 0) continue;
       const left = 1 - (o.killP[uid] ?? 0);
-      const focus = 1 + (rules.focusFire ?? 0) * (rules.focusFire ? ctx.alliesOn(f) : 0);
-      add('pressure', left * vc.pressureShare * ctx.contribution(f) * Math.min(1, d / Math.max(1, f.hp + f.shield + f.magicShield)) * focus * keep(f));
+      const focus = (1 + (rules.focusFire ?? 0) * (rules.focusFire ? ctx.alliesOn(f) : 0)) * (f.summoned ? 1 : 1 + ctx.stall() * (vc.stallFocus ?? 0));
+      add('pressure', left * vc.pressureShare * ctx.contribution(f) * ctx.resummonShare(f) * Math.min(1, d / Math.max(1, f.hp + f.shield + f.magicShield)) * focus * keep(f));
     }
     // Şifa (fazla şifa sayılmaz: önizleme eksik canla sınırlar) + tehlikedeki dostu kurtarma
     add('heal', o.heal);
@@ -1185,7 +1194,14 @@ function scoreOption(ctx: ValueContext, profile: AiProfile, o: Option): void {
       o.summonValue = v;
       add('summon', v);
     }
-    add('bond', o.bond);
+    // Bağ / şifa yeniden çağrılabilir bir çağrıya gidiyorsa (aynı resummonShare): yerine yenisi gelebilecek birimi ayakta tutmanın değeri düşük
+    const bondShare = o.bond > 0 && o.targets[0] ? ctx.resummonShare(o.targets[0]) : 1;
+    add('bond', o.bond * bondShare);
+    for (const [uid, h] of Object.entries(o.healBy)) {
+      const a = get(uid);
+      const share = a && a.side === actor.side ? ctx.resummonShare(a) : 1;
+      if (share < 1 && h > 0) add('futile', -h * (1 - share));
+    }
     add('curse', o.curse);
     add('mitigation', o.mitigation);
     add('cleanse', cleanseValue(ctx, profile, o));
@@ -1837,6 +1853,15 @@ function chooseGlobal(battle: Battle, actor: Combatant, profile: AiProfile, g: A
     return best.choice;
   }
   if (danger) {
+    // Tehlikede de class hamlesi HİÇ yoksa pas geçmek yerine (multiplayer kuralı: kullanılabilir eylem varken pas yok) Skip Turn, o da yoksa Rest:
+    // ikisi de pastan kötü olamaz (Skip sonraki turu öne çeker, Rest MP verir)
+    if (!pick) {
+      const fallback = battle.canUseGlobal(actor.uid, 'skip_turn').ok ? 'skip_turn' : canRest.ok ? 'rest' : null;
+      if (fallback) {
+        if (trace) trace.outcome = `danger: no class move; ${fallback} instead of passing`;
+        return { skillId: fallback, reason: fallback === 'skip_turn' ? 'skip' : 'rest' };
+      }
+    }
     if (trace) trace.outcome = 'danger: no rest/skip; class move stands';
     return null;
   }
@@ -2087,7 +2112,7 @@ export function explainChoice(battle: Battle, actorUid: string, config: AiConfig
     final,
     why,
     steps,
-    winnerRule: `value scale (difficulty ${difficulty}, horizon ${vc.horizon} turns): score = damage + pressure + kill + save + heal + shield + revive + control + protect + summon + bond + curse + mitigation + cleanse + burn + silence + tempo + deny + anchor + position (+ buff for self-buffs) - overkill - patience - cost - cooldown; ${rules.pickTop && rules.pickTop > 1 ? `picks among the best ${rules.pickTop} (deterministic, seed + turn + unit)` : 'highest wins'}`,
+    winnerRule: `value scale (difficulty ${difficulty}, horizon ${vc.horizon} turns): score = damage + pressure + kill + save + heal + shield + revive + control + protect + summon + bond + curse + mitigation + cleanse + burn + silence + tempo + deny + anchor + position (+ buff for self-buffs) + stall - overkill - futile - patience - cost - cooldown; ${rules.pickTop && rules.pickTop > 1 ? `picks among the best ${rules.pickTop} (deterministic, seed + turn + unit)` : 'highest wins'}`,
     candidates,
     rejected,
     reserves: trace.reserves.map((r) => ({ skill: r.skill, needMp: r.need, inTurns: r.turns })),

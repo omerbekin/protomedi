@@ -5,6 +5,8 @@
  * Ekran bir KAYNAK (GearSource) ile çalışır: sefer (`openGearScreen`, CampaignState) ve endless (`openGear` + src/game/endless-gear.ts) aynı ekranı besler.
  * Oyun içi metinler İngilizce.
  */
+import { closeDom } from './motion';
+import { uiSound } from './ui-sound';
 import './gear.css';
 import { activeHeroes, discardItem, discardNeedsConfirm, equipBest, equipItem, takeLeftover, unequipItem, type CampaignState, type Hero } from '../campaign';
 import { content } from '../engine';
@@ -21,7 +23,10 @@ import {
   heroPanel,
   heroStats,
   itemDef,
-  itemLines,
+  instanceLines,
+  effectLine,
+  instanceStats,
+  statRange,
   itemSubtitle,
   itemValue,
   ITEMS,
@@ -158,12 +163,13 @@ export function openGearScreen(root: HTMLElement, o: GearOptions): () => void {
 
 /** Gear ekranı: sol kahramanlar, orta 6 yuva + statlar, sağ torba + seçilen item kartı. Kaynaktan beslenir (sefer / endless). */
 export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string; tutorial?: boolean; onClose?: () => void } = {}): () => void {
-  const overlay = el('div', 'gr-overlay');
+  const overlay = el('div', 'gr-overlay el-modal'); // ortak pencere hareketi (elegant.css > .el-modal, src/ui/motion.ts)
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-label', 'Gear');
-  const panel = el('div', 'gr-panel');
+  const panel = el('div', 'gr-panel el-modal-panel');
   overlay.append(panel);
   root.append(overlay);
+  uiSound('open');
   lockInput('gear');
   let heroId = o.hero ?? src.heroes()[0]?.id ?? '';
   let sel: Selection = null;
@@ -227,8 +233,11 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
     }
   });
 
+  let closing = false;
   const close = (): void => {
-    overlay.remove();
+    if (closing) return;
+    closing = true;
+    closeDom(overlay, () => overlay.remove());
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('pointermove', onMove);
     document.removeEventListener('pointerup', onUp);
@@ -281,6 +290,7 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
       const fam = ITEMS.weaponFamilies.find((f) => f.id === d.family);
       sel = { kind: 'bag', uid };
       shakeUid = uid;
+      uiSound('error');
       flash(`${className(h.class)} cannot use ${fam?.name ?? 'this weapon'}.`);
       render();
       return;
@@ -292,6 +302,7 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
       return;
     }
     sel = null;
+    uiSound('equip');
     apply(() => src.equip(targetHero, uid));
   };
   let lastTap: { key: string; at: number } | null = null;
@@ -356,6 +367,7 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
     if (act.kind === 'equip') tryEquip(act.heroId, act.uid);
     else if (act.kind === 'unequip') {
       sel = null;
+      uiSound('equip');
       apply(() => src.unequip(act.heroId, act.slot));
     } else if (d.src.kind === 'bag' && act.reason === 'Cannot use' && tg.kind !== 'bag') tryEquip(tg.heroId, d.src.uid);
   };
@@ -472,8 +484,8 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
       if (inst) cell.dataset['drag'] = `slot:${k}`;
       cell.append(slotIcon(d, k, d ? rarityColor(inst) : null, 1.3));
       const txt = el('div', 'gr-slot-text');
-      txt.append(el('div', 'gr-slot-name', d ? d.name : slotDef(k).name), el('div', 'gr-slot-sub', d ? itemLines(d).join(', ') : 'Empty'));
-      if (d) cell.title = `${d.name}: ${itemLines(d).join(', ')}`;
+      txt.append(el('div', 'gr-slot-name', d ? d.name : slotDef(k).name), el('div', 'gr-slot-sub', d && inst ? instanceLines(inst).join(', ') : 'Empty'));
+      if (d && inst) cell.title = `${d.name}: ${instanceLines(inst).join(', ')}`;
       cell.append(txt);
       slots.append(cell);
     }
@@ -572,13 +584,17 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
       name.style.color = rarityDef(selDef.rarity).color;
       card.append(name, el('div', 'gr-card-sub', itemSubtitle(selDef)));
       const lines = el('div', 'gr-card-lines');
+      // Zarlanmış değer + aralık: "+4 Armor (3–5)" (Ömer 2026-10-10)
+      const rolled = instanceStats(selInst);
       for (const k of STAT_IDS) {
-        const v = selDef.stats[k];
+        const v = rolled[k];
         if (!v) continue;
-        const line = statLineEl(k, v, 'gr-card-line gr-line');
+        const line = statLineEl(k, v, 'gr-card-line gr-line', statRange(selDef, k));
         line.dataset['stat'] = k;
         lines.append(line);
       }
+      const fx = effectLine(selDef); // Epic etkisi (madde 292)
+      if (fx) lines.append(el('div', 'gr-card-line gr-line gr-effect', fx));
       card.append(lines, el('div', 'gr-card-value', `Value ${itemValue(selDef)} gold`));
       const actions = el('div', 'gr-card-actions');
       if (sel?.kind === 'bag') {
@@ -598,6 +614,7 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
           actions.append(
             btn('gr-btn primary', pc.lost ? 'Equip anyway' : 'Equip', () => {
               sel = null;
+              uiSound('equip');
               apply(() => src.equip(hero.id, selInst.uid));
             }),
           );
@@ -619,6 +636,7 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
             const slot = sel?.kind === 'slot' ? sel.slot : undefined;
             if (!slot) return;
             sel = null;
+            uiSound('equip');
             apply(() => src.unequip(hero.id, slot));
           }),
         );
@@ -653,13 +671,13 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
 
 /** Ortak küçük kart (Spoils / teslim). */
 function smallCard(root: HTMLElement, title: string, subtitle: string, items: string[], extra: string[], buttons: Array<{ label: string; primary?: boolean; run: () => void }>): () => void {
-  const overlay = el('div', 'gr-overlay gr-small');
-  const panel = el('div', 'gr-panel gr-mini');
+  const overlay = el('div', 'gr-overlay gr-small el-modal');
+  const panel = el('div', 'gr-panel gr-mini el-modal-panel');
   overlay.append(panel);
   root.append(overlay);
   lockInput('gear-card');
   const close = (): void => {
-    overlay.remove();
+    closeDom(overlay, () => overlay.remove());
     unlockInput('gear-card');
   };
   panel.append(el('div', 'gr-title', title));
@@ -684,7 +702,7 @@ function smallCard(root: HTMLElement, title: string, subtitle: string, items: st
  * Item stat satırı: stat ikonu + "+2 Magic Armor" (Gear kartı, Spoils / teslim kartları; ikon kaynağı savaş HUD'ıyla aynı:
  * src/ui/stat-tips.ts > statIconUrl). Phaser ekranları (Endless ödül / tüccar) `statIcon(id)` ile aynı ikonu çizer.
  */
-export function statLineEl(k: string, v: number, cls = 'gr-line'): HTMLDivElement {
+export function statLineEl(k: string, v: number, cls = 'gr-line', range?: [number, number]): HTMLDivElement {
   const row = el('div', cls);
   const url = statIconUrl(k);
   if (url) {
@@ -694,7 +712,7 @@ export function statLineEl(k: string, v: number, cls = 'gr-line'): HTMLDivElemen
     i.draggable = false;
     row.append(i);
   }
-  row.append(el('span', '', statLine(k as (typeof STAT_IDS)[number], v)));
+  row.append(el('span', '', statLine(k as (typeof STAT_IDS)[number], v, range)));
   return row;
 }
 
@@ -709,6 +727,8 @@ function itemRow(id: string, gone = false): HTMLDivElement {
   const lines = el('div', 'gr-mini-lines');
   lines.append(el('span', 'gr-mini-subt', itemSubtitle(d)));
   for (const k of STAT_IDS) if (d.stats[k]) lines.append(statLineEl(k, d.stats[k]!, 'gr-line inline'));
+  const fx = effectLine(d);
+  if (fx) lines.append(el('div', 'gr-line inline gr-effect', fx));
   t.append(n, lines);
   row.append(t);
   return row;
@@ -728,15 +748,15 @@ export interface SpoilsHooks {
  * kart açıkken oyuncu torbadan item atıp (Rare+ onaylı) yer açabilir ve "Take" ile alabilir. Kart kapanınca geride kalanlar kaybolur (madde 280).
  */
 export function showSpoils(root: HTMLElement, on: SpoilsHooks): () => void {
-  const overlay = el('div', 'gr-overlay gr-small');
-  const panel = el('div', 'gr-panel gr-mini');
+  const overlay = el('div', 'gr-overlay gr-small el-modal');
+  const panel = el('div', 'gr-panel gr-mini el-modal-panel');
   overlay.append(panel);
   root.append(overlay);
   lockInput('gear-card');
   let pick = '';
   let confirm = '';
   const close = (): void => {
-    overlay.remove();
+    closeDom(overlay, () => overlay.remove());
     unlockInput('gear-card');
   };
   const render = (): void => {

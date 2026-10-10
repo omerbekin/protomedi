@@ -36,6 +36,6 @@ describe('primary bonusu: normal kural + önceden uyarı', () => {
   });
 
   it('güç katmanı primary için özel bayrak vermez (QB/MP/düşman kuralıyla aynı)', () => {
-    expect(loadout({ class: 'paladin', equipment: { boots: { uid: 'i1', id: 'turnshoes' } } }).modifiers).toEqual({ armorAdd: 1 });
+    expect(loadout({ class: 'paladin', equipment: { boots: { uid: 'i1', id: 'turnshoes' } } }).modifiers).toEqual({ evasionAdd: 0.02 });
   });
 });

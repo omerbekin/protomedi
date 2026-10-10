@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { motion } from '../ui/motion';
 import { content } from '../engine';
 import { CONFIG, deleteSave, deleteSlot, listSaves, slotSummaries, type CampaignMode, type Difficulty, type SaveEntry, type SlotSummary } from '../campaign';
 import { storage } from './campaign-session';
@@ -80,7 +81,8 @@ export function openSlotBrowser(scene: Phaser.Scene, layer: Phaser.GameObjects.C
   let closed = false;
 
   // --- zemin: tüm alanı kaplayan örtü (alttaki tıklamaları yutar) + soldan gölge ---
-  const dim = scene.add.rectangle(FULL_X0, 0, FULL_W, H, 0x050302, 0.95).setOrigin(0, 0).setInteractive();
+  // Ömer 2026-10-10: tam ekran değil, ana menü sahnesinin (ya da haritanın) üstünde yarı saydam açılır; sol gölge yuva satırlarını okunur tutar
+  const dim = scene.add.rectangle(FULL_X0, 0, FULL_W, H, 0x050302, 0.5).setOrigin(0, 0).setInteractive();
   const shade = scene.add.graphics();
   const drawShade = () => {
     shade.clear();
@@ -361,8 +363,10 @@ export function openSlotBrowser(scene: Phaser.Scene, layer: Phaser.GameObjects.C
     },
   };
   render();
-  root.setAlpha(0);
-  scene.tweens.add({ targets: root, alpha: 1, duration: 220, ease: EL.EASE });
+  // Ortak panel geçişi (data/ui-motion.json > panel; Reduced motion = anında)
+  const pm = motion('panel');
+  root.setAlpha(pm.ms > 0 ? 0 : 1);
+  if (pm.ms > 0) scene.tweens.add({ targets: root, alpha: 1, duration: pm.ms, ease: EL.EASE });
   return api;
 }
 

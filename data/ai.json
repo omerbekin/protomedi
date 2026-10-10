@@ -17,7 +17,11 @@
     "reserveValueShare": 0.85,
     "manaHorizonMult": 2,
     "advanceMeleeShare": 0.5,
-    "advanceRiskShare": 0.5
+    "advanceRiskShare": 0.5,
+    "resummonShare": 0.4,
+    "stallTurns": 150,
+    "stallRamp": 50,
+    "stallFocus": 3
   },
   "difficulty": {
     "easy": {

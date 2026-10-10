@@ -13,7 +13,8 @@ import { GRID, PxGrid, spriteCells, type Cell } from './pixel-art';
 import { SHARED_KEY, statusOwner, wantsV2 } from './asset-versions';
 import { ICONS_V2 } from './art-v2/icons-index';
 import { V2_DEFAULT_SIZE, isV2Image, type V2Sprite, type V2SpriteEntry } from './art-v2/types';
-import { ICON_IMAGE_SIZE, iconImageUrl } from './icon-image-files';
+import { ICON_IMAGE_SIZE, STAT_IMAGE_TEXTURE, iconImageUrl, statImage } from './icon-image-files';
+import { STAT_ICON_PREFIX, statIconFallback } from '../ui/stat-icons';
 
 export interface ResolvedSprite {
   /** Doku/önbellek anahtarı parçası: v1'de çıplak ad (eski anahtarlar aynen), v2'de `v2:<sahip>:<ad>`. */
@@ -25,6 +26,13 @@ export interface ResolvedSprite {
   cells: () => Cell[][] | null;
   /** GÖRSEL v2 ikonu (hazır PNG, art-v2 `{ image }`): dosyanın URL'si. Varsa çizim yerine bu resim kullanılır (cells null). */
   image?: string;
+  /**
+   * Boyalı (yumuşak ölçeklenen) görsel: stat ikonları. Phaser dokusu yumuşatmayla (LINEAR) çizilir, DOM tam boy dosyayı (`domImage`)
+   * `#smooth` ekiyle alır (style.css: pixelated yerine tarayıcı küçültmesi). Defender v2 ikonları gibi piksel görseller NEAREST kalır.
+   */
+  smooth?: boolean;
+  /** DOM'da kullanılacak dosya (verilmezse `image`). */
+  domImage?: string;
 }
 
 /** v2 efekt sprite'ının tam adı: `sprite()` / `ensureIcon` / `iconUrl` bu adı doğrudan çözer. */
@@ -86,6 +94,14 @@ const sizeOf = (e: V2Sprite): number => Math.max(8, Math.round(e.size ?? V2_DEFA
  * Adı (ve isteğe bağlı sahibini) seçili sürüme göre çözer. Bilinmeyen ad v1 olarak döner (cells() null: çağıran yer tutucu çizer).
  */
 export function resolveSprite(name: string, owner?: string | null): ResolvedSprite {
+  if (name.startsWith(STAT_ICON_PREFIX)) {
+    // stat ikonu: boyalı PNG (assets/stat-icons), yoksa kodla çizilen yedek (STAT_ICON / v2:shared:might; doku anahtarı eskisiyle aynı)
+    const kind = name.slice(STAT_ICON_PREFIX.length);
+    const img = statImage(kind);
+    if (img) return { key: name, version: 'v2', size: STAT_IMAGE_TEXTURE, cells: () => null, image: img.small, domImage: img.url, smooth: true };
+    const fb = statIconFallback(kind);
+    return fb ? resolveSprite(fb) : { key: name, version: 'v1', size: GRID, cells: () => null };
+  }
   if (name.startsWith('v2:')) {
     const [, o = '', n = ''] = name.split(':');
     const e = v2Entry(o, n, true);

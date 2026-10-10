@@ -14,7 +14,6 @@ import {
   type CampaignMode,
   type CampaignState,
   type Difficulty,
-  type KV,
   type SaveEntry,
   type SaveKind,
 } from '../campaign';
@@ -32,15 +31,8 @@ export const MAP_SCENE = 'CampaignMapScene';
 export const MENU_SCENE = 'MainMenuScene';
 const BATTLE_SCENE = 'BattleScene';
 
-/** Tarayıcı deposu; kapalıysa (gizli pencere vb.) null: kayıt yapılamaz ama oyun çökmez. */
-export function storage(): KV | null {
-  try {
-    const ls = window.localStorage;
-    return ls ?? null;
-  } catch {
-    return null;
-  }
-}
+export { storage } from './kv-storage';
+import { storage } from './kv-storage';
 
 export const session = {
   state: null as CampaignState | null,

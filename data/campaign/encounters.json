@@ -106,7 +106,7 @@
   "bridge_warden": {
     "name": "The Bridge Warden",
     "units": [
-      { "class": "bridge_warden", "slot": 1, "name": "The Bridge Warden", "tier": "boss", "boss": "giant", "noTierMods": true, "mods": { "spriteScale": 2.2, "actionsPerTurn": 2 } },
+      { "class": "bridge_warden", "slot": 1, "name": "The Bridge Warden", "tier": "boss", "boss": "giant", "noTierMods": true, "mods": { "spriteScale": 2.2, "actionsPerTurn": 2, "hpMult": 0.88 } },
       { "class": "iron_mooring", "slot": 3, "mods": { "spriteScale": 1.5 } },
       { "class": "iron_mooring", "slot": 5, "mods": { "spriteScale": 1.5 } }
     ],

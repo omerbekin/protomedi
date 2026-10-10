@@ -1,9 +1,9 @@
 // Endless koşu durumu ve kuralları (saf; her fonksiyon yeni durum döner, girdiyi değiştirmez). Sayılar data/endless.json'dan.
 import { classes } from '../engine/content';
-import { BAG_SIZE, ITEMS, RARITY_IDS, canEquip, itemDef, itemIP, itemValue, sellValue, type ItemDef, type ItemInstance, type RarityId, type SlotId } from '../progression/items';
+import { BAG_SIZE, ITEMS, RARITY_IDS, canEquip, instanceIP, itemDef, itemIP, itemValue, rollStats, sellValue, type ItemDef, type ItemInstance, type RarityId, type SlotId } from '../progression/items';
 import { bestMoves } from '../progression/equip';
 import { emptyEquipment } from '../progression/items';
-import { ENDLESS, type EndlessConfig, type EndlessHero, type EndlessRun, type RewardCard, type ScoreEntry, type ShopEntry, type WaveKind } from './data';
+import { ENDLESS, type EndlessConfig, type ItemRolls, type EndlessHero, type EndlessRun, type RewardCard, type ScoreEntry, type ShopEntry, type WaveKind } from './data';
 import { rngFor, waveKind, waveSeed, type WavePlan } from './waves';
 import type { SuspendedBattle } from './replay';
 import { relicOffer, victoryHealOf } from './relics';
@@ -42,10 +42,7 @@ export const heroOf = (run: EndlessRun, id: string): EndlessHero | undefined => 
 export function gearScore(run: Pick<EndlessRun, 'heroes'>): number {
   let ip = 0;
   for (const h of run.heroes)
-    for (const inst of Object.values(h.equipment)) {
-      const d = inst ? itemDef(inst.id) : undefined;
-      if (d) ip += itemIP(d);
-    }
+    for (const inst of Object.values(h.equipment)) if (inst && itemDef(inst.id)) ip += instanceIP(inst);
   return Math.round(ip * 10) / 10;
 }
 
@@ -192,7 +189,8 @@ const defIn = (catalog: ItemDef[], id: string): ItemDef | undefined => catalog.f
 function slotIP(h: EndlessHero, d: ItemDef, catalog: ItemDef[]): number {
   const cur = h.equipment[d.slot];
   const cd = cur ? defIn(catalog, cur.id) : undefined;
-  return cd ? itemIP(cd) : 0;
+  if (!cur || !cd) return 0;
+  return itemDef(cur.id) ? instanceIP(cur) : itemIP(cd);
 }
 
 /** Nadirlik sırası (0 = common). */
@@ -249,7 +247,8 @@ export function rewardOffer(run: EndlessRun, cfg: EndlessConfig = ENDLESS, catal
     const pair = pickOne(upgradePairs(run, cleared, taken, cfg, catalog, sp ? { ilvlBonus: sp.ilvlBonus, minRarity: sp.minRarity } : {}), rng);
     if (pair) {
       taken.push(pair.def.id);
-      cards.push({ kind: 'item', itemId: pair.def.id, heroId: pair.heroId });
+      // Zarlar teklif anında atılır (seed'li): kartta görünen değer = alınan değer
+      cards.push({ kind: 'item', itemId: pair.def.id, heroId: pair.heroId, rolls: rollStats(pair.def, rngFor(run.seed, cleared, 'offer-roll', i)) });
     } else if (!cards.some((c) => c.kind === 'gold')) cards.push({ kind: 'gold', amount: Math.round(gold * 1.5) });
   }
   cards.push({ kind: 'gold', amount: gold });
@@ -272,7 +271,8 @@ export function shopStock(run: EndlessRun, cfg: EndlessConfig = ENDLESS, catalog
     const pair = fresh ?? pickOne(upgradePairs(run, cleared, taken, cfg, catalog), rng);
     if (!pair) break;
     taken.push(pair.def.id);
-    out.push({ itemId: pair.def.id, heroId: pair.heroId, price: itemValue(pair.def) });
+    // Zarlar tezgâha konurken atılır (seed'li; yenileme numarasıyla): tezgâhta görünen değer = satın alınan değer
+    out.push({ itemId: pair.def.id, heroId: pair.heroId, price: itemValue(pair.def), rolls: rollStats(pair.def, rngFor(run.seed, cleared, 'ware-roll', reroll, i)) });
   }
   return out;
 }
@@ -302,7 +302,7 @@ export const bagOf = (run: EndlessRun): ItemInstance[] => run.bag ?? [];
 /**
  * Item'i torbaya koyar (yeni örnek uid'i). Torba doluysa satış değerine (`sellValue`) çevrilir (kaybolmaz). Bilinmeyen item: ok false.
  */
-function addToBag(s: EndlessRun, itemId: string, catalog: ItemDef[], cfg: EndlessConfig): { ok: boolean; sold: number } {
+function addToBag(s: EndlessRun, itemId: string, catalog: ItemDef[], cfg: EndlessConfig, rolls?: ItemRolls): { ok: boolean; sold: number } {
   const d = defIn(catalog, itemId);
   if (!d) return { ok: false, sold: 0 };
   const bag = (s.bag ??= []);
@@ -311,7 +311,10 @@ function addToBag(s: EndlessRun, itemId: string, catalog: ItemDef[], cfg: Endles
     s.gold += sold;
     return { ok: true, sold };
   }
-  bag.push({ uid: `e${s.nextItem}`, id: d.id });
+  // Stat zarları koşu seed'inden (Ömer 2026-10-10): aynı koşu + aynı uid = aynı değerler; kayda yazılır
+  const uid = `e${s.nextItem}`;
+  // Teklifte / tezgâhta zarlanmışsa aynı değerler (görünen = alınan); yoksa (eski kayıt, debug) burada zarlanır
+  bag.push({ uid, id: d.id, rolls: rolls ? { ...rolls } : rollStats(d, rngFor(s.seed, 'roll', uid)) });
   s.nextItem += 1;
   return { ok: true, sold: 0 };
 }
@@ -412,7 +415,7 @@ export function chooseReward(run: EndlessRun, index: number, cfg: EndlessConfig 
     for (const h of s.heroes) h.hpRatio = 1;
     s.blessing = { hpMult: card.hpMult, waves: card.waves };
   }
-  else if (!addToBag(s, card.itemId, catalog, cfg).ok) return run; // item torbaya (Gear ekranında takılır)
+  else if (!addToBag(s, card.itemId, catalog, cfg, card.rolls).ok) return run; // item torbaya (Gear ekranında takılır)
   return afterReward(s, cfg, catalog);
 }
 
@@ -421,7 +424,7 @@ export function buyItem(run: EndlessRun, index: number, catalog: ItemDef[] = ITE
   const e = run.phase === 'shop' ? run.shop?.[index] : undefined;
   if (!e || e.sold || run.gold < e.price || bagOf(run).length >= endlessBagSize(cfg)) return run;
   const s = clone(run);
-  if (!addToBag(s, e.itemId, catalog, cfg).ok) return run;
+  if (!addToBag(s, e.itemId, catalog, cfg, e.rolls).ok) return run;
   s.gold -= e.price;
   s.shop![index]!.sold = true;
   return s;

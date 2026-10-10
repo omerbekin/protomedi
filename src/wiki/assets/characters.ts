@@ -1,7 +1,7 @@
 import { bindIcon, iconUrl } from '../../ui/dom-icons';
 import { ownerOfUnit } from '../../game/asset-versions';
 import { variantLabel } from '../../game/sprite-variants';
-import { STAT_COLOR, STAT_ICON, STAT_LABEL } from '../../ui/stat-icons';
+import { STAT_COLOR, STAT_LABEL, statIconName } from '../../ui/stat-icons';
 import type { Catalog, CharacterEntry } from '../../gallery/catalog';
 import { applyFilter, chipBar, h, openLightbox, searchable, type SectionApi } from '../../gallery/dom';
 
@@ -36,7 +36,7 @@ export function mountCharacters(cat: Catalog): SectionApi {
     const bars = ATTRS.map((a) => {
       const v = c.attributes[a] ?? 0;
       return h('div', { class: `attr${a === primary ? ' primary' : ''}`, title: `${STAT_LABEL[a]} ${v}${a === primary ? ' (primary)' : ''}` },
-        h('img', { class: 'tag-icon pixelated', attrs: { src: iconUrl(STAT_ICON[a], STAT_COLOR[a]), alt: '' } }),
+        h('img', { class: 'tag-icon pixelated', attrs: { src: iconUrl(statIconName(a), STAT_COLOR[a]), alt: '' } }),
         h('span', { class: 'attr-name', text: STAT_LABEL[a] }),
         h('span', { class: 'bar' }, h('span', { class: 'fill', style: { width: `${Math.min(100, v * 5)}%`, background: STAT_COLOR[a] } })),
         h('span', { class: 'attr-val', text: String(v) }));

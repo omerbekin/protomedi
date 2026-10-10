@@ -1,7 +1,10 @@
 import type { StatKind } from '../engine';
 import type { IconKind } from './icon-kinds';
 
-/** Her stat'ın placeholder ikonu ve rengi (alt bar ve tooltip). Tüm stat türleri tanımlı olmak zorunda. */
+/**
+ * Her stat'ın KODLA ÇİZİLEN ikonu: boyalı görsel (assets/stat-icons) yoksa yedek; Codex > Icons piksel listesi de bunu sayar. Ekranda stat ikonu
+ * gösterirken bunu değil `statIconName(k)` kullan. Tüm stat türleri tanımlı olmak zorunda.
+ */
 export const STAT_ICON: Record<StatKind, IconKind> = {
   hp: 'heart',
   mp: 'droplet',
@@ -19,6 +22,26 @@ export const STAT_ICON: Record<StatKind, IconKind> = {
   hpRegen: 'hpregen',
   mpRegen: 'mpregen',
 };
+
+/** Stat ikonu alan her tür: motor statları + Might (item'lerin skill gücü eki; motorda tek stat değil). */
+export type StatIconKind = StatKind | 'might';
+
+/**
+ * STAT İKONU ADI (TEK KAYNAK, Ömer 2026-10-10): `ensureIcon(scene, statIconName(k), STAT_COLOR[k], false)` (Phaser) ve
+ * `iconUrl(statIconName(k), STAT_COLOR[k])` (DOM) bu adı boyalı PNG'ye çözer (assets/stat-icons/<k>.png; src/game/art-registry.ts >
+ * resolveSprite, src/game/icon-image-files.ts). Dosya yoksa kodla çizilen yedeğe düşer: STAT_ICON[k] (Might: Shared v2 `v2:shared:might`).
+ */
+export const STAT_ICON_PREFIX = 'stat:';
+export const statIconName = (kind: StatIconKind): string => `${STAT_ICON_PREFIX}${kind}`;
+
+/** Görseli olmayan stat ikonunun kodla çizilen yedeği (bilinmeyen türde null). */
+export function statIconFallback(kind: string): string | null {
+  if (kind === 'might') return 'v2:shared:might';
+  return (STAT_ICON as Record<string, IconKind | undefined>)[kind] ?? null;
+}
+
+/** Might'ın rengi (Gear / Endless satırları). */
+export const MIGHT_COLOR = '#ff9f43';
 
 /** Primary statın ismi bu altın renkte yazılır. */
 export const PRIMARY_GOLD = '#ffd700';

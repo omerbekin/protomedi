@@ -1,7 +1,8 @@
 // Sefer ekipmanı (saf; her işlem YENİ durum döndürür): torba, kuşanma, çıkarma, altın ve kahramanın savaş gücü.
 // Aşama 0 temeli (roadmap 1.4); loot / tüccar / ekranlar Aşama 1. Kurallar: docs/design/progression/items.md.
-import { BAG_SIZE, bestMoves, canEquip, itemDef, loadout, RARITY_IDS, SLOT_IDS, type ItemInstance, type LoadoutResult, type SlotId } from '../progression';
+import { BAG_SIZE, bestMoves, canEquip, itemDef, loadout, makeItem, RARITY_IDS, SLOT_IDS, type ItemInstance, type LoadoutResult, type SlotId } from '../progression';
 import { clone, heroById } from './state';
+import { rngFor } from './seed';
 import type { CampaignState, Hero } from './types';
 
 /** Torbada yer var mı? */
@@ -12,7 +13,9 @@ export function addItem(s: CampaignState, itemId: string): { state: CampaignStat
   if (!itemDef(itemId)) throw new Error(`Unknown item: ${itemId}`);
   if (!bagHasRoom(s)) throw new Error('Bag is full');
   const t = clone(s);
-  const item: ItemInstance = { uid: `i${t.nextItemId++}`, id: itemId };
+  const uid = `i${t.nextItemId++}`;
+  // Zarlar sefer seed'inden (debug "Give item" ve testler; aynı sefer + aynı uid = aynı değerler)
+  const item: ItemInstance = makeItem(itemId, uid, rngFor(t.seed, 'item', uid));
   t.inventory.push(item);
   return { state: t, item };
 }

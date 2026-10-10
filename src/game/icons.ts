@@ -3,7 +3,7 @@ import type { SkillDef } from '../engine';
 import { GRID, INTERNAL_TOKEN_VALUES, shadeColor } from './pixel-art';
 import { resolveSprite } from './art-registry';
 import { onVersionsChange, ownerOfSkill } from './asset-versions';
-import { ICON_IMAGE_URLS } from './icon-image-files';
+import { ICON_IMAGE_URLS, STAT_IMAGE_FILES, smoothUrl } from './icon-image-files';
 
 /**
  * Piksel art ikon dokuları. Çizimler src/game/pixel-art.ts motoruyla ızgaralara çizilir (otomatik kontur + ışık/gölge);
@@ -31,7 +31,10 @@ export function ensureIcon(scene: Phaser.Scene, kind: string, hex: string, frame
     watch(scene.game);
   }
   if (scene.textures.exists(key)) return key;
-  if (art.image) return ensureImageIcon(scene, key, art.image, art.size, hex, framed);
+  if (art.image) {
+    if (art.smooth) textureDom.set(key, smoothUrl(art.domImage ?? art.image));
+    return ensureImageIcon(scene, key, art.image, art.size, hex, framed, !!art.smooth);
+  }
   const S = art.size;
   const q = S / GRID;
   const cells =
@@ -77,6 +80,13 @@ export function ensureIcon(scene: Phaser.Scene, kind: string, hex: string, frame
 
 // ---------------------------------------------------------------- GÖRSEL v2 ikonları (hazır PNG)
 
+/**
+ * Boyalı görsel ikon dokusu -> DOM'da kullanılacak tam boy dosya adresi (`#smooth` ekli). Dokudan DOM resmi üreten arayüzler (savaş HUD'ı
+ * `texUrl`) bunu tercih eder: 64'lük dokuyu kopyalamak yerine 128'lik dosyayı tarayıcı yumuşak küçültür. Boyalı olmayan dokuda null.
+ */
+const textureDom = new Map<string, string>();
+export const iconTextureUrl = (key: string): string | null => textureDom.get(key) ?? null;
+
 /** Yüklenen ikon resimleri (URL -> resim) ve yüklenince yeniden çizilecek dokular. */
 const images = new Map<string, HTMLImageElement>();
 const pending = new Map<string, Array<() => void>>();
@@ -119,10 +129,10 @@ function withImage(url: string, onReady: (img: HTMLImageElement) => void): void 
 }
 
 /**
- * Görsel v2 ikonunun dokusu: tuval doku hemen kurulur (çerçeveli skill ikonunda aynı koyu plaka + vurgu çerçevesi), resim NEAREST
- * (yumuşatmasız) çizilir; resim henüz yüklenmediyse yüklenince aynı dokuya çizilip yenilenir (anahtar değişmez, ekrandaki nesne kendiliğinden güncellenir).
+ * Görsel ikonun dokusu: tuval doku hemen kurulur (çerçeveli skill ikonunda aynı koyu plaka + vurgu çerçevesi), resim NEAREST
+ * (yumuşatmasız; `smooth` = boyalı stat ikonu: yumuşak + LINEAR) çizilir; resim henüz yüklenmediyse yüklenince aynı dokuya çizilip yenilenir (anahtar değişmez, ekrandaki nesne kendiliğinden güncellenir).
  */
-function ensureImageIcon(scene: Phaser.Scene, key: string, url: string, S: number, hex: string, framed: boolean): string {
+function ensureImageIcon(scene: Phaser.Scene, key: string, url: string, S: number, hex: string, framed: boolean, smooth = false): string {
   const q = S / GRID;
   const frame = framed ? Math.round(FRAME * q) : 0;
   const size = S + frame * 2;
@@ -130,13 +140,14 @@ function ensureImageIcon(scene: Phaser.Scene, key: string, url: string, S: numbe
   if (!tex) return key;
   const ctx = tex.getContext();
   if (framed) drawFramePlate(ctx, size, q, hex);
-  tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  tex.setFilter(smooth ? Phaser.Textures.FilterMode.LINEAR : Phaser.Textures.FilterMode.NEAREST);
   tex.refresh();
   const textures = scene.textures;
   let sync = true;
   withImage(url, (img) => {
     if (!textures.exists(key)) return;
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = smooth; // boyalı stat ikonu: dosya zaten doku boyunda (64), yumuşak; piksel v2 ikonu: NEAREST
+    if (smooth) ctx.imageSmoothingQuality = 'high';
     ctx.globalAlpha = 1;
     ctx.drawImage(img, frame, frame, S, S);
     tex.refresh();
@@ -215,4 +226,4 @@ function refreshAllSceneIcons(): void {
 export const ensureSkillIcon = (scene: Phaser.Scene, skill: SkillDef): string => ensureIcon(scene, skill.icon, skill.fx, true, ownerOfSkill(skill.id));
 
 // Görsel ikonlar oyun açılırken arka planda yüklenir (küçük dosyalar): ilk savaşta ikon dokusu çoğunlukla hazır çizilir.
-if (typeof Image !== 'undefined') for (const url of Object.values(ICON_IMAGE_URLS)) withImage(url, () => undefined);
+if (typeof Image !== 'undefined') for (const url of [...Object.values(ICON_IMAGE_URLS), ...Object.values(STAT_IMAGE_FILES).map((f) => f.small)]) withImage(url, () => undefined);

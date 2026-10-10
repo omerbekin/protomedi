@@ -291,7 +291,7 @@ describe('yapay zeka: yeni sınıflar ve menzil/taunt kuralları', () => {
     const archer = b.get(uid(b, 'enemy', 'archer'))!;
     archer.hp = Math.round(archer.maxHp * 0.12); // ölmek üzere: Guard (hasarın yarısını üstlenir) kurtarır
     const skills = b.get(d)!.skills;
-    b.get(d)!.skills = skills.filter((x) => x !== 'taunt'); // Taunt da kurtarabilirdi: yalnızca Guard sınansın
+    b.get(d)!.skills = skills.filter((x) => x !== 'taunt' && x !== 'fist_crush'); // Taunt kurtarabilirdi, Fist Crush (zırh ölçekli, 2026-10-10) daha değerli olabilir: yalnızca Guard sınansın
     expect(chooseAction(b, d, ai)).toMatchObject({ skillId: 'guard', targetUid: archer.uid, reason: 'guard' });
     // Taunt sürerken tek hedefli saldırılar zaten Defender'a gider: Guard'ın kurtarma terimi kalmaz
     b.get(d)!.skills = skills;

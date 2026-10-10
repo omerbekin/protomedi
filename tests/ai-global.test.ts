@@ -311,13 +311,6 @@ describe('YZ Move Tile: kırılgan birimi geri çek, yakın dövüşçüyü öne
   });
 });
 
-/**
- * Bilinen tıkanmalar (global skill kilidi DEĞİL; her eylem geçerli): seed 12 sonunda Undead'e karşı Undead kalır; iki taraf da lifesteal + Dark Bond +
- * MP/can yenilenmesi + sürekli Raise Dead ile hasarı karşılar (Bone Throw büyü/dark oldu, 2026-10-10; Undead'e hasarı fiilen aynı: eskiden 1,12 x zırh
- * 8 ~ 0,89, şimdi 0,90). `npm run sim` 2000 savaşta bitmeyen oranı %0,10 -> %0,15. Ayrı YZ işi (Undead aynası odak): open-questions madde 289.
- */
-const KNOWN_STALLS = new Set([12]);
-
 describe('YZ global skill: tam savaşlar (kilitlenme yok, sınırlar korunur)', () => {
   it('60 rastgele savaş biter; her eylem geçerli; hiçbir birim üst üste maxConsecutive\'den fazla skip ya da iki kez Move yapmaz; üç global de kullanılır', () => {
     const used = new Map<string, number>();
@@ -339,7 +332,6 @@ describe('YZ global skill: tam savaşlar (kilitlenme yok, sınırlar korunur)', 
         expect(id === 'move_tile' && lastMove.get(u), `seed ${seed} ${u} üst üste move`).toBeFalsy();
         lastMove.set(u, id === 'move_tile');
       }
-      if (KNOWN_STALLS.has(seed)) continue; // eylemler geçerli olmalı (yukarıda denetlendi); savaşın bitmesi beklenmez
       expect(b.winner, `seed ${seed}`).not.toBeNull();
     }
     for (const id of GLOBALS) expect(used.get(id) ?? 0, id).toBeGreaterThan(0);

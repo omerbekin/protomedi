@@ -4,19 +4,20 @@ import { Battle, MatchLog, chooseAction, isRatioCost, skillCostAmount, skillCost
 import type { AreaStage, BattleEvent, BattleMode, Combatant, SkillDef, StatKind, Teams, TargetPreview } from '../../engine';
 import { type DamageTags } from '../float-text';
 import { ATTACK_STATS, DEFENSE_STATS, MAIN_STATS, statRowText } from '../stat-columns';
-import { PRIMARY_GOLD, RAGE_COLOR, RAGE_ICON, STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON } from '../../ui/stat-icons';
+import { PRIMARY_GOLD, RAGE_COLOR, RAGE_ICON, STAT_COLOR, STAT_LABEL, UI_COLOR, UI_ICON, statIconName } from '../../ui/stat-icons';
 import { avatarTexture, backgroundKey, characterTexture, hasBackground, preloadAssets } from '../assets';
 import { CombatantView, color, slow, textStyle } from '../combatant-view';
 import { preloadVfxSheets } from '../vfx-sheets';
-import { ensureIcon, ensureSkillIcon, onIconImagesLoaded } from '../icons';
+import { ensureIcon, ensureSkillIcon, iconTextureUrl, onIconImagesLoaded } from '../icons';
 import { initialSeed, initialSizes, newSeed } from '../seed';
 import { clampSize } from '../team-select-model';
-import { EL, elText } from '../elegant-ui';
+import { EL, elScreenIn, elText } from '../elegant-ui';
 import { formatHit } from '../hit-format';
 import { kitTextBand } from '../hud-kit';
 import type { BattleEffect } from '../battle-effects';
 import { CombatLog } from '../combat-log';
 import { skillTags } from '../../ui/skill-tags';
+import { statName } from '../../ui/stat-name';
 import { BattleHud, type HudActor, type HudGlobal, type HudModel, type HudQueueCell, type HudSkill, type HudStat, type TipContent, type UnitCard } from '../../ui/battle-hud';
 import { playSfx } from '../audio';
 import { BattleStats, showResultScreen } from '../result-screen';
@@ -285,6 +286,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create(): void {
+    elScreenIn(this); // ortak ekran geçişi (data/ui-motion.json > screen; Reduced motion = anında)
     const def = content.battles[this.battleId];
     // Sefer arka planı (varsa ve dosyası yüklüyse), yoksa savaşın varsayılanı (castle-hall)
     // Sefer: kendi arka planı (yoksa savaşın varsayılanı); Quick Battle / multiplayer: havuzdan seed'e göre (iki oyuncu aynı arka planı görür)
@@ -1904,7 +1906,7 @@ export class BattleScene extends Phaser.Scene {
       meta.push({ icon: ensureIcon(this, RAGE_ICON, RAGE_COLOR, false), text: `RAGE ${costNow}${ratio ? ` (${skillCostLabel(skill.cost)})` : ''}`, hex: RAGE_COLOR });
     } else if (costNow > 0) {
       const kind = skill.cost.resource === 'mp' ? 'mp' : 'hp';
-      meta.push({ icon: ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false), text: ratio ? `${costNow} ${skill.cost.resource.toUpperCase()} (${skillCostLabel(skill.cost)})` : info.cost, hex: colors.text });
+      meta.push({ icon: ensureIcon(this, statIconName(kind), STAT_COLOR[kind], false), text: ratio ? `${costNow} ${skill.cost.resource.toUpperCase()} (${skillCostLabel(skill.cost)})` : info.cost, hex: colors.text });
     } else meta.push({ text: info.cost, hex: colors.muted });
     if (this.battle.mode === 'turns' && (skill.cooldown ?? 0) > 0) meta.push({ icon: ensureIcon(this, UI_ICON.hourglass, UI_COLOR, false), text: info.cooldown, hex: colors.muted });
     if (this.battle.mode === 'turns' && info.initialCooldown && !actor.summoned) rows.push([info.initialCooldown, colors.muted]);
@@ -1938,7 +1940,7 @@ export class BattleScene extends Phaser.Scene {
         rows.splice(sources.length, 0, [`Base ${Math.round(actor.stats[kind] * 100)}%`, colors.muted]);
       }
     }
-    const tip = this.makeInfo(info.bonus ? `${info.title} · ${info.bonus.name}` : info.title, info.primary ? PRIMARY_GOLD : EL.ON, ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false), rows);
+    const tip = this.makeInfo(info.bonus ? `${info.title} · ${info.bonus.name}` : info.title, info.primary ? PRIMARY_GOLD : EL.ON, ensureIcon(this, statIconName(kind), STAT_COLOR[kind], false), rows);
     tip.value = this.statValue(kind, stats);
     if (info.primary) tip.valueColor = '#ffd76a';
     return tip;
@@ -1959,9 +1961,9 @@ export class BattleScene extends Phaser.Scene {
     return {
       kind,
       label: STAT_LABEL[kind],
-      name: info.title,
+      name: statName(info.title), // yalnızca ad: değer sağ sütunda (karakter sayfası satırı)
       value: this.statValue(kind, s),
-      iconUrl: this.texUrl(ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false)),
+      iconUrl: this.texUrl(ensureIcon(this, statIconName(kind), STAT_COLOR[kind], false)),
       primary: s.primary === kind,
       ...(dir === 'down' ? { color: '#ff9a8a' } : dir === 'up' ? { color: '#9ee6a8' } : {}),
       tip,
@@ -1998,7 +2000,7 @@ export class BattleScene extends Phaser.Scene {
     const tier = tierStyle(c.tier);
     const primaryName = c.stats.primary ? describeStat(c.stats.primary, c.stats, f).title : '';
     const sub = [def?.role ?? (c.summoned ? 'Summon' : ''), primaryName ? `${primaryName} primary` : ''].filter(Boolean).join(' · ');
-    const icon = (k: StatKind) => this.texUrl(ensureIcon(this, STAT_ICON[k], STAT_COLOR[k], false));
+    const icon = (k: StatKind) => this.texUrl(ensureIcon(this, statIconName(k), STAT_COLOR[k], false));
     const pctOf = (a: number) => `−${Math.round(armorReduction(a, f) * 100)}%`;
     const tint = (k: StatKind): string | undefined => {
       const d = isDeltaStat(k) ? statDir(c.stats[k], eff[k]) : null;
@@ -3246,6 +3248,8 @@ export class BattleScene extends Phaser.Scene {
 
   /** Phaser dokusu -> DOM resmi (data URL; önbellekli, sürüm değişince temizlenir). */
   private texUrl(key: string): string {
+    const file = iconTextureUrl(key); // boyalı stat ikonu: tam boy dosya (#smooth), doku kopyası değil
+    if (file) return file;
     const hit = this.texUrlCache.get(key);
     if (hit) return hit;
     if (!this.textures.exists(key)) return '';
@@ -3292,10 +3296,10 @@ export class BattleScene extends Phaser.Scene {
     const primary = actor.stats.primary;
     const primaryName = primary ? describeStat(primary, actor.stats, f).title : '';
     const sub = [def?.role ?? (actor.summoned ? 'Summon' : ''), primaryName ? `${primaryName} primary` : ''].filter(Boolean).join(' · ');
-    const statIcon = (k: 'hp' | 'mp') => this.texUrl(ensureIcon(this, STAT_ICON[k], STAT_COLOR[k], false));
+    const statIcon = (k: 'hp' | 'mp') => this.texUrl(ensureIcon(this, statIconName(k), STAT_COLOR[k], false));
     const barTip = (k: 'hp' | 'mp'): TipContent => {
       const info = describeStat(k, actor.stats, f);
-      const t = this.makeInfo(info.title, EL.ON, ensureIcon(this, STAT_ICON[k], STAT_COLOR[k], false), info.lines.map((l): [string] => [l]));
+      const t = this.makeInfo(info.title, EL.ON, ensureIcon(this, statIconName(k), STAT_COLOR[k], false), info.lines.map((l): [string] => [l]));
       t.value = k === 'hp' ? `${actor.hp} / ${actor.maxHp}` : `${actor.mp} / ${actor.maxMp}`;
       return t;
     };
@@ -3397,7 +3401,7 @@ export class BattleScene extends Phaser.Scene {
     if (costNow > 0 && skill.cost.resource === 'rage') out.push({ iconUrl: this.texUrl(ensureIcon(this, RAGE_ICON, RAGE_COLOR, false)), text: `RAGE ${costNow}`, color: RAGE_COLOR });
     else if (costNow > 0) {
       const kind = skill.cost.resource === 'mp' ? 'mp' : 'hp';
-      out.push({ iconUrl: this.texUrl(ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false)), text: String(costNow) });
+      out.push({ iconUrl: this.texUrl(ensureIcon(this, statIconName(kind), STAT_COLOR[kind], false)), text: String(costNow) });
     }
     if (turns && (skill.cooldown ?? 0) > 0) out.push({ iconUrl: hourglass, text: String(skill.cooldown), color: colors.muted });
     return out;

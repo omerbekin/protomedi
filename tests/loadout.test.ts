@@ -63,11 +63,13 @@ describe('güç katmanı: boş yükleme', () => {
 });
 
 describe('güç katmanı: item -> modifiers', () => {
-  it('statlar toplanır: STR/DEX/INT/LUCK -> attrAdd, Armor -> armorAdd, Might % -> powerMult', () => {
-    const eq = { ...emptyEquipment(), weapon: { uid: 'i1', id: 'woodcutters_axe' }, boots: { uid: 'i2', id: 'turnshoes' }, gloves: { uid: 'i3', id: 'bracers_of_the_fox' } };
+  it('statlar toplanır: STR/DEX/INT/LUCK -> attrAdd, Armor -> armorAdd, Might % -> powerMult, yüzdeler oran; zarsız örnek = katalog değeri, zarlı örnek = zar', () => {
+    const eq = { ...emptyEquipment(), weapon: { uid: 'i1', id: 'arming_sword' }, armor: { uid: 'i2', id: 'riveted_mail' }, gloves: { uid: 'i3', id: 'archers_bracer' } };
     const r = loadout({ class: 'warrior', equipment: eq });
-    expect(r.modifiers).toEqual({ attrAdd: { dex: 1 }, armorAdd: 1, powerMult: 1.03 });
-    expect(r.stats).toEqual({ might: 3, armor: 1, dex: 1 });
+    // Arming Sword +1 STR +1% Might +1% Crit; Riveted Mail +2 Armor +4 Max HP; Archer's Bracer +2% Accuracy +2% Crit
+    expect(r.modifiers).toEqual({ attrAdd: { str: 1 }, armorAdd: 2, powerMult: 1.01, hpAdd: 4, critAdd: 0.03, accuracyAdd: 0.02 });
+    const rolled = loadout({ class: 'warrior', equipment: { ...eq, armor: { uid: 'i2', id: 'riveted_mail', rolls: { armor: 2, hp: 5 } } } });
+    expect(rolled.modifiers?.hpAdd).toBe(5);
   });
 
   it('veride olmayan item yok sayılır (eski kayıt çökmez)', () => {
@@ -90,8 +92,9 @@ describe('güç katmanı: item -> modifiers', () => {
     const idx = plan.heroOrder.indexOf(hero.id);
     const unit = battle.combatants.find((c) => c.uid === `party-${idx}`)!;
     const want = applyUnitModifiers(content.classes[hero.class]!, plan.units.party[cell]!.modifiers, f);
-    expect(unit.stats.dex).toBe(want.stats.dex);
-    expect(unit.stats.armor).toBe(content.classes[hero.class]!.stats.armor + 1);
+    expect(unit.stats.evasion).toBe(want.stats.evasion);
+    expect(unit.stats.evasion).toBeGreaterThan(content.classes[hero.class]!.stats.evasion); // Turnshoes + Bracers kaçınma verir
+    expect(unit.stats.critChance).toBeGreaterThan(content.classes[hero.class]!.stats.critChance);
     expect(fightPlan(plan, 'medium').log).toEqual(fightPlan(plan, 'medium').log);
   });
 });

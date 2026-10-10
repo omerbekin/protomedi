@@ -1,4 +1,5 @@
 import { iconUrl } from '../../ui/dom-icons';
+import { statIconName, type StatIconKind } from '../../ui/stat-icons';
 import { itemIconUrl } from '../../ui/item-icon-dom';
 import itemsJson from '../../../data/items.json';
 import type { Catalog, IconEntry } from '../../gallery/catalog';
@@ -109,6 +110,26 @@ export function mountIcons(cat: Catalog): SectionApi {
       ),
     );
 
+  // Boyalı stat ikonları (assets/stat-icons/<stat>.png): HUD, Gear, Endless, takım seçimi ve Codex'teki TÜM stat ikonları (tek kaynak statIconName)
+  const stats = h('div', { class: 'cards icons' });
+  for (const a of cat.statArt) {
+    const url = a.url ? iconUrl(statIconName(a.stat as StatIconKind), a.color) : a.fallback ? iconUrl(a.fallback, a.color) : '';
+    stats.append(
+      searchable(
+        h(
+          'article',
+          { class: 'card icon-card' },
+          h('img', { class: a.url ? 'bigicon' : 'bigicon pixelated', attrs: { src: url, alt: a.stat, loading: 'lazy' }, title: 'Click to enlarge', on: { click: () => openLightbox(url, a.label, !a.url) } }),
+          h('div', { class: 'card-title mono', text: a.stat }),
+          h('div', { class: 'tags' }, h('span', { class: a.unlinked ? 'badge' : a.url ? 'badge ok' : 'badge', text: a.unlinked ? 'Unlinked' : a.url ? 'Stat art' : 'Pixel fallback' })),
+          h('div', { class: 'small', style: { color: a.color }, text: a.label }),
+          h('div', { class: 'small muted', text: a.unlinked ? 'no stat with this name' : a.url ? `fallback: ${a.fallback}` : 'no image yet: code-drawn icon' }),
+        ),
+        `stat art image ${a.stat} ${a.label}`,
+      ),
+    );
+  }
+
   // Nadirlik: aynı nesne, yalnızca taş / kenar ayrıntısı nadirlik renginde
   const tints = h('div', { class: 'cards icons' });
   for (const name of ['amulet', 'sword', 'mail']) {
@@ -123,6 +144,7 @@ export function mountIcons(cat: Catalog): SectionApi {
     applyFilter(fx, query);
     applyFilter(items, query);
     applyFilter(art, query);
+    applyFilter(stats, query);
     applyFilter(tints, query);
     countEl.textContent = `${n} / ${cat.icons.length}`;
     return n;
@@ -136,6 +158,9 @@ export function mountIcons(cat: Catalog): SectionApi {
     h('h3', { class: 'sub', text: `Items and rewards (${cat.itemIcons.length})` }),
     h('p', { class: 'note', text: 'Gear, Spoils, Endless reward cards and the Codex all draw these (src/game/item-icons.ts). Items show with the Rare tint here.' }),
     items,
+    h('h3', { class: 'sub', text: `Stat icons (${cat.statArt.filter((a) => a.url).length} / ${cat.statArt.filter((a) => !a.unlinked).length})` }),
+    h('p', { class: 'note', text: 'Painted stat icons (assets/stat-icons, cut by tools/make-stat-icons.mjs from assets/source/stat-icons). The battle HUD, Gear, Endless cards, team select and the Codex all show these; a stat without an image falls back to its pixel icon (Stat chip above).' }),
+    stats,
     h('h3', { class: 'sub', text: `Item art (${cat.itemArt.art.length})` }),
     h('p', { class: 'note', text: `Painted item icons (assets/items, cut by tools/make-item-icons.mjs from assets/source/item-icons). An item with art shows it everywhere; the rest fall back to the pixel icons above${cat.itemArt.missing.length ? ` (still pixel: ${cat.itemArt.missing.join(', ')})` : ''}.` }),
     art,

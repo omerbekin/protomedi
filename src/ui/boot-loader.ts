@@ -51,9 +51,38 @@ export function markBootReady(): void {
   if (bootDone) return;
   bootDone = true;
   hide();
+  for (const fn of readyHooks.splice(0)) fn();
 }
 
 export const bootFinished = (): boolean => bootDone;
+
+const readyHooks: Array<() => void> = [];
+
+/** Açılış bitince bir kez çağrılır (bitmişse hemen): ör. sonraki ekranların kodunu arka planda indirmek (src/game/lazy-scenes.ts). */
+export function whenBootReady(fn: () => void): void {
+  if (bootDone) fn();
+  else readyHooks.push(fn);
+}
+
+/**
+ * Kod parçası (dynamic import: Codex, debug menüsü, ilk kez açılan sahne) yükleniyor: açılıştan sonra 150 ms'den uzun sürerse aynı kutu
+ * kısa yükleyici olarak görünür, bitince kapanır. Açılış sırasında (doğrudan bağlantı: ?seed=, ?campaign=1...) açılış kutusu zaten açıktır.
+ */
+export function trackChunkLoad<T>(p: Promise<T>): Promise<T> {
+  if (!bootDone || typeof window === 'undefined') return p;
+  let visible = false;
+  const timer = window.setTimeout(() => {
+    visible = true;
+    show('Loading');
+    setBootProgress(0.5);
+  }, 150);
+  const done = (): void => {
+    window.clearTimeout(timer);
+    if (visible) hide();
+  };
+  p.then(done, done);
+  return p;
+}
 
 /** Asgari Phaser yükleyici arayüzü (test edilebilir, Phaser'a bağımlı değil). */
 export interface LoaderLike {

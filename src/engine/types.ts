@@ -250,6 +250,12 @@ export interface CombatantDef {
   inert?: boolean;
 }
 
+/** Hibrit ölçek girişi (damage.bonusScale): saldıranın geçerli zırhının / büyü zırhının ya da bir temel statının pct'si. */
+export interface BonusScale {
+  stat: Attribute | 'armor' | 'magicArmor';
+  pct: number;
+}
+
 /**
  * Savaş kurulumunda birime verilen güçlendirme/zayıflatma (sefer: tutorial zayıf düşmanları, elitler, boss). Hepsi opsiyonel; verilmeyen alan etkisizdir.
  * Uygulama sırası (src/engine/stats.ts > applyUnitModifiers): temel statlar (str/int/dex/luck) x statMult x attrMult[stat] + attrAdd[stat] (tam sayıya yuvarlanır,
@@ -305,6 +311,35 @@ export interface UnitModifiers {
   mpRegenAdd?: number;
 }
 
+/**
+ * Epic item özel etkileri (Ömer onayı 2026-10-10, madde 292; docs/design/progression/item-effects.md). Hepsi isteğe bağlı ve GENEL motor kancaları;
+ * verilmezse birim bugünküyle birebir aynı. Sayılar data/items.json > effects'ten (güç katmanı çevirir).
+ */
+export interface ItemEffects {
+  /** Opening Ward: savaş başında maks canın bu oranı kalkan (UnitSetup.startShieldRatio ile toplanır). */
+  startShieldRatio?: number;
+  /** Mana Spring: birimin kendi kritik vuruşunda bu kadar MP (maks'ı aşmaz). */
+  critMp?: number;
+  /** Second Wind: savaşta bir kez, can `below` oranının altına inince maks canın `heal` oranı şifa. */
+  secondWind?: { below: number; heal: number };
+  /** Quick Start: savaş başında sıra sayacı eşiğin bu oranı dolu. */
+  startCharge?: number;
+  /** Steadfast: çekilemez / itilemez. */
+  steadfast?: boolean;
+  /** Iron Will: debuff'lar uygulanırken `chance` ihtimalle 1 tur kısalır; STR Resilience ile toplanır, toplam en çok `cap`. */
+  debuffShorten?: { chance: number; cap: number };
+  /** Giantslayer: elit / boss rütbeli (ya da boss tanımlı) hedefe skill hasarı bu kadar çarpılır. */
+  tierDamageMult?: number;
+  /** Warden's Oath: ekranda yan komşusu (sideNeighbors) olan dostlar bu oran daha az hasar alır (birden çok kaynakta en yükseği). */
+  adjacentGuard?: number;
+  /** Ember Heart: can `above` oranının üstündeyken tur başında ek `mp` MP. */
+  turnMp?: { mp: number; above: number };
+  /** Thrifty: savaştaki ilk skill'in MP bedeli 0. */
+  firstSkillFree?: boolean;
+  /** Bloodletter: canı `below` oranının altındaki düşmana vuruşta verilen can kaybının `ratio` katı şifa. */
+  executeLifesteal?: { below: number; ratio: number };
+}
+
 /** Birimin sefer rütbesi (arayüz çerçeve/rozet için; kural değiştirmez). */
 export type UnitTier = 'elite' | 'boss';
 
@@ -332,6 +367,8 @@ export interface UnitSetup {
   openingDamageMult?: number;
   /** Bu birim düşünce (çağrı değilse) kendi tarafındaki canlı, çağrı olmayan dostlar maks canlarının bu oranı kadar iyileşir. */
   fallAllyHealRatio?: number;
+  /** Epic item özel etkileri (madde 292; yalnızca güç katmanı `src/progression/loadout.ts` verir; QB / MP / düşmanlar vermez). */
+  itemEffects?: ItemEffects;
   /** Başlangıç MP'si (mutlak; [0, maks MP]). startMpRatio'dan önceliklidir. */
   startMp?: number;
   /** Başlangıç MP oranı (0-1). */
@@ -492,6 +529,12 @@ export type SkillEffectKind =
        * Jinxed / Misfortune) eklenir, sonuç [0, 1]. guaranteedCrit varsa anlamsız (zaten her vuruş kritik).
        */
       critBonus?: number;
+      /**
+       * Hibrit ölçek (Ömer kararı 2026-10-10, madde 289 (a); Defender Seçenek A): ana ölçeğe (scale x power) EKLENEN ölçekler. Her giriş saldıranın
+       * GEÇERLİ değerinin pct'si: stat 'armor' / 'magicArmor' (aura, item ve boss bağı dahil: battle.effectiveStats) ya da bir temel stat. Ek, ana ölçekle
+       * aynı çarpanları alır (skill gücü, etiket/element bonusu, alan falloff'u, pasif çarpanı); zırhtan önce eklenir. Ör. Tremor Slam [{stat:'armor', pct:0.25}].
+       */
+      bonusScale?: BonusScale[];
     }
   /**
    * Anlık şifa. `missingHpBonus` (isteğe bağlı, generic; Radiance 0,5): şifa HEDEF BAŞINA x (1 + missingHpBonus x hedefin eksik can oranı) çarpılır;
@@ -1060,6 +1103,14 @@ export interface Combatant {
   actionsPerTurn?: number;
   /** Bu savaşta kullanılamayan skill'ler (UnitSetup.lockSkills; canUse 'Locked'). Skill listede kalır. */
   lockedSkills?: string[];
+  /** Epic item özel etkileri (UnitSetup.itemEffects; madde 292). */
+  itemEffects?: ItemEffects;
+  /** Second Wind bu savaşta kullanıldı. */
+  secondWindUsed?: boolean;
+  /** Thrifty: ilk skill kullanıldı (sonrakiler normal bedel). */
+  freeSkillUsed?: boolean;
+  /** Mana Spring: son MP verilen eylem (turnsTaken); eylem başına bir kez. */
+  springAt?: number;
   /** Başlangıç cooldown'u eki (UnitSetup.initialCooldownBonus; cooldown'lu skill'lere). */
   initialCooldownBonus?: number;
   /** Boss kuralları (tanımdan; bkz. BossDef). */

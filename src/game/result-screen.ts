@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { motion, TYPE } from '../ui/motion';
 import type { Battle, BattleEvent, Combatant } from '../engine';
 import { debugState } from './debug-state';
 import { copyMatchData } from '../ui/match-copy';
@@ -130,8 +131,11 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   edge.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0.6, 0, 0.6).fillRect(FULL_X0 + FULL_W - 360, 0, 360, H);
   edge.setAlpha(0);
   root.add([dim, edge]);
-  scene.tweens.add({ targets: dim, fillAlpha: victory ? 0.66 : 0.74, duration: 360 });
-  scene.tweens.add({ targets: edge, alpha: 1, duration: 360 });
+  // Kademeli giriş ortak ön ayardan (data/ui-motion.json > result; Reduced motion = anında)
+  const rm = motion('result');
+  const d = (n: number) => Math.max(1, n);
+  scene.tweens.add({ targets: dim, fillAlpha: victory ? 0.66 : 0.74, duration: d(rm.dimMs) });
+  scene.tweens.add({ targets: edge, alpha: 1, duration: d(rm.dimMs) });
 
   // --- Plaket ---
   const plaqueW = 820;
@@ -143,7 +147,7 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   const panelG = elPanel(scene, px, py, plaqueW, plaqueH, { corners: true, alpha: 0.95, border: victory ? 0.5 : 0.35 });
   plaque.add(panelG);
   const local = o.localSide ?? 'party';
-  const title = elText(scene, W / 2, py + 62, o.title ?? (victory ? 'Victory' : 'Defeat'), 84, '#ffffff', { em: 0.12 }).setOrigin(0.5);
+  const title = elText(scene, W / 2, py + 62, o.title ?? (victory ? 'Victory' : 'Defeat'), TYPE.hero, '#ffffff', { em: 0.12 }).setOrigin(0.5);
   if (victory) title.setTint(0xfbe7b0, 0xfbe7b0, 0xc7984f, 0xc7984f);
   else title.setTint(0xd98a7e, 0xd98a7e, 0x8a3a32, 0x8a3a32);
   plaque.add(title);
@@ -156,7 +160,7 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   plaque.setSize(plaqueW, plaqueH);
   root.add(plaque);
   plaque.setAlpha(0);
-  scene.tweens.add({ targets: plaque, y: 0, alpha: 1, duration: 520, ease: 'Cubic.easeOut', delay: 120 });
+  scene.tweens.add({ targets: plaque, y: 0, alpha: 1, duration: d(rm.plaqueMs), ease: 'Cubic.easeOut', delay: rm.plaqueDelayMs });
 
   // --- Özet paneli ---
   const sx = 230;
@@ -175,7 +179,7 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   divider.lineStyle(1, EL.GOLD, EL.LINE.a2).lineBetween(W / 2, sy + 26, W / 2, sy + sh - 26);
   summary.add(divider);
   root.add(summary);
-  scene.tweens.add({ targets: summary, y: 0, alpha: 1, duration: 480, ease: 'Cubic.easeOut', delay: 380 });
+  scene.tweens.add({ targets: summary, y: 0, alpha: 1, duration: d(rm.summaryMs), ease: 'Cubic.easeOut', delay: rm.summaryDelayMs });
 
   const winnerSide = victory ? local : local === 'party' ? 'enemy' : 'party';
   const roster = (side: 'party' | 'enemy') => battle.combatants.filter((c) => c.side === side && !c.summoned).sort((a, b) => a.slot - b.slot);
@@ -187,7 +191,7 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
   (['party', 'enemy'] as const).forEach((side, col) => {
     const cx0 = sx + 30 + col * (colW + 0);
     const heading = o.headings ? (side === local ? o.headings.local : o.headings.remote).toUpperCase() : side === local ? 'YOUR PARTY' : 'ENEMY';
-    const head = elText(scene, cx0 + 14, sy + 30, heading, 20, side === winnerSide ? EL.ON : EL.MUTED, { em: 0.2 }).setOrigin(0, 0.5);
+    const head = elText(scene, cx0 + 14, sy + 30, heading, TYPE.section, side === winnerSide ? EL.ON : EL.MUTED, { em: 0.2 }).setOrigin(0, 0.5);
     summary.add(head);
     const cols = [colW - 215, colW - 135, colW - 55]; // DMG / TAKEN / HEAL merkez x (sütun içi)
     ['DEALT', 'TAKEN', 'HEALED'].forEach((label, i) => {
@@ -255,7 +259,7 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
     const [dx, dy] = [0, 12];
     row.y = dy;
     row.x = dx;
-    scene.tweens.add({ targets: row, alpha: 1, y: 0, duration: 340, ease: 'Sine.easeOut', delay: 640 + (i % 5) * 70 + Math.floor(i / 5) * 30 });
+    scene.tweens.add({ targets: row, alpha: 1, y: 0, duration: d(rm.rowMs), ease: 'Sine.easeOut', delay: rm.rowDelayMs + (i % 5) * rm.rowStaggerMs + Math.floor(i / 5) * (rm.rowStaggerMs * 0.43) });
   });
 
   // --- Düğmeler ---
@@ -286,17 +290,19 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
     const aw = actions.length > 2 ? 360 : bw;
     const gap = 40;
     const x0 = W / 2 - ((actions.length - 1) * (aw + gap)) / 2;
-    actions.forEach((a, i) => {
-      const b = kitButton(a.label, a.run, x0 + i * (aw + gap), aw, !!a.primary);
+    // Kit kuralı: ikinciller solda, birincil eylem en sağda (sıra yalnızca görünüm; Enter yine ilk eylem / gate dizinleri aynı)
+    const order = [...actions.map((a, i) => ({ a, i })).filter((x) => !x.a.primary), ...actions.map((a, i) => ({ a, i })).filter((x) => x.a.primary)];
+    order.forEach(({ a }, k) => {
+      const b = kitButton(a.label, a.run, x0 + k * (aw + gap), aw, !!a.primary);
       buttons.add(b.root);
       if (a.view) live.push({ b, view: a.view });
     });
   } else if (o.preview) {
-    buttons.add(kitButton('Close preview', () => destroy(), W / 2 - 220, bw, true).root);
-    buttons.add(kitButton('Team Select', teamSelect, W / 2 + 220, bw, false).root);
+    buttons.add(kitButton('Team Select', teamSelect, W / 2 - 220, bw, false).root);
+    buttons.add(kitButton('Close preview', () => destroy(), W / 2 + 220, bw, true).root);
   } else {
-    buttons.add(kitButton('New Game', newGame, W / 2 - 220, bw, true).root);
-    buttons.add(kitButton('Team Select', teamSelect, W / 2 + 220, bw, false).root);
+    buttons.add(kitButton('Team Select', teamSelect, W / 2 - 220, bw, false).root);
+    buttons.add(kitButton('New Game', newGame, W / 2 + 220, bw, true).root);
   }
   // Multiplayer durum satırı: düğmelerin hemen üstünde, ortalı (rakip ayrıldı / bekleniyor / rövanş istiyor)
   const statusText = o.status && !o.preview ? elBody(scene, W / 2, by - bh / 2 - 34, '', 22, EL.MUTED).setOrigin(0.5) : null;
@@ -334,7 +340,7 @@ export function showResultScreen(scene: Phaser.Scene, o: ResultScreenOptions): R
     buttons.add(link);
   }
   root.add(buttons);
-  scene.tweens.add({ targets: buttons, alpha: 1, duration: 420, delay: 1000 });
+  scene.tweens.add({ targets: buttons, alpha: 1, duration: d(rm.buttonsMs), delay: rm.buttonsDelayMs });
 
   // --- Klavye: Enter = New Game, Esc = Team Select (wiki/debug menüsü açıkken yok sayılır) ---
   const onKey = (e: KeyboardEvent) => {

@@ -3,7 +3,7 @@
 import { content, describeStat } from '../engine';
 import type { StatKind, Stats } from '../engine';
 import { iconUrl } from './dom-icons';
-import { STAT_COLOR, STAT_ICON } from './stat-icons';
+import { MIGHT_COLOR, STAT_COLOR, statIconName } from './stat-icons';
 
 export interface StatTip {
   title: string;
@@ -78,15 +78,14 @@ function statTipBase(id: string, stats: Stats): StatTip | null {
 }
 
 /**
- * Statın ikonu (savaş HUD'ı / karakter sayfası / alt çubuk / Codex ile AYNI kaynak: src/ui/stat-icons.ts). Gear paneli ve item stat
- * kimlikleri kabul edilir. Might'ın v1'de ikonu yok: Shared v2 çizimi `v2:shared:might` (src/game/art-v2/shared/icons.ts > SPRITES).
+ * Statın ikonu (savaş HUD'ı / karakter sayfası / alt çubuk / Codex ile AYNI kaynak: src/ui/stat-icons.ts > statIconName -> boyalı PNG
+ * assets/stat-icons/<stat>.png, yoksa kodla çizilen yedek). Gear paneli ve item stat kimlikleri kabul edilir (Might dahil).
  * Phaser ekranları (Endless ödül / tüccar kartları) aynı `kind` + `color` ile `ensureIcon(scene, kind, color)` çağırır.
  */
 export function statIcon(id: string): { kind: string; color: string } | null {
   const kind = KIND[id];
   if (!kind) return null;
-  if (kind === 'might') return { kind: 'v2:shared:might', color: '#ff9f43' };
-  return { kind: STAT_ICON[kind], color: STAT_COLOR[kind] };
+  return { kind: statIconName(kind), color: kind === 'might' ? MIGHT_COLOR : STAT_COLOR[kind] };
 }
 
 /** DOM için ikon resmi (data URL; önbellekli). Bilinmeyen kimlikte ''. */

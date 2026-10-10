@@ -1,5 +1,5 @@
 {
-  "_not": "The Bridge Warden: King's Bridge (düğüm 9) boss'u. Tasarım docs/design/bosses/bridge-warden.md (Ömer kararları 2026-10-08: tema A, Iron Mooring x2, Faz III sert, kamp YOK -> can belgedeki 480'den %10 düşük = 432, telgraf boss'un sonraki turunda çözülür). Sayılar PROVİZYON (npm run sim:campaign). Gizli boss tanımı: rastgele havuzda ve takım seçiminde YOK (data/bosses, content.bosses).",
+  "_not": "The Bridge Warden: King's Bridge (düğüm 9) boss'u. Tasarım docs/design/bosses/bridge-warden.md (Ömer kararları 2026-10-08: tema A, Iron Mooring x2, Faz III sert, kamp YOK -> can belgedeki 480'den %10 düşük = 432, telgraf boss'un sonraki turunda çözülür). Sayılar PROVİZYON (npm run sim:campaign). Sefer karşılaşması (encounters.json > bridge_warden) canı ayrıca x0,88 ile düşürür (balance-tester 2026-10-10: Medium King's Bridge ilk deneme %37 -> %49, Medium boss kategorisi %45 -> %51, bant 45-60). Gizli boss tanımı: rastgele havuzda ve takım seçiminde YOK (data/bosses, content.bosses).",
   "id": "bridge_warden",
   "name": "The Bridge Warden",
   "spriteId": "bridge_warden",

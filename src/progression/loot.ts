@@ -2,7 +2,7 @@
 // nadirlik her zorlukta AYNI (karar 6), boss/hazine düşüşleri otomatik (karar 8), tekrar oynamada azalan ödül (roadmap 2.3 A).
 // Sefer (src/campaign/loot.ts) ve endless aynı fonksiyonu kullanabilir; rastgelelik yalnızca verilen Rng'den.
 import type { Rng } from '../engine/rng';
-import { classWeaponFamilies, ITEMS, RARITY_IDS, SLOT_IDS, itemDef, itemIP, type Equipment, type ItemDef, type LootKind, type RarityId, type SlotId } from './items';
+import { classWeaponFamilies, ITEMS, RARITY_IDS, SLOT_IDS, instanceIP, itemDef, type Equipment, type ItemDef, type LootKind, type RarityId, type SlotId } from './items';
 
 export interface LootInput {
   rng: Rng;
@@ -54,8 +54,7 @@ function weakestSlot(rng: Rng, party: LootInput['party']): SlotId {
   for (const h of party)
     for (const k of SLOT_IDS) {
       const inst = h.equipment?.[k];
-      const d = inst ? itemDef(inst.id) : undefined;
-      const ip = d ? itemIP(d) : 0;
+      const ip = inst && itemDef(inst.id) ? instanceIP(inst) : 0;
       if (ip < best) {
         best = ip;
         slots = [k];

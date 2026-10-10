@@ -260,7 +260,8 @@ describe('endless: ödül kartları ve dükkân', () => {
     const d = ITEMS.items[0]!;
     run.offer = [{ kind: 'item', itemId: d.id, heroId: run.heroes[0]!.id }];
     const next = chooseReward(run, 0);
-    expect(next.bag).toEqual([{ uid: `e${run.nextItem}`, id: d.id }]);
+    expect(next.bag).toMatchObject([{ uid: `e${run.nextItem}`, id: d.id }]);
+    expect(next.bag![0]!.rolls).toBeDefined(); // stat zarları koşu seed'inden (2026-10-10)
     expect(next.heroes).toEqual(run.heroes); // kimseye takılmadı
     expect(next.nextItem).toBe(run.nextItem + 1);
     const full = { ...run, bag: Array.from({ length: ENDLESS.bagSize! }, (_, i) => ({ uid: `x${i}`, id: d.id })) };

@@ -1,6 +1,6 @@
 # Item (eşya) sistemi: tasarım belgesi (TASLAK / ÖNERİ)
 
-> **Durum: AŞAMA 1 (Item MVP) UYGULANDI (madde 280).** Kodda: 51 Valdoria item'i + loot ayarları (`data/items.json`), saf loot `src/progression/loot.ts`, güç katmanı `loadout.ts` (tüm statlar motorun toplamsal eklerine), Equip best `equip.ts`, primary uyarısı `primary.ts`, seferde loot `src/campaign/loot.ts`, Gear ekranı `src/ui/gear-screen.ts`, Spoils / Ashford teslim kartı, düşman telafisi açık (`power-budget.json`). Bu belgedeki oranlardan sapmalar madde 280'de: loot miktarı (savaş 0,5 x takım) ve ölçülen telafi (+%8). Tüccar, affix üreteci, set/Legendary/trait sonraki aşamalarda. Sayılar PROVİZYON (balance-tester).
+> **Durum: AŞAMA 1 + YENİDEN YAPILANMA (Ömer onayı 2026-10-10, bölüm 1.3a).** Nadirlik = stat sayısı + güç, yuva ana statı + izinli ekler, seed'li stat zarları (kayda yazılır), Epic etki kancası (etkiler henüz seçilmedi: `item-effects.md`). Kodda: 52 item (`data/items.json`), loot `src/progression/loot.ts`, güç katmanı `loadout.ts` (zarlı değerler: `instanceStats`), Equip best `equip.ts`, primary uyarısı `primary.ts`, seferde loot `src/campaign/loot.ts`, Gear ekranı, Spoils / Ashford teslim kartı, düşman telafisi (`power-budget.json`). Sapmalar madde 280 ve 290'da. Sayılar PROVİZYON (balance-tester).
 >
 > Hazırlayan: content-designer (Opus). Kaynaklar: `docs/design/future-ideas.md` (Item satırları), `docs/design/campaign/campaign.md` (v5), `docs/balance.md` (bantlar + sefer dengesi), `docs/design/combat.md` (Savaş kurulum seçenekleri, hasar ölçekleme kuralı), `data/classes/*.json`, `data/formulas.json`, `src/engine/stats.ts`.
 >
@@ -76,10 +76,39 @@ Karakter sprite'ları sabit (item görünüşü değiştirmez), bu yüzden kıs�
 
 Neden 5: oyuncuların okuduğu evrensel dil (gri-yeşil-mavi-mor-turuncu); 4 kademe Epic/Legendary arasındaki "özel" hissi kaybettirir, 6+ kademe küçük bütçede (4.1) birbirinden ayırt edilemez.
 
+### 1.3a Nadirlik = stat sayısı + güç, yuva ana statı, stat zarları (Ömer onayı 2026-10-10)
+
+Bu bölüm 1.3'ün "ek stat satırı (affix)" sütununun ve 1.6'nın MVP kısmının YERİNE geçer.
+
+| Nadirlik | Stat sayısı | Bütçe çarpanı | Not |
+|---|---|---|---|
+| Common | **1** (yuvanın ana statı) | **x1,0** | |
+| Uncommon | **2** | **x1,4** | |
+| Rare | **3** | **x1,85** | |
+| Epic | **3 + 1 özel etki** | **x2,3** | Etkiler UYGULANDI (Ömer seçimi 2026-10-10, madde 292; `item-effects.md`): 11 etki, her Epic item bir etki taşır; etkinin IP'si Epic bütçesinin içinden (statlar o kadar küçük). |
+| Legendary | — | — | Sonra. |
+
+- **Bütçe:** `IP = yuva ağırlığı x B(ilvl) x nadirlik çarpanı`, `B(ilvl) = 0,7 + 0,14 x ilvl` (eski `1 + 0,2 x ilvl`'nin x0,7'si: Ömer'in çarpanları eski çarpanların Common = 1'e göre yeniden ölçeklenmiş hâli, bu yüzden item gücü eski ölçekte kalır ve güç bütçesi / düşman telafisi (`power-budget.json`) aynen çalışır). Tolerans ±%10 (`validateItems`).
+- **Yuva ana statları** (`items.json > slotStats`; item en az birini taşır, Common yalnızca onu):
+
+| Yuva | Ana stat | İzinli ekler |
+|---|---|---|
+| Weapon | Might ya da ailesinin statı (balta/topuz STR, yay/hançer DEX, asa INT, tılsım LUCK; `weaponFamilies[].attr`) | kritik, isabet, kritik hasarı, can, MP, MP yenilenmesi, zırh (+ diğer ana stat) |
+| Helm | can ya da büyü zırhı | zırh, isabet, MP (+ diğer ana stat) |
+| Armor | zırh | can, büyü zırhı, kaçınma, can yenilenmesi |
+| Gloves | kritik ya da isabet (Might YOK: yalnızca silahta, madde 286; set bonusları ileride Might taşıyabilir) | zırh, kritik hasarı, kaçınma (+ diğer ana stat) |
+| Boots | hız ya da kaçınma | zırh, can, büyü zırhı (+ diğer ana stat) |
+| Trinket | MP, can/MP yenilenmesi ya da LUCK | kritik, büyü zırhı, can (+ diğer ana statlar) |
+
+- **Silahta silah ailesi dışı ana stat yok:** yay STR taşıyamaz (doğrulama hatası).
+- **Stat zarları (görünür aralık, 2026-10-10 düzeltmesi):** her stat katalog değerinin (aralığın ortası) iki yanına **simetrik**, **en az bir adım** (`max(adım, değer x %15)`, adıma yuvarlanır) aralıkta seed'li zarla atılır; tekdüze zar + simetri => beklenen değer = katalog değeri (denge sabit). Adımlar `stats[].step`: düz statlar 1, yüzde statlar (Might, kritik, isabet, kaçınma) 0,5, MP 5, kritik hasarı 5, hız 0,5. Değer tek adımsa (+1 STR, +0,5 hız) aralık yok. Sonuç: 52 item'in 51'inde en az bir stat aralık gösterir (108 statın 82'si); örn. +2 Armor -> 1–3, +3% Crit -> 2,5–3,5. Sefer loot'u loot seed'inden (düşüş başına; deneme sayısı değiştirmez), Endless koşu seed'inden zarlanır. **Zarlar örnekte kayda yazılır** (`ItemInstance.rolls`): yeniden yükleme yeniden atmaz. Okunurken güncel aralığa sıkıştırılır (veri dengelenirse eski zar taşmaz). Kartlarda ve ipuçlarında aralık görünür: "+4 Max HP (3–5)".
+- **Eski kayıtlar:** zarı olmayan item'ler aralığın ortasını (= katalog değeri) kullanır; hiçbir şey bozulmaz. Bozuk zar alanı olan item kayıttan atılır (oyun çökmez).
+- **İçerik:** 52 item'in id'si, adı, yuvası, ailesi ve nadirliği korundu (ikonlar id'ye boyalı); statlar yeni kurallara göre yeniden yazıldı. Sığmayan birkaç Common'ın ilvl'si kaydırıldı (Padded Gambeson 2->3, Quilted Jack 5->4, Flanged Mace 3->4, Turnshoes 2->5, Hobnailed Boots 5->4): zırh / kaçınma tek statının adımı küçük bütçeye sığmıyordu.
+
 ### 1.4 Item seviyesi (ilvl) ve bölüm kademesi
 
 - **ilvl = bölümün tabanı + düğümün bölüm içindeki derinliği.** Öneri: bölüm 1 = ilvl **1-10**, bölüm 2 = **11-20**, bölüm 3 = **21-30** (bölüm başına ~10 savaş durağı; roadmap durak sayısını değiştirirse `ilvlPerStop` ile ölçeklenir). Endless'ta ilvl 30'un üstüne devam eder (yumuşak tavan, 4.5).
-- **Seviye bütçesi:** `B(ilvl) = 1 + 0,2 x ilvl` → ilvl 5 = 2, ilvl 10 = 3, ilvl 20 = 5, ilvl 30 = 7.
+- **Seviye bütçesi:** ~~`B(ilvl) = 1 + 0,2 x ilvl`~~ → 2026-10-10'dan beri `B(ilvl) = 0,7 + 0,14 x ilvl` ve nadirlik çarpanları Common = 1,0 ölçeğinde (1.3a); mutlak güç aynı.
 - **Item bütçesi:** `IP = slotWeight x B(ilvl) x rarityMult` (±%10 tolerans; tam sayıya yakın, "güzel" stat değerleri için).
 - Bölümün adı item adına girmez; ama taban isimleri bölüme göre sertleşir (bölüm 1 köylü/haydut malı: *Woodcutter's Axe, Padded Gambeson*; bölüm 2 asker malı: *Riveted Mail, Arming Sword*; bölüm 3 şövalye/rün malı: *Plate Harness, Rune Staff*). Bu "kademe" tabanların `minIlvl`'i ile sağlanır, ayrı tür gerekmez.
 

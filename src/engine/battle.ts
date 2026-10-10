@@ -6,11 +6,11 @@ import { pickSideNeighbors } from './formation';
 import { betMultipliers, betStake } from './gamble';
 import { burnAmountFor, emptyProcApplies } from './mana-burn';
 import { Rng } from './rng';
-import { damageSpecFor, type DamageEffect } from './spec';
+import { bonusScaleRaw, damageSpecFor, type DamageEffect } from './spec';
 import { applySummonVariant, applyUnitModifiers, armorReduction, attributePower, hitOutcome } from './stats';
 import type { Attribute, Corpse, CorpseChoice, CorpseState, DamageOrigin, Element } from './types';
 import { advanceTurn, predictQueue, turnProgress, type TurnSlot } from './turn-order';
-import type { ActionInfo, AreaDef, AreaStage, BattleAction, BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GlobalSkillDef, GroundDef, GroundEffect, ShieldHook, Side, SkillDef, SkillEffect, Status, StatusDef, Telegraph, UnitSetup } from './types';
+import type { ActionInfo, ItemEffects, AreaDef, AreaStage, BattleAction, BattleEvent, BattleMode, BetSpec, Combatant, CombatantDef, Formulas, GlobalSkillDef, GroundDef, GroundEffect, ShieldHook, Side, SkillDef, SkillEffect, Status, StatusDef, Telegraph, UnitSetup } from './types';
 
 export interface BattleSetup {
   seed: number;
@@ -296,7 +296,22 @@ export class Battle {
       }
       m *= protect;
     }
+    // Warden's Oath (item etkisi adjacentGuard): ekranda yan komşu dostun koruması; birden çok kaynakta en yükseği
+    const oath = this.adjacentGuardOf(target);
+    if (oath > 0) m *= 1 - oath;
     return m;
+  }
+
+  /** Hedefin ekranda yan komşusu olan (sideNeighbors) canlı dostlarından gelen en yüksek adjacentGuard (yoksa 0). */
+  private adjacentGuardOf(target: Combatant): number {
+    let best = 0;
+    for (const a of this.living(target.side)) if (a.uid !== target.uid && a.board === target.board && (a.itemEffects?.adjacentGuard ?? 0) > best) {
+      const map = this.setup.formulas.formation.sideNeighbors?.[target.board]?.[target.slot];
+      const alive = this.living(target.side).filter((c) => c.uid !== target.uid && c.board === target.board);
+      const near = map ? pickSideNeighbors(map, (slot) => alive.some((c) => c.slot === slot)) : alive.filter((c) => this.rowOf(c.slot) === this.rowOf(target.slot) && Math.abs(this.laneOf(c.slot) - this.laneOf(target.slot)) === 1).map((c) => c.slot);
+      if (near.includes(a.slot)) best = a.itemEffects!.adjacentGuard!;
+    }
+    return best;
   }
 
   /**
@@ -533,6 +548,15 @@ export class Battle {
   hunterMarkMult(actor: Combatant, target: Combatant): number {
     const m = actor.stats.hunterMark ?? 0;
     return m > 0 && this.baseSpeedOf(actor) > this.baseSpeedOf(target) ? 1 + m : 1;
+  }
+
+  /**
+   * Saldırının hedefe göre verdiği hasar çarpanı: Hunter's Mark x Giantslayer (item etkisi tierDamageMult: hedef elit / boss rütbeli ya da boss tanımlı).
+   * Etki yoksa hunterMarkMult ile aynı. Önizleme ve yapay zeka da bunu kullanır.
+   */
+  dealtDamageMult(actor: Combatant, target: Combatant): number {
+    const gs = actor.itemEffects?.tierDamageMult;
+    return this.hunterMarkMult(actor, target) * (gs && (target.tier !== undefined || target.boss !== undefined) ? gs : 1);
   }
 
   /** 'everyone' hedefli skill'lerde bir etkinin bu hedefe uygulanıp uygulanmadığı (diğer skill'lerde hep evet). */
@@ -1003,7 +1027,7 @@ export class Battle {
     if (!src || src.hp <= 0) return { avg, min, max };
     for (const e of this.skill(t.skill)?.effects ?? []) {
       if (e.type !== 'damage') continue;
-      const r = damageRange(this.attackStats(src), this.effectiveStats(c), damageSpecFor(src, c, e, this.setup.formulas, 1, true, this.damageTakenMult(c), this.hunterMarkMult(src, c)), this.setup.formulas);
+      const r = damageRange(this.attackStats(src), this.effectiveStats(c), damageSpecFor(src, c, e, this.setup.formulas, 1, true, this.damageTakenMult(c), this.dealtDamageMult(src, c), e.bonusScale ? this.effectiveStats(src) : undefined), this.setup.formulas);
       avg += r.avg;
       min += r.min;
       max += r.max;
@@ -1039,9 +1063,23 @@ export class Battle {
     return !!this.setup.formulas.ccImmunity?.taunt && this.ccImmune(c);
   }
 
+  /** Thrifty: bu birimin sıradaki skill'i MP bedelsiz mi (item etkisi firstSkillFree, ilk skill henüz kullanılmadı)? Saf. */
+  thriftyFree(actor: Combatant, resource: string): boolean {
+    return resource === 'mp' && !!actor.itemEffects?.firstSkillFree && !actor.freeSkillUsed;
+  }
+
+  /** Second Wind (item etkisi secondWind): savaşta bir kez, can eşiğin altına inince şifa. */
+  private checkSecondWind(target: Combatant, emit: Emit): void {
+    const sw = target.itemEffects?.secondWind;
+    if (!sw || target.secondWindUsed || target.hp <= 0 || target.hp >= sw.below * target.maxHp) return;
+    target.secondWindUsed = true;
+    emit({ type: 'passive', actor: target.uid, passive: 'second_wind', name: 'Second Wind' });
+    this.applyHeal(target, target, Math.max(1, Math.round(target.maxHp * sw.heal)), false, emit);
+  }
+
   /** Birim çekilemez/itilemez mi (boss bağışıklığı ya da Unyielding)? Saf. */
   immuneToDisplacement(c: Combatant): boolean {
-    return !!c.boss?.unyielding?.immuneDisplacement || (!!this.setup.formulas.ccImmunity?.displacement && this.ccImmune(c));
+    return !!c.boss?.unyielding?.immuneDisplacement || (!!this.setup.formulas.ccImmunity?.displacement && this.ccImmune(c)) || !!c.itemEffects?.steadfast;
   }
 
   /**
@@ -1348,7 +1386,7 @@ export class Battle {
       if (!sk) continue;
       let v = 0;
       for (const e of sk.effects) {
-        if (e.type === 'damage' || e.type === 'heal') v += attributePower(unit.stats, e.scale, f) * e.power;
+        if (e.type === 'damage' || e.type === 'heal') v += attributePower(unit.stats, e.scale, f) * e.power + (e.type === 'damage' ? bonusScaleRaw(e.bonusScale, unit.stats) * (unit.stats.spellPowerMult ?? 1) : 0);
         else if (e.type === 'hot') v += attributePower(unit.stats, e.scale, f) * e.power * e.turns;
         else if (e.type === 'shield') v += attributePower(unit.stats, e.scale, f) * e.power * 0.5;
       }
@@ -1621,7 +1659,7 @@ export class Battle {
       return { ok: false, reason: 'Melee: front row only' };
     }
     const resource = skill.cost.resource;
-    const amount = skillCostAmount(skill.cost, actor); // oranlı bedel (ofCurrent): mevcut kaynağın oranı, en az 1
+    const amount = this.thriftyFree(actor, resource) ? 0 : skillCostAmount(skill.cost, actor); // oranlı bedel (ofCurrent): mevcut kaynağın oranı, en az 1
     // Silence (statuses.json > blocksMpSkills, madde 260): MP bedelli skill kullanılamaz (Unlimited MP debug'ı da bunu açmaz); bedelsizler ve global eylemler serbest
     if (resource === 'mp' && amount > 0 && this.isSilenced(actorUid)) return { ok: false, reason: 'Silenced' };
     if (resource === 'mp' && !this.freeMp && actor.mp < amount) return { ok: false, reason: 'Not enough MP' };
@@ -1990,7 +2028,12 @@ export class Battle {
     if (!debug && this.mode === 'turns' && !this.noCooldowns && (skill.cooldown ?? 0) > 0) actor.cooldowns[skill.id] = skill.cooldown!;
 
     const resource = skill.cost.resource;
-    const cost = skillCostAmount(skill.cost, actor); // oranlı bedel (Wail: mevcut canın %20'si) ödeme anındaki kaynaktan
+    // Thrifty (item etkisi firstSkillFree): savaştaki ilk skill'in MP bedeli 0; ilk skill kullanıldıktan sonra normal
+    const cost = this.thriftyFree(actor, resource) ? 0 : skillCostAmount(skill.cost, actor); // oranlı bedel (Wail: mevcut canın %20'si) ödeme anındaki kaynaktan
+    if (!debug && actor.itemEffects?.firstSkillFree && !actor.freeSkillUsed) {
+      actor.freeSkillUsed = true;
+      if (resource === 'mp' && skillCostAmount(skill.cost, actor) > 0) emit({ type: 'passive', actor: actor.uid, passive: 'thrifty', name: 'Thrifty' });
+    }
     if (!debug && cost > 0 && !(resource === 'mp' && this.freeMp) && !(resource === 'rage' && this.freeRage)) {
       if (resource === 'rage') {
         actor.rage = (actor.rage ?? 0) - cost;
@@ -2568,8 +2611,10 @@ export class Battle {
     // Str: tur başı düz can yenilenmesi (Str x hpRegenPerStr, yuvarlanır)
     const hpRegen = Math.round(actor.stats.hpRegen ?? 0);
     if (actor.hp > 0 && !skipThisTurn && hpRegen > 0 && actor.hp < actor.maxHp) this.applyHeal(actor, actor, hpRegen, false, emit);
-    // MP yenilenir
-    const regen = Math.max(0, Math.min(actor.stats.mpRegen, actor.maxMp - actor.mp));
+    // MP yenilenir (Ember Heart: can eşiğin üstündeyse ek MP; item etkisi turnMp)
+    const th = actor.itemEffects?.turnMp;
+    const bonusMp = th && actor.hp > th.above * actor.maxHp ? th.mp : 0;
+    const regen = Math.max(0, Math.min(actor.stats.mpRegen + bonusMp, actor.maxMp - actor.mp));
     if (regen > 0) {
       actor.mp += regen;
       emit({ type: 'mpRegen', actor: actor.uid, amount: regen, after: actor.mp });
@@ -2637,9 +2682,12 @@ export class Battle {
     // Str-primary Resilience: karaktere uygulanan her debuff, uygulanırken ihtimalle 1 tur kısalır (en az 1 kalır; 1 turluk debuff'ta zar atılmaz).
     // Yer etkilerinin kendi süresi (ground turns) buradan geçmez; yalnızca karakter üstünde tutulan durumlar etkilenir.
     const resilience = target.stats.resilience ?? 0;
-    if (resilience > 0 && this.statusDef(status.kind)?.type === 'debuff' && status.turns > 1 && this.rng.next() < resilience) {
+    // Iron Will (item etkisi debuffShorten): Resilience ile TEK zarda toplanır, tavan `cap`; etki yoksa zar ve şans eskisiyle aynı
+    const iw = target.itemEffects?.debuffShorten;
+    const shorten = iw ? Math.min(iw.cap, resilience + iw.chance) : resilience;
+    if (shorten > 0 && this.statusDef(status.kind)?.type === 'debuff' && status.turns > 1 && this.rng.next() < shorten) {
       status = { ...status, turns: status.turns - 1 };
-      emit({ type: 'passive', actor: target.uid, passive: 'primary_str', name: 'Resilience' });
+      emit({ type: 'passive', actor: target.uid, passive: resilience > 0 ? 'primary_str' : 'iron_will', name: resilience > 0 ? 'Resilience' : 'Iron Will' });
     }
     // Yüklü durum (attackCharges): kalan yük `turns` alanında, her uygulamada tam yükle başlar (yığılmaz, tazelenir)
     const charges = this.statusDef(status.kind)?.attackCharges;
@@ -2827,7 +2875,7 @@ export class Battle {
       emit({ type: outcome, source: actor.uid, target: target.uid });
       return { landed: false };
     }
-    const spec = damageSpecFor(actor, target, effect, f, powerMult, extras, this.damageTakenMult(target), this.hunterMarkMult(actor, target));
+    const spec = damageSpecFor(actor, target, effect, f, powerMult, extras, this.damageTakenMult(target), this.dealtDamageMult(actor, target), effect.bonusScale ? this.effectiveStats(actor) : undefined);
     const targetStats = this.effectiveStats(target);
     const base = rollDamage(this.attackStats(actor), targetStats, spec, f, this.rng); // Abyssal Fury: bonus STR yalnızca hasarda (madde 262)
     // Garantili kritik (Backstab): kritik zarı ATILMAZ, kritik çarpanı uygulanır (debug 'never' yine kapatır; Jinxed bunu bozmaz: madde Ö5).
@@ -2843,6 +2891,9 @@ export class Battle {
     const guardian = guard ? this.get(guard.source) : undefined;
     let hpLoss: number;
     const meta: HitMeta = { origin: 'skill', element: effect.element ?? 'physical', damageType: effect.damageType };
+    // Bloodletter (item etkisi executeLifesteal): vuruştan ÖNCE hedefin canı eşiğin altında mı
+    const exe = actor.itemEffects?.executeLifesteal;
+    const execute = !!exe && target.hp < exe.below * target.maxHp;
     let lucky: boolean;
     if (guard && guardian && guardian !== target && guardian.hp > 0) {
       const redirected = Math.round(total * (guard.share ?? 0.5));
@@ -2866,6 +2917,17 @@ export class Battle {
       const r = f.rage;
       const gain = Math.min(r.perHitCap, r.hitBase + r.perHpPercent * ((total / Math.max(1, target.maxHp)) * 100));
       this.rageTally.set(target.uid, (this.rageTally.get(target.uid) ?? 0) + gain);
+    }
+    if (execute && exe && actor.hp > 0 && hpLoss > 0) {
+      emit({ type: 'passive', actor: actor.uid, passive: 'bloodletter', name: 'Bloodletter' });
+      this.applyHeal(actor, actor, Math.max(1, Math.round(hpLoss * exe.ratio)), false, emit);
+    }
+    // Mana Spring (item etkisi critMp): kendi kritik vuruşunda MP (maks'ı aşmaz); EYLEM başına bir kez (alan / çok vuruşlu skill'ler MP yağdırmasın)
+    const springMp = crit && actor.hp > 0 && actor.springAt !== this.turnsTaken ? Math.min(actor.itemEffects?.critMp ?? 0, actor.maxMp - actor.mp) : 0;
+    if (springMp > 0) {
+      actor.springAt = this.turnsTaken;
+      actor.mp += springMp;
+      emit({ type: 'mpRegen', actor: actor.uid, amount: springMp, after: actor.mp, cause: 'mana_spring' });
     }
     if (effect.lifesteal && actor.hp > 0) {
       // Madde 241: canı doluyken can çalınmaz; Dark Bond kopyası yalnızca GERÇEKTEN iyileşen miktar
@@ -2983,6 +3045,7 @@ export class Battle {
     });
     if (pendingBreak) emit({ type: 'statusEnd', target: target.uid, status: 'taunt', broken: true });
     if (target.boss?.phases && target.hp > 0) this.checkPhase(target, emit);
+    this.checkSecondWind(target, emit);
     // Kalkan kancaları yalnızca DOĞRUDAN bir saldırganın skill vuruşunda (yer etkisi tiki / kendine hasar tetiklemez)
     if (meta.origin === 'skill' && actor.side !== target.side) for (const { hook, part } of hooked) this.absorbTrigger(hook, target, actor, part, emit);
     return rest;
@@ -3237,6 +3300,13 @@ function createSetupCombatant(baseDef: CombatantDef, side: Side, slot: number, u
   if (finite(unit.startShieldRatio) && unit.startShieldRatio > 0) c.shield += Math.round(c.maxHp * unit.startShieldRatio);
   if (finite(unit.openingDamageMult) && unit.openingDamageMult !== 1) c.openingDamageMult = unit.openingDamageMult;
   if (finite(unit.fallAllyHealRatio) && unit.fallAllyHealRatio > 0) c.fallAllyHealRatio = unit.fallAllyHealRatio;
+  // Epic item etkileri (madde 292): verilmezse birim aynı
+  const ie = unit.itemEffects;
+  if (ie && Object.keys(ie).length > 0) {
+    c.itemEffects = JSON.parse(JSON.stringify(ie)) as ItemEffects;
+    if (finite(ie.startShieldRatio) && ie.startShieldRatio > 0) c.shield += Math.round(c.maxHp * ie.startShieldRatio);
+    if (finite(ie.startCharge) && ie.startCharge > 0) c.turnCounter = Math.round(formulas.turn.threshold * Math.min(0.99, ie.startCharge));
+  }
   // Hazır çağrı (ör. düşman Skeleton): çağrı kuralları, sahipsiz ve süresiz
   if (unit.summoned) c.summoned = true;
   if (unit.lockSkills && unit.lockSkills.length > 0) c.lockedSkills = [...unit.lockSkills];

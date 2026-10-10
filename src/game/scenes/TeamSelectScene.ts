@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import type { UiSoundKind } from '../../ui/ui-sound';
 import layout from '../../../data/battle-layout.json';
 import { skillTags } from '../../ui/skill-tags';
 import { content, describePassive, describeSkill, describeStat, primaryBonusInfo } from '../../engine';
@@ -6,7 +7,7 @@ import type { CombatantDef, Teams } from '../../engine';
 import { backgroundKey, hasBackground, preloadAssets } from '../assets';
 import { ensureIcon, ensureSkillIcon } from '../icons';
 import { ownerOfUnit } from '../asset-versions';
-import { PRIMARY_GOLD, STAT_COLOR, STAT_ICON, STAT_LABEL } from '../../ui/stat-icons';
+import { PRIMARY_GOLD, STAT_COLOR, STAT_LABEL, statIconName } from '../../ui/stat-icons';
 import { initialSizes, newSeed } from '../seed';
 import { classAvatar, ensureGlow } from '../menu-ui';
 import { groupColor } from '../class-order';
@@ -43,6 +44,8 @@ import {
   EL,
   diamondPts,
   elBack,
+  elGo,
+  elScreenIn,
   elBadge,
   elBody,
   elButton,
@@ -170,7 +173,7 @@ export class TeamSelectScene extends Phaser.Scene {
   private infoRoot?: Phaser.GameObjects.Container;
   private infoLines?: Phaser.GameObjects.Graphics;
   private menuLink?: Phaser.GameObjects.Container;
-  private toastFn?: (msg: string) => void;
+  private toastFn?: (msg: string, sound?: UiSoundKind | null) => void;
   private center?: Phaser.GameObjects.Container;
   private actions?: Phaser.GameObjects.Container;
   private status?: Phaser.GameObjects.Text;
@@ -276,7 +279,7 @@ export class TeamSelectScene extends Phaser.Scene {
     this.layout(); // class rafı burada kurulur (genişliğe göre)
     onStageResize(this, () => this.layout());
     this.playEntrance();
-    this.cameras.main.fadeIn(380, 6, 3, 1);
+    elScreenIn(this); // ortak ekran geçişi (data/ui-motion.json > screen)
   }
 
   // --- State ---
@@ -324,16 +327,13 @@ export class TeamSelectScene extends Phaser.Scene {
     }
     this.starting = true;
     this.hideTip(true);
-    this.cameras.main.fadeOut(300, 6, 3, 1);
-    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-      this.scene.start('BattleScene', {
-        seed: newSeed(),
-        mode: 'turns',
-        battleId: content.DEFAULT_BATTLE,
-        partySize: this.sizes.party,
-        enemySize: this.sizes.enemies,
-        teams: { party: [...this.teams.party], enemies: [...this.teams.enemies] } satisfies Teams, // cell lists (index = slot)
-      });
+    elGo(this, 'BattleScene', {
+      seed: newSeed(),
+      mode: 'turns',
+      battleId: content.DEFAULT_BATTLE,
+      partySize: this.sizes.party,
+      enemySize: this.sizes.enemies,
+      teams: { party: [...this.teams.party], enemies: [...this.teams.enemies] } satisfies Teams, // cell lists (index = slot)
     });
   }
 
@@ -374,7 +374,7 @@ export class TeamSelectScene extends Phaser.Scene {
     }
     const replacing = i >= 0 && !!this.teams[side][i];
     if (!replacing && this.count(side) >= this.sizes[side]) {
-      this.toast(`${NAME[side]} team is full (${this.sizes[side]} / ${this.sizes[side]})`);
+      this.toast(`${NAME[side]} team is full (${this.sizes[side]} / ${this.sizes[side]})`, 'error');
       return false;
     }
     if (i < 0) i = freeCellFor(this.teams[side], id);
@@ -422,8 +422,7 @@ export class TeamSelectScene extends Phaser.Scene {
     }
     this.starting = true;
     this.hideTip(true);
-    this.cameras.main.fadeOut(220, 6, 3, 1);
-    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('MainMenuScene', { view: 'play' }));
+    elGo(this, 'MainMenuScene', { view: 'play' });
   }
 
   // --- Scenery ---
@@ -625,8 +624,8 @@ export class TeamSelectScene extends Phaser.Scene {
   }
 
   /** Kısa bildirim (üst ortada): takım dolu, eksik sınıf... */
-  private toast(msg: string): void {
-    this.toastFn?.(msg);
+  private toast(msg: string, sound: UiSoundKind | null = 'toast'): void {
+    this.toastFn?.(msg, sound);
   }
 
   private setStatus(text: string, hex: string, pulse = false): void {
@@ -685,7 +684,7 @@ export class TeamSelectScene extends Phaser.Scene {
     for (const k of ATTRS) {
       const pri = def.primary === k;
       const sx = x;
-      const ic = this.add.image(x + 11, 0, ensureIcon(this, STAT_ICON[k], STAT_COLOR[k], false)).setDisplaySize(22, 22);
+      const ic = this.add.image(x + 11, 0, ensureIcon(this, statIconName(k), STAT_COLOR[k], false)).setDisplaySize(22, 22);
       x += 22 + 6;
       const lb = this.cz(x, 1, STAT_LABEL[k], 12, pri ? PRI_SMALL : MUTED, 0.12).setOrigin(0, 0.5);
       x += lb.width + 6;
@@ -1161,7 +1160,7 @@ export class TeamSelectScene extends Phaser.Scene {
   private statTip(def: CombatantDef, kind: (typeof ATTRS)[number]): TipSpec {
     const info = describeStat(kind, def.stats, content.formulas);
     return {
-      icon: ensureIcon(this, STAT_ICON[kind], STAT_COLOR[kind], false),
+      icon: ensureIcon(this, statIconName(kind), STAT_COLOR[kind], false),
       iconSize: 40,
       title: info.title,
       titleHex: info.primary ? PRI : STAT_COLOR[kind],
@@ -1304,13 +1303,13 @@ export class TeamSelectScene extends Phaser.Scene {
       if (r.ok) {
         this.teams = r.teams;
         this.pop = { side: slot.side, cell: slot.i };
-      } else if (r.reason === 'full') this.toast(`${NAME[slot.side]} team is full`);
+      } else if (r.reason === 'full') this.toast(`${NAME[slot.side]} team is full`, 'error');
     } else if (side && side !== d.side) {
       const r = moveToSide(this.teams, this.sizes, from, side);
       if (r.ok) {
         this.teams = r.teams;
         this.pop = { side, cell: r.cell };
-      } else if (r.reason === 'full') this.toast(`${NAME[side]} team is full`);
+      } else if (r.reason === 'full') this.toast(`${NAME[side]} team is full`, 'error');
     }
     this.refresh();
   }

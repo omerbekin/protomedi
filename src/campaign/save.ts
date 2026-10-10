@@ -72,7 +72,12 @@ const DIFFS: Difficulty[] = ['easy', 'medium', 'hard'];
 const maxFor = (mode: CampaignMode) => (mode === 'ironman' ? CONFIG.rules.maxSaves.ironman : CONFIG.rules.maxSaves.normal);
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 
-const isItem = (it: unknown): it is ItemInstance => !!it && typeof it === 'object' && typeof (it as ItemInstance).uid === 'string' && typeof (it as ItemInstance).id === 'string';
+const isItem = (it: unknown): it is ItemInstance =>
+  !!it &&
+  typeof it === 'object' &&
+  typeof (it as ItemInstance).uid === 'string' &&
+  typeof (it as ItemInstance).id === 'string' &&
+  ((it as ItemInstance).rolls === undefined || (typeof (it as ItemInstance).rolls === 'object' && (it as ItemInstance).rolls !== null));
 
 /**
  * Sefer durumu v1 -> v2 (madde 278): kahramana level 1, XP 0, boş 6 yuva; sefere boş torba, 0 altın. v2'de eksik/bozuk alanlar da aynı

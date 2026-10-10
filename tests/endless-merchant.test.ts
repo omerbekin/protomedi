@@ -174,13 +174,10 @@ describe('endless tüccar: detay paneli hesapları', () => {
 
   it('karşılaştırma ve BEST: takılıya göre stat farkı; en büyük IP kazancı olan kahraman', () => {
     const run = atShop();
-    run.heroes[0]!.equipment = { helm: { uid: 'e1', id: 'iron_cap' } }; // warrior: +1 Armor +1 Max HP
+    run.heroes[0]!.equipment = { helm: { uid: 'e1', id: 'iron_cap' } }; // warrior: +3 Max HP (item kuralları 2026-10-10: Common = 1 stat)
     const coif = itemDef('leather_coif')!; // +2 Max HP
     const rows = statDelta(run, run.heroes[0]!.id, coif);
-    expect(rows).toEqual([
-      { stat: 'armor', now: 1, next: 0, diff: -1 },
-      { stat: 'hp', now: 1, next: 2, diff: 1 },
-    ]);
+    expect(rows).toEqual([{ stat: 'hp', now: 3, next: 2, diff: -1 }]);
     // boş yuvalı kahramanlar kazanır; warrior'da kazanç yok (Iron Cap daha güçlü) -> BEST ilk boş yuvalı (archer)
     expect(bestHeroFor(run, coif)).toBe(run.heroes[1]!.id);
     // kimse için yükseltme değilse BEST yok

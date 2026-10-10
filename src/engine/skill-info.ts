@@ -2,6 +2,7 @@ import { isShapeArea, RECT_CENTER_MIN, shapeBadge } from './area-shape';
 import { bossBlocksStatus } from './cc-immunity';
 import { isRatioCost, skillCostLabel } from './cost';
 import { betMultipliers, betStake } from './gamble';
+import { bonusScaleRaw } from './spec';
 import { applySummonVariant, attributePower } from './stats';
 import type { AreaDef, Attribute, CombatantDef, Element, Formulas, GlobalSkillDef, GroundDef, PassiveDef, SkillDef, SkillTarget, Stats, StatusDef } from './types';
 
@@ -97,6 +98,8 @@ export function stageText(area: AreaDef | undefined): string {
 }
 
 export const ATTRIBUTE_NAME: Record<Attribute, string> = { str: 'STR', int: 'INT', dex: 'DEX', luck: 'LUCK' };
+/** Hibrit ölçek (damage.bonusScale) stat adları. */
+const BONUS_STAT_NAME: Record<Attribute | 'armor' | 'magicArmor', string> = { ...ATTRIBUTE_NAME, armor: 'Armor', magicArmor: 'Magic armor' };
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 /** Boss bağışıklık satırındaki tür adı (madde 271/272): CC ya da isabet/kritik cezası. */
@@ -220,7 +223,13 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
     const raw = (scale: Attribute, power: number) => Math.round(attributePower(stats, scale, formulas) * power);
     if (e.type === 'damage') {
       const element = e.element ?? 'physical';
-      add(`Damage ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)})${times > 1 ? ` x${times}` : ''}${who}`, element);
+      if (e.bonusScale?.length) {
+        // Hibrit ölçek: "Damage 36% STR + 25% Armor (12)"; sayı = ana + ek (kartın gösterdiği statlarla; savaşta aura zırhı da eklenir)
+        const parts = e.bonusScale.map((b) => `${pct(b.pct)} ${BONUS_STAT_NAME[b.stat]}`).join(' + ');
+        const total = Math.round(attributePower(stats, e.scale, formulas) * e.power + bonusScaleRaw(e.bonusScale, stats) * (stats.spellPowerMult ?? 1));
+        add(`Damage ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} + ${parts} (${total})${times > 1 ? ` x${times}` : ''}${who}`, element);
+        if (e.bonusScale.some((b) => b.stat === 'armor')) add('Uses your current armor, aura bonus included');
+      } else add(`Damage ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)})${times > 1 ? ` x${times}` : ''}${who}`, element);
       if (e.ignoreDefense) add(`Ignores ${pct(e.ignoreDefense)} of armor`);
       if (e.lifesteal) add(`Heals you for ${pct(e.lifesteal)} of damage dealt`);
       if (e.bonusVsTag) add(`x${e.bonusVsTag.multiplier} vs ${e.bonusVsTag.tag}`);

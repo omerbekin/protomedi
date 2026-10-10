@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings backdrop: blur vs darkening</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=EB+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<style>
+  /* Taslak (Ömer 2026-10-10, öneri 2): oyun içi Settings ekranının zemini. v=1 her yerde BULANIK (bugünkü oyun içi Settings),
+     v=2 her yerde yalnızca KOYULAŞTIRMA (bugünkü ana menü Settings sütunu). Her sürümde iki ekran: ana menü üstünde ve savaş üstünde.
+     Settings düzeni oyundaki ile birebir (src/style.css > .st-*, html.menu-elegant; ölçüler oyun biriminde, 1920x1080 sahne ölçeklenir). */
+  :root { --page: #0b0806; --on: #f3d999; --txt: #d9c8a2; --muted: #a8977a; --dim: #7d705a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--txt); font-family: 'EB Garamond', Georgia, serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 16px 20px 6px; }
+  header h1 { margin: 0; font: 600 20px Cinzel, serif; letter-spacing: .12em; text-transform: uppercase; color: var(--on); }
+  .pick { display: flex; gap: 10px; }
+  .pick a { font: 600 14px Cinzel, serif; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); text-decoration: none; padding: 9px 14px; border: 1px solid rgba(217,178,106,.3); }
+  .pick a.on { color: var(--on); border-color: rgba(243,217,153,.8); box-shadow: 0 0 12px rgba(240,140,40,.25); }
+  .cap { padding: 0 20px 10px; font: italic 17px 'EB Garamond', serif; color: var(--muted); max-width: 1100px; }
+  .shots { display: grid; gap: 22px; padding: 6px 20px 30px; }
+  .shot h2 { margin: 6px 0 8px; font: 600 13px Cinzel, serif; letter-spacing: .22em; text-transform: uppercase; color: rgba(217,178,106,.85); }
+  /* 16:9 sahne: içerik 1920x1080 oyun biriminde çizilir, kutuya ölçeklenir */
+  .frame { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid rgba(217,178,106,.3); }
+  .stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  .bg { position: absolute; inset: 0; background-size: cover; background-position: center; }
+  .bg.menu { background-image: url('settings-backdrop/menu.webp'); }
+  .bg.battle { background-image: url('settings-backdrop/battle.webp'); }
+  /* oyundaki Settings zemini: soldan sağa açılan gölge + genel koyuluk (+ v1'de 4 px bulanıklık) */
+  .over { position: absolute; inset: 0;
+    background: linear-gradient(90deg, rgba(8,6,4,.85) 0, rgba(8,6,4,.85) 0px, rgba(8,6,4,.55) 686px, rgba(8,6,4,0) 980px), rgba(0,0,0,var(--dark)); }
+  body.v1 .over { --dark: .45; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+  body.v2 .over { --dark: .52; }
+  /* sol üst Back (kit: .el-back) */
+  .back { position: absolute; left: 48px; top: 40px; display: flex; align-items: baseline; gap: 14px; font: 600 21px Cinzel, serif; letter-spacing: .12em; text-transform: uppercase; color: var(--txt); }
+  .back small { font: italic 18px 'EB Garamond', serif; letter-spacing: 0; text-transform: none; color: var(--dim); }
+  /* Settings sütunu (html.menu-elegant .st-*) */
+  .col { position: absolute; left: 140px; top: 321px; width: 754px; }
+  .title { margin-bottom: 46px; font: 600 52px Cinzel, serif; letter-spacing: .05em; line-height: 1.1; text-transform: uppercase;
+    background: linear-gradient(180deg, #fff2c0 20%, #c89238 85%); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 2px 0 #0c0805) drop-shadow(0 0 2px #0c0805); }
+  .row { position: relative; display: flex; align-items: center; height: 92px; border-bottom: 1px solid rgba(217,178,106,.16); }
+  .dia { width: 34px; flex: none; display: flex; align-items: center; }
+  .row.on .dia::before { content: ''; width: 12px; height: 12px; margin-left: 4px; background: #e0702a; border: 2px solid #ffb35a; transform: rotate(45deg); }
+  .label { flex: 1; font: 600 30px Cinzel, serif; letter-spacing: .1em; text-transform: uppercase; color: var(--txt); text-shadow: 0 0 3px #0c0805, 0 2px 0 #0c0805; }
+  .row.on .label { color: var(--on); transform: translateX(12px); text-shadow: 0 0 3px #0c0805, 0 2px 0 #0c0805, 0 0 18px rgba(240,140,40,.45); }
+  .val { font: 600 26px Cinzel, serif; color: var(--on); text-shadow: 0 0 3px #0c0805, 0 2px 0 #0c0805; }
+  .slider { display: flex; align-items: center; gap: 16px; }
+  .slider .track { position: relative; width: 200px; height: 10px; background: rgba(18,12,7,.9); border: 1px solid #9a7438; }
+  .slider .track i { position: absolute; left: 0; top: 0; bottom: 0; width: 70%; background: #d9b26a; }
+  .slider .track b { position: absolute; left: 70%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; background: #f3d999; border: 2px solid #5a3a10; border-radius: 50%; }
+  .slider .st { font: 600 34px Cinzel, serif; color: var(--on); }
+  .dev { margin-top: 30px; font: italic 21px 'EB Garamond', serif; color: rgba(168,151,122,.55); }
+  /* savaş üstünde: sağ üst Menu düğmesi ve HUD bandının izi (oyunda Settings açılınca Menu paneli gizlenir) */
+  .hud { position: absolute; left: 0; right: 0; bottom: 0; height: 170px; background: linear-gradient(180deg, rgba(10,7,5,0), rgba(10,7,5,.92) 40%); border-top: 1px solid rgba(217,178,106,.2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Settings backdrop</h1>
+  <div class="pick"><a href="?v=1" data-v="1">v1 · Blur everywhere</a><a href="?v=2" data-v="2">v2 · Darkening everywhere</a></div>
+</header>
+<div class="cap" id="cap"></div>
+<div class="shots">
+  <section class="shot"><h2>Settings over the main menu</h2><div class="frame"><div class="stage"><div class="bg menu"></div><div class="over"></div><div class="ui"></div></div></div></section>
+  <section class="shot"><h2>Settings over a battle</h2><div class="frame"><div class="stage"><div class="bg battle"></div><div class="hud"></div><div class="over"></div><div class="ui"></div></div></div></section>
+</div>
+<script>
+  const v = new URLSearchParams(location.search).get('v') === '2' ? 2 : 1;
+  document.body.className = 'v' + v;
+  document.querySelectorAll('.pick a').forEach((a) => a.classList.toggle('on', a.dataset.v === String(v)));
+  document.getElementById('cap').textContent = v === 1
+    ? 'v1: the scene behind Settings is darkened AND blurred (4 px), everywhere: over the main menu and over a battle. Today this is how the in-game Settings looks.'
+    : 'v2: the scene behind Settings is only darkened (no blur), everywhere. Today this is how the main menu Settings column looks over the animated scene.';
+  const ui = `<div class="back">◂ Back <small>Esc</small></div>
+    <div class="col"><div class="title">Settings</div>
+      <div class="row on"><span class="dia"></span><span class="label">Sound volume</span><span class="slider"><span class="st">−</span><span class="track"><i></i><b></b></span><span class="st">+</span><span class="val">7</span></span></div>
+      <div class="row"><span class="dia"></span><span class="label">UI sounds</span><span class="val">5</span></div>
+      <div class="row"><span class="dia"></span><span class="label">Reduced motion</span><span class="val">Off</span></div>
+      <div class="row"><span class="dia"></span><span class="label">Fullscreen</span><span class="val">Enter</span></div>
+      <div class="dev">Developer tools</div></div>`;
+  document.querySelectorAll('.ui').forEach((u) => (u.innerHTML = ui));
+  const fit = () => document.querySelectorAll('.frame').forEach((f) => (f.querySelector('.stage').style.transform = `scale(${f.clientWidth / 1920})`));
+  addEventListener('resize', fit);
+  fit();
+</script>
+</body>
+</html>

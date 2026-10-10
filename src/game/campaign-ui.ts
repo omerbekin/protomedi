@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
+import { TYPE } from '../ui/motion';
 import { content } from '../engine';
 import { classAvatar, classLogoBadge } from './menu-ui';
 import { FULL_W, FULL_X0 } from '../ui/viewport';
-import { EL, elBackdropTap, elBody, elButton, elHeading, elPanel, elText, fitW } from './elegant-ui';
+import { EL, elBackdropTap, elBody, elButton, elHeading, elModalIn, elModalOut, elPanel, elText, fitW } from './elegant-ui';
 import { BODY_FONT } from '../ui/menu-style';
 
 /**
@@ -76,7 +77,7 @@ export function openModal(
   root.add(elPanel(scene, x, y, w, h, { corners: true, alpha: 0.97 }));
   const onDismiss = o.onDismiss;
   if (onDismiss && o.dismissOnBackdrop !== false) elBackdropTap(scene, dim, { x, y, w, h }, () => !closed && onDismiss());
-  root.add(elHeading(scene, W / 2, y + 54, o.title, 40, { ornament: Math.min(120, w / 2 - 220) }));
+  root.add(elHeading(scene, W / 2, y + 54, o.title, TYPE.modal, { ornament: Math.min(120, w / 2 - 220) }));
   let top = y + 96;
   if (sub) {
     sub.y = top;
@@ -96,15 +97,20 @@ export function openModal(
     btn.root.setPosition(x0 + i * (bw + 34), by);
     root.add(btn.root);
   });
-  root.setAlpha(0);
-  scene.tweens.add({ targets: root, alpha: 1, duration: 200, ease: EL.EASE });
+  elModalIn(scene, root);
   return {
     root,
     area: { x: x + 30, y: top, w: w - 60, h: by - 50 - top },
     close: () => {
       if (closed) return;
       closed = true;
-      root.destroy(true);
+      // Kapanış hareketi (ortak ön ayar); kapanırken tıklamalar geçmez
+      const off = (o: Phaser.GameObjects.GameObject): void => {
+        if (o.input) o.disableInteractive();
+        if (o instanceof Phaser.GameObjects.Container) o.each(off);
+      };
+      off(root);
+      elModalOut(scene, root, () => root.destroy(true));
     },
   };
 }

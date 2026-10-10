@@ -1375,3 +1375,9 @@ html.compact:not(.short) .gm-row {
   letter-spacing: 1px;
   text-transform: none;
 }
+
+/* Boyalı görsel ikonlar (stat ikonları, assets/stat-icons): adresleri `#smooth` ile biter (src/game/icon-image-files.ts > smoothUrl).
+   Piksel ikonlar için konan `image-rendering: pixelated` boyalı resmi küçültürken tırtıklı yapar: tarayıcının yumuşak küçültmesi kullanılır. */
+img[src$='#smooth'] {
+  image-rendering: auto !important;
+}

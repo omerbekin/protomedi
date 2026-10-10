@@ -1,6 +1,7 @@
 // Endless ekranının yazıları (saf; İngilizce oyun içi metin). Sahne: src/game/scenes/EndlessScene.ts.
 import { classes } from '../engine/content';
 import { ITEMS, rarityDef, slotDef, type ItemDef, type ItemStatId } from '../progression/items';
+import { effectLine } from '../progression/item-text';
 import { ENDLESS, type RewardCard } from './data';
 
 /** Item statı satırı: "+3% Might", "+1 Armor", "+1 DEX". */
@@ -10,7 +11,11 @@ export function statLine(k: ItemStatId, v: number): string {
   return `+${num}${sd?.percent ? '%' : ''} ${sd?.name ?? k}`;
 }
 
-export const itemStatLines = (d: ItemDef): string[] => (Object.entries(d.stats) as Array<[ItemStatId, number]>).filter(([, v]) => v).map(([k, v]) => statLine(k, v));
+export const itemStatLines = (d: ItemDef): string[] => {
+  const lines = (Object.entries(d.stats) as Array<[ItemStatId, number]>).filter(([, v]) => v).map(([k, v]) => statLine(k, v));
+  const fx = effectLine(d); // Epic etkisi (madde 292)
+  return fx ? [...lines, fx] : lines;
+};
 
 /** "Boots · Common" */
 export const itemKindLine = (d: ItemDef): string => `${slotDef(d.slot)?.name ?? d.slot} · ${rarityDef(d.rarity)?.name ?? d.rarity}`;

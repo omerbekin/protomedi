@@ -19,3 +19,31 @@ export const iconImageUrl = (id: string): string | null => ICON_IMAGE_URLS[id] ?
 
 /** Görsel ikonların piksel boyutu (kare; içe aktarıcı 128 bekler). */
 export const ICON_IMAGE_SIZE = 128;
+
+// ---------------------------------------------------------------- STAT ikonları (boyalı PNG, Ömer 2026-10-10)
+
+/**
+ * Stat ikonları: assets/stat-icons/<stat>.png (128, DOM) + assets/stat-icons/small/<stat>.png (64, Phaser dokusu). <stat> = StatKind ya da
+ * 'might'. Asıl sayfa assets/source/stat-icons/stat-sheet.png (oyuna yüklenmez); kesim: `node tools/make-stat-icons.mjs`. Tek giriş noktası
+ * `statIconName(kind)` (src/ui/stat-icons.ts) -> art-registry 'stat:<kind>' adını bu dosyalara çözer; dosya yoksa kodla çizilen ikona düşer.
+ */
+const statFiles = import.meta.glob('../../assets/stat-icons/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const statSmall = import.meta.glob('../../assets/stat-icons/small/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const byName = (rec: Record<string, string>): Record<string, string> => Object.fromEntries(Object.entries(rec).map(([p, url]) => [(p.split('/').pop() ?? '').replace(/\.png$/, ''), url]));
+
+/** Stat -> { url (128, DOM), small (64, Phaser; yoksa url) }. */
+export const STAT_IMAGE_FILES: Readonly<Record<string, { url: string; small: string }>> = (() => {
+  const big = byName(statFiles);
+  const small = byName(statSmall);
+  return Object.fromEntries(Object.entries(big).map(([k, url]) => [k, { url, small: small[k] ?? url }]));
+})();
+
+/** Statın görsel ikonu (dosya yoksa null). */
+export const statImage = (kind: string): { url: string; small: string } | null => STAT_IMAGE_FILES[kind] ?? null;
+
+/** Phaser'daki stat dokusunun kenarı (small dosyası 64). */
+export const STAT_IMAGE_TEXTURE = 64;
+
+/** DOM'da boyalı görselin adresine eklenen işaret: style.css `img[src$='#smooth']` pixelated yerine yumuşak küçültür. */
+export const SMOOTH_MARK = '#smooth';
+export const smoothUrl = (url: string): string => (url.endsWith(SMOOTH_MARK) ? url : `${url}${SMOOTH_MARK}`);

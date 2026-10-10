@@ -224,6 +224,8 @@ export interface LootDrop {
   items: string[];
   gold: number;
   left?: string[];
+  /** `left` ile aynı sırada: geride kalan item'lerin düşüşte atılmış stat zarları (alınırsa bunlarla gelir). */
+  leftRolls?: Array<Partial<Record<string, number>> | undefined>;
 }
 
 /** Teslim kaydı: kimden (ayrılan kahramanlar), hangi item'ler (torbadaki uid'ler), hangi düğümde. */

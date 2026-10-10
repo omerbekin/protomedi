@@ -251,7 +251,7 @@ describe('önizleme: şifa, kalkan, tur bazlı şifa, mana yakma, durumlar', () 
     const w = b.combatants.find((c) => c.side === 'party' && c.defId === 'warrior')!;
     expect(previewSkill(b, d.uid, 'taunt')[0]!.statuses).toEqual(['Taunt 2 turns']);
     expect(previewSkill(b, d.uid, 'guard', w.uid)[0]!.statuses).toEqual(['Guard 3 turns']);
-    expect(previewSkill(b, d.uid, 'taunt')[0]!.shield!.amount).toBeGreaterThan(0); // taunt kalkan da verir
+    expect(previewSkill(b, d.uid, 'taunt')[0]!.shield).toBeUndefined(); // Taunt kalkan vermez (Ömer 2026-10-10)
   });
 
   it('Fist Crush rastgele hedefli: önizleme yok', () => {

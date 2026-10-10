@@ -140,7 +140,7 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
 
   const addDamage = (target: Combatant, effect: DamageEffect, powerMult: number, splash: boolean) => {
     const stats = battle.effectiveStats(target);
-    const range = (mult: number) => damageRange(battle.attackStats(actor), stats, damageSpecFor(actor, target, effect, f, powerMult * mult, !splash, battle.damageTakenMult(target), battle.hunterMarkMult(actor, target)), f);
+    const range = (mult: number) => damageRange(battle.attackStats(actor), stats, damageSpecFor(actor, target, effect, f, powerMult * mult, !splash, battle.damageTakenMult(target), battle.dealtDamageMult(actor, target), effect.bonusScale ? battle.effectiveStats(actor) : undefined), f);
     // Bahis: en az (kayıp), en çok (kazanç) ve beklenen çarpan (güce uygulanır, gerçek vuruşla aynı yuvarlama); çifte vuruş: en çok 2 vuruş, beklenen 1 + ihtimal
     let lo = 1;
     let hi = 1;
@@ -275,7 +275,7 @@ export function previewForTargets(battle: Battle, actor: Combatant, skillId: str
         const spec = effect.onEmpty;
         if (spec && emptyProcApplies(effect, target)) {
           const dmg: DamageEffect = { type: 'damage', ...spec.damage };
-          const r = damageRange(battle.attackStats(actor), battle.effectiveStats(target), damageSpecFor(actor, target, dmg, f, 1, false, battle.damageTakenMult(target), battle.hunterMarkMult(actor, target)), f);
+          const r = damageRange(battle.attackStats(actor), battle.effectiveStats(target), damageSpecFor(actor, target, dmg, f, 1, false, battle.damageTakenMult(target), battle.dealtDamageMult(actor, target), dmg.bonusScale ? battle.effectiveStats(actor) : undefined), f);
           if (battle.statusBlocked(target, spec.status)) e.immune = [...(e.immune ?? []), battle.statusDef(spec.status)?.name ?? spec.status];
           e.emptyProc = {
             chance: spec.chance,
