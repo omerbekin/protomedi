@@ -1,5 +1,5 @@
 // Endless dalga üretici (saf, seed'li; Math.random yok). Dalga -> motorun mevcut savaş girişi (hücre listeleri + yuva başına UnitSetup + seed).
-import { CELL_COUNT, bosses, classes, randomCells, randomPool } from '../engine/content';
+import { CELL_COUNT, bosses, classes, randomCells, randomPool, summons } from '../engine/content';
 import { Rng } from '../engine/rng';
 import type { UnitModifiers, UnitSetup } from '../engine/types';
 import { loadoutSetup } from '../progression/loadout';
@@ -7,6 +7,7 @@ import { ITEMS } from '../progression/items';
 import { ENDLESS, encounter, type EndlessConfig, type EndlessRun, type WaveKind } from './data';
 import { withRelics } from './relics';
 import { heroSlots } from './formation';
+import { carrySetup, heroRef, summonRef } from './carry';
 
 /** FNV-1a + karıştırma: parçalardan seed (sefer seed.ts ile aynı yöntem; endless kendi kopyasını taşır, sefer modülüne bağlanmaz). */
 export function hashSeed(...parts: Array<string | number>): number {
@@ -80,7 +81,7 @@ export interface WavePlan {
   /** Hücre listeleri (dizin = yuva, '' = boş): BattleScene'in `teams` girişi. */
   party: string[];
   enemies: string[];
-  /** Kahraman id'leri motor sırasıyla (party-0, party-1 ...). */
+  /** Kahraman id'leri motor sırasıyla (party-0, party-1 ...); taşınan çağrının hücresi ''. */
   heroOrder: string[];
   units: { party: Record<number, UnitSetup>; enemies: Record<number, UnitSetup> };
   difficulty: EndlessConfig['difficulty'];
@@ -106,6 +107,19 @@ export function wavePlan(run: EndlessRun, cfg: EndlessConfig = ENDLESS): WavePla
   const live = run.heroes.filter((h) => classes[h.class]);
   const slots = heroSlots(live);
   const placed: Array<{ id: string; slot: number }> = [];
+  // Sürekli akış (madde 300): taşınan çağrılar hücrelerine (kahraman hücresiyle çakışan / bilinmeyen çağrı düşer); motor uid'i = hücre sırası
+  const heroCells = new Set(live.map((_, i) => slots[i]!));
+  const summonCells = new Map<number, number>();
+  (run.summons ?? []).forEach((x, k) => {
+    if (summons[x.unit] && x.slot >= 0 && x.slot < CELL_COUNT && !heroCells.has(x.slot) && !summonCells.has(x.slot)) summonCells.set(x.slot, k);
+  });
+  const occupied = [...new Set([...heroCells, ...summonCells.keys()])].filter((c) => c >= 0).sort((a, b) => a - b);
+  const uidAt = new Map(occupied.map((c, i) => [c, `party-${i}`]));
+  const refUid = new Map<string, string>();
+  live.forEach((h, i) => slots[i]! >= 0 && refUid.set(heroRef(h.id), uidAt.get(slots[i]!)!));
+  for (const [cell, k] of summonCells) refUid.set(summonRef(k), uidAt.get(cell)!);
+  const uidOf = (ref: string) => refUid.get(ref);
+  const clearCooldowns = wave > 1 && cfg.carry.cooldowns !== 'initial';
   live.forEach((h, i) => {
     const slot = slots[i]!;
     if (slot < 0) return;
@@ -118,9 +132,26 @@ export function wavePlan(run: EndlessRun, cfg: EndlessConfig = ENDLESS): WavePla
     if (run.blessing && run.blessing.waves > 0 && run.blessing.hpMult !== 1)
       setup.modifiers = { ...(setup.modifiers ?? {}), hpMult: r3((setup.modifiers?.hpMult ?? 1) * run.blessing.hpMult) };
     if (h.hpRatio < 1) setup.startHpRatio = Math.max(0, h.hpRatio);
+    // Taşınan durum (MP oranı, buff'lar, Rage, kalkan) + dalga arası cooldown sıfırlama
+    Object.assign(setup, carrySetup(h.carry, uidAt.get(slot)!, uidOf));
+    if (clearCooldowns) setup.skipInitialCooldown = true;
     if (Object.keys(setup).length) partyUnits[slot] = setup;
   });
-  const heroOrder = placed.sort((a, b) => a.slot - b.slot).map((p) => p.id);
+  for (const [cell, k] of summonCells) {
+    const x = run.summons![k]!;
+    party[cell] = x.unit;
+    const owner = x.owner ? uidOf(heroRef(x.owner)) : undefined;
+    partyUnits[cell] = {
+      ...carrySetup(x, uidAt.get(cell)!, uidOf),
+      startHp: x.hp,
+      ...(owner ? { owner } : {}),
+      ...(x.lifespan !== undefined ? { lifespan: x.lifespan } : {}),
+      ...(x.empowered !== undefined ? { empowered: x.empowered } : {}),
+    };
+  }
+  // Motor sırası (dizin = 'party-i'): kahraman id'si, çağrı hücresi ''
+  const heroAt = new Map(placed.map((p) => [p.slot, p.id]));
+  const heroOrder = occupied.map((c) => heroAt.get(c) ?? '');
 
   const enemyUnits: Record<number, UnitSetup> = {};
   const scale = waveMods(wave, cfg);

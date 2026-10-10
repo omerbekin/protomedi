@@ -53,3 +53,14 @@ describe('stat ipucu farkı (Ömer 2026-10-10)', async () => {
     expect(tip?.lines.some((l) => /→ .*\(\+[\d.]+%\)/.test(l))).toBe(true);
   });
 });
+
+describe('tüccar ipucu başlık farkı (Ömer 2026-10-10)', async () => {
+  const { statTip } = await import('../src/ui/stat-tips');
+  it('karşılaştırmada başlık farkı ayrı alanda (renkli yazılır); başlık yazısına eklenmez', () => {
+    const up = statTip('armor', { armor: 38 } as never, { armor: 40 } as never);
+    expect(up?.titleDiff).toEqual({ text: '(+2)', dir: 'up' });
+    expect(up?.title).not.toContain('(+2)');
+    expect(statTip('armor', { armor: 40 } as never, { armor: 37 } as never)?.titleDiff).toEqual({ text: '(-3)', dir: 'down' });
+    expect(statTip('armor', { armor: 40 } as never, { armor: 40 } as never)?.titleDiff).toBeUndefined();
+  });
+});

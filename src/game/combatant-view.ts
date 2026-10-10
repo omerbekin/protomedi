@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { reducedMotion } from '../ui/motion-pref';
 import { paintedOr } from '../ui/misc-icons';
 import layout from '../../data/battle-layout.json';
 import type { Combatant, TargetPreview } from '../engine';
@@ -82,6 +83,11 @@ export class CombatantView {
   private readonly speedFill: Phaser.GameObjects.Rectangle;
   private readonly speedGlow: Phaser.GameObjects.Rectangle;
   private speedFull = false;
+  /** SPEED çubuğu havası (Haste / Slow; Ömer 2026-10-10): dolgu rengi + Haste'te akan küçük » işaretleri. */
+  private speedMood: 'haste' | 'slow' | null = null;
+  private chevrons: Phaser.GameObjects.Text[] = [];
+  private chevronTween: Phaser.Tweens.Tween | null = null;
+  private readonly chevronPhase = { v: 0 };
   private readonly shieldFill: Phaser.GameObjects.Rectangle;
   private readonly magicShieldFill: Phaser.GameObjects.Rectangle;
   private readonly statusBox: Phaser.GameObjects.Container;
@@ -393,6 +399,66 @@ export class CombatantView {
     this.speedBox.setVisible(true);
     this.speedFill.width = hpBar.width * Math.max(0, Math.min(1, ratio));
     this.setSpeedFull(ratio >= 1);
+    this.placeChevrons();
+  }
+
+  /**
+   * SPEED çubuğunun havası: Haste = daha parlak altın-yeşil dolgu + içinde akan küçük » işaretleri; Slow = soğuk mavi-gri, sönük dolgu,
+   * işaret yok; null = normal. Bekleme sırasında farklı dolma hızı gerisini gösterir (src/game/turn-wait.ts). Dolu çubuk her zaman açık sarı.
+   */
+  setSpeedMood(mood: 'haste' | 'slow' | null): void {
+    if (mood === this.speedMood) return;
+    this.speedMood = mood;
+    this.paintSpeedFill();
+    this.chevronTween?.stop();
+    this.chevronTween = null;
+    for (const c of this.chevrons) c.destroy();
+    this.chevrons = [];
+    if (mood !== 'haste') return;
+    const spdY = this.speedFill.y;
+    for (let i = 0; i < 7; i++) {
+      const t = this.scene.add.text(0, spdY, '»', { fontFamily: 'Georgia, serif', fontSize: '11px', fontStyle: 'bold', color: '#3d4a12' }).setOrigin(0.5, 0.55).setAlpha(0.75).setResolution(2);
+      this.chevrons.push(t);
+      this.speedBox.add(t);
+    }
+    this.chevronTween = reducedMotion()
+      ? null
+      : this.scene.tweens.add({ targets: this.chevronPhase, v: { from: 0, to: 1 }, duration: 900, repeat: -1, onUpdate: () => this.placeChevrons() });
+    this.placeChevrons();
+  }
+
+  private placeChevrons(): void {
+    if (!this.chevrons.length) return;
+    const gap = hpBar.width / this.chevrons.length;
+    const x0 = -hpBar.width / 2;
+    const fill = this.speedFill.width;
+    this.chevrons.forEach((c, i) => {
+      const x = (i + this.chevronPhase.v) * gap;
+      c.setX(x0 + x).setVisible(x > 3 && x < fill - 3);
+    });
+  }
+
+  private paintSpeedFill(): void {
+    const c = this.speedFull ? colors.speedFull : this.speedMood === 'haste' ? '#cfe06a' : this.speedMood === 'slow' ? '#7f93a6' : colors.speedFill;
+    this.speedFill.setFillStyle(color(c), this.speedMood === 'slow' && !this.speedFull ? 0.75 : 1);
+  }
+
+  /**
+   * Sırası gelen birim: kısa parıltı ve hafif öne adım, sonra yerine döner (turlar arası bekleme sonunda; Reduced motion'da çağrılmaz).
+   * `ms` toplam süre, `px` adım (yüzdüğü yöne).
+   */
+  stepForward(ms: number, px: number): Promise<void> {
+    if (!this.alive || ms <= 0) return Promise.resolve();
+    const dir = this.combatant.side === 'enemy' ? -1 : 1;
+    const glow = this.scene.add.image(0, -this.h * 0.5, ensureGlow(this.scene)).setTint(KIT.ember).setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(this.w * 1.3, this.h * 1.1).setAlpha(0);
+    this.container.addAt(glow, 0);
+    this.scene.tweens.add({ targets: glow, alpha: 0.45, duration: ms / 2, yoyo: true, onComplete: () => glow.destroy() });
+    return new Promise((resolve) => {
+      this.scene.tweens.add({ targets: this.sprite, x: dir * px, duration: ms / 2, ease: 'Sine.easeOut', yoyo: true, onComplete: () => {
+        this.sprite.setX(0);
+        resolve();
+      } });
+    });
   }
 
   private setSpeedFull(full: boolean): void {
@@ -400,7 +466,7 @@ export class CombatantView {
     this.speedFull = full;
     this.scene.tweens.killTweensOf(this.speedGlow);
     this.speedGlow.setVisible(full).setAlpha(1);
-    this.speedFill.setFillStyle(color(full ? colors.speedFull : colors.speedFill));
+    this.paintSpeedFill();
     if (full) this.scene.tweens.add({ targets: this.speedGlow, alpha: 0.25, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
 

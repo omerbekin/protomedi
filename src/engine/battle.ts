@@ -222,7 +222,7 @@ export class Battle {
    * ilk N turunda kullanılamaz ve ilk turunda sayaç N gösterir.
    */
   private applyInitialCooldowns(c: Combatant): void {
-    if (c.summoned) return;
+    if (c.summoned || c.skipInitialCooldown) return;
     const max = this.setup.formulas.cooldown?.maxInitial ?? 0;
     for (const id of c.skills) {
       const sk = this.skill(id);
@@ -3395,7 +3395,9 @@ function createCombatant(def: CombatantDef, side: Side, slot: number, uid: strin
 function createSetupCombatant(baseDef: CombatantDef, side: Side, slot: number, uid: string, unit: UnitSetup | undefined, formulas: Formulas): Combatant {
   if (!unit) return createCombatant(baseDef, side, slot, uid);
   const mods = unit.modifiers;
-  const c = createCombatant(applyUnitModifiers(baseDef, mods, formulas), side, slot, uid);
+  // Taşınan ceset tüketen çağrı (Endless): beslenmiş / beslenmemiş varyantı (savaşta çağrıldığı gibi)
+  const variantDef = unit.empowered !== undefined && baseDef.variants ? applySummonVariant(baseDef, unit.empowered ? 'fed' : 'unfed', formulas) : baseDef;
+  const c = createCombatant(applyUnitModifiers(variantDef, mods, formulas), side, slot, uid);
   if (unit.displayName) c.displayName = unit.displayName;
   if (unit.tier) c.tier = unit.tier;
   if (mods && Object.keys(mods).length > 0) c.modifiers = { ...mods, ...(mods.attrMult ? { attrMult: { ...mods.attrMult } } : {}), ...(mods.attrAdd ? { attrAdd: { ...mods.attrAdd } } : {}) };
@@ -3423,6 +3425,16 @@ function createSetupCombatant(baseDef: CombatantDef, side: Side, slot: number, u
   if (unit.summoned) c.summoned = true;
   if (unit.lockSkills && unit.lockSkills.length > 0) c.lockedSkills = [...unit.lockSkills];
   if (finite(unit.initialCooldownBonus) && unit.initialCooldownBonus > 0) c.initialCooldownBonus = Math.floor(unit.initialCooldownBonus);
+  // Endless sürekli akış: taşınan durum (Rage, buff'lar, kalkan, çağrı sahibi/ömrü); verilmezse birim aynı
+  if (finite(unit.startRage) && c.maxRage !== undefined) c.rage = Math.max(0, Math.min(c.maxRage, Math.round(unit.startRage)));
+  if (unit.startStatuses && unit.startStatuses.length > 0) c.statuses = unit.startStatuses.map((s) => ({ ...s }));
+  if (finite(unit.startShield) && unit.startShield > 0) c.shield = Math.max(c.shield, Math.round(unit.startShield));
+  if (finite(unit.startMagicShield) && unit.startMagicShield > 0) c.magicShield = Math.max(c.magicShield, Math.round(unit.startMagicShield));
+  if (unit.startShieldHooks && unit.startShieldHooks.length > 0) c.shieldHooks = unit.startShieldHooks.map((h) => ({ ...h, onAbsorb: { ...h.onAbsorb } }));
+  if (unit.owner) c.owner = unit.owner;
+  if (finite(unit.lifespan)) c.lifespan = Math.max(1, Math.floor(unit.lifespan));
+  if (unit.empowered !== undefined && c.summoned) c.empowered = unit.empowered;
+  if (unit.skipInitialCooldown) c.skipInitialCooldown = true;
   return c;
 }
 

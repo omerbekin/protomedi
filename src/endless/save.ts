@@ -3,6 +3,7 @@
 import { CELL_COUNT, classes } from '../engine/content';
 import type { EndlessRun, ScoreEntry } from './data';
 import { validSuspended } from './replay';
+import { cleanCarry } from './carry';
 import { migrateRollsX2 } from '../progression/items';
 
 export interface KV {
@@ -16,8 +17,11 @@ export const SCORES_KEY = 'protomedi.endless.scores.v1';
 /**
  * Koşu kaydı sürümü. 2: x2 stat ölçeği (Ömer 2026-10-10): sürüm 1 okunurken item zarlarının ölçekli statları x2 (progression > migrateRollsX2) ve
  * yarım kalmış savaş (suspended) atılır (durum özeti eski ölçekte; dalga baştan başlar, koşunun geri kalanı aynen kalır).
+ * 3: sürekli akış (Ömer 2026-10-10, madde 300): kahramanlarda taşınan durum (`carry`: MP oranı, buff'lar, Rage, kalkan) ve koşuda taşınan çağrılar
+ * (`summons`). Sürüm 1-2 okunurken bu alanlar yok (= tam MP, temiz başlangıç: eski kural bir kez daha) ve yarım savaş atılır (savaş kurulumu
+ * değişti: dalga arası cooldown sıfırlama; dalga baştan başlar). Ara verme (ödül / tüccar / kalıntı / kamp) aşaması aynen sürer.
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 /** Skor listesi sürümü (statsız; x2 dönüşümünden etkilenmez). */
 export const SCORES_VERSION = 1;
 
@@ -29,10 +33,16 @@ export function parseRun(raw: string | null): EndlessRun | null {
   try {
     const data = JSON.parse(raw) as { version?: number; run?: EndlessRun };
     const r = data?.run;
-    if ((data?.version !== SAVE_VERSION && data?.version !== 1) || !r || r.version !== 1 || r.preview) return null;
+    if (![1, 2, SAVE_VERSION].includes(data?.version ?? 0) || !r || r.version !== 1 || r.preview) return null;
     if (data.version === 1) {
       migrateRollsX2(r);
       delete r.suspended;
+    }
+    // 2 -> 3 (sürekli akış): taşınan durum yok (temiz başlangıç); yarım savaşın kurulumu artık farklı kurulacağı için atılır
+    if (data.version === 2) {
+      delete r.suspended;
+      delete r.summons;
+      for (const h of r.heroes ?? []) if (h) delete h.carry;
     }
     if (!isNum(r.seed) || !isNum(r.wave) || r.wave < 1 || !isNum(r.gold) || !isNum(r.nextItem)) return null;
     if (!['ready', 'relic', 'reward', 'shop', 'over'].includes(r.phase)) return null;
@@ -60,6 +70,23 @@ export function parseRun(raw: string | null): EndlessRun | null {
     if (r.relics !== undefined && (!Array.isArray(r.relics) || r.relics.some((x) => typeof x !== 'string'))) return null;
     if (r.phase === 'relic' && !Array.isArray(r.relicOffer)) return null;
     if (r.blessing !== undefined && (!isNum(r.blessing.hpMult) || !isNum(r.blessing.waves))) return null;
+    // Taşınan durum (sürüm 3): bozuk alanlar atılır (koşu bozulmaz)
+    for (const h of r.heroes) {
+      if (h.carry === undefined) continue;
+      const c = cleanCarry(h.carry);
+      if (c && Object.keys(c).length) h.carry = c;
+      else delete h.carry;
+    }
+    if (r.summons !== undefined) {
+      if (!Array.isArray(r.summons)) delete r.summons;
+      else
+        r.summons = r.summons
+          .filter((x) => x && typeof x.unit === 'string' && Number.isInteger(x.slot) && x.slot >= 0 && x.slot < CELL_COUNT && isNum(x.hp) && x.hp > 0)
+          .map((x) => {
+            const { statuses: _s, shieldHooks: _h, mpRatio: _m, rage: _r, shield: _sh, magicShield: _ms, ...rest } = x;
+            return { ...rest, ...cleanCarry(x) };
+          });
+    }
     // Bozuk yarım savaş kaydı koşuyu bozmaz: yalnızca o kayıt atılır
     if (r.suspended !== undefined && !validSuspended(r.suspended)) delete r.suspended;
     return r;

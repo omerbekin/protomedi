@@ -17,7 +17,7 @@ import {
   gearScore,
   leaveShop,
   newRun,
-  outcomeFromSummary,
+  outcomeFromBattle,
   specialEncounter,
   waveKind,
   wavePlan,
@@ -142,7 +142,7 @@ export function simulateEndless(o: EndlessSimOptions): EndlessSimResult {
         const battle = fightWave(plan, player);
         const sum = battleSummary(battle);
         const win = battle.winner === 'party';
-        const out = outcomeFromSummary(plan, win, sum.units, sum.turnsTaken);
+        const out = outcomeFromBattle(plan, battle);
         const enc = specialEncounter(run.seed, run.wave, cfg);
         waves.push({
           w: run.wave,

@@ -8,6 +8,8 @@ import { MIGHT_COLOR, STAT_COLOR, statIconName } from './stat-icons';
 export interface StatTip {
   title: string;
   lines: string[];
+  /** Karşılaştırmada başlıktaki fark ("+2" / "-3"; başlık yazısına eklenmez): tüccar ipucu yanına renkli yazar (Gear ekranı kendi farkını gösterir). */
+  titleDiff?: { text: string; dir: 'up' | 'down' };
 }
 
 /** Gear paneli / item stat kimliği -> motor statı ('might' ayrı). */
@@ -104,7 +106,9 @@ export function statTip(id: string, stats: Stats, after?: Stats | null): StatTip
   if (!next) return now;
   const lines = now.lines.map((l, i) => mergeLine(l, next.lines[i] ?? l, true)); // türetilen değerlerde fark da (başlık farkı ayrı: Gear satırı)
   for (let i = now.lines.length; i < next.lines.length; i++) lines.push(next.lines[i]!);
-  return { title: mergeLine(now.title, next.title), lines };
+  const segs = statTipSegments(mergeLine(now.title, next.title, true));
+  const d = segs.find((g) => g.dir);
+  return { title: mergeLine(now.title, next.title), lines, ...(d ? { titleDiff: { text: d.text, dir: d.dir! } } : {}) };
 }
 
 function statTipBase(id: string, stats: Stats): StatTip | null {

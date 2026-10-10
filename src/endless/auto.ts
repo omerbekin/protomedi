@@ -1,8 +1,8 @@
 // Endless dalgasını başsız (headless) oynatır: iki taraf yapay zeka (testler, debug "Auto-win" yok; ileride balance-tester'ın `sim:endless` aracı
 // bunu kullanır: roadmap 1.5 "item'li / item'siz kaçıncı dalgada ölünür"). Saf: yalnızca motor.
-import { Battle, battleSummary, chooseAction, content, type AiDifficulty } from '../engine';
+import { Battle, chooseAction, content, type AiDifficulty } from '../engine';
 import { ENDLESS, type EndlessConfig, type EndlessRun } from './data';
-import { applyOutcome, outcomeFromSummary } from './run';
+import { applyOutcome, outcomeFromBattle } from './run';
 import { wavePlan, type WavePlan } from './waves';
 
 /** Savaşı bitmiş saymak için tur sınırı (src/sim/simulate.ts MAX_TURNS ile aynı). */
@@ -27,6 +27,5 @@ export function fightWave(plan: WavePlan, player: AiDifficulty = 'medium'): Batt
 export function autoPlayWave(run: EndlessRun, player: AiDifficulty = 'medium', cfg: EndlessConfig = ENDLESS): EndlessRun {
   const plan = wavePlan(run, cfg);
   const battle = fightWave(plan, player);
-  const sum = battleSummary(battle);
-  return applyOutcome(run, plan, outcomeFromSummary(plan, battle.winner === 'party', sum.units, sum.turnsTaken), cfg);
+  return applyOutcome(run, plan, outcomeFromBattle(plan, battle), cfg);
 }

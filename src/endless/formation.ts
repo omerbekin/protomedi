@@ -1,7 +1,7 @@
 // Endless dizilimi (Ömer 2026-10-09: "karakterler bir önceki dalgada nerede kaldılarsa oradan devam etsin; koşu başında tek seferlik dizilim").
 // Saf. Kural: koşu başında oyuncu 4 kahramanı 4 sıra x 3 şerit ızgaraya dizer (öneri = otomatik dizilim); her kazanılan dalganın sonunda her
 // kahramanın SAVAŞ SONUNDAKİ hücresi saklanır (Move ile değişen dahil), sonraki dalga oradan başlar. Düşen kahraman (20% canla kalkar) son
-// hücresine döner; orası doluysa kendi tahtasındaki en yakın boş hücreye (belirleyici sıra). Çağrılar taşınmaz. Eski kayıt (hücre yok) =
+// hücresine döner; orası doluysa kendi tahtasındaki en yakın boş hücreye (belirleyici sıra). Canlı çağrılar hücreleriyle taşınır (sürekli akış, madde 300). Eski kayıt (hücre yok) =
 // otomatik dizilim. Dalgalar arası dizilim düzenleme YOK. Koşu başı dizilim takım seçimi ekranında, sürükle-bırak (Ömer 2026-10-10).
 import { CELL_COUNT, classes, defaultSlots } from '../engine/content';
 import type { EndlessHero } from './data';
@@ -48,11 +48,12 @@ export interface EndCell {
  * Zafer sonrası hücreler: önce sağ kalanlar savaş sonu hücrelerine (sırayla; çakışırsa en yakın boş), sonra düşenler son hücrelerine
  * (doluysa en yakın boş), kahraman sırasıyla. Savaşta görünmeyen kahraman eski hücresini (yoksa en yakın boşu) korur. Dönen: heroId -> hücre.
  */
-export function carrySlots(heroes: Pick<EndlessHero, 'id' | 'class' | 'slot'>[], end: EndCell[]): Map<string, number> {
+export function carrySlots(heroes: Pick<EndlessHero, 'id' | 'class' | 'slot'>[], end: EndCell[], blocked: readonly number[] = []): Map<string, number> {
   const before = heroSlots(heroes);
   const prev = new Map(heroes.filter((h) => classes[h.class]).map((h, i) => [h.id, before[i]!]));
   const endOf = new Map(end.map((u) => [u.heroId, u]));
-  const taken = new Set<number>();
+  // `blocked`: taşınan çağrıların hücreleri (sürekli akış; düşen kahramanın ceset hücresine çağrı konmuş olabilir)
+  const taken = new Set<number>(blocked.filter(validCell));
   const out = new Map<string, number>();
   const put = (id: string, want: number | undefined) => {
     const w = validCell(want) ? want : (prev.get(id) ?? 0);

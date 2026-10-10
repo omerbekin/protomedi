@@ -467,6 +467,8 @@ export interface ElTipSpec {
   iconSize?: number;
   title: string;
   titleHex?: string;
+  /** Başlığın hemen sağında farklı renkte kısa ek (ör. stat farkı "(+2)" yeşil). */
+  titleSuffix?: { text: string; hex: string };
   badge?: string;
   /** Başlığın altında yan yana küçük Cinzel etiketler (skill: hedef türü · element · Melee / Ranged; src/ui/skill-tags.ts). Varsa badge yerine. */
   tags?: Array<{ text: string; color?: string; icon?: string }>;
@@ -533,6 +535,12 @@ export function elTip(scene: Phaser.Scene, spec: ElTipSpec): { container: Phaser
     items.push(badge);
   }
   items.push(title);
+  if (spec.titleSuffix) {
+    const sx = title.x + title.displayWidth - EL.PAD + 6;
+    const suf = elBody(scene, sx, 0, spec.titleSuffix.text, 20, spec.titleSuffix.hex).setOrigin(0, 0.5);
+    suf.y = title.y + title.displayHeight / 2;
+    items.push(suf);
+  }
   if (spec.shape && shapeSz) items.push(drawMiniShape(scene, w - px - shapeSz.w, y0 + (blockH - shapeSz.h) / 2, spec.shape));
   let y = y0 + Math.max(blockH, shapeSz?.h ?? 0) + 8;
   const rule = scene.add.graphics();

@@ -1,4 +1,5 @@
 import { lockInput, unlockInput } from './input-lock';
+import { battleSpeed, battleSpeedLabel, nextBattleSpeed, onBattleSpeedChange, setBattleSpeed } from './battle-speed';
 import './motion';
 import { onReducedMotionChange, reducedMotion, setReducedMotion } from './motion-pref';
 import { openDebugMenu } from './debug-entry';
@@ -139,6 +140,11 @@ export class SettingsScreen {
     const motion = el('span', 'st-value', reducedMotion() ? 'On' : 'Off');
     onReducedMotionChange((on) => (motion.textContent = on ? 'On' : 'Off'));
     this.addRow(col, 'Reduced motion', () => setReducedMotion(!reducedMotion()), [motion]);
+
+    // --- Battle speed: turlar arası görsel beklemeyi ölçekler (1x / 2x / 4x; src/ui/battle-speed.ts, src/game/turn-wait.ts) ---
+    const bspeed = el('span', 'st-value', battleSpeedLabel(battleSpeed()));
+    onBattleSpeedChange((v) => (bspeed.textContent = battleSpeedLabel(v)));
+    this.addRow(col, 'Battle speed', () => setBattleSpeed(nextBattleSpeed(battleSpeed())), [bspeed], (d) => setBattleSpeed(nextBattleSpeed(battleSpeed(), d > 0 ? 1 : -1)));
 
     // --- Fullscreen (Fullscreen API yoksa satır yok; iPhone'da ipucu) ---
     const support = currentSupport();

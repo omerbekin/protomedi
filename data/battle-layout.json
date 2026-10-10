@@ -166,6 +166,16 @@
     "floatFadeMs": 200,
     "deathFadeMs": 500,
     "spriteFps": 8,
+    "turnWait": {
+      "_not": "Turlar arası görsel bekleme (yalnızca sunum; src/game/turn-wait.ts): hızı refSpd olan birim boştan doluya fullMs içinde dolar; tek bekleme en çok maxMs; Battle speed (1x/2x/4x) böler; Reduced motion çarpanı reducedMotionMult. stepMs = dolan birimin öne adım + parıltı süresi, slideCell = sıra çubuğunda bir hücrenin kayma mesafesi (HUD birimi).",
+      "fullMs": 2000,
+      "refSpd": 20,
+      "maxMs": 2500,
+      "reducedMotionMult": 0.5,
+      "stepMs": 260,
+      "stepPx": 16,
+      "slideCell": 80
+    },
     "aiThinkMs": 700,
     "announceMs": 1100,
     "skillSlowdown": 1.2,

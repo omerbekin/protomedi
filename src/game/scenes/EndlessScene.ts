@@ -55,7 +55,7 @@ import type { Stats } from '../../engine/types';
 import { statIcon, statTip, statTipSegments } from '../../ui/stat-tips';
 import { backgroundKey, hasBackground, preloadAssets } from '../assets';
 import { classAvatar, fitText } from '../menu-ui';
-import { EL, diamondPts, elBody, elButton, elConfirm, elConfirmOpen, elGo, elHeading, elIconButton, elLink, elPanel, elScreenIn, elText, elTip, elToast, fadeLine, placeElTip, type ElButton } from '../elegant-ui';
+import { EL, diamondPts, elBody, elButton, elConfirm, elConfirmOpen, elGo, elHeading, elIconButton, elLink, elPanel, elScreenIn, elText, elTip, elToast, fadeLine, placeElTip, vGradient, type ElButton } from '../elegant-ui';
 import { motion, MOTION } from '../../ui/motion';
 import { merchantAvatar, merchantFigure } from '../merchant-art';
 import { worldXY } from '../stage';
@@ -69,7 +69,7 @@ import { onStageResize, stageView } from '../stage';
 import { FULL_W, FULL_X0 } from '../../ui/viewport';
 import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
 import { groupColor, sortByPrimary } from '../class-order';
-import { ENDLESS_SCENE, abandon, commit, continueRun, endless, savedRun, scores, startRun, startWave } from '../endless-session';
+import { ENDLESS_SCENE, abandon, commit, continueRun, endless, openPause, savedRun, scores, startRun, startWave } from '../endless-session';
 
 /** Stat ipucundaki fark renkleri (DOM Gear ile aynı: gear.css > .gr-tip-d.up / .down). */
 const TIP_UP = '#8fe39a';
@@ -78,6 +78,11 @@ const TIP_DOWN = '#ff8a7a';
 export interface EndlessSceneData {
   /** 'title': başlık ekranıyla aç (ana menü / debug); 'pick': doğrudan takım seçimi. Yoksa bellekteki koşunun aşaması. */
   view?: 'title' | 'pick';
+  /**
+   * Sürekli akış (madde 300): ara verme panelleri savaş alanının (BattleScene) ÜSTÜNDE: arka plan resmi yok, hafif koyulaştırma; kamp görünümü
+   * sade (kahramanlar savaş alanında görünür). Başlık / seçim / skor görünümüne geçince tam ekrana döner.
+   */
+  overlay?: boolean;
 }
 
 const W = layout.width;
@@ -89,6 +94,8 @@ const PRIMARY_COLORS = layout.colors.primaryGroup as Record<string, string>;
 const LOOK = {
   bg: 'proving-grounds-sunset',
   shade: 0.72,
+  /** Sürekli akış overlay'i: savaş alanının üstündeki koyulaştırma (kamp / diğer paneller). */
+  overlayShade: { camp: 0.18, panel: 0.6 },
   color: { text: '#d9c8a2', dim: '#9c8a68', warn: '#e0806a', accent: '#e8c47e', bright: '#f3d999', sub: '#cdb88d', stat: '#f0e2bf', empty: '#5d5040' },
   headingY: 118,
   subY: 204,
@@ -193,6 +200,10 @@ export class EndlessScene extends Phaser.Scene {
   private pickSel = '';
   /** Seçim ekranının hedef çizimi (sürüklerken yeniden çizilir). */
   private pickFx: Phaser.GameObjects.Graphics | null = null;
+  /** Sürekli akış: savaş alanının üstünde açılan ara verme panelleri (EndlessSceneData.overlay). */
+  private overlay = false;
+  /** Koyulaştırma katmanı (overlay'de görünüme göre: kampta hafif, kart / tüccarda koyu). */
+  private shade: Phaser.GameObjects.Rectangle | null = null;
 
   constructor() {
     super(ENDLESS_SCENE);
@@ -200,6 +211,7 @@ export class EndlessScene extends Phaser.Scene {
 
   init(data: EndlessSceneData): void {
     this.requested = data?.view;
+    this.overlay = !!data?.overlay;
     this.draft = emptyDraft();
     this.drag = null;
     this.dropHot = -1;
@@ -229,17 +241,25 @@ export class EndlessScene extends Phaser.Scene {
   }
 
   create(): void {
-    elScreenIn(this); // ortak ekran geçişi (data/ui-motion.json > screen; Reduced motion = anında)
-    this.cameras.main.setBackgroundColor('#0d0a07');
+    // Sürekli akış: koşu ara vermedeyse (kamp / ödül / tüccar / kalıntı) paneller savaş alanının üstünde açılır (BattleScene + overlay)
+    if (!this.overlay && !this.requested) {
+      if (!endless.run) continueRun();
+      const v = endlessView(endless.run);
+      if (v !== 'title' && v !== 'over' && openPause(this)) return;
+    }
+    if (!this.overlay) {
+      elScreenIn(this); // ortak ekran geçişi (data/ui-motion.json > screen; Reduced motion = anında)
+      this.cameras.main.setBackgroundColor('#0d0a07');
+    }
     // Phaser yazıları çizildiği andaki fontla kalır: menü fontları hazır değilse bekle ve yeniden kur (ana menüyle aynı)
     if (!menuFontsReady()) {
       void whenMenuFontsReady().then(() => {
-        if (this.sys.isActive()) this.scene.restart({ view: this.requested });
+        if (this.sys.isActive()) this.scene.restart({ view: this.requested, overlay: this.overlay });
       });
       return;
     }
-    if (hasBackground(this, LOOK.bg)) this.bg = this.add.image(CX, H / 2, backgroundKey(LOOK.bg)).setDepth(0);
-    this.add.rectangle(FULL_X0, 0, FULL_W, H, 0x080604, LOOK.shade).setOrigin(0, 0).setDepth(1);
+    if (!this.overlay && hasBackground(this, LOOK.bg)) this.bg = this.add.image(CX, H / 2, backgroundKey(LOOK.bg)).setDepth(0);
+    this.shade = this.add.rectangle(FULL_X0, 0, FULL_W, H, 0x080604, LOOK.shade).setOrigin(0, 0).setDepth(1);
     this.root = this.add.container(0, 0).setDepth(10);
     // Takım seçimi sürükle-bırak: sahne geneli hareket / bırakma (sahne kapanınca giriş eklentisi dinleyicileri siler)
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.onPickMove(p));
@@ -405,6 +425,7 @@ export class EndlessScene extends Phaser.Scene {
 
   private actMainMenu(): void {
     if (endless.run?.phase === 'over') endless.run = null;
+    if (this.overlay) this.scene.stop('BattleScene'); // savaş alanı da kapanır (koşu kayıtlı)
     elGo(this, 'MainMenuScene');
   }
 
@@ -462,6 +483,14 @@ export class EndlessScene extends Phaser.Scene {
   }
 
   private go(view: EndlessView): void {
+    // Ara verme panelinden başlık / seçim / skor ekranına: savaş alanı kapanır, ekran tam ekran açılır
+    if (this.overlay && (view === 'title' || view === 'pick' || view === 'over')) {
+      this.scene.stop('BattleScene');
+      this.scene.restart(view === 'over' ? {} : { view });
+      return;
+    }
+    // Tam ekrandan ara verme görünümüne (yeni koşu, Continue): savaş alanı açılır, paneller üstte
+    if (!this.overlay && view !== 'title' && view !== 'pick' && view !== 'over' && openPause(this)) return;
     if (view !== this.view) this.cardSel = -1;
     if (view === 'shop' && this.view !== 'shop') this.resetShopState();
     this.view = view;
@@ -499,6 +528,8 @@ export class EndlessScene extends Phaser.Scene {
       over: () => this.drawOver(),
     };
     draw[this.view]();
+    // Overlay: kampta savaş alanı görünsün (hafif), kart / tüccar ekranında okunurluk için koyu
+    if (this.overlay) this.shade?.setAlpha(this.view === 'camp' ? LOOK.overlayShade.camp : LOOK.overlayShade.panel);
     // Tüccar önizlemesi (?merchant=1): kaydedilmeyen, skora girmeyen koşu olduğu üstte açıkça yazar
     if (endless.run?.preview && this.view !== 'title' && this.view !== 'pick') this.add2(elText(this, CX, 22, T.previewRun, 16, C.warn, { em: 0.16 }).setOrigin(0.5));
     if (endlessBack(this.view)) this.drawBack();
@@ -754,10 +785,17 @@ export class EndlessScene extends Phaser.Scene {
     const plan = wavePlan(run);
     const kind = waveKind(run.wave);
     const susp = suspendedOf(run);
+    // Overlay: başlık savaş alanının gökyüzünde okunsun diye üstte ve altta (düğmeler) sönen koyu şerit
+    if (this.overlay) {
+      const g = this.add2(this.add.graphics());
+      vGradient(g, FULL_X0, 0, FULL_W, 330, 0x080604, [[0, 0.78], [0.6, 0.55], [1, 0]]);
+      vGradient(g, FULL_X0, 820, FULL_W, 260, 0x080604, [[0, 0], [0.45, 0.6], [1, 0.75]]);
+    }
     this.heading(T.campTitle(run.wave), kind === 'normal' ? T.campFoes(plan.enemyNames) : T.campSpecial(kind === 'boss', plan.name));
     this.add2(this.note(CX, 246, T.campStats(run.gold, gearScore(run), run.stats.cleared), 24, C.accent).setOrigin(0.5));
     if (run.blessing) this.add2(this.note(CX, 280, T.campBlessing(run.blessing.hpMult, run.blessing.waves), 22, C.bright, true).setOrigin(0.5));
-    run.heroes.forEach((h, i) => this.heroPanel(h, CX + (i - (run.heroes.length - 1) / 2) * 420, 310));
+    // Overlay (sürekli akış): kahramanlar savaş alanında durur; kahraman kartları yalnızca tam ekran kampta
+    if (!this.overlay) run.heroes.forEach((h, i) => this.heroPanel(h, CX + (i - (run.heroes.length - 1) / 2) * 420, 310));
     this.relicRow(run.relics ?? [], CX, 852);
     if (endless.notice) {
       this.add2(this.note(CX, 806, endless.notice, 22, C.accent, true).setOrigin(0.5));
@@ -1009,7 +1047,7 @@ export class EndlessScene extends Phaser.Scene {
       const info = st ? statTip(sk, st.now, st.after) : null;
       if (!info) return;
       this.hideTip();
-      const tip = elTip(this, { icon: ic ? ensureIcon(this, ic.kind, ic.color, false) : undefined, iconSize: 40, title: info.title, lines: info.lines.map((l) => ({ segs: statTipSegments(l).map((g) => ({ text: g.text, ...(g.dir ? { hex: g.dir === 'up' ? TIP_UP : TIP_DOWN } : {}) })) })), width: 440 });
+      const tip = elTip(this, { icon: ic ? ensureIcon(this, ic.kind, ic.color, false) : undefined, iconSize: 40, title: info.title, ...(info.titleDiff ? { titleSuffix: { text: info.titleDiff.text, hex: info.titleDiff.dir === 'up' ? TIP_UP : TIP_DOWN } } : {}), lines: info.lines.map((l) => ({ segs: statTipSegments(l).map((g) => ({ text: g.text, ...(g.dir ? { hex: g.dir === 'up' ? TIP_UP : TIP_DOWN } : {}) })) })), width: 440 });
       const m = z.getWorldTransformMatrix();
       placeElTip(this, tip, { x: m.tx - z.width / 2, y: m.ty - z.height / 2, w: z.width, h: z.height }, 'above');
       this.tip = tip.container;

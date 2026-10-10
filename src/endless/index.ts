@@ -11,3 +11,4 @@ export * from './ui-text';
 export * from './relics';
 export * from './merchant';
 export * from './formation';
+export * from './carry';

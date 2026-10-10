@@ -10,6 +10,9 @@ import type { SuspendedBattle } from './replay';
 import { relicOffer, victoryHealOf } from './relics';
 import { autoSlots, carrySlots, validSlots } from './formation';
 import type { Rng } from '../engine/rng';
+import { battleSummary, type Battle } from '../engine';
+import { snapshotCarry, type WaveCarry } from './carry';
+import type { UnitCarry } from './data';
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -51,10 +54,12 @@ export function gearScore(run: Pick<EndlessRun, 'heroes'>): number {
 
 export interface WaveOutcome {
   victory: boolean;
-  /** Kahraman başına son durum (motor özeti üzerinden); `slot` = savaş sonundaki hücre (dizilim taşınır). */
-  units: Array<{ heroId: string; hpRatio: number; alive: boolean; slot?: number }>;
+  /** Kahraman başına son durum (motor özeti üzerinden); `slot` = savaş sonundaki hücre (dizilim taşınır), `mpRatio` = MP oranı. */
+  units: Array<{ heroId: string; hpRatio: number; alive: boolean; slot?: number; mpRatio?: number }>;
   kills: number;
   turns: number;
+  /** Sürekli akış (madde 300): taşınan buff / Rage / kalkan / çağrılar (outcomeFromBattle verir; yoksa yalnızca can, MP ve hücre taşınır). */
+  carry?: WaveCarry;
 }
 
 /** Motor özetinin (battleSummary) birim görünümü. */
@@ -65,16 +70,31 @@ export interface SummaryUnitLike {
   hp: number;
   maxHp: number;
   slot?: number;
+  mp?: number;
+  maxMp?: number;
 }
 
 /** Savaş özeti -> dalga sonucu: 'party-i' birimi heroOrder[i] kahramanıdır; çağrılar sayılmaz. */
 export function outcomeFromSummary(plan: Pick<WavePlan, 'heroOrder'>, victory: boolean, units: SummaryUnitLike[], turns: number): WaveOutcome {
   const heroes = units
     .filter((c) => c.side === 'party' && !c.summoned && /^party-\d+$/.test(c.uid))
-    .map((c) => ({ heroId: plan.heroOrder[Number(c.uid.slice('party-'.length))] ?? '', hpRatio: clamp01(c.hp / Math.max(1, c.maxHp)), alive: c.hp > 0, ...(c.slot !== undefined ? { slot: c.slot } : {}) }))
+    .map((c) => ({
+      heroId: plan.heroOrder[Number(c.uid.slice('party-'.length))] ?? '',
+      hpRatio: clamp01(c.hp / Math.max(1, c.maxHp)),
+      alive: c.hp > 0,
+      ...(c.slot !== undefined ? { slot: c.slot } : {}),
+      ...(c.mp !== undefined && c.maxMp ? { mpRatio: Math.round(clamp01(c.mp / c.maxMp) * 1000) / 1000 } : {}),
+    }))
     .filter((u) => u.heroId);
   const kills = units.filter((c) => c.side === 'enemy' && !c.summoned && c.hp <= 0).length;
   return { victory, units: heroes, kills, turns };
+}
+
+/** Bitmiş savaş -> dalga sonucu (can, MP, hücre + taşınan durum). Endless'ın tek doğru kapısı (sahne, sim, auto). */
+export function outcomeFromBattle(plan: Pick<WavePlan, 'heroOrder'>, battle: Battle): WaveOutcome {
+  const sum = battleSummary(battle);
+  const out = outcomeFromSummary(plan, battle.winner === 'party', sum.units, sum.turnsTaken);
+  return out.victory ? { ...out, carry: snapshotCarry(battle, plan.heroOrder) } : out;
 }
 
 /**
@@ -97,17 +117,31 @@ export function applyOutcome(run: EndlessRun, plan: Pick<WavePlan, 'wave'>, out:
     return s;
   }
   const boss = waveKind(run.wave, cfg) === 'boss';
+  // Sürekli akış (madde 300): canlı çağrılar hücreleriyle taşınır; kahramanlar onların hücrelerine düşmez
+  const summons = out.carry?.summons ?? [];
+  if (summons.length) s.summons = clone(summons);
+  else delete s.summons;
   // Dizilim taşınır: savaş sonundaki hücreler (düşen son hücresine, doluysa en yakın boşa)
-  const cells = carrySlots(run.heroes, out.units);
+  const cells = carrySlots(run.heroes, out.units, summons.map((x) => x.slot));
   for (const h of s.heroes) {
     const c = cells.get(h.id);
     if (c !== undefined) h.slot = c;
   }
+  const heal = victoryHealOf(run.relics, cfg);
   for (const u of out.units) {
     const h = heroOf(s, u.heroId);
     if (!h) continue;
     if (boss) h.hpRatio = clamp01(cfg.carry.bossVictoryHeal);
-    else h.hpRatio = u.alive ? clamp01(u.hpRatio + victoryHealOf(run.relics, cfg)) : clamp01(cfg.carry.reviveRatio);
+    else h.hpRatio = u.alive ? clamp01(u.hpRatio + heal) : clamp01(cfg.carry.reviveRatio);
+    // MP canla aynı oranla (Ömer 2026-10-10; 'full' = eski kural); buff / Rage / kalkan yalnızca sağ kalana (düşen temiz kalkar)
+    const carry: UnitCarry = u.alive ? { ...(out.carry?.heroes[u.heroId] ?? {}) } : {};
+    delete carry.mpRatio;
+    if (cfg.carry.mp !== 'full') {
+      const mp = boss ? cfg.carry.bossVictoryHeal : u.alive ? (u.mpRatio ?? 1) + heal : cfg.carry.reviveRatio;
+      if (clamp01(mp) < 1) carry.mpRatio = Math.round(clamp01(mp) * 1000) / 1000;
+    }
+    if (Object.keys(carry).length) h.carry = clone(carry);
+    else delete h.carry;
   }
   // Hero's Feast: kazanılan her dalga bir hak düşer
   if (s.blessing) {

@@ -410,6 +410,24 @@ export interface UnitSetup {
   initialCooldownBonus?: number;
   /** Bu savaşta kullanamayacağı skill id'leri (ör. tutorial düşmanında ultimate yok). Skill listede kalır; canUse 'Locked'; YZ seçmez. İki modda. */
   lockSkills?: string[];
+  /*
+   * Endless sürekli akış (Ömer 2026-10-10): önceki dalgadan TAŞINAN durum (genel; verilmezse birim aynı; QB / MP / sefer vermez). uid içeren
+   * alanlar (durum kaynağı, Dark Bond ortağı, kalkan kancası sahibi, çağrı sahibi) BU savaşın uid'leridir (çağıran yeniden eşler).
+   */
+  /** Başlangıç Rage'i (Rage'li class; [0, maks Rage]). */
+  startRage?: number;
+  /** Başlangıç durumları (taşınan buff'lar; süreleri kalan haliyle). */
+  startStatuses?: Status[];
+  /** Taşınan kalkan / büyü kalkanı (mutlak) ve kancalı katmanlar. Savaş başı kalkan kaynakları (kalıntı, Epic, Mantle) bunun ÜSTÜNE eklenmez: havuz = en büyüğü. */
+  startShield?: number;
+  startMagicShield?: number;
+  startShieldHooks?: ShieldHook[];
+  /** Hazır çağrının sahibi (uid; sahibi ölünce çağrı da ölür), kalan ömrü (kendi turu) ve beslenme hâli (ceset tüketen çağrı varyantı uygulanır). */
+  owner?: string;
+  lifespan?: number;
+  empowered?: boolean;
+  /** true: skill'lerin başlangıç cooldown'u (initialCooldown) uygulanmaz (dalga arası cooldown'lar sıfırlandı). */
+  skipInitialCooldown?: boolean;
 }
 
 /** Savaş sonu özetinde tek birim (src/engine/battle-summary.ts > battleSummary). */
@@ -1162,6 +1180,8 @@ export interface Combatant {
   shieldRefreshed?: boolean;
   /** Başlangıç cooldown'u eki (UnitSetup.initialCooldownBonus; cooldown'lu skill'lere). */
   initialCooldownBonus?: number;
+  /** UnitSetup.skipInitialCooldown (Endless dalga arası: cooldown'lar sıfırlandı). */
+  skipInitialCooldown?: boolean;
   /** Boss kuralları (tanımdan; bkz. BossDef). */
   boss?: BossDef;
   /** Boss fazı (1 = başlangıç); boss olmayan birimde tanımsız. */

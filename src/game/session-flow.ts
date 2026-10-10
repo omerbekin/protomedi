@@ -96,6 +96,8 @@ export const MENU_LABELS: Record<MenuItemId, string> = {
 };
 
 export function flowContext(game: Phaser.Game): FlowContext {
+  // Endless ara verme panelleri savaş alanının üstündeyken (madde 300) Menu yok: panellerin kendi Back'i var (BattleScene altta durur)
+  if (game.scene.isActive('EndlessScene')) return 'none';
   const scene = active(game);
   if (!scene) return 'none';
   const key = scene.scene.key;

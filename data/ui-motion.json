@@ -6,6 +6,7 @@
   "toast": { "_not": "Kısa bildirim bandı: aşağıdan belirir, bekler, yukarı söner.", "inMs": 250, "holdMs": 1700, "outMs": 250, "rise": 10 },
   "tooltip": { "inMs": 140 },
   "result": { "_not": "Sonuç ekranının kademeli girişi (zemin, başlık plaketi, özet tablosu, satırlar, düğmeler); Reduced motion = anında.", "dimMs": 360, "plaqueMs": 520, "plaqueDelayMs": 120, "summaryMs": 480, "summaryDelayMs": 380, "rowMs": 340, "rowDelayMs": 640, "rowStaggerMs": 70, "buttonsMs": 420, "buttonsDelayMs": 1000 },
+  "wave": { "_not": "Endless sürekli akış (madde 300): dalga başı 'WAVE X' bandı (beliriş, bekleme, sönüş; toplam ~3 sn), yeni düşmanların girişi (sağdan 'enterOffset' px kayarak) ve dalga sonu toparlanma (can/MP dolar, debuff'lar silinir). Reduced motion: hareket yok, bant yine 'holdMs' kadar görünür.", "inMs": 400, "holdMs": 2100, "outMs": 500, "enterMs": 650, "enterOffset": 260, "recoverMs": 900 },
   "type": { "_not": "Başlık ölçeği (Cinzel 600, oyun birimi): hero = büyük ekran başlığı (sonuç ekranı Victory / Defeat), screen = ekran başlığı (Settings sütunu, Endless), modal = pencere başlığı (elHeading), section = bölüm başlığı.", "hero": 84, "screen": 52, "modal": 40, "section": 20 },
   "dim": { "_not": "Pencere zemininin koyuluğu (Phaser ve DOM ortak).", "modal": 0.62 },
   "ease": { "phaser": "Cubic.easeOut", "css": "cubic-bezier(0.33, 1, 0.68, 1)" }

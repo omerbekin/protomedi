@@ -49,8 +49,8 @@ describe('x2 stat ölçeği: veri ve kayıt göçü', () => {
     expect(again.file.slots[0]!.saves[0]!.state.inventory[0]!.rolls).toEqual({ armor: 4, hp: 3 }); // ikinci kez çarpılmaz
   });
 
-  it('Endless koşu kaydı v1 -> v2: zarlar x2, yarım savaş atılır; v2 aynen okunur; skor listesi sürüm 1 kalır', () => {
-    expect(ENDLESS_SAVE_VERSION).toBe(2);
+  it('Endless koşu kaydı v1 -> güncel: zarlar x2, yarım savaş atılır; güncel sürüm aynen okunur; skor listesi sürüm 1 kalır', () => {
+    expect(ENDLESS_SAVE_VERSION).toBe(3); // 3: sürekli akış (madde 300; tests/endless-carry.test.ts)
     expect(SCORES_VERSION).toBe(1);
     const run = newRun(5, ['warrior', 'mage', 'archer', 'paladin'], '2026-10-10T00:00:00.000Z');
     const legacy = { ...run, bag: [{ uid: 'b1', id: 'riveted_mail', rolls: { armor: 3, hp: 4 } }], suspended: { wave: 1, seed: 1, actions: [], turn: 0, hash: 'x' } };
@@ -59,8 +59,8 @@ describe('x2 stat ölçeği: veri ve kayıt göçü', () => {
     expect(back.suspended).toBeUndefined();
     const kv = memoryKV();
     saveRun(kv, back);
-    expect(JSON.parse(kv.getItem(RUN_KEY)!).version).toBe(2);
-    expect(parseRun(kv.getItem(RUN_KEY))!.bag![0]!.rolls).toEqual({ armor: 6, hp: 4 }); // v2: göç yok
+    expect(JSON.parse(kv.getItem(RUN_KEY)!).version).toBe(3);
+    expect(parseRun(kv.getItem(RUN_KEY))!.bag![0]!.rolls).toEqual({ armor: 6, hp: 4 }); // güncel sürüm: zar göçü yok
     kv.setItem(SCORES_KEY, JSON.stringify({ version: 1, scores: [] }));
     expect(loadScores(kv)).toEqual([]);
   });

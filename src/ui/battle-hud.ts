@@ -485,7 +485,16 @@ export class BattleHud {
   }
 
   /** Sıra çubuğu (null = gizli); test modunda hücreler yerine yazı. */
+  /**
+   * Turlar arası bekleme (src/game/turn-wait.ts): sıra çubuğu portreleri "now" yuvasına doğru `t` (0-1) oranında kayar; bekleme bitince
+   * yeni sıra (setQueue) kaymayı sıfırlar ve geçen birim solda bir hücre daha açıldığı için konumlar aynen devam eder.
+   */
+  setQueueSlide(t: number, cell = 80): void {
+    this.turn.style.translate = t > 0 ? `${-Math.round(t * cell * 10) / 10}px 0` : '';
+  }
+
   setQueue(cells: HudQueueCell[] | null, testLabel = ''): void {
+    this.turn.style.translate = '';
     this.queue = cells;
     this.testLabel = testLabel;
     if (testLabel) {

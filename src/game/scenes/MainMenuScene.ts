@@ -18,6 +18,7 @@ import { GOLD } from '../ui-frame';
 import { mp, MP_SCENE } from '../mp-client';
 import { addLogo, hasLogo, preloadLogo } from '../branding';
 import { loadVolume, setSettingsVolume } from '../../ui/settings';
+import { battleSpeed, battleSpeedLabel, nextBattleSpeed, setBattleSpeed } from '../../ui/battle-speed';
 import { openDebugMenu } from '../../ui/debug-entry';
 import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from '../../ui/fullscreen';
 import { isInputLocked, lockInput, unlockInput } from '../../ui/input-lock';
@@ -930,6 +931,16 @@ export class MainMenuScene extends Phaser.Scene {
       setReducedMotion(!reducedMotion());
       motion.setText(reducedMotion() ? 'On' : 'Off');
     }, { right: [motion] });
+
+    // --- Battle speed: savaşta turlar arası görsel bekleme (1x / 2x / 4x; src/ui/battle-speed.ts) ---
+    const bspeed = this.valueText(PANEL_W - 6, 0, battleSpeedLabel(battleSpeed()), TXT_ON).setOrigin(1, 0.5);
+    this.addPanelRow(p, 'Battle speed', () => {
+      setBattleSpeed(nextBattleSpeed(battleSpeed()));
+      bspeed.setText(battleSpeedLabel(battleSpeed()));
+    }, { right: [bspeed], adjust: (d) => {
+      setBattleSpeed(nextBattleSpeed(battleSpeed(), d > 0 ? 1 : -1));
+      bspeed.setText(battleSpeedLabel(battleSpeed()));
+    } });
 
     // --- Fullscreen (API yoksa satır yok; iPhone'da ipucu) ---
     const support = currentSupport();

@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { battleSummary, content } from '../engine';
+import { content } from '../engine';
 import type { Battle } from '../engine';
 import { grantLegendariesRun,
   abandonRun,
@@ -18,7 +18,7 @@ import { grantLegendariesRun,
   loadScores,
   merchantEntry,
   newRun,
-  outcomeFromSummary,
+  outcomeFromBattle,
   saveRun,
   saveScores,
   scoreOf,
@@ -30,7 +30,7 @@ import { grantLegendariesRun,
 } from '../endless';
 import { pickBackground } from './battle-background';
 import type { ResultAction } from './result-screen';
-import type { BattleSceneData } from './scenes/BattleScene';
+import type { BattleScene, BattleSceneData, CampaignBattleHooks } from './scenes/BattleScene';
 import { endlessEffects } from './battle-effects';
 import { newSeed } from './seed';
 
@@ -83,10 +83,93 @@ export function continueRun(): EndlessRun | null {
   return endless.run;
 }
 
-/** Koşu durumu değişti: belleğe ve kayda yaz (bitmişse yuva boşalır). */
+/** Koşu durumu değişti: belleğe ve kayda yaz (bitmişse yuva boşalır). Ara vermedeyse savaş alanındaki çubuklar da güncellenir (şifa ödülü). */
 export function commit(run: EndlessRun): void {
   endless.run = run;
   saveRun(storage(), run);
+  if (pause?.scene.sys.isActive() && run.phase !== 'over') pause.scene.syncEndlessUnits(pauseUnits(run, pause.heroOrder));
+}
+
+// ------------------------------------------------------------ sürekli akış: ara verme (Ömer 2026-10-10, madde 300)
+
+/**
+ * Ara verme: dalga bitince savaş alanı (BattleScene) durur, ödül / Gear / tüccar / kalıntı / kamp panelleri (EndlessScene, `overlay`) üstünde açılır.
+ * `heroOrder`: o savaşın 'party-i' -> kahraman eşlemesi (çubukları güncellemek için).
+ */
+let pause: { scene: BattleScene; heroOrder: string[] } | null = null;
+
+/** Koşudaki kahramanların can / MP oranları, ara verme savaşının uid'leriyle. */
+function pauseUnits(run: EndlessRun, heroOrder: string[]): Array<{ uid: string; hpRatio: number; mpRatio: number }> {
+  const out: Array<{ uid: string; hpRatio: number; mpRatio: number }> = [];
+  heroOrder.forEach((id, i) => {
+    const h = id ? run.heroes.find((x) => x.id === id) : undefined;
+    if (h) out.push({ uid: `party-${i}`, hpRatio: h.hpRatio, mpRatio: h.carry?.mpRatio ?? 1 });
+  });
+  return out;
+}
+
+/** Ara verme panellerini savaş alanının üstünde aç (EndlessScene overlay). */
+function openOverlay(bs: BattleScene, heroOrder: string[]): void {
+  pause = { scene: bs, heroOrder };
+  bs.events.once('shutdown', () => {
+    if (pause?.scene === bs) pause = null;
+  });
+  bs.scene.launch(ENDLESS_SCENE, { overlay: true });
+  bs.scene.bringToTop(ENDLESS_SCENE);
+}
+
+/** Ara verme sahnesi açık mı (EndlessScene overlay'i bunu sorar). */
+export const pauseActive = (): boolean => !!pause?.scene.sys.isActive();
+
+/**
+ * Kayıttan devam / geri çekilme / tüccar kısayolu: koşu ara vermedeyse (kamp, ödül, tüccar, kalıntı) savaş alanı sıradaki dalganın kurulumuyla
+ * (kahramanlar taşınan durumla, hücrelerinde; düşmanlar görünmez) açılır, paneller üstte. Koşu yoksa / bittiyse false.
+ */
+export function openPause(from: Phaser.Scene): boolean {
+  const run = endless.run;
+  if (!run || run.phase === 'over') return false;
+  const plan = wavePlan(run);
+  const data = battleData(from.game, plan, run, {
+    intermission: true,
+    onPause: (bs) => openOverlay(bs, plan.heroOrder),
+    resultActions: () => [],
+  });
+  from.scene.start(BATTLE_SCENE, data);
+  return true;
+}
+
+/** Planın BattleScene girişi (takımlar + seed + birim kurulumları + zorluk + arka plan) ve verilen kancalar. */
+function battleData(game: Phaser.Game, plan: WavePlan, run: EndlessRun, hooks: CampaignBattleHooks): Partial<BattleSceneData> {
+  // Doku anahtarı assets.ts > backgroundKey ile aynı ('bg:<id>'); assets.ts Phaser yüklediği için burada içe aktarılmaz (debug testleri Node'da)
+  const exists = (id: string) => game.textures.exists(`bg:${id}`);
+  // Sürekli akış (madde 300): savaş alanı koşu boyunca AYNI (koşu seed'iyle seçilir; boss karşılaşmasının kendi arka planı da kullanılmaz)
+  const background = pickBackground('quick', run.seed, exists) ?? plan.background ?? undefined;
+  return {
+    seed: plan.seed,
+    mode: 'turns',
+    battleId: content.DEFAULT_BATTLE,
+    teams: { party: plan.party, enemies: plan.enemies, units: plan.units },
+    partySize: plan.party.filter(Boolean).length,
+    enemySize: plan.enemies.filter(Boolean).length,
+    difficulty: plan.difficulty,
+    ...(background ? { background } : {}),
+    campaign: { retreatLabel: 'Retreat to Camp', battleEffects: () => endlessEffects(run), ...hooks },
+  };
+}
+
+/** Zafer (sürekli akış): sonuç yazılır, tek birleşik toparlanma animasyonu oynar, sonra ara verme panelleri savaş alanının üstünde açılır. */
+function onVictory(game: Phaser.Game, plan: WavePlan, battle: Battle): boolean {
+  if (recording?.battle === battle) stopRecording();
+  const run = endless.run;
+  if (!run) return false;
+  const next = applyOutcome(run, plan, outcomeFromBattle(plan, battle));
+  if (next === run || next.phase === 'over') return false;
+  commit(next);
+  const bs = game.scene.getScene(BATTLE_SCENE) as BattleScene;
+  void bs.playEndlessRecovery(pauseUnits(next, plan.heroOrder)).then(() => {
+    if (bs.sys.isActive()) bs.enterEndlessPause();
+  });
+  return true;
 }
 
 /** Koşu bitti: skoru yerel listeye yaz (bir kez; çağıran koşunun yeni bittiğinden emin olur). */
@@ -192,35 +275,26 @@ export function startWave(scene: Phaser.Scene, resume = false): WavePlan | null 
   if (!susp) dropSuspended();
   const replay = susp?.actions ?? [];
   const game = scene.game;
-  // Doku anahtarı assets.ts > backgroundKey ile aynı ('bg:<id>'); assets.ts Phaser yüklediği için burada içe aktarılmaz (debug testleri Node'da)
-  const exists = (id: string) => game.textures.exists(`bg:${id}`);
-  const background = plan.background ?? pickBackground('quick', plan.seed, exists) ?? undefined;
-  const data: Partial<BattleSceneData> = {
-    seed: plan.seed,
-    mode: 'turns',
-    battleId: content.DEFAULT_BATTLE,
-    teams: { party: plan.party, enemies: plan.enemies, units: plan.units },
-    partySize: plan.party.filter(Boolean).length,
-    enemySize: plan.enemies.filter(Boolean).length,
-    difficulty: plan.difficulty,
-    ...(background ? { background } : {}),
-    campaign: {
-      // Sahne savaşı kurar kurmaz (çizimden önce): devam ise günlük oynatılır, sonra kayıt başlar
-      prepareBattle: (battle) => {
-        if (replay.length) replayActions(battle, replay);
-        startRecording(battle, plan, replay);
-      },
-      resultActions: (victory, battle) => resultActions(game, plan, victory, battle),
-      retreatLabel: 'Retreat to Camp',
-      battleEffects: () => endlessEffects(run),
-      retreat: () => {
-        stopRecording();
-        dropSuspended();
-        endless.notice = 'You retreated. The battle did not count.';
-        goTo(game, ENDLESS_SCENE);
-      },
+  const data = battleData(game, plan, run, {
+    // Sürekli akış: dalga ekran geçişsiz başlar, "WAVE X" bandı + düşman girişi; yarım savaşa dönüşte bant yok (savaş sürüyor)
+    ...(resume ? {} : { seamless: true, intro: { title: `Wave ${plan.wave}`, ...(plan.kind !== 'normal' ? { subtitle: plan.name } : {}) } }),
+    // Sahne savaşı kurar kurmaz (çizimden önce): devam ise günlük oynatılır, sonra kayıt başlar
+    prepareBattle: (battle) => {
+      if (replay.length) replayActions(battle, replay);
+      startRecording(battle, plan, replay);
     },
-  };
+    resultActions: (victory, battle) => resultActions(game, plan, victory, battle),
+    onVictory: (battle) => onVictory(game, plan, battle),
+    onPause: (bs) => openOverlay(bs, plan.heroOrder),
+    retreat: () => {
+      stopRecording();
+      dropSuspended();
+      endless.notice = 'You retreated. The battle did not count.';
+      // Savaş sayılmaz: savaş alanı dalga başı haliyle ara vermeye döner (paneller üstte)
+      const bs = game.scene.getScene(BATTLE_SCENE) as Phaser.Scene;
+      if (!openPause(bs)) goTo(game, ENDLESS_SCENE);
+    },
+  });
   scene.scene.start(BATTLE_SCENE, data);
   return plan;
 }
@@ -233,8 +307,7 @@ export function resultActions(game: Phaser.Game, plan: WavePlan, victory: boolea
   if (recording?.battle === battle) stopRecording();
   const run = endless.run;
   if (run) {
-    const sum = battleSummary(battle);
-    const next = applyOutcome(run, plan, outcomeFromSummary(plan, victory, sum.units, sum.turnsTaken));
+    const next = applyOutcome(run, plan, outcomeFromBattle(plan, battle));
     if (next !== run) {
       commit(next);
       if (next.phase === 'over') recordScore(next);

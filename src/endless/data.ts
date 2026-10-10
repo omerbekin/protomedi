@@ -4,7 +4,7 @@ import encountersJson from '../../data/campaign/encounters.json';
 import type { Equipment, ItemInstance, RarityId } from '../progression/items';
 import type { SuspendedBattle } from './replay';
 import type { RelicDef } from './relics';
-import type { UnitModifiers, UnitTier } from '../engine/types';
+import type { ShieldHook, Status, UnitModifiers, UnitTier } from '../engine/types';
 
 export interface EndlessConfig {
   partySize: number;
@@ -16,7 +16,8 @@ export interface EndlessConfig {
   bossEvery: number;
   elites: string[];
   bosses: string[];
-  carry: { victoryHeal: number; reviveRatio: number; bossVictoryHeal: number };
+  /** Dalga arası taşıma (sürekli akış, madde 300): mp 'ratio' = canla aynı oran ('full' = her dalga tam), cooldowns 'clear' | 'initial'. */
+  carry: { victoryHeal: number; reviveRatio: number; bossVictoryHeal: number; mp?: 'ratio' | 'full'; cooldowns?: 'clear' | 'initial' };
   rewards: { healRatio: number; goldBase: number; goldPerWave: number };
   special: {
     elite: SpecialRewards & { healRatio: number };
@@ -77,6 +78,33 @@ export interface EndlessHero {
    * (src/endless/formation.ts). Eski kayıtta yok = otomatik dizilim.
    */
   slot?: number;
+  /** Önceki dalgadan taşınan savaş durumu (sürekli akış, madde 300); eski kayıtta / ilk dalgada yok = tam MP, Rage 0, durum yok. */
+  carry?: UnitCarry;
+}
+
+/**
+ * Taşınan birim durumu. uid içeren alanlar (durum kaynağı, Dark Bond ortağı, kalkan kancası sahibi) kayıtta KİMLİK REFERANSI tutar:
+ * 'h:<kahraman id>' ya da 's:<çağrı sırası>' (src/endless/carry.ts; sonraki savaşın uid'lerine wavePlan eşler).
+ */
+export interface UnitCarry {
+  /** MP oranı (0-1; yoksa tam). */
+  mpRatio?: number;
+  rage?: number;
+  /** Buff'lar (debuff'lar dalga arasında silinir). */
+  statuses?: Status[];
+  shield?: number;
+  magicShield?: number;
+  shieldHooks?: ShieldHook[];
+}
+
+/** Dalgadan dalgaya taşınan (oyuncu tarafı, canlı) çağrı: birim id'si, hücresi, sahibi (kahraman id), canı, kalan ömrü, beslenme hâli. */
+export interface CarriedSummon extends UnitCarry {
+  unit: string;
+  slot: number;
+  owner?: string;
+  hp: number;
+  lifespan?: number;
+  empowered?: boolean;
 }
 
 export type RewardCard =
@@ -159,6 +187,8 @@ export interface EndlessRun {
   blessing?: Blessing;
   /** Tüccar önizlemesi için atılır koşu (?merchant=1): kaydedilmez, en iyi koşulara yazılmaz (src/endless/merchant.ts > previewRun). */
   preview?: true;
+  /** Taşınan çağrılar (sürekli akış, madde 300; eski kayıtta yok = yok). */
+  summons?: CarriedSummon[];
   /** Yarıda bırakılan savaş (seed + eylem günlüğü; src/endless/replay.ts). Yalnızca 'ready' aşamasında ve aynı dalga için geçerli. */
   suspended?: SuspendedBattle;
 }

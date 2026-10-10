@@ -1,4 +1,8 @@
 import Phaser from 'phaser';
+import { elapsedTicks, startCounter, waitMs, type CounterSnap } from '../turn-wait';
+import { battleSpeed } from '../../ui/battle-speed';
+import { reducedMotion } from '../../ui/motion-pref';
+import { uiSound } from '../../ui/ui-sound';
 import { solveBadgeSizes, type SideSizes } from '../badge-layout';
 import { classLogoName, paintedOr } from '../../ui/misc-icons';
 import layout from '../../../data/battle-layout.json';
@@ -15,6 +19,8 @@ import { ensureIcon, ensureSkillIcon, iconTextureUrl, onIconImagesLoaded } from 
 import { initialSeed, initialSizes, newSeed } from '../seed';
 import { clampSize } from '../team-select-model';
 import { EL, elScreenIn, elText } from '../elegant-ui';
+import { motion } from '../../ui/motion';
+import { enemiesEnter, showWaveBanner } from '../wave-banner';
 import { formatHit } from '../hit-format';
 import { kitTextBand } from '../hud-kit';
 import type { BattleEffect } from '../battle-effects';
@@ -95,6 +101,19 @@ export interface CampaignBattleHooks {
   retreatLabel?: string;
   /** Koşu boyu etkiler (HUD > Battle info > Effects): Endless kalıntıları, sefer zorluk / bölüm ölçeği; ileride başka sistemler (src/game/battle-effects.ts). */
   battleEffects?(): BattleEffect[];
+  /*
+   * Endless sürekli akış (Ömer 2026-10-10, madde 300; src/game/endless-session.ts). Hiçbiri verilmezse savaş bugünkü gibi.
+   */
+  /** true: ekran geçişi (kararıp açılma) yok: önceki dalganın savaş alanı aynen kalır gibi açılır. */
+  seamless?: boolean;
+  /** Dalga başı: HUD gizli, "WAVE X" bandı (~3 sn), yeni düşmanlar girer, sonra savaş başlar. */
+  intro?: { title: string; subtitle?: string };
+  /** true: ara verme (kayıttan devam / geri çekilme): savaş kurulur ama başlamaz; düşmanlar görünmez, HUD gizli; `onPause` çağrılır. */
+  intermission?: boolean;
+  /** Zafer: true dönerse sonuç ekranı açılmaz (endless: toparlanma + ara verme panelleri savaş alanının üstünde). */
+  onVictory?(battle: Battle): boolean;
+  /** Ara verme başladı (savaş alanı duruyor, girdisi kapalı): endless panellerini üstte açar. */
+  onPause?(scene: BattleScene): void;
 }
 
 /** Sonuç ekranında söndürülen savaş arayüzü öğesi (container, graphics, text...). */
@@ -277,10 +296,15 @@ export class BattleScene extends Phaser.Scene {
     this.lastQueue = [];
     this.unitTipKey = '';
     this.eventQueue = Promise.resolve();
+    this.turnSnap = null;
+    this.turnSnapActor = null;
+    this.speedShown = new Map();
     this.lastAi = '-';
     this.galleryCaster = null;
     this.debugUnitUid = null;
     debugState.paused = false; // a new battle never starts frozen
+    this.endlessPaused = false; // sahne örneği yeniden kullanılır: önceki dalganın ara vermesi taşınmasın
+    this.input.enabled = true;
   }
 
   preload(): void {
@@ -289,7 +313,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create(): void {
-    elScreenIn(this); // ortak ekran geçişi (data/ui-motion.json > screen; Reduced motion = anında)
+    if (!this.campaign?.seamless) elScreenIn(this); // ortak ekran geçişi (data/ui-motion.json > screen; Reduced motion = anında); endless dalgaları kesintisiz
     const def = content.battles[this.battleId];
     // Sefer arka planı (varsa ve dosyası yüklüyse), yoksa savaşın varsayılanı (castle-hall)
     // Sefer: kendi arka planı (yoksa savaşın varsayılanı); Quick Battle / multiplayer: havuzdan seed'e göre (iki oyuncu aynı arka planı görür)
@@ -352,7 +376,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.drawCommandPanel();
     if (this.mp) this.bindMultiplayer(this.mp);
-    this.settle(); // the first unit may be an enemy: let the AI start
+    if (!this.endlessStart()) this.settle(); // the first unit may be an enemy: let the AI start
     // Sanat sürümü değişince (debug > Versions) ikonlar, logolar ve durum rozetleri hemen yeni sürümle çizilir
     const offVersions = onVersionsChange(() => this.onVersionsChanged());
     this.events.once('shutdown', offVersions);
@@ -514,7 +538,104 @@ export class BattleScene extends Phaser.Scene {
 
   /** SPEED bars under the mana bars: turn counter / threshold from the engine (read-only). Hidden in test mode. */
   private refreshSpeedBars(): void {
-    for (const view of this.views.values()) view.setSpeed(this.battle.turnProgressOf(view.combatant.uid));
+    for (const view of this.views.values()) {
+      const uid = view.combatant.uid;
+      const engine = this.battle.turnProgressOf(uid);
+      // turlar arası görsel bekleme (src/game/turn-wait.ts): gösterilen değer oynatılan olaylarla eşzamanlı (motor çoktan ilerlemiş olabilir)
+      const shown = engine === null ? null : (this.speedShown.get(uid) ?? engine);
+      view.setSpeed(shown);
+      const c = this.battle.get(uid);
+      if (c && c.hp > 0 && this.battle.mode === 'turns') {
+        const now = this.battle.speedOf(c);
+        view.setSpeedMood(now > c.stats.spd ? 'haste' : now < c.stats.spd ? 'slow' : null);
+      } else view.setSpeedMood(null);
+    }
+  }
+
+  // --- Turlar arası görsel bekleme (Ömer 2026-10-10; yalnızca sunum, motor aynı: src/game/turn-wait.ts) ---
+
+  /** Son turnStart anındaki sıra sayaçları (olay yayılırken, eşzamanlı) ve o turun aktörü. */
+  private turnSnap: CounterSnap | null = null;
+  private turnSnapActor: string | null = null;
+  /** Görüntünün ait olduğu savaş (Endless dalgalar arası aynı sahnede yeni savaş kurabilir: eski görüntü kullanılmaz). */
+  private turnSnapBattle: object | null = null;
+  /** turnStart olayı -> bekleme bilgisi (yayılırken hesaplanır, oynatılırken kullanılır). */
+  private turnWaits = new WeakMap<object, { ticks: number; next: CounterSnap }>();
+  /** Ekranda gösterilen SPEED oranı (oynatılan olaylarla eşzamanlı); yoksa motorun değeri. */
+  private speedShown = new Map<string, number>();
+  /** Süren beklemeyi atla (dokunma / tık). */
+  private skipTurnWait: (() => void) | null = null;
+
+  private counterSnap(): CounterSnap {
+    const snap: CounterSnap = new Map();
+    for (const c of this.battle.combatants) if (c.hp > 0 && !c.inert) snap.set(c.uid, { counter: c.turnCounter, spd: this.battle.speedOf(c) });
+    return snap;
+  }
+
+  /** Olay yayılırken (eşzamanlı): yeni tur başı için geçen tik sayısı hesaplanır ve olaya bağlanır. */
+  private noteTurnStart(e: BattleEvent & { type: 'turnStart' }): void {
+    if (e.extra || this.battle.mode !== 'turns') return;
+    const next = this.counterSnap();
+    if (this.turnSnapBattle !== this.battle) {
+      this.turnSnap = null;
+      this.turnSnapActor = null;
+      this.turnSnapBattle = this.battle;
+    }
+    const ticks = this.turnSnap ? (elapsedTicks(this.turnSnap, next, this.turnSnapActor, e.actor) ?? 0) : 0;
+    this.turnWaits.set(e, { ticks, next });
+    this.turnSnap = next;
+    this.turnSnapActor = e.actor;
+  }
+
+  /**
+   * Oynatılırken: sıradaki birim dolana kadar bekler; bu sırada her birimin SPEED çubuğu kendi hızıyla dolar, sıra çubuğu portreleri "now"a
+   * doğru kayar. Dokunma / tık atlar. Sonunda dolan birim parlar, tık sesi ve kısa öne adım (Reduced motion: kayma ve adım yok, bekleme kısa).
+   */
+  private async playTurnWait(e: BattleEvent & { type: 'turnStart' }): Promise<void> {
+    const info = this.turnWaits.get(e);
+    if (!info) return;
+    const T = content.formulas.turn.threshold;
+    const cfg = layout.animation.turnWait;
+    const rm = reducedMotion();
+    const ms = waitMs(info.ticks, T, cfg, battleSpeed(), rm);
+    const from = new Map<string, number>();
+    const to = new Map<string, number>();
+    for (const [uid, n] of info.next) {
+      from.set(uid, Math.max(0, startCounter(n.counter, n.spd, info.ticks)) / T);
+      to.set(uid, Math.min(1, n.counter / T));
+    }
+    if (ms > 0) {
+      const anim = { t: 0 };
+      const apply = (): void => {
+        for (const [uid, a] of from) this.speedShown.set(uid, a + ((to.get(uid) ?? a) - a) * anim.t);
+        this.refreshSpeedBars();
+        if (!rm) this.hud?.setQueueSlide(anim.t, cfg.slideCell);
+      };
+      apply();
+      await new Promise<void>((resolve) => {
+        const tween = this.tweens.add({ targets: anim, t: 1, duration: ms, ease: 'Linear', onUpdate: apply, onComplete: () => finish() });
+        const onTap = (): void => finish();
+        const finish = (): void => {
+          if (this.skipTurnWait !== finish) return;
+          this.skipTurnWait = null;
+          tween.stop();
+          anim.t = 1;
+          apply();
+          this.input.off('pointerdown', onTap);
+          window.removeEventListener('pointerdown', onTap, true);
+          resolve();
+        };
+        this.skipTurnWait = finish;
+        this.input.on('pointerdown', onTap);
+        window.addEventListener('pointerdown', onTap, true);
+      });
+    }
+    for (const [uid, v] of to) this.speedShown.set(uid, v);
+    this.refreshSpeedBars();
+    const view = this.views.get(e.actor);
+    if (!view || ms <= 0) return;
+    uiSound('select');
+    if (!rm) await view.stepForward(Math.round(cfg.stepMs / battleSpeed()), cfg.stepPx);
   }
 
   update(): void {
@@ -530,6 +651,7 @@ export class BattleScene extends Phaser.Scene {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
       if (isGameMenuOpen() || isSettingsOpen()) return; // menü / ayarlar açık: kısayollar savaşa gitmez
+      if (this.endlessPaused) return; // endless ara verme: klavye üstteki panellere ait
       if (e.key === 'Escape' && this.moveMode) {
         this.cancelMove();
         return;
@@ -2169,6 +2291,7 @@ export class BattleScene extends Phaser.Scene {
 
   private enqueue(e: BattleEvent): void {
     this.usageRec.push(e);
+    if (e.type === 'turnStart') this.noteTurnStart(e);
     if (e.type === 'skillUsed') this.lastSkillUsed = e;
     else if (e.type === 'passive' && this.lastSkillUsed) {
       const r = this.skillResults.get(this.lastSkillUsed) ?? {};
@@ -2494,6 +2617,7 @@ export class BattleScene extends Phaser.Scene {
       case 'turnStart':
         this.abortHitGate();
         this.closeStageGate();
+        await this.playTurnWait(e); // turlar arası görsel bekleme (yalnızca sunum)
         this.extraAction = !!e.extra;
         if (this.uiActor && this.uiActor !== e.actor) this.playedUids.push(this.uiActor);
         this.uiActor = e.actor;
@@ -2563,6 +2687,8 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       case 'battleEnd':
+        if (this.endlessPaused) return; // endless ara verme: savaş alanı yalnızca görüntü (debug ile düşman ölse de sonuç ekranı yok)
+        if (e.winner === this.localSide && this.campaign?.onVictory?.(this.battle)) return; // endless: toparlanma + ara verme (sonuç ekranı yok)
         this.showResult(e.winner === this.localSide);
         return;
       case 'battleStart':
@@ -3490,6 +3616,105 @@ export class BattleScene extends Phaser.Scene {
     this.hudHidden = null;
     this.hud?.setHidden(false);
     for (const v of this.views.values()) v.setOverlayHidden(false);
+  }
+
+  // ============================================================ Endless sürekli akış (madde 300)
+
+  /** Endless ara verme: savaş alanı durur, HUD gizli, girdi kapalı (paneller üstteki EndlessScene'de). */
+  private endlessPaused = false;
+
+  /** create sonu: dalga girişi ya da ara verme kurulduysa true (savaş henüz başlamaz). */
+  private endlessStart(): boolean {
+    const hooks = this.campaign;
+    if (!hooks || this.mp || (!hooks.intro && !hooks.intermission)) return false;
+    const enemies = [...this.views.values()].filter((v) => v.combatant.side !== 'party').map((v) => v.container);
+    for (const c of enemies) c.setAlpha(0);
+    this.setBattleHudHidden(true);
+    this.showPartyBars();
+    this.busy = true;
+    if (hooks.intermission) {
+      this.enterEndlessPause();
+      return true;
+    }
+    const intro = hooks.intro!;
+    void showWaveBanner(this, intro.title, intro.subtitle)
+      .then(() => (this.sys.isActive() ? enemiesEnter(this, enemies) : undefined))
+      .then(() => {
+        if (!this.sys.isActive()) return;
+        this.setBattleHudHidden(false);
+        this.busy = false;
+        this.settle();
+      });
+    return true;
+  }
+
+  /** Ara vermeye geç (zafer toparlanmasından sonra ya da kayıttan devamda): girdi kapanır, üstteki paneller açılır. */
+  enterEndlessPause(): void {
+    this.endlessPaused = true;
+    this.busy = true;
+    this.clearSelection();
+    this.setBattleHudHidden(true);
+    this.showPartyBars();
+    this.input.enabled = false;
+    this.campaign?.onPause?.(this);
+  }
+
+  /** HUD gizliyken de kahramanların ad / can / MP çubukları görünür (ara verme ve dalga girişi: toparlanma görülsün). */
+  private showPartyBars(): void {
+    for (const v of this.views.values()) if (v.combatant.side === 'party' && v.combatant.hp > 0) v.setOverlayHidden(false);
+  }
+
+  /**
+   * Dalga sonu toparlanması TEK birleşik animasyon: can ve MP dolar (düşen kahraman %20 ile kalkar), debuff'lar silinir, cooldown'lar sıfırlanır.
+   * Değerler koşu kuralından gelir (src/endless/run.ts > applyOutcome); burada yalnızca görünür hale gelir. Bitmiş savaşın birimleri güncellenir.
+   */
+  playEndlessRecovery(units: Array<{ uid: string; hpRatio: number; mpRatio: number }>): Promise<void> {
+    const m = motion('wave');
+    // Savaş bitti: HUD söner, kahramanların çubukları açık kalır (toparlanma görülsün)
+    this.setBattleHudHidden(true);
+    this.showPartyBars();
+    for (const u of units) {
+      const c = this.battle.get(u.uid);
+      const view = this.views.get(u.uid);
+      if (!c || !view) continue;
+      const fallen = c.hp <= 0;
+      const before = c.hp;
+      c.hp = Math.max(1, Math.round(c.maxHp * u.hpRatio));
+      if (!fallen && c.hp > before) view.floatText(`+${c.hp - before}`, colors.heal, 40, false, { kind: 'heal' });
+      c.mp = Math.round(c.maxMp * u.mpRatio);
+      c.cooldowns = {};
+      c.statuses = fallen ? [] : c.statuses.filter((st) => content.statuses[st.kind]?.type !== 'debuff');
+      if (fallen) {
+        if (this.rageShown.has(c.uid)) this.setRageShown(c.uid, 0);
+        c.rage = c.maxRage !== undefined ? 0 : c.rage;
+        view.revive(c.hp, c.mp);
+      } else {
+        view.setHp(c.hp, m.recoverMs > 0);
+        view.setMp(c.mp, m.recoverMs > 0);
+        view.ring(colors.heal, 1.1);
+      }
+    }
+    this.uiCorpses.clear();
+    this.refreshCorpseMarks();
+    this.refreshBadges();
+    return this.wait(m.recoverMs);
+  }
+
+  /** Ara vermede koşu değişti (ör. şifa ödülü): kahramanların can / MP çubukları güncellenir. */
+  syncEndlessUnits(units: Array<{ uid: string; hpRatio: number; mpRatio: number }>): void {
+    for (const u of units) {
+      const c = this.battle.get(u.uid);
+      const view = this.views.get(u.uid);
+      if (!c || !view || c.hp <= 0) continue;
+      const hp = Math.max(1, Math.round(c.maxHp * u.hpRatio));
+      const mp = Math.round(c.maxMp * u.mpRatio);
+      if (hp === c.hp && mp === c.mp) continue;
+      if (hp > c.hp) view.floatText(`+${hp - c.hp}`, colors.heal, 40, false, { kind: 'heal' });
+      c.hp = hp;
+      c.mp = mp;
+      view.setHp(hp, true);
+      view.setMp(mp, true);
+    }
   }
 
   showResult(victory: boolean, preview = false, mpInfo?: MpResultInfo): void {
