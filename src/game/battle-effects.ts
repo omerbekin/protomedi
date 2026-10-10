@@ -1,5 +1,6 @@
 // Koşu boyu etkiler (battle HUD > Battle info > Effects; saf, Phaser'sız). Oturum (sefer / Endless) savaşı başlatırken
 // `CampaignBattleHooks.battleEffects` kancasıyla bu listeyi verir; ileride yeni sistemler (kutsamalar, lanetler, olaylar) aynı listeye eklenir.
+import { paintedOr } from '../ui/misc-icons';
 import { CONFIG, chapterEnemyMods, type CampaignState, type DifficultyEnemyMods } from '../campaign';
 import { relicDef, type EndlessRun } from '../endless';
 
@@ -51,5 +52,5 @@ export function endlessEffects(run: Pick<EndlessRun, 'relics'>): BattleEffect[] 
   return (run.relics ?? [])
     .map((id) => relicDef(id))
     .filter((r): r is NonNullable<typeof r> => !!r)
-    .map((r) => ({ name: r.name, text: r.text, icon: r.icon, color: r.color, group: 'Relics' }));
+    .map((r) => ({ name: r.name, text: r.text, icon: paintedOr('relic', r.id, r.icon), color: r.color, group: 'Relics' })); // boyalı kalıntı ikonu (assets/misc-icons/relic), yoksa piksel
 }

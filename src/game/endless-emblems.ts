@@ -5,6 +5,7 @@ import { ITEM_ICON_SIZE, REWARD_ICON, itemIconName, paintItemIcon } from './item
 import { ITEM_IMAGE_FILES, itemImageKey } from './item-icon-files';
 import { ensureIcon } from './icons';
 import { hasUiImage, uiIconName } from '../ui/ui-icons';
+import { hasMiscImage, miscIconName } from '../ui/misc-icons';
 
 /**
  * Endless ödül / dükkân / kalıntı kartlarının amblemleri. İkonlar piksel art (tek ortak kaynak: src/game/item-icons.ts; Gear ekranı,
@@ -42,10 +43,10 @@ export const itemEmblem = (scene: Phaser.Scene, d: { id?: string; slot: string; 
 
 /** Altın: boyalı sikke yığını (assets/ui-icons/gold.png: kese, fiyat etiketleri, ödül kartı); görsel yoksa piksel kese ve sikke yığını. */
 export const purseEmblem = (scene: Phaser.Scene): string => (hasUiImage('gold') ? ensureIcon(scene, uiIconName('gold'), '#e8c47e', false) : pixelTexture(scene, REWARD_ICON.gold));
-/** Rest / şifa: kırmızı iksir şişesi. */
-export const healEmblem = (scene: Phaser.Scene): string => pixelTexture(scene, REWARD_ICON.heal);
+/** Rest / şifa: boyalı iksir ve şifalı ot kesesi (assets/misc-icons/emblem/heal.png), yoksa piksel kırmızı iksir şişesi. */
+export const healEmblem = (scene: Phaser.Scene): string => (hasMiscImage('emblem', 'heal') ? ensureIcon(scene, miscIconName('emblem', 'heal'), '#e8c47e', false) : pixelTexture(scene, REWARD_ICON.heal));
 /** Hero's Feast: kızarmış kuş ve kadeh. */
-export const feastEmblem = (scene: Phaser.Scene): string => pixelTexture(scene, REWARD_ICON.feast);
+export const feastEmblem = (scene: Phaser.Scene): string => (hasMiscImage('emblem', 'feast') ? ensureIcon(scene, miscIconName('emblem', 'feast'), '#e8c47e', false) : pixelTexture(scene, REWARD_ICON.feast));
 
 /** Piksel ikonların madalyondaki ölçeği (disk çapına oran). */
 export const PIXEL_ICON_SCALE = 0.88;

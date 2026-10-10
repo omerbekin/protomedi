@@ -20,11 +20,11 @@ type Priv = { addStatus: (t: unknown, s: unknown, emit: (e: BattleEvent) => void
 
 describe('veri: etki kaydı, Epic atamaları, bütçe', () => {
   it('11 onaylı etki kayıtlı, reddedilenler yok; her Epic item bir etki taşır, bütçeden düşülmüş statlarla ±%10', () => {
-    expect(Object.keys(ITEMS.effects).sort()).toEqual(['bloodletter', 'ember_heart', 'giantslayer', 'iron_will', 'mana_spring', 'opening_ward', 'quick_start', 'second_wind', 'steadfast', 'thrifty', 'wardens_oath']);
+    expect(Object.keys(ITEMS.effects).filter((k) => !ITEMS.effects[k]!.legendary).sort()).toEqual(['bloodletter', 'ember_heart', 'giantslayer', 'iron_will', 'mana_spring', 'opening_ward', 'quick_start', 'second_wind', 'steadfast', 'thrifty', 'wardens_oath']);
     expect(validateItems()).toEqual([]);
     const epics = ITEMS.items.filter((d) => d.rarity === 'epic');
     for (const d of epics) expect(d.effect, d.id).toBeDefined();
-    expect(ITEMS.items.filter((d) => d.rarity !== 'epic').every((d) => !d.effect)).toBe(true);
+    expect(ITEMS.items.filter((d) => d.rarity !== 'epic' && d.rarity !== 'legendary').every((d) => !d.effect)).toBe(true);
     expect(ITEMS.effectRules).toEqual({ ipFromBudget: true, stack: false, endless: true });
     const dane = itemDef('dane_axe')!;
     const full = 1.5 * (ITEMS.budget.base + ITEMS.budget.perIlvl * dane.ilvl) * 2.3;

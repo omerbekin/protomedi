@@ -29,14 +29,15 @@ export function instanceLines(inst: ItemInstance): string[] {
 export function effectLine(d: Pick<ItemDef, 'effect'>): string | null {
   const e = d.effect ? ITEMS.effects[d.effect] : undefined;
   if (!e) return null;
-  const pct = (x: number) => `${Math.round(x * 1000) / 10}%`;
+  const pct = (x: number) => `${Math.round((x > 1 ? x - 1 : x) * 1000) / 10}%`;
+  const RAW = new Set(['value', 'mp', 'turns', 'every']); // ham sayı gösterilen alanlar; diğerleri yüzde (1'den büyükse fazlası: x1,25 -> 25%)
   const v = e.value;
   const fill = (key: string): string => {
-    if (key === 'pct') return typeof v === 'number' ? pct(v > 1 ? v - 1 : v) : typeof v === 'object' ? pct(Object.values(v)[0]!) : '';
+    if (key === 'pct') return typeof v === 'number' ? pct(v) : typeof v === 'object' ? pct(Number(Object.values(v).find((x) => typeof x === 'number') ?? 0)) : '';
     if (key === 'value') return String(v);
     const x = typeof v === 'object' ? v[key] : undefined;
     if (x === undefined) return `{${key}}`;
-    return key === 'mp' ? String(x) : pct(x);
+    return typeof x === 'string' || RAW.has(key) ? String(x) : pct(x);
   };
   return `${e.name}: ${e.text.replace(/\{(\w+)\}/g, (_, k: string) => fill(k))}`;
 }

@@ -17,7 +17,8 @@ import itemsJson from '../../data/items.json';
 import { ITEM_IMAGE_FILES } from '../game/item-icon-files';
 import { ICON_KINDS } from '../ui/icon-kinds';
 import { MIGHT_COLOR, STAT_COLOR, STAT_ICON, STAT_LABEL, UI_COLOR, UI_ICON, statIconFallback, type StatIconKind } from '../ui/stat-icons';
-import { STAT_IMAGE_FILES, UI_IMAGE_FILES } from '../game/icon-image-files';
+import { MISC_IMAGE_FILES, STAT_IMAGE_FILES, UI_IMAGE_FILES } from '../game/icon-image-files';
+import { MISC_GROUPS, MISC_ICONS, MISC_UNUSED } from '../ui/misc-icons';
 import { UI_ICON_FALLBACK, UI_ICON_KINDS, UI_ICON_LABEL, type UiIconKind } from '../ui/ui-icons';
 import { UI_ICONS } from '../ui/dom-icons';
 import { BACKUP_VFX, VFX_KINDS } from '../ui/vfx-kinds';
@@ -523,6 +524,26 @@ export function buildUiArt(): UiArtEntry[] {
   return rows;
 }
 
+/** Boyalı oyun ikonu (assets/misc-icons/<grup>/<ad>.png): durum, element, zemin, kalıntı, amblem, sınıf, düğüm, efekt. */
+export interface MiscArtEntry {
+  /** '<grup>:<ad>'. */
+  id: string;
+  group: string;
+  name: string;
+  url: string | null;
+  /** Henüz oyunda yeri yok (Valdoria x2 düğümleri, kalkan kabarcığı). */
+  unused: boolean;
+  /** Dosya beklenen listede değil (yanlış ad). */
+  unlinked?: boolean;
+}
+
+/** Beklenen her oyun ikonu + listede olmayan dosyalar (yeni dosya kendiliğinden listelenir). */
+export function buildMiscArt(): MiscArtEntry[] {
+  const rows: MiscArtEntry[] = MISC_GROUPS.flatMap((g) => MISC_ICONS[g].map((n) => ({ id: `${g}:${n}`, group: g, name: n, url: MISC_IMAGE_FILES[`${g}:${n}`]?.url ?? null, unused: MISC_UNUSED.includes(`${g}:${n}`) })));
+  for (const [id, f] of Object.entries(MISC_IMAGE_FILES)) if (!rows.some((r) => r.id === id)) rows.push({ id, group: id.split(':')[0] ?? '', name: id.split(':')[1] ?? '', url: f.url, unused: true, unlinked: true });
+  return rows;
+}
+
 // ---------------------------------------------------------------- hepsi
 
 export interface Catalog {
@@ -540,6 +561,8 @@ export interface Catalog {
   statArt: StatArtEntry[];
   /** Boyalı arayüz ikonları (assets/ui-icons). */
   uiArt: UiArtEntry[];
+  /** Boyalı oyun ikonları (assets/misc-icons). */
+  miscArt: MiscArtEntry[];
   fxSprites: string[];
   statuses: StatusEntry[];
   grounds: GroundEntry[];
@@ -560,6 +583,7 @@ export function buildCatalog(files: AssetFiles): Catalog {
     itemArt: buildItemArt(),
     statArt: buildStatArt(),
     uiArt: buildUiArt(),
+    miscArt: buildMiscArt(),
     fxSprites: fxSpriteNames(),
     statuses: buildStatuses(),
     grounds: buildGrounds(),

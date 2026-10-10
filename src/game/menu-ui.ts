@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { classLogoName } from '../ui/misc-icons';
 import type { CombatantDef } from '../engine';
 import { avatarTexture, characterTexture } from './assets';
 import { canvasTexture, ensureGlow, fx, GLOW_SCALE } from './menu-text';
@@ -221,7 +222,7 @@ export function classAvatar(scene: Phaser.Scene, def: CombatantDef, cx: number, 
  */
 export function classLogoBadge(scene: Phaser.Scene, def: CombatantDef, cx: number, cy: number, r: number): Phaser.GameObjects.GameObject[] {
   const bg = scene.add.circle(cx, cy, r, 0x000000, 0.8).setStrokeStyle(2, Phaser.Display.Color.HexStringToColor(def.color).color);
-  const icon = scene.add.image(cx, cy, ensureIcon(scene, def.logo, def.color, false, ownerOfUnit(def.id))).setDisplaySize(r * 1.4, r * 1.4);
+  const icon = scene.add.image(cx, cy, ensureIcon(scene, classLogoName(def), def.color, false, ownerOfUnit(def.id))).setDisplaySize(r * 1.4, r * 1.4);
   return [bg, icon];
 }
 

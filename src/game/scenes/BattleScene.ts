@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { classLogoName, paintedOr } from '../../ui/misc-icons';
 import layout from '../../../data/battle-layout.json';
 import { Battle, MatchLog, chooseAction, isRatioCost, skillCostAmount, skillCostLabel, content, explainChoice, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, primaryBonusInfo, previewSkill, armorReduction } from '../../engine';
 import type { AreaStage, BattleEvent, BattleMode, Combatant, SkillDef, StatKind, Teams, TargetPreview } from '../../engine';
@@ -419,7 +420,7 @@ export class BattleScene extends Phaser.Scene {
       for (const g of this.battle.ground) {
         if (g.board !== c.board || !g.slots.includes(c.slot) || g.sourceSide === c.side) continue;
         const def = content.grounds[g.ground];
-        list.push({ icon: def?.icon ?? 'flame', color: def?.color ?? '#ffffff', text: String(g.turns), debuff: true, turns: true });
+        list.push({ icon: paintedOr('ground', g.ground, def?.icon ?? 'flame'), color: def?.color ?? '#ffffff', text: String(g.turns), debuff: true, turns: true });
       }
       const bonus = this.battle.effectiveStats(c).armor - c.stats.armor;
       if (Math.round(bonus) > 0) list.push({ icon: 'shield', color: '#c9d1dc', text: `+${Math.round(bonus)}`, debuff: false, turns: false });
@@ -2349,7 +2350,8 @@ export class BattleScene extends Phaser.Scene {
         // v1'de basit kara-mor çöküş. Doom Mark (detonate) kendi skill efektinin içinde patlar: yalnızca yazı.
         const v = this.views.get(e.target);
         v?.setSeals(null); // mühürler çatladı: yuvalar boşalır (rozet bir sonraki tazelemede gelir/gider)
-        v?.floatText('DOOM', '#e9dfc4', 72, true, { kind: 'crit' });
+        const doomIcon = paintedOr('status', 'doom', null); // Doom'un kendi ikonu (Omen'in gözü değil)
+        v?.floatText('DOOM', '#e9dfc4', 72, true, { kind: 'crit', ...(doomIcon ? { leftIcon: doomIcon } : {}) });
         if (v && e.cause !== 'detonate') {
           const source = this.views.get(e.source);
           const owner = statusOwner('omen') ?? this.ownerOfView(source);
@@ -3284,7 +3286,7 @@ export class BattleScene extends Phaser.Scene {
   /** Birimin portresi (kafa avatarı); yoksa class logosu. */
   private avatarUrl(c: Combatant): string {
     const key = avatarTexture(this, c.spriteId);
-    return key ? this.texUrl(key) : this.texUrl(ensureIcon(this, c.logo, c.color, false, ownerOfUnit(c.defId)));
+    return key ? this.texUrl(key) : this.texUrl(ensureIcon(this, classLogoName({ id: c.defId, logo: c.logo }), c.color, false, ownerOfUnit(c.defId)));
   }
 
   /** Alt çubuğun içeriği: sıradaki birim, 4 skill, global eylemler, sıra yazısı. */

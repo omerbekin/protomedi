@@ -209,7 +209,7 @@ export interface CampaignState {
    */
   pendingHandover?: Handover;
   /** Loot sayaçları (items.md 3.3-3.4): Rare pity, düğüm başına zafer sayısı ('<düğüm>:battle' | '<düğüm>:treasure'; tekrar oynamada azalan ödül). */
-  lootState: { rarePity: number; clears: Record<string, number> };
+  lootState: { rarePity: number; clears: Record<string, number>; rareMisses?: number };
   /** Son düşüş: haritada "Spoils" kartı olarak gösterilir, onaylanınca silinir (`acknowledgeLoot`). */
   pendingLoot?: LootDrop;
 }
@@ -224,6 +224,8 @@ export interface LootDrop {
   items: string[];
   gold: number;
   left?: string[];
+  /** Ortak nadir düşüş zarından gelen item id'leri (Spoils kartında altın-turuncu parıltı; madde 297). */
+  rare?: string[];
   /** `left` ile aynı sırada: geride kalan item'lerin düşüşte atılmış stat zarları (alınırsa bunlarla gelir). */
   leftRolls?: Array<Partial<Record<string, number>> | undefined>;
 }

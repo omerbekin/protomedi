@@ -33,7 +33,6 @@ import {
   endlessBagSize,
   gearLockReason,
   suspendedOf,
-  togglePick,
   waveKind,
   wavePlan,
   type EndlessHero,
@@ -44,8 +43,11 @@ import {
   type StatDelta,
   autoDraft,
   heroSlots,
-  moveInDraft,
   newDraft,
+  emptyDraft,
+  placeInDraft,
+  removeFromDraft,
+  draftClassAt,
   type FormationDraft,
 } from '../../endless';
 import { ITEMS, SLOT_IDS, canEquip, effectLine, heroStats, itemDef, itemSubtitle, sellValue, slotDef, statLine, type ItemDef, type ItemStatId } from '../../progression';
@@ -56,14 +58,13 @@ import { classAvatar, fitText } from '../menu-ui';
 import { EL, diamondPts, elBody, elButton, elConfirm, elConfirmOpen, elGo, elHeading, elIconButton, elLink, elPanel, elScreenIn, elText, elTip, elToast, fadeLine, placeElTip, type ElButton } from '../elegant-ui';
 import { motion, MOTION } from '../../ui/motion';
 import { merchantAvatar, merchantFigure } from '../merchant-art';
-import { openFormation, type FormationState } from '../campaign-panels';
-import type { Modal } from '../campaign-ui';
 import { worldXY } from '../stage';
 import { ensureGlow } from '../menu-ui';
 import { feastEmblem, healEmblem, hexNum, itemEmblem, medallion, purseEmblem } from '../endless-emblems';
 import { openEndlessGear } from '../endless-gear';
 import { ensureIcon } from '../icons';
 import { hasUiImage, uiIconName, type UiIconKind } from '../../ui/ui-icons';
+import { paintedOr } from '../../ui/misc-icons';
 import { onStageResize, stageView } from '../stage';
 import { FULL_W, FULL_X0 } from '../../ui/viewport';
 import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
@@ -112,6 +113,19 @@ const SHOP = {
   detail: { x: 1250, w: 630, top: 140, bottom: 920 },
 } as const;
 
+/**
+ * Takım seçimi + dizilim ekranı (Ömer 2026-10-10): solda kadro kartları, sağda 4 sıra x 3 şerit ızgara (ön sıra sağda, düşmana bakar;
+ * seferin Formation penceresiyle aynı düzen). 1920x1080 birimi; telefonda okunur olsun diye yazılar en az ~17.
+ */
+const PICK = {
+  labelY: 272,
+  roster: { x: 140, top: 326, cols: 6, step: 156, avatar: 116, rowH: 200 },
+  grid: { x: 1196, top: 318, cell: 132, gap: 10 },
+  dragPx: 12,
+  ghostLift: 56,
+  infoY: 790,
+} as const;
+
 /** Seçim kartının çizim bağlamı: `add` kart içine, `addTop` kartın dokunma alanının üstüne (ipucu alanları). */
 interface CardCtx {
   cx: number;
@@ -141,7 +155,6 @@ export class EndlessScene extends Phaser.Scene {
   private root!: Phaser.GameObjects.Container;
   private backBtn: Phaser.GameObjects.Container | null = null;
   private bg: Phaser.GameObjects.Image | null = null;
-  private picked: string[] = [];
   private hoverClass: string | null = null;
   private confirm: { close(): void } | null = null;
   private pending = false;
@@ -164,9 +177,18 @@ export class EndlessScene extends Phaser.Scene {
   private merchantLine: MerchantLine = 'idle';
   private lastGold: number | null = null;
   private toast: ((msg: string, sound?: UiSoundKind | null) => void) | null = null;
-  /** Koşu başı dizilim penceresi (takım seçiminden sonra; tek seferlik) ve taslağı; pencere katmanı ekran yeniden çizilince silinmez. */
-  private formation: { modal: Modal; draft: FormationDraft } | null = null;
-  private modalLayer!: Phaser.GameObjects.Container;
+  /**
+   * Takım seçimi + koşu başı dizilimi TEK ekranda (Ömer 2026-10-10; eski ayrı Formation penceresi kaldırıldı): seçilen class'lar ve hücreleri.
+   * Sürükleme durumu: sürüklenen class, kaynağı (hücre; -1 = kadro), başlangıç noktası, eşik aşıldı mı, hayalet kart ve kaynağın görseli.
+   */
+  private draft: FormationDraft = emptyDraft();
+  private drag: { cls: string; from: number; sx: number; sy: number; moved: boolean; ghost?: Phaser.GameObjects.Container; src?: Phaser.GameObjects.Image } | null = null;
+  /** Bırakma hedefi: hücre, -2 = kadro (çıkar), -1 yok. */
+  private dropHot = -1;
+  /** Dokunarak taşıma: seçili ızgara kahramanı (sonra hücreye dokun). */
+  private pickSel = '';
+  /** Seçim ekranının hedef çizimi (sürüklerken yeniden çizilir). */
+  private pickFx: Phaser.GameObjects.Graphics | null = null;
 
   constructor() {
     super(ENDLESS_SCENE);
@@ -174,7 +196,10 @@ export class EndlessScene extends Phaser.Scene {
 
   init(data: EndlessSceneData): void {
     this.requested = data?.view;
-    this.picked = [];
+    this.draft = emptyDraft();
+    this.drag = null;
+    this.dropHot = -1;
+    this.pickSel = '';
     this.hoverClass = null;
     this.confirm = null;
     this.backBtn = null;
@@ -182,7 +207,6 @@ export class EndlessScene extends Phaser.Scene {
     this.pending = false;
     this.infoText = null;
     this.toast = null;
-    this.formation = null;
     this.resetShopState();
   }
 
@@ -213,7 +237,10 @@ export class EndlessScene extends Phaser.Scene {
     if (hasBackground(this, LOOK.bg)) this.bg = this.add.image(CX, H / 2, backgroundKey(LOOK.bg)).setDepth(0);
     this.add.rectangle(FULL_X0, 0, FULL_W, H, 0x080604, LOOK.shade).setOrigin(0, 0).setDepth(1);
     this.root = this.add.container(0, 0).setDepth(10);
-    this.modalLayer = this.add.container(0, 0).setDepth(30);
+    // Takım seçimi sürükle-bırak: sahne geneli hareket / bırakma (sahne kapanınca giriş eklentisi dinleyicileri siler)
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.onPickMove(p));
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => this.onPickUp(p));
+    this.input.on('pointerupoutside', (p: Phaser.Input.Pointer) => this.onPickUp(p));
     this.toast = elToast(this, 1046); // alt orta: tüccarın sekmeleri ve torba başlığıyla çakışmasın
     // Bellekte koşu yoksa kayıtlıyı yükle (sayfa yenilendi / ana menüden geldi); bitmiş koşu bellekte yalnızca skor ekranı için durur
     if (!endless.run) continueRun();
@@ -226,7 +253,8 @@ export class EndlessScene extends Phaser.Scene {
   // ============================================================ oyuncu eylemleri (düzenden bağımsız)
 
   private actStartPick(): void {
-    this.picked = [];
+    this.draft = emptyDraft();
+    this.pickSel = '';
     this.go('pick');
   }
 
@@ -270,48 +298,65 @@ export class EndlessScene extends Phaser.Scene {
       const j = Math.floor(Math.random() * (i + 1));
       [pool[i], pool[j]] = [pool[j]!, pool[i]!];
     }
-    this.picked = pool.slice(0, ENDLESS.partySize);
+    this.draft = newDraft(pool.slice(0, ENDLESS.partySize)); // önerilen (otomatik) dizilimle
+    this.pickSel = '';
     this.render();
   }
 
+  /** Kadrodaki karta dokunma: takımda değilse önerilen hücreye ekler (takım doluysa uyarır), takımdaysa çıkarır. */
   private actTogglePick(id: string): void {
-    this.picked = togglePick(this.picked, id, ENDLESS.partySize);
+    if (this.draft.classes.includes(id)) return this.setDraft(removeFromDraft(this.draft, id), 'back');
+    const next = placeInDraft(this.draft, id, ENDLESS.partySize);
+    if (next === this.draft) return this.pickFull();
+    this.setDraft(next, 'select');
+  }
+
+  /** Izgara hücresine dokunma: önce kahramanı seç, sonra hücreye dokun (boşsa taşır, doluysa yer değiştirir); seçiliye yine dokunmak bırakır. */
+  private actTapCell(cell: number): void {
+    const here = draftClassAt(this.draft, cell);
+    if (!this.pickSel) {
+      if (!here) return;
+      this.pickSel = here;
+      uiSound('select');
+      return this.render();
+    }
+    const sel = this.pickSel;
+    this.pickSel = '';
+    if (sel === here) return this.render();
+    this.setDraft(placeInDraft(this.draft, sel, ENDLESS.partySize, cell), 'select');
+  }
+
+  /** Sürükleyip bırakma: hücreye (ekle / taşı / yer değiştir) ya da kadroya (çıkar). */
+  private actDrop(cls: string, from: number, target: number): void {
+    if (target === -2) return from >= 0 ? this.setDraft(removeFromDraft(this.draft, cls), 'back') : undefined;
+    if (target < 0 || target === from) return;
+    const next = placeInDraft(this.draft, cls, ENDLESS.partySize, target);
+    if (next === this.draft) return this.pickFull();
+    this.setDraft(next, 'select');
+  }
+
+  private actAutoArrange(): void {
+    if (!this.draft.classes.length) return;
+    this.pickSel = '';
+    this.setDraft(autoDraft(this.draft), 'select');
+  }
+
+  private setDraft(d: FormationDraft, sound: UiSoundKind): void {
+    if (d !== this.draft) uiSound(sound);
+    this.draft = d;
     this.render();
   }
 
-  /** Start Run: önce tek seferlik dizilim penceresi (seferin Formation penceresi; öneri = otomatik dizilim), Start Run ile koşu başlar. */
-  private actBeginRun(): void {
-    if (this.picked.length !== ENDLESS.partySize || this.formation) return;
-    const draft = newDraft(this.picked);
-    const view = (): FormationState => {
-      const d = this.formation?.draft ?? draft;
-      const active = Array.from({ length: 12 }, () => '');
-      d.slots.forEach((c, i) => (active[c] = `f${i}`));
-      return { active, roster: d.classes.map((c, i) => ({ id: `f${i}`, class: c, hpRatio: 1 })) };
-    };
-    const set = (d: FormationDraft) => this.formation && (this.formation.draft = d);
-    const modal = openFormation(this, this.modalLayer, {
-      get: view,
-      move: (id, cell) => set(moveInDraft(this.formation!.draft, Number(id.slice(1)), cell)),
-      auto: () => set(autoDraft(this.formation!.draft)),
-      done: () => {
-        const d = this.formation?.draft ?? draft;
-        this.closeFormation();
-        startRun(d.classes, d.slots);
-        this.go('camp');
-      },
-      back: () => this.closeFormation(),
-      toUi: (p) => worldXY(this, p),
-      doneLabel: T.formationStart,
-      subtitle: T.formationSub,
-    });
-    this.formation = { modal, draft };
+  private pickFull(): void {
+    this.toast?.(T.pickFull(ENDLESS.partySize), 'error');
   }
 
-  private closeFormation(): void {
-    const f = this.formation;
-    this.formation = null;
-    f?.modal.close();
+  /** Start Run: koşu ekranda dizilen hücrelerle hemen başlar (ayrı dizilim penceresi yok). */
+  private actBeginRun(): void {
+    const d = this.draft;
+    if (d.classes.length !== ENDLESS.partySize) return;
+    startRun(d.classes, d.slots);
+    this.go('camp');
   }
 
   private actTakeReward(run: EndlessRun, index: number): void {
@@ -361,9 +406,10 @@ export class EndlessScene extends Phaser.Scene {
 
   private onKey(e: KeyboardEvent): void {
     if (this.gearOpen || elConfirmOpen(this)) return;
-    if (this.formation) {
-      if (e.key === 'Escape') this.closeFormation();
-      return;
+    // Takım seçimi: Esc önce dokunarak seçilen kahramanı bırakır
+    if (e.key === 'Escape' && this.view === 'pick' && this.pickSel) {
+      this.pickSel = '';
+      return this.render();
     }
     if (e.key === 'Escape') return this.back();
     // Seçim kartları: 1-4 seçer, Enter alır, ←/→ dolaşır
@@ -419,6 +465,9 @@ export class EndlessScene extends Phaser.Scene {
   }
 
   private renderNow(): void {
+    this.cancelPickDrag();
+    this.pickFx = null;
+    this.pickRemoveText = null;
     this.infoText = null;
     this.cards = [];
     this.hideTip();
@@ -478,44 +527,205 @@ export class EndlessScene extends Phaser.Scene {
 
   private drawPick(): void {
     const size = ENDLESS.partySize;
+    const d = this.draft;
+    const R = PICK.roster;
+    const G = PICK.grid;
     this.heading(T.pickTitle, T.pickSub(size));
-    // Seçilen yuvalar
-    for (let i = 0; i < size; i++) {
-      const x = CX + (i - (size - 1) / 2) * 190;
-      const y = 340;
-      const id = this.picked[i];
-      const g = this.add2(this.add.graphics());
-      // Kit: ince çerçeve; boş yuvada ortada içi boş elmas
-      g.fillStyle(EL.INK, 0.38).fillRect(x - 75, y - 75, 150, 150);
-      g.lineStyle(1, EL.GOLD, id ? 0.62 : EL.LINE.a2).strokeRect(x - 74.5, y - 74.5, 149, 149);
-      if (!id) {
-        g.lineStyle(1, EL.GOLD, 0.35).strokePoints([{ x, y: y - 7 }, { x: x + 7, y }, { x, y: y + 7 }, { x: x - 7, y }], true);
-        continue;
-      }
-      this.avatar(content.classes[id]!, x, y, 124);
-      this.add2(this.label(x, y + 94, className(id).toUpperCase(), 22).setOrigin(0.5, 0));
-      this.tapZone(x, y, 150, 150, () => this.actTogglePick(id));
-    }
-    // Raf: rastgele havuz (test class'ları yok), primary grubuna göre
+    // Kadro (sol): rastgele havuz (test class'ları yok), primary grubuna göre satırlar. Karta dokun = ekle / çıkar; sürükle = ızgaraya koy
     const defs = sortByPrimary(content.randomPool.map((id) => content.classes[id]!).filter(Boolean));
-    const step = Math.min(150, 1700 / Math.max(1, defs.length));
+    const rows = Math.max(1, Math.ceil(defs.length / R.cols));
+    const rowH = Math.min(R.rowH, 400 / rows);
+    const av = Math.min(R.avatar, rowH - 84);
+    // İki çalışma alanı ince kit panelleri üstünde (yoğun arka planda hücreler okunsun): kadro ve ızgara
+    this.rosterRect = new Phaser.Geom.Rectangle(R.x - 12, R.top - 14, R.cols * R.step + 24, rows * rowH + 6);
+    const gw = 4 * G.cell + 3 * G.gap;
+    const gh = 3 * G.cell + 2 * G.gap;
+    this.panel(this.rosterRect.x, this.rosterRect.y, this.rosterRect.width, this.rosterRect.height, 0.62);
+    this.panel(G.x - 18, G.top - 18, gw + 36, gh + 36, 0.62);
+    this.add2(elText(this, R.x, PICK.labelY, T.pickRoster, 17, EL.MUTED, { em: 0.24 }).setOrigin(0, 0.5));
+    this.add2(elText(this, G.x, PICK.labelY, T.pickCompany(d.classes.length, size), 17, d.classes.length === size ? EL.ON : EL.MUTED, { em: 0.24 }).setOrigin(0, 0.5));
     defs.forEach((def, i) => {
-      const x = CX + (i - (defs.length - 1) / 2) * step;
-      const y = 640;
-      const on = this.picked.includes(def.id);
-      this.avatar(def, x, y, step - 26);
-      if (on) this.add2(this.add.rectangle(x, y, step - 14, step - 14).setStrokeStyle(2, EL.ON_N, 1));
-      this.add2(fitText(this.label(x, y + step / 2 + 8, def.name.toUpperCase(), 15, on ? C.bright : C.text).setOrigin(0.5, 0), step - 4));
-      this.add2(this.add.rectangle(x, y + step / 2 + 40, 34, 3, Phaser.Display.Color.HexStringToColor(groupColor(PRIMARY_COLORS, def.primary)).color, 1));
-      const z = this.tapZone(x, y + 20, step - 6, step + 50, () => this.actTogglePick(def.id));
-      z.on('pointerover', () => {
-        this.hoverClass = def.id;
-        this.infoText?.setText(this.classInfo(def.id));
-      });
+      const x = R.x + R.step / 2 + (i % R.cols) * R.step;
+      const y = R.top + av / 2 + 4 + Math.floor(i / R.cols) * rowH;
+      const on = d.classes.includes(def.id);
+      const col = Phaser.Display.Color.HexStringToColor(groupColor(PRIMARY_COLORS, def.primary)).color;
+      this.add2(this.add.rectangle(x, y, av + 6, av + 6, 0x120c07, 1).setStrokeStyle(on ? 2 : 1, on ? EL.ON_N : col, on ? 1 : 0.8));
+      // Takımdaki class kadroda soluk durur (ızgarada görünür); yine sürüklenebilir, dokunmak çıkarır
+      const img = this.add2(classAvatar(this, def, x, y, av).setAlpha(on ? 0.4 : 1));
+      this.add2(fitText(this.label(x, y + av / 2 + 10, def.name.toUpperCase(), 18, on ? C.bright : C.text).setOrigin(0.5, 0), R.step - 6));
+      this.add2(this.add.rectangle(x, y + av / 2 + 44, 34, 3, col, 1));
+      const z = this.add2(this.add.zone(x, y + 20, R.step - 6, av + 60).setInteractive({ useHandCursor: true }));
+      z.on('pointerdown', (p: Phaser.Input.Pointer) => this.beginPickDrag(def.id, -1, p, img));
+      z.on('pointerup', () => this.pickTap(() => this.actTogglePick(def.id)));
+      z.on('pointerover', () => this.setPickInfo(def.id));
     });
-    this.infoText = this.add2(this.note(CX, 800, this.classInfo(this.hoverClass), 26, C.sub).setOrigin(0.5));
-    this.button(CX - 230, LOOK.buttonY, 300, T.randomize, () => this.actRandomize());
-    this.button(CX + 230, LOOK.buttonY, 340, T.startRunButton, () => this.actBeginRun(), { primary: true, enabled: this.picked.length === size });
+    // Izgara (sağ): 4 sıra x 3 şerit, ön sıra (0) en sağda
+    this.add2(elText(this, G.x + gw + 34, G.top + gh / 2, T.pickFront, 17, EL.ON, { em: 0.2 }).setOrigin(0, 0.5));
+    this.add2(elText(this, G.x - 30, G.top + gh / 2, T.pickBack, 15, EL.MUTED, { em: 0.2 }).setOrigin(1, 0.5));
+    for (let row = 0; row < 4; row++)
+      for (let lane = 0; lane < 3; lane++) {
+        const slot = row * 3 + lane;
+        const x = G.x + (3 - row) * (G.cell + G.gap);
+        const y = G.top + lane * (G.cell + G.gap);
+        const id = draftClassAt(d, slot);
+        const def = id ? content.classes[id] : undefined;
+        const g = this.add2(this.add.graphics());
+        g.fillStyle(EL.INK, def ? 0.75 : 0.38).fillRect(x, y, G.cell, G.cell);
+        if (def && id === this.pickSel) g.lineStyle(2, EL.ON_N, 1).strokeRect(x + 1, y + 1, G.cell - 2, G.cell - 2);
+        else g.lineStyle(1, EL.GOLD, def ? 0.62 : row === 0 ? 0.42 : EL.LINE.a2).strokeRect(x + 0.5, y + 0.5, G.cell - 1, G.cell - 1);
+        if (!def) g.lineStyle(1, EL.GOLD, 0.22).strokePoints(diamondPts(x + G.cell / 2, y + G.cell / 2, 6.4), true);
+        let img: Phaser.GameObjects.Image | undefined;
+        if (def) {
+          img = this.add2(classAvatar(this, def, x + G.cell / 2, y + G.cell / 2 - 8, G.cell - 18));
+          const band = this.add2(this.add.graphics());
+          band.fillGradientStyle(EL.INK, EL.INK, EL.INK, EL.INK, 0, 0, 0.92, 0.92).fillRect(x + 1, y + G.cell - 40, G.cell - 2, 39);
+          const warn = row !== 0 && content.isMeleeClass(id);
+          this.add2(fitText(elText(this, x + G.cell / 2, y + G.cell - 20, def.name, 17, warn ? EL.BAD : EL.ON, { em: 0.04 }).setOrigin(0.5), G.cell - 10));
+        }
+        const z = this.add2(this.add.zone(x + G.cell / 2, y + G.cell / 2, G.cell, G.cell).setInteractive({ useHandCursor: !!def || !!this.pickSel }));
+        if (def) z.on('pointerdown', (p: Phaser.Input.Pointer) => this.beginPickDrag(id, slot, p, img));
+        z.on('pointerup', () => this.pickTap(() => this.actTapCell(slot)));
+        z.on('pointerover', () => this.setPickInfo(id || null, def ? slot : undefined));
+      }
+    // Sürükleme hedefi çizimi (ızgara ve kadro üstünde; yalnızca sürüklerken dolu) + kadroya bırakma yazısı
+    this.pickFx = this.add2(this.add.graphics());
+    this.pickRemoveText = this.add2(elText(this, this.rosterRect.centerX, this.rosterRect.bottom + 18, T.pickRemove, 17, EL.ON, { em: 0.2 }).setOrigin(0.5).setVisible(false));
+    this.infoText = this.add2(this.note(CX, PICK.infoY, this.pickInfo(this.hoverClass), 25, C.sub).setOrigin(0.5));
+    // Düğmeler: ikinciller solda, birincil (Start Run) en sağda
+    this.button(CX - 450, LOOK.buttonY, 280, T.randomize, () => this.actRandomize());
+    this.button(CX - 120, LOOK.buttonY, 300, T.autoArrange, () => this.actAutoArrange(), { enabled: d.classes.length > 0 });
+    this.button(CX + 280, LOOK.buttonY, 360, T.startRunButton, () => this.actBeginRun(), { primary: true, enabled: d.classes.length === size });
+  }
+
+  // ------------------------------------------------------------ takım seçimi: sürükle-bırak (fare ve dokunma; Phaser işaretçisi)
+
+  /** Kadronun dünya dikdörtgeni (ızgaradan kadroya bırakma = çıkar). */
+  private rosterRect = new Phaser.Geom.Rectangle(0, 0, 0, 0);
+  private pickRemoveText: Phaser.GameObjects.Text | null = null;
+
+  private setPickInfo(id: string | null, slot?: number): void {
+    if (this.drag?.moved) return;
+    this.hoverClass = id;
+    this.infoText?.setText(this.pickInfo(id, slot));
+  }
+
+  /** Bilgi satırı: class + primary + pasif; ızgaradaysa sırası ve (yakın dövüşçü arkadaysa) uyarı. */
+  private pickInfo(id: string | null, slot = id ? this.draft.slots[this.draft.classes.indexOf(id)] : undefined): string {
+    const base = this.classInfo(id);
+    if (!id || slot === undefined || slot < 0) return base;
+    const warn = slot >= 3 && content.isMeleeClass(id) ? `  ·  ${T.pickMeleeBack}` : '';
+    return `${base}  ·  ${T.heroRow(slot)}${warn}`;
+  }
+
+  /** Dokunma (sürüklenmediyse): sürükleme yeni bittiyse dokunma sayılmaz. */
+  private pickTap(run: () => void): void {
+    if (this.drag?.moved || this.confirm) return;
+    this.drag = null;
+    run();
+  }
+
+  private beginPickDrag(cls: string, from: number, p: Phaser.Input.Pointer, src?: Phaser.GameObjects.Image): void {
+    if (this.confirm) return;
+    const q = worldXY(this, p);
+    this.drag = { cls, from, sx: q.x, sy: q.y, moved: false, ...(src ? { src } : {}) };
+  }
+
+  private pickCellAt(x: number, y: number): number {
+    const G = PICK.grid;
+    const h = G.gap / 2;
+    for (let row = 0; row < 4; row++)
+      for (let lane = 0; lane < 3; lane++) {
+        const cx = G.x + (3 - row) * (G.cell + G.gap);
+        const cy = G.top + lane * (G.cell + G.gap);
+        if (x >= cx - h && x <= cx + G.cell + h && y >= cy - h && y <= cy + G.cell + h) return row * 3 + lane;
+      }
+    return -1;
+  }
+
+  /** Bırakma hedefi: hücre; ızgaradan gelen kahraman için kadro alanı (-2); yoksa -1. */
+  private pickTarget(x: number, y: number): number {
+    const c = this.pickCellAt(x, y);
+    if (c >= 0) return c;
+    return this.drag && this.drag.from >= 0 && this.rosterRect.contains(x, y) ? -2 : -1;
+  }
+
+  private onPickMove(p: Phaser.Input.Pointer): void {
+    const dr = this.drag;
+    if (!dr || this.view !== 'pick') return;
+    if (!p.isDown) return this.cancelPickDrag();
+    const q = worldXY(this, p);
+    if (!dr.moved) {
+      if (Math.hypot(q.x - dr.sx, q.y - dr.sy) < PICK.dragPx) return;
+      dr.moved = true;
+      this.pickSel = '';
+      const def = content.classes[dr.cls];
+      if (def) {
+        const s = PICK.grid.cell - 24;
+        const bg = this.add.graphics();
+        bg.fillStyle(0x120c08, 0.96).fillRect(-s / 2, -s / 2, s, s).lineStyle(2, EL.ON_N, 1).strokeRect(-s / 2, -s / 2, s, s);
+        dr.ghost = this.add.container(q.x, q.y - PICK.ghostLift, [bg, classAvatar(this, def, 0, 0, s - 8)]).setDepth(50).setAlpha(0.92);
+      }
+      dr.src?.setAlpha(0.25);
+      this.drawPickFx();
+    }
+    dr.ghost?.setPosition(q.x, q.y - PICK.ghostLift); // parmak altında kalmasın: biraz yukarıda
+    const t = this.pickTarget(q.x, q.y);
+    if (t !== this.dropHot) {
+      this.dropHot = t;
+      this.drawPickFx();
+    }
+  }
+
+  private onPickUp(p: Phaser.Input.Pointer): void {
+    const dr = this.drag;
+    if (!dr) return;
+    if (!dr.moved) {
+      this.drag = null;
+      return;
+    }
+    const q = worldXY(this, p);
+    const t = this.pickTarget(q.x, q.y);
+    this.cancelPickDrag();
+    this.actDrop(dr.cls, dr.from, t);
+  }
+
+  /** Sürüklemeyi bırak: hayalet silinir, kaynak görsel geri gelir, hedef çizimi temizlenir. */
+  private cancelPickDrag(): void {
+    const dr = this.drag;
+    this.drag = null;
+    this.dropHot = -1;
+    if (!dr) return;
+    dr.ghost?.destroy();
+    if (dr.src?.active) dr.src.setAlpha(dr.from < 0 && this.draft.classes.includes(dr.cls) ? 0.4 : 1);
+    this.drawPickFx();
+  }
+
+  /** Hedef vurgusu: sürüklerken ızgara çevresi kor rengi ince çizgi, hedef hücre kor çerçeve + dolgu; ızgaradan gelende kadro alanı da hedef. */
+  private drawPickFx(): void {
+    const g = this.pickFx;
+    if (!g?.active) return;
+    g.clear();
+    const dr = this.drag;
+    this.pickRemoveText?.setVisible(!!dr?.moved && dr.from >= 0);
+    if (!dr?.moved) return;
+    const G = PICK.grid;
+    const gw = 4 * G.cell + 3 * G.gap;
+    const gh = 3 * G.cell + 2 * G.gap;
+    g.lineStyle(2, EL.EMBER, 0.7).strokeRect(G.x - 7, G.top - 7, gw + 14, gh + 14);
+    if (this.dropHot >= 0) {
+      const row = Math.floor(this.dropHot / 3);
+      const lane = this.dropHot % 3;
+      const x = G.x + (3 - row) * (G.cell + G.gap);
+      const y = G.top + lane * (G.cell + G.gap);
+      g.fillStyle(EL.EMBER, 0.24).fillRect(x, y, G.cell, G.cell);
+      g.lineStyle(3, EL.EMBER2, 1).strokeRect(x + 1.5, y + 1.5, G.cell - 3, G.cell - 3);
+    }
+    if (dr.from >= 0) {
+      const r = this.rosterRect;
+      const hot = this.dropHot === -2;
+      if (hot) g.fillStyle(EL.EMBER, 0.08).fillRect(r.x, r.y, r.width, r.height);
+      g.lineStyle(hot ? 2 : 1, hot ? EL.EMBER : EL.GOLD, hot ? 1 : 0.4).strokeRect(r.x + 0.5, r.y + 0.5, r.width - 1, r.height - 1);
+    }
   }
 
   private classInfo(id: string | null): string {
@@ -560,7 +770,7 @@ export class EndlessScene extends Phaser.Scene {
     defs.forEach((d, i) => {
       const x = x0 + i * step;
       const show = (on: boolean) => (on ? this.showRelicTip(d.id, x, y, size) : this.hideTip());
-      const b = elIconButton(this, { icon: ensureIcon(this, d.icon, d.color, false) }, () => show(true), { size, onHover: show });
+      const b = elIconButton(this, { icon: ensureIcon(this, paintedOr('relic', d.id, d.icon), d.color, false) }, () => show(true), { size, onHover: show });
       b.root.setPosition(x, y);
       this.add2(b.root);
     });
@@ -570,7 +780,7 @@ export class EndlessScene extends Phaser.Scene {
     const d = relicDef(id);
     if (!d) return;
     this.hideTip();
-    const tip = elTip(this, { icon: ensureIcon(this, d.icon, d.color, false), title: d.name, meta: T.relicEffectLabel, lines: [[d.text]], width: 420 });
+    const tip = elTip(this, { icon: ensureIcon(this, paintedOr('relic', d.id, d.icon), d.color, false), title: d.name, meta: T.relicEffectLabel, lines: [[d.text]], width: 420 });
     placeElTip(this, tip, { x: x - size / 2, y: y - size / 2, w: size, h: size }, 'above');
     this.tip = tip.container;
   }
@@ -594,7 +804,7 @@ export class EndlessScene extends Phaser.Scene {
       const d = relicDef(id);
       if (!d) return;
       this.choiceCard({ index: i, cx: CX + (i - (n - 1) / 2) * (w + gap), w, rich: true, accent: hexNum(d.color), tint: EndlessScene.TINT.relic, kicker: T.relicKicker, take: () => this.actChooseRelic(run, id) }, (k) => {
-        const m = medallion(this, ensureIcon(this, d.icon, d.color, false), hexNum(d.color), LOOK.card.medal, { rich: true, iconScale: 0.8 });
+        const m = medallion(this, ensureIcon(this, paintedOr('relic', d.id, d.icon), d.color, false), hexNum(d.color), LOOK.card.medal, { rich: true, iconScale: 0.8 });
         m.setPosition(k.cx, k.top + LOOK.card.medal + 22);
         k.add(m);
         let y = k.top + LOOK.card.medal * 2 + 58;
@@ -641,6 +851,12 @@ export class EndlessScene extends Phaser.Scene {
     const w = Math.min(LOOK.card.maxW, (1760 - (n - 1) * LOOK.card.gap) / n);
     run.offer.forEach((card, i) => this.rewardCard(run, card, i, CX + (i - (n - 1) / 2) * (w + LOOK.card.gap), w, special));
     this.add2(this.note(CX, LOOK.card.top + LOOK.card.h + 26, T.cardHint, 19, C.dim, true).setOrigin(0.5, 0));
+    // Nadir düşüş duyurusu (madde 297): altın-turuncu parlayan satır (item torbada)
+    const rare = run.rareDrop && run.rareDrop.wave === run.stats.cleared ? itemDef(run.rareDrop.itemId) : undefined;
+    if (rare) {
+      const t = this.add2(this.note(CX, LOOK.card.top - 34, `Rare drop: ${rare.name} (in your bag)`, 26, '#f0a830', false).setOrigin(0.5, 1));
+      this.tweens.add({ targets: t, alpha: { from: 0.35, to: 1 }, scale: { from: 1.12, to: 1 }, duration: 520, yoyo: true, repeat: 2, ease: 'Sine.easeInOut', onComplete: () => t.setAlpha(1).setScale(1) });
+    }
   }
 
   /**

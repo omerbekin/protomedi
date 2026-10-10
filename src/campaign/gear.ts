@@ -1,6 +1,6 @@
 // Sefer ekipmanı (saf; her işlem YENİ durum döndürür): torba, kuşanma, çıkarma, altın ve kahramanın savaş gücü.
 // Aşama 0 temeli (roadmap 1.4); loot / tüccar / ekranlar Aşama 1. Kurallar: docs/design/progression/items.md.
-import { BAG_SIZE, bestMoves, canEquip, itemDef, loadout, makeItem, RARITY_IDS, SLOT_IDS, type ItemInstance, type LoadoutResult, type SlotId } from '../progression';
+import { BAG_SIZE, bestMoves, canEquip, itemDef, legendaryConflict, legendaryIds, loadout, makeItem, RARITY_IDS, SLOT_IDS, type ItemInstance, type LoadoutResult, type SlotId } from '../progression';
 import { clone, heroById } from './state';
 import { rngFor } from './seed';
 import type { CampaignState, Hero } from './types';
@@ -24,8 +24,8 @@ export function addItem(s: CampaignState, itemId: string): { state: CampaignStat
 export function equipError(hero: Hero, item: ItemInstance): string | null {
   const d = itemDef(item.id);
   if (!d) return `Unknown item: ${item.id}`;
-  if (!canEquip(hero.class, d)) return `${hero.class} cannot use ${d.family ?? d.slot}`;
-  return null;
+  if (!canEquip(hero.class, d)) return d.usableBy && !d.usableBy.includes(hero.class) ? `${d.name} can only be used by ${d.usableBy.join(', ')}` : `${hero.class} cannot use ${d.family ?? d.slot}`;
+  return legendaryConflict(hero.equipment, d);
 }
 
 /** Torbadaki item'i kahramana takar; yuvada item varsa torbaya geri döner (yer değiştirme: torba boyutu değişmez). */
@@ -98,6 +98,21 @@ export function equipBest(s: CampaignState, heroIds?: string[]): CampaignState {
     const h = heroById(t, id);
     if (!h) continue;
     for (const m of bestMoves(h, t.inventory)) t = equipItem(t, id, m.uid);
+  }
+  return t;
+}
+
+/**
+ * Önizleme / debug (madde 296): torbada ya da takılı olmayan tüm Legendary'leri torbaya koyar (zarlı). Torba sınırı uygulanmaz (yalnızca test aracı).
+ * Legendary'ler henüz düşmez; bu tek yoldur (?legendary=1, debug > Campaign > Give all Legendaries).
+ */
+export function grantAllLegendaries(s: CampaignState): CampaignState {
+  const have = new Set([...s.inventory.map((i) => i.id), ...s.roster.flatMap((h) => SLOT_IDS.map((k) => h.equipment[k]?.id))]);
+  let t = clone(s);
+  for (const id of legendaryIds()) {
+    if (have.has(id)) continue;
+    const uid = `i${t.nextItemId++}`;
+    t.inventory.push(makeItem(id, uid, rngFor(t.seed, 'item', uid)));
   }
   return t;
 }

@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import { battleSummary, content } from '../engine';
 import type { Battle } from '../engine';
-import {
+import { grantLegendariesRun,
   abandonRun,
   addScore,
   applyOutcome,
@@ -245,4 +245,11 @@ export function resultActions(game: Phaser.Game, plan: WavePlan, victory: boolea
     { label: 'Run Summary', primary: true, run: () => goTo(game, ENDLESS_SCENE) },
     { label: 'Main Menu', run: () => goTo(game, 'MainMenuScene') },
   ];
+}
+
+/** ?legendary=1 önizlemesi (madde 296): bekleyen / kayıtlı koşunun torbasına 10 Legendary (yoksa yeni bir koşu açılır). */
+export function applyLegendaryPreview(): EndlessRun {
+  const run = endless.run && endless.run.phase !== 'over' ? endless.run : (continueRun() ?? startRun(['warrior', 'archer', 'mage', 'druid']));
+  commit(grantLegendariesRun(run));
+  return endless.run!;
 }

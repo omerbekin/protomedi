@@ -3,6 +3,7 @@
  * Çizimi combatant-view.ts > floatText yapar. Yeni font dosyası yok: oyunun serif dil ailesinden, rakamları düz (lining) olan
  * Palatino/Book Antiqua öncelikli bir yığın (Georgia'nın eski stil rakamları 3/4/5/7/9'u aşağı sarkıtır, hasar rakamında okunmaz).
  */
+import { paintedOr } from '../ui/misc-icons';
 
 export type FloatKind = 'damage' | 'crit' | 'heal' | 'shield' | 'miss' | 'dodge' | 'resource' | 'info';
 
@@ -133,6 +134,20 @@ const STATUS_ICON: Record<string, string> = { wound: 'drop', bleed: 'drop', pois
 export const ELEMENT_ICON: Record<string, string> = { fire: 'flame', ice: 'blizzard', holy: 'holy', arcane: 'rune', nature: 'leaf', dark: 'skull' };
 /** Element ikon renkleri (data/battle-layout.json > colors.element ile uyumlu; zehir yeşil, kan kırmızı). */
 export const FLOAT_ICON_TINT: Record<string, string> = { poison: '#6fcf4b', flame: '#ff7a1a', drop: '#c0203a', holy: '#fff0a0', blizzard: '#8fd8ff', rune: '#e05cff', leaf: '#7ed957', skull: '#b36bff', burst: '#ffd23f' };
+
+/**
+ * Ekrandaki ikon (boyalı oyun ikonları, assets/misc-icons): zemin / durum / element boyalı görseli varsa '<grup>:<ad>', yoksa damageIconKind'in
+ * piksel ikonu. Karar sırası damageIconKind ile aynı.
+ */
+export function damagePaintedIcon(t: DamageTags): string | null {
+  const base = damageIconKind(t);
+  if (!base) return null;
+  const src = damageSourceKind(t);
+  if (src === 'ground' && t.ground && GROUND_ICON[t.ground] === base) return paintedOr('ground', t.ground, base);
+  if (src === 'status' && t.statusId && STATUS_ICON[t.statusId] === base) return paintedOr('status', t.statusId, base);
+  if (t.element && ELEMENT_ICON[t.element] === base) return paintedOr('element', t.element, base);
+  return base;
+}
 
 /** Hasar rakamının yanındaki element/kaynak ikonu (yoksa null: fiziksel ya da bilinmeyen). Önce zemin/durum, sonra element. */
 export function damageIconKind(t: DamageTags): string | null {

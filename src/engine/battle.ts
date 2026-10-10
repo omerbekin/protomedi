@@ -1069,6 +1069,32 @@ export class Battle {
     return resource === 'mp' && !!actor.itemEffects?.firstSkillFree && !actor.freeSkillUsed;
   }
 
+  /** Staff of the Last Ember: bu birimin sıradaki bu skill'i N. büyü olarak bedelsiz mi (MP bedelli skill, sayaç+1 N'nin katı)? Saf. */
+  nthSpellFree(actor: Combatant, skill: SkillDef): boolean {
+    const ne = actor.itemEffects?.nthSpellFree;
+    return !!ne && ne.every > 0 && skill.cost.resource === 'mp' && skillCostAmount(skill.cost, actor) > 0 && ((actor.spellCount ?? 0) + 1) % ne.every === 0;
+  }
+
+  /** Ekranda yan komşu mu (formation.sideNeighbors; harita yoksa aynı sıra, şerit farkı 1)? Saf. */
+  private sideAdjacent(a: Combatant, b: Combatant): boolean {
+    if (a.board !== b.board || a.uid === b.uid) return false;
+    const map = this.setup.formulas.formation.sideNeighbors?.[b.board]?.[b.slot];
+    const alive = this.living(b.side).filter((c) => c.uid !== b.uid && c.board === b.board);
+    const near = map ? pickSideNeighbors(map, (slot) => alive.some((c) => c.slot === slot)) : alive.filter((c) => this.rowOf(c.slot) === this.rowOf(b.slot) && Math.abs(this.laneOf(c.slot) - this.laneOf(b.slot)) === 1).map((c) => c.slot);
+    return near.includes(a.slot);
+  }
+
+  /** Mantle of Valdren (shieldRefresh): can eşiğin altına inince bir kez kalkan. */
+  private checkShieldRefresh(target: Combatant, emit: Emit): void {
+    const sr = target.itemEffects?.shieldRefresh;
+    if (!sr || target.shieldRefreshed || target.hp <= 0 || target.hp >= sr.below * target.maxHp) return;
+    target.shieldRefreshed = true;
+    const add = Math.max(1, Math.round(target.maxHp * sr.ratio));
+    target.shield += add;
+    emit({ type: 'passive', actor: target.uid, passive: 'valdren_mantle', name: 'Mantle of Valdren' });
+    emit({ type: 'shield', source: target.uid, target: target.uid, amount: add, shieldAfter: target.shield, magicShieldAfter: target.magicShield, magic: false });
+  }
+
   /** Second Wind (item etkisi secondWind): savaşta bir kez, can eşiğin altına inince şifa. */
   private checkSecondWind(target: Combatant, emit: Emit): void {
     const sw = target.itemEffects?.secondWind;
@@ -1661,7 +1687,7 @@ export class Battle {
       return { ok: false, reason: 'Melee: front row only' };
     }
     const resource = skill.cost.resource;
-    const amount = this.thriftyFree(actor, resource) ? 0 : skillCostAmount(skill.cost, actor); // oranlı bedel (ofCurrent): mevcut kaynağın oranı, en az 1
+    const amount = this.thriftyFree(actor, resource) || this.nthSpellFree(actor, skill) ? 0 : skillCostAmount(skill.cost, actor); // oranlı bedel (ofCurrent): mevcut kaynağın oranı, en az 1
     // Silence (statuses.json > blocksMpSkills, madde 260): MP bedelli skill kullanılamaz (Unlimited MP debug'ı da bunu açmaz); bedelsizler ve global eylemler serbest
     if (resource === 'mp' && amount > 0 && this.isSilenced(actorUid)) return { ok: false, reason: 'Silenced' };
     if (resource === 'mp' && !this.freeMp && actor.mp < amount) return { ok: false, reason: 'Not enough MP' };
@@ -1862,8 +1888,14 @@ export class Battle {
       actor.slot = slot!;
       emit({ type: 'moved', actor: actor.uid, from, to: actor.slot });
     }
+    // Pilgrim's Road Boots (moveStride): Move yarım tur harcar ve kaçınma buff'ı verir
+    const stride = def!.kind === 'move' ? actor.itemEffects?.moveStride : undefined;
+    if (stride) {
+      emit({ type: 'passive', actor: actor.uid, passive: 'pilgrims_stride', name: "Pilgrim's Stride" });
+      this.addStatus(actor, { kind: stride.status as Status['kind'], turns: stride.turns, source: actor.uid }, emit);
+    }
     this.noteAction(actor.uid, def!.kind === 'rest' ? 'rest' : def!.kind === 'skip' ? 'skip' : 'move');
-    this.finishAction(actor, emit);
+    this.finishAction(actor, emit, stride ? stride.turnCost : 1);
     return { ok: true, events };
   }
 
@@ -2031,7 +2063,14 @@ export class Battle {
 
     const resource = skill.cost.resource;
     // Thrifty (item etkisi firstSkillFree): savaştaki ilk skill'in MP bedeli 0; ilk skill kullanıldıktan sonra normal
-    const cost = this.thriftyFree(actor, resource) ? 0 : skillCostAmount(skill.cost, actor); // oranlı bedel (Wail: mevcut canın %20'si) ödeme anındaki kaynaktan
+    // Staff of the Last Ember (nthSpellFree): her N. büyü (MP bedelli skill) bedelsiz ve güçlü
+    const lastEmber = !debug && this.nthSpellFree(actor, skill);
+    if (!debug && actor.itemEffects?.nthSpellFree && skill.cost.resource === 'mp' && skillCostAmount(skill.cost, actor) > 0) actor.spellCount = (actor.spellCount ?? 0) + 1;
+    if (lastEmber) {
+      actor.empowerMult = actor.itemEffects!.nthSpellFree!.power;
+      emit({ type: 'passive', actor: actor.uid, passive: 'last_ember', name: 'The Last Ember' });
+    }
+    const cost = this.thriftyFree(actor, resource) || lastEmber ? 0 : skillCostAmount(skill.cost, actor); // oranlı bedel (Wail: mevcut canın %20'si) ödeme anındaki kaynaktan
     if (!debug && actor.itemEffects?.firstSkillFree && !actor.freeSkillUsed) {
       actor.freeSkillUsed = true;
       if (resource === 'mp' && skillCostAmount(skill.cost, actor) > 0) emit({ type: 'passive', actor: actor.uid, passive: 'thrifty', name: 'Thrifty' });
@@ -2374,6 +2413,21 @@ export class Battle {
       }
     }
 
+    // Windrunner Longbow (firstAttackEcho): savaştaki ilk hasar skill'i, hedefler dışından rastgele bir düşmana da vurur
+    const echoPower = actor.itemEffects?.firstAttackEcho;
+    const echoEffect = skill.effects.find((e): e is DamageEffect => e.type === 'damage');
+    if (!debug && echoPower && !actor.echoUsed && echoEffect && !skill.telegraph) {
+      actor.echoUsed = true;
+      const hitUids = new Set(targets.map((c) => c.uid));
+      const pool = this.living(actor.side === 'party' ? 'enemy' : 'party').filter((c) => !hitUids.has(c.uid) && !c.inert);
+      if (pool.length > 0) {
+        const other = pool[this.rng.int(0, pool.length - 1)]!;
+        emit({ type: 'passive', actor: actor.uid, passive: 'windrunner', name: 'Windrunner' });
+        this.strike(actor, other, echoEffect, emit, echoPower, false);
+        this.announceIfDead(other, emit);
+      }
+    }
+    if (actor.empowerMult !== undefined) delete actor.empowerMult;
     for (const s of ownAttackEnds) {
       if (!actor.statuses.includes(s)) continue;
       actor.statuses = actor.statuses.filter((x) => x !== s);
@@ -2534,6 +2588,7 @@ export class Battle {
     const actor = next ? this.get(next.uid) : undefined;
     if (!next || !actor) return;
     this.speedBoost.delete(actor.uid); // Skip Turn desteği, birimin sıradaki turu başlayınca biter
+    if (actor.extraTurnGranted) actor.extraTurnGranted = false; // Whisper of Morvane: tur başına en çok bir ek eylem
     this.phaseCrossed.clear();
     this.telegraphedThisTurn.delete(actor.uid);
     if ((actor.actionsPerTurn ?? 1) > 1) this.actionsLeft.set(actor.uid, actor.actionsPerTurn! - 1);
@@ -2663,6 +2718,13 @@ export class Battle {
 
   /** `cause`: görsel neden (skill etkisinin `cause` alanı, ör. 'vines'); `status` olayına aynen yazılır. */
   private addStatus(target: Combatant, status: Status, emit: Emit, cause?: string): void {
+    // Crown of the Ashen King (ignoreFirstDebuff): savaşta uygulanan ilk debuff yok sayılır (kendi kendine uygulananlar hariç)
+    if (target.itemEffects?.ignoreFirstDebuff && !target.debuffIgnored && status.source !== target.uid && this.statusDef(status.kind)?.type === 'debuff') {
+      target.debuffIgnored = true;
+      emit({ type: 'immune', target: target.uid, status: status.kind, source: status.source, ...(cause ? { cause } : {}) });
+      emit({ type: 'passive', actor: target.uid, passive: 'ashen_crown', name: 'Ashen Crown' });
+      return;
+    }
     // Kontrol bağışıklığı (madde 271): boss rütbesi CC durumlarını (statuses.json > cc: Stun, Slow, Silence) yemez; durum uygulanmaz, 'Immune' yazısı.
     // Madde 272: isabet/kritik düşüren debuff'lar (Blinded, Jinxed; ccImmunity.accuracyCrit) aynı akış.
     if (this.statusBlocked(target, status.kind)) {
@@ -2873,6 +2935,12 @@ export class Battle {
     else if (this.debug.dodge === 'always') outcome = 'dodge';
     else if (this.debug.miss === 'always') outcome = 'miss';
     else if (this.debug.dodge === 'never') outcome = 'hit';
+    // The Gambler's Last Coin (rerollMiss): savaşta bir kez, iska / kaçınma yeniden zarlanır (debug zorlamasında değil)
+    if (outcome !== 'hit' && !sure && actor.itemEffects?.rerollMiss && !actor.rerollUsed && this.debug.dodge === 'auto' && this.debug.miss === 'auto') {
+      actor.rerollUsed = true;
+      emit({ type: 'passive', actor: actor.uid, passive: 'last_coin', name: 'The Last Coin' });
+      outcome = hitOutcome(this.effectiveStats(actor), this.effectiveStats(target), f, this.rng.next());
+    }
     if (outcome !== 'hit') {
       emit({ type: outcome, source: actor.uid, target: target.uid });
       return { landed: false };
@@ -2887,12 +2955,24 @@ export class Battle {
     const crit = this.debug.crit === 'auto' ? rolled.crit : this.debug.crit === 'always';
     const mult = crit ? actor.stats.critMult : 1;
     // openingDamageMult (endless Banner of the Bridge): yalnızca birimin ilk eyleminde; yoksa x1 (sonuç birebir aynı)
-    const total = Math.max(f.damage.minDamage, Math.round(base * mult * this.debug.damageMult * (actor.openingDamageMult ?? 1)));
+    const total = Math.max(f.damage.minDamage, Math.round(base * mult * this.debug.damageMult * (actor.openingDamageMult ?? 1) * (actor.empowerMult ?? 1)));
 
     const guard = target.statuses.find((s) => s.kind === 'guard');
     const guardian = guard ? this.get(guard.source) : undefined;
     let hpLoss: number;
     const meta: HitMeta = { origin: 'skill', element: effect.element ?? 'physical', damageType: effect.damageType };
+    // Oathkeeper's Bulwark (interceptLethal): ölümcül vuruş, yan komşu dosttaki taşıyana gider (savaşta bir kez); hedefe bu vuruştan hiçbir şey olmaz
+    const pool = (type: string) => target.hp + target.shield + (type === 'magic' ? target.magicShield : 0);
+    if (target.hp > 0 && total >= pool(effect.damageType)) {
+      const keeper = this.living(target.side).find((c) => c.itemEffects?.interceptLethal && !c.interceptUsed && this.sideAdjacent(c, target));
+      if (keeper) {
+        keeper.interceptUsed = true;
+        emit({ type: 'passive', actor: keeper.uid, passive: 'oathkeeper', name: "Oathkeeper's Vow" });
+        this.applyHit(actor, keeper, total, effect.damageType, crit, emit, true, meta);
+        this.announceIfDead(keeper, emit);
+        return { landed: false };
+      }
+    }
     // Bloodletter (item etkisi executeLifesteal): vuruştan ÖNCE hedefin canı eşiğin altında mı
     const exe = actor.itemEffects?.executeLifesteal;
     const execute = !!exe && target.hp < exe.below * target.maxHp;
@@ -2923,6 +3003,29 @@ export class Battle {
     if (execute && exe && actor.hp > 0 && hpLoss > 0) {
       emit({ type: 'passive', actor: actor.uid, passive: 'bloodletter', name: 'Bloodletter' });
       this.applyHeal(actor, actor, Math.max(1, Math.round(hpLoss * exe.ratio)), false, emit);
+    }
+    // Emberbrand (onHitDot): isabet eden vuruş hedefe DoT bırakır (miktar uygulamada sabitlenir; yenisi süreyi tazeler, büyük miktar kalır)
+    const burn = actor.itemEffects?.onHitDot;
+    if (burn && hpLoss > 0 && target.hp > 0 && this.statusDef(burn.status)) {
+      const amount = Math.max(1, Math.round(attributePower(this.attackStats(actor), effect.scale, f) * burn.power));
+      const old = target.statuses.find((s) => s.kind === burn.status)?.amount ?? 0;
+      this.addStatus(target, { kind: burn.status as Status['kind'], turns: burn.turns, source: actor.uid, amount: Math.max(amount, old) }, emit, 'emberbrand');
+    }
+    // Heart of the Forge (critHealAlly): kritik vuruşta en yaralı dost iyileşir
+    const forge = actor.itemEffects?.critHealAlly;
+    if (forge && crit && hpLoss > 0) {
+      const hurt = this.living(actor.side).filter((c) => !c.inert && c.hp < c.maxHp).sort((x, y) => x.hp / x.maxHp - y.hp / y.maxHp)[0];
+      if (hurt) {
+        emit({ type: 'passive', actor: actor.uid, passive: 'forge_heart', name: 'Heart of the Forge' });
+        this.applyHeal(actor, hurt, Math.max(1, Math.round(hpLoss * forge)), false, emit);
+      }
+    }
+    // Whisper of Morvane (killExtraTurn): skill vuruşuyla öldürünce ihtimalle aynı turda bir eylem daha (tur başına en çok bir kez; zincir yok)
+    const whisper = actor.itemEffects?.killExtraTurn;
+    if (whisper && target.hp <= 0 && hpLoss > 0 && !actor.extraTurnGranted && this.mode === 'turns' && this.currentUid === actor.uid && this.rng.next() < whisper) {
+      actor.extraTurnGranted = true;
+      this.actionsLeft.set(actor.uid, (this.actionsLeft.get(actor.uid) ?? 0) + 1);
+      emit({ type: 'passive', actor: actor.uid, passive: 'morvane_whisper', name: 'Whisper of Morvane' });
     }
     // Mana Spring (item etkisi critMp): kendi kritik vuruşunda MP (maks'ı aşmaz); EYLEM başına bir kez (alan / çok vuruşlu skill'ler MP yağdırmasın)
     const springMp = crit && actor.hp > 0 && actor.springAt !== this.turnsTaken ? Math.min(actor.itemEffects?.critMp ?? 0, actor.maxMp - actor.mp) : 0;
@@ -3048,6 +3151,7 @@ export class Battle {
     if (pendingBreak) emit({ type: 'statusEnd', target: target.uid, status: 'taunt', broken: true });
     if (target.boss?.phases && target.hp > 0) this.checkPhase(target, emit);
     this.checkSecondWind(target, emit);
+    this.checkShieldRefresh(target, emit);
     // Kalkan kancaları yalnızca DOĞRUDAN bir saldırganın skill vuruşunda (yer etkisi tiki / kendine hasar tetiklemez)
     if (meta.origin === 'skill' && actor.side !== target.side) for (const { hook, part } of hooked) this.absorbTrigger(hook, target, actor, part, emit);
     return rest;
@@ -3308,6 +3412,7 @@ function createSetupCombatant(baseDef: CombatantDef, side: Side, slot: number, u
     c.itemEffects = JSON.parse(JSON.stringify(ie)) as ItemEffects;
     if (finite(ie.startShieldRatio) && ie.startShieldRatio > 0) c.shield += Math.round(c.maxHp * ie.startShieldRatio);
     if (finite(ie.startCharge) && ie.startCharge > 0) c.turnCounter = roundStat(formulas.turn.threshold * Math.min(0.99, ie.startCharge), formulas);
+    if (ie.shieldRefresh && ie.shieldRefresh.start > 0) c.shield += Math.round(c.maxHp * ie.shieldRefresh.start); // Mantle of Valdren
   }
   // Hazır çağrı (ör. düşman Skeleton): çağrı kuralları, sahipsiz ve süresiz
   if (unit.summoned) c.summoned = true;

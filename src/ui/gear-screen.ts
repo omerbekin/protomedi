@@ -787,7 +787,18 @@ export function showSpoils(root: HTMLElement, on: SpoilsHooks): () => void {
     panel.append(el('div', 'gr-title', drop.kind === 'treasure' ? 'Treasure' : 'Spoils'));
     if (ids.length) panel.append(el('div', 'gr-mini-sub', `${ids.length} new item${ids.length > 1 ? 's' : ''} in the bag`));
     const list = el('div', 'gr-mini-list');
-    for (const id of ids) list.append(itemRow(id));
+    // Nadir düşüş (madde 297): altın-turuncu parıltılı satır + "Rare drop" etiketi
+    const rareLeft = [...(drop.rare ?? [])];
+    for (const id of ids) {
+      const row = itemRow(id);
+      const ri = rareLeft.indexOf(id);
+      if (ri >= 0) {
+        rareLeft.splice(ri, 1);
+        row.classList.add('gr-rare-drop');
+        row.append(el('span', 'gr-rare-tag', 'Rare drop'));
+      }
+      list.append(row);
+    }
     if (ids.length) panel.append(list);
     panel.append(el('div', 'gr-mini-extra', ids.length || left.length ? `+${drop.gold} gold` : `No gear this time. +${drop.gold} gold`));
     if (left.length) {

@@ -13,9 +13,10 @@ import { GRID, PxGrid, spriteCells, type Cell } from './pixel-art';
 import { SHARED_KEY, statusOwner, wantsV2 } from './asset-versions';
 import { ICONS_V2 } from './art-v2/icons-index';
 import { V2_DEFAULT_SIZE, isV2Image, type V2Sprite, type V2SpriteEntry } from './art-v2/types';
-import { ICON_IMAGE_SIZE, STAT_IMAGE_TEXTURE, iconImageUrl, statImage, uiImage } from './icon-image-files';
+import { ICON_IMAGE_SIZE, STAT_IMAGE_TEXTURE, iconImageUrl, miscImage, statImage, uiImage } from './icon-image-files';
 import { STAT_ICON_PREFIX, statIconFallback } from '../ui/stat-icons';
 import { UI_ICON_PREFIX, uiIconFallback } from '../ui/ui-icons';
+import { isMiscIconName } from '../ui/misc-icons';
 
 export interface ResolvedSprite {
   /** Doku/önbellek anahtarı parçası: v1'de çıplak ad (eski anahtarlar aynen), v2'de `v2:<sahip>:<ad>`. */
@@ -111,6 +112,12 @@ export function resolveSprite(name: string, owner?: string | null): ResolvedSpri
     const fb = uiIconFallback(kind);
     return fb ? resolveSprite(fb, owner) : { key: name, version: 'v1', size: GRID, cells: () => null };
   }
+  if (isMiscIconName(name)) {
+    // boyalı oyun ikonu (assets/misc-icons): durum, element, zemin, kalıntı, amblem, sınıf logosu, düğüm; dosya yoksa yer tutucu (çağıran paintedOr ile eskiye düşer)
+    const img = miscImage(name);
+    if (img) return { key: name, version: 'v2', size: STAT_IMAGE_TEXTURE, cells: () => null, image: img.small, domImage: img.url, smooth: true };
+    return { key: name, version: 'v1', size: GRID, cells: () => null };
+  }
   if (name.startsWith('v2:')) {
     const [, o = '', n = ''] = name.split(':');
     const e = v2Entry(o, n, true);
@@ -135,6 +142,8 @@ export const badgeSpriteName = (statusId: string): string => `badge_${statusId}`
  * ikon adı (Shared v2 seçiliyse shared/icons.ts çizimi).
  */
 export function statusBadge(statusId: string, icon: string): { name: string; owner: string } {
+  // boyalı durum rozeti (assets/misc-icons/status/<id>.png) her sürümün önünde
+  if (miscImage(`status:${statusId}`)) return { name: `status:${statusId}`, owner: SHARED_KEY };
   const owner = statusOwner(statusId);
   if (owner && wantsV2(owner, 'icon')) {
     const file = ICONS_V2[owner];

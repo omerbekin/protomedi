@@ -105,7 +105,8 @@ function mergeEffect(prev: unknown, next: EffectDef['value'], stack: boolean): u
   if (typeof next === 'number') return stack ? (prev as number) + next : Math.max(prev as number, next);
   const p = prev as Record<string, number>;
   const thresholds = new Set(['below', 'above', 'cap']);
-  return Object.fromEntries(Object.entries(next).map(([k, v]) => [k, thresholds.has(k) ? v : stack ? (p[k] ?? 0) + v : Math.max(p[k] ?? 0, v)]));
+  const thr = new Set([...thresholds, 'turns', 'every']); // eşik / süre / sıklık alanları toplanmaz; metin alanları (durum id'si) aynen
+  return Object.fromEntries(Object.entries(next).map(([k, v]) => [k, typeof v === 'string' || thr.has(k) ? v : stack ? (p[k] ?? 0) + v : Math.max(p[k] ?? 0, v)]));
 }
 
 /**

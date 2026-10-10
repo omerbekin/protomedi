@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { classLogoName } from '../../ui/misc-icons';
 import type { UiSoundKind } from '../../ui/ui-sound';
 import layout from '../../../data/battle-layout.json';
 import { skillTags } from '../../ui/skill-tags';
@@ -1194,7 +1195,7 @@ export class TeamSelectScene extends Phaser.Scene {
     lines.push([`HP ${s.hp}   ·   MP ${s.mp}   ·   SPD ${s.spd}`]);
     lines.push([`Armor ${s.armor}${s.magicArmor > 0 ? `   ·   Magic armor ${s.magicArmor}` : ''}   ·   Crit ${(s.critChance * 100).toFixed(1).replace(/\.0$/, '')}% x${s.critMult.toFixed(2)}`]);
     if (def.passive) lines.push([`${def.passive.name}: ${describePassive(def.passive, s, f)}`, NOTE]);
-    return { icon: ensureIcon(this, def.logo, def.color, false, ownerOfUnit(def.id)), title: def.name, badge: `${archetypeOf(def)} · ${rangeOf(def)}`, lines };
+    return { icon: ensureIcon(this, classLogoName(def), def.color, false, ownerOfUnit(def.id)), title: def.name, badge: `${archetypeOf(def)} · ${rangeOf(def)}`, lines };
   }
 
   /** Zarif tooltip: koyu degrade kutu, ince altın çerçeve, Cinzel başlık + EB Garamond satırlar; yukarı kayarak belirir. */

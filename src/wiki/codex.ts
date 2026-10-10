@@ -4,6 +4,7 @@
  * Her maddenin küçük resmi (portre / skill ikonu / durum ikonu / element ikonu) burada seçilir; çizimi view.ts yapar.
  * Arama: catalog'un `search` metinleri; kelimelerin hepsi geçmeli (eski wiki ile aynı kural).
  */
+import { paintedOr } from '../ui/misc-icons';
 import type { WikiArticle, WikiCatalog, WikiUnit } from './catalog';
 
 export type CodexSectionId = 'start' | 'classes' | 'skills' | 'mechanics' | 'statuses' | 'elements';
@@ -93,7 +94,7 @@ export function codexEntries(cat: WikiCatalog): Record<CodexSectionId, CodexEntr
     mechanics: cat.mechanics.map((a) => articleEntry('mechanics', a)),
     statuses: [
       ...cat.statuses.map((s): CodexEntry => ({ section: 'statuses', id: s.id, title: s.name, sub: s.type === 'buff' ? 'Buff' : 'Debuff', group: 'Statuses', thumb: { kind: 'status', statusId: s.id, icon: s.icon, color: s.color }, search: s.search })),
-      ...cat.grounds.map((g): CodexEntry => ({ section: 'statuses', id: groundEntryId(g.id), title: g.name, sub: 'Ground', group: 'Grounds', thumb: { kind: 'icon', icon: g.icon, color: g.color, owner: 'shared' }, search: g.search })),
+      ...cat.grounds.map((g): CodexEntry => ({ section: 'statuses', id: groundEntryId(g.id), title: g.name, sub: 'Ground', group: 'Grounds', thumb: { kind: 'icon', icon: paintedOr('ground', g.id, g.icon), color: g.color, owner: 'shared' }, search: g.search })),
     ],
     elements: [
       {

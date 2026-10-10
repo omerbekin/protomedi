@@ -1,7 +1,8 @@
 // Endless koşu durumu ve kuralları (saf; her fonksiyon yeni durum döner, girdiyi değiştirmez). Sayılar data/endless.json'dan.
 import { classes } from '../engine/content';
-import { BAG_SIZE, ITEMS, RARITY_IDS, canEquip, instanceIP, itemDef, itemIP, itemValue, rollStats, sellValue, type ItemDef, type ItemInstance, type RarityId, type SlotId } from '../progression/items';
+import { BAG_SIZE, ITEMS, RARITY_IDS, canEquip, legendaryConflict, instanceIP, itemDef, itemIP, itemValue, rollStats, sellValue, type ItemDef, type ItemInstance, type RarityId, type SlotId } from '../progression/items';
 import { bestMoves } from '../progression/equip';
+import { RARE, legendaryPool, rollRareDrop } from '../progression/rare';
 import { emptyEquipment } from '../progression/items';
 import { ENDLESS, type EndlessConfig, type ItemRolls, type EndlessHero, type EndlessRun, type RewardCard, type ScoreEntry, type ShopEntry, type WaveKind } from './data';
 import { rngFor, waveKind, waveSeed, type WavePlan } from './waves';
@@ -115,6 +116,12 @@ export function applyOutcome(run: EndlessRun, plan: Pick<WavePlan, 'wave'>, out:
   }
   s.stats.cleared = run.wave;
   s.wave = run.wave + 1;
+  // Ortak nadir düşüş (madde 297): kazanılan her dalgada bir zar; dalga başına şans artar, Legendary 11. dalgadan itibaren
+  delete s.rareDrop;
+  const wk = waveKind(run.wave, cfg);
+  const rr = rollRareDrop({ rng: rngFor(s.seed, run.wave, 'rare'), kind: wk === 'normal' ? 'battle' : wk, misses: s.rarePity ?? 0, wave: run.wave });
+  s.rarePity = rr.misses;
+  if (rr.item && addToBag(s, rr.item, catalog, cfg).ok) s.rareDrop = { itemId: rr.item, wave: run.wave };
   s.phase = 'reward';
   s.offer = rewardOffer(s, cfg, catalog);
   // Boss zaferi: önce kalıntı seçimi (sahip olunmayan yoksa atlanır), sonra ödül kartları
@@ -212,6 +219,7 @@ export function upgradePairs(run: EndlessRun, cleared: number, exclude: string[]
   let pairs: Array<{ def: ItemDef; heroId: string }> = [];
   for (const d of catalog) {
     if (d.ilvl > cap || exclude.includes(d.id) || bagOf(run).some((i) => i.id === d.id)) continue;
+    if (d.rarity === 'legendary') continue; // Legendary ödül/tüccarda yok (düşüş modeli bekliyor, madde 296)
     for (const h of run.heroes) if (canEquip(h.class, d) && itemIP(d) > slotIP(h, d, catalog)) pairs.push({ def: d, heroId: h.id });
   }
   if (!pairs.length) return pairs;
@@ -273,6 +281,17 @@ export function shopStock(run: EndlessRun, cfg: EndlessConfig = ENDLESS, catalog
     taken.push(pair.def.id);
     // Zarlar tezgâha konurken atılır (seed'li; yenileme numarasıyla): tezgâhta görünen değer = satın alınan değer
     out.push({ itemId: pair.def.id, heroId: pair.heroId, price: itemValue(pair.def), rolls: rollStats(pair.def, rngFor(run.seed, cleared, 'ware-roll', reroll, i)) });
+  }
+  // Nadir mal (madde 297): merchant.fromWave'den itibaren her ziyarette (yenileme dahil) ihtimalle bir Legendary, yüksek fiyatla; havuzdan tekdüze
+  const rm = RARE.endless.merchant;
+  if (run.wave >= rm.fromWave) {
+    const rr = rngFor(run.seed, cleared, 'shop-rare', reroll);
+    const pool = legendaryPool({ wave: run.wave }, catalog);
+    if (pool.length && rr.next() < rm.chance) {
+      const d = pool[rr.int(0, pool.length - 1)]!;
+      const hero = run.heroes.find((h) => canEquip(h.class, d)) ?? run.heroes[0]!;
+      out.push({ itemId: d.id, heroId: hero.id, price: Math.round(itemValue(d) * rm.priceMult), rolls: rollStats(d, rngFor(run.seed, cleared, 'shop-rare-roll', reroll)) });
+    }
   }
   return out;
 }
@@ -351,6 +370,8 @@ export function equipFromBag(run: EndlessRun, heroId: string, uid: string): Endl
   const d = itemDef(bag[idx]!.id);
   if (!d) throw new Error(`Unknown item: ${bag[idx]!.id}`);
   if (!canEquip(hero.class, d)) throw new Error(`${hero.class} cannot use ${d.family ?? d.slot}`);
+  const leg = legendaryConflict(hero.equipment, d); // kahraman başına 1 Legendary (madde 296)
+  if (leg) throw new Error(leg);
   const s = clone(run);
   const h = heroOf(s, heroId)!;
   const nb = [...bagOf(s)];
@@ -466,3 +487,20 @@ export function addScore(list: ScoreEntry[], entry: ScoreEntry, cfg: EndlessConf
 }
 
 export const waveLabel = (kind: WaveKind): string => (kind === 'boss' ? 'Boss wave' : kind === 'elite' ? 'Elite wave' : 'Wave');
+
+/**
+ * Önizleme / debug (madde 296): torbada ya da takılı olmayan tüm Legendary'leri torbaya koyar (koşu seed'iyle zarlı). Torba sınırı uygulanmaz
+ * (yalnızca test aracı; Legendary'ler Endless ödül / tüccarında yok). ?legendary=1, debug > Endless > Give all Legendaries.
+ */
+export function grantLegendariesRun(run: EndlessRun): EndlessRun {
+  const s = clone(run);
+  const have = new Set([...bagOf(s).map((i) => i.id), ...s.heroes.flatMap((h) => Object.values(h.equipment).map((i) => i?.id))]);
+  const bag = (s.bag ??= []);
+  for (const d of ITEMS.items) {
+    if (d.rarity !== 'legendary' || have.has(d.id)) continue;
+    const uid = `e${s.nextItem}`;
+    s.nextItem += 1;
+    bag.push({ uid, id: d.id, rolls: rollStats(d, rngFor(s.seed, 'roll', uid)) });
+  }
+  return s;
+}

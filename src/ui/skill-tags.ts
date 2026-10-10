@@ -8,6 +8,7 @@ import { content } from '../engine';
 import { targetBadge } from '../engine/skill-info';
 import type { Element, SkillDef } from '../engine';
 import { ELEMENT_ICON } from '../game/float-text';
+import { paintedOr } from './misc-icons';
 
 export type SkillRange = 'Melee' | 'Ranged' | 'Support' | 'Self';
 
@@ -16,8 +17,8 @@ export const ELEMENT_COLOR = layout.colors.element as Record<string, string>;
 /** Element adı (Codex Elements bölümüyle aynı: id'nin baş harfi büyük). */
 export const elementName = (id: string): string => id.charAt(0).toUpperCase() + id.slice(1);
 
-/** Element ikonu (yüzen hasar yazısı ve Codex ile aynı; fiziksel: kılıç). */
-export const elementIcon = (id: string): string => ELEMENT_ICON[id] ?? 'sword';
+/** Element ikonu (yüzen hasar yazısı ve Codex ile aynı): boyalı element ikonu (assets/misc-icons/element), yoksa piksel ikon; fiziksel: kılıç. */
+export const elementIcon = (id: string): string => paintedOr('element', id, ELEMENT_ICON[id] ?? 'sword');
 
 /** Menzil: motorun melee kuralı (`motion === 'melee'`); kendine = Self; dost hedefli = Support; kalanı (büyü, alan, gökten, ok) Ranged. */
 export function skillRange(skill: SkillDef): SkillRange {

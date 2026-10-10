@@ -3,7 +3,7 @@
  * denemek için), sonraki elit/boss dalgasına atla, altın ver, en iyi koşular listesini sil. Sahne sınıfını içe aktarmaz (Node testinde Phaser yok).
  */
 import type Phaser from 'phaser';
-import { SCORES_KEY, applyOutcome, autoPlayWave, giveItem, grantRelic, waveKind, wavePlan, type EndlessRun } from '../endless';
+import { SCORES_KEY, applyOutcome, autoPlayWave, giveItem, grantLegendariesRun, grantRelic, waveKind, wavePlan, type EndlessRun } from '../endless';
 import { ENDLESS_SCENE, commit, continueRun, endless, openEndless, openMerchant, recordScore, startRun, storage } from '../game/endless-session';
 import type { DebugMenu } from './debug-menu';
 
@@ -32,6 +32,18 @@ export function registerEndlessDebug(game: Phaser.Game, debug: DebugMenu): void 
     label: 'Open Endless',
     hint: 'Open the Endless screen (Continue / New Run / best runs). Also: add ?endless=1 to the address',
     run: () => openEndless(game),
+  });
+  debug.register({
+    id: 'endless.legendaries',
+    tab: TAB,
+    section: SECTION,
+    icon: 'burst',
+    label: 'Give all Legendaries',
+    hint: 'Put all 10 Legendary items into the run bag (they are not offered in rewards or the shop yet). Also: ?legendary=1',
+    run: () => {
+      commit(grantLegendariesRun(readyRun()));
+      open(game);
+    },
   });
   debug.register({
     id: 'endless.win',

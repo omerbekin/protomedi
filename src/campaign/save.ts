@@ -109,6 +109,8 @@ function upgradeState(s: CampaignState): void {
   s.lootState = {
     rarePity: ls && typeof ls.rarePity === 'number' && ls.rarePity >= 0 ? ls.rarePity : 0,
     clears: ls && ls.clears && typeof ls.clears === 'object' ? Object.fromEntries(Object.entries(ls.clears as Record<string, unknown>).filter(([, v]) => typeof v === 'number')) as Record<string, number> : {},
+    // Nadir düşüş sayacı (madde 297): eski kayıtta yok = 0
+    rareMisses: ls && typeof ls.rareMisses === 'number' && ls.rareMisses >= 0 ? ls.rareMisses : 0,
   };
   const pl = s.pendingLoot as unknown as Record<string, unknown> | undefined;
   if (pl !== undefined && !(pl && typeof pl.node === 'string' && Array.isArray(pl.items) && typeof pl.gold === 'number' && (pl.left === undefined || (Array.isArray(pl.left) && pl.left.every((x) => typeof x === 'string')))))

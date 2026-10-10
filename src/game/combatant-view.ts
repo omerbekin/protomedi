@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
+import { paintedOr } from '../ui/misc-icons';
 import layout from '../../data/battle-layout.json';
 import type { Combatant, TargetPreview } from '../engine';
 import { animKey, characterTexture, type AnimName } from './assets';
 import { debugState } from './debug-state';
 import { formatHit, hitColor } from './hit-format';
-import { type DamageTags, FLOAT_ICON_TINT, damageIconKind, floatStyle, floatTimes, placeFloat, rowLayout, type FloatKind } from './float-text';
+import { type DamageTags, FLOAT_ICON_TINT, damagePaintedIcon, floatStyle, floatTimes, placeFloat, rowLayout, type FloatKind } from './float-text';
 import { ensureIcon } from './icons';
 import { SHARED_KEY } from './asset-versions';
 import { tierStyle, unitName } from './unit-label';
@@ -823,10 +824,10 @@ export class CombatantView {
   damageText(amount: number, ratio: number, crit = false, tags: DamageTags = {}): void {
     const level = damageNumberLevel(ratio);
     const px = Math.round(timing.damageNumberMinPx + timing.damageNumberSpanPx * level) + (crit ? timing.damageNumberCritBonusPx : 0); // boyutlar data/battle-layout.json > animation
-    const icon = damageIconKind({ ...tags, crit });
+    const icon = damagePaintedIcon({ ...tags, crit });
     this.floatText(String(amount), crit ? colors.crit : damageColor(level), px, true, {
       kind: crit ? 'crit' : 'damage',
-      ...(crit ? { leftIcon: 'burst' } : {}),
+      ...(crit ? { leftIcon: paintedOr('fx', 'crit', 'burst') } : {}),
       ...(icon ? { rightIcon: icon } : {}),
     });
   }
@@ -856,7 +857,7 @@ export class CombatantView {
     const sizeOf = (o: Phaser.GameObjects.GameObject) => (o as Phaser.GameObjects.Image).displayWidth;
     const mk = (kind: string): Phaser.GameObjects.Image => {
       const img = this.scene.add.image(0, 0, ensureIcon(this.scene, kind, FLOAT_ICON_TINT[kind] ?? hex, false));
-      const d = Math.round(px * (kind === 'burst' ? 0.66 : 0.58));
+      const d = Math.round(px * (kind === 'burst' || kind.includes(':') ? 0.66 : 0.58)); // boyalı ikonlar (kenar paylı) patlama boyunda
       return img.setDisplaySize(d, d).setOrigin(0.5);
     };
     const left = opts.leftIcon ? mk(opts.leftIcon) : null;

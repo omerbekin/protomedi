@@ -71,9 +71,9 @@
     {
       "id": "legendary",
       "name": "Legendary",
-      "mult": 2.8,
+      "mult": 2.85,
       "affixes": 0,
-      "color": "#d9741c",
+      "color": "#f0a830",
       "statCount": 3,
       "effect": true
     }
@@ -947,6 +947,178 @@
         "crit": 4,
         "evasion": 3
       }
+    },
+    {
+      "id": "emberbrand",
+      "name": "Emberbrand",
+      "slot": "weapon",
+      "family": "axes",
+      "rarity": "legendary",
+      "ilvl": 10,
+      "minChapter": 1,
+      "stats": {
+        "str": 2,
+        "might": 1,
+        "crit": 2
+      },
+      "effect": "ember_burn",
+      "flavor": "A blade forged in the last fire of Old Valdoria. It never quite cools."
+    },
+    {
+      "id": "mantle_of_valdren",
+      "name": "Mantle of Valdren",
+      "slot": "armor",
+      "rarity": "legendary",
+      "ilvl": 10,
+      "minChapter": 1,
+      "stats": {
+        "armor": 4,
+        "hp": 3,
+        "magicArmor": 4
+      },
+      "effect": "valdren_mantle",
+      "usableBy": [
+        "warrior",
+        "defender",
+        "paladin",
+        "undead"
+      ],
+      "flavor": "Worn by the wardens of Valdren Keep when the bridge first fell."
+    },
+    {
+      "id": "oathkeepers_bulwark",
+      "name": "Oathkeeper's Bulwark",
+      "slot": "weapon",
+      "family": "maces",
+      "rarity": "legendary",
+      "ilvl": 15,
+      "minChapter": 2,
+      "stats": {
+        "might": 10,
+        "armor": 2,
+        "hp": 8
+      },
+      "effect": "oath_intercept",
+      "usableBy": [
+        "defender",
+        "paladin"
+      ],
+      "flavor": "A shield that remembers every oath sworn behind it."
+    },
+    {
+      "id": "windrunner_longbow",
+      "name": "Windrunner Longbow",
+      "slot": "weapon",
+      "family": "bows",
+      "rarity": "legendary",
+      "ilvl": 16,
+      "minChapter": 2,
+      "stats": {
+        "dex": 2,
+        "might": 3,
+        "accuracy": 6
+      },
+      "effect": "windrunner_echo",
+      "flavor": "Its arrows find a second mark on the wind."
+    },
+    {
+      "id": "whisper_of_morvane",
+      "name": "Whisper of Morvane",
+      "slot": "weapon",
+      "family": "daggers",
+      "rarity": "legendary",
+      "ilvl": 18,
+      "minChapter": 2,
+      "stats": {
+        "dex": 2,
+        "might": 7,
+        "crit": 9
+      },
+      "effect": "morvane_whisper",
+      "flavor": "The curse speaks through it; it is never satisfied with one."
+    },
+    {
+      "id": "staff_of_the_last_ember",
+      "name": "Staff of the Last Ember",
+      "slot": "weapon",
+      "family": "staves",
+      "rarity": "legendary",
+      "ilvl": 18,
+      "minChapter": 2,
+      "stats": {
+        "int": 2,
+        "might": 4,
+        "mpRegen": 2
+      },
+      "effect": "last_ember",
+      "flavor": "An ember the old kings kept burning through the long night."
+    },
+    {
+      "id": "gamblers_last_coin",
+      "name": "The Gambler's Last Coin",
+      "slot": "weapon",
+      "family": "charms",
+      "rarity": "legendary",
+      "ilvl": 16,
+      "minChapter": 2,
+      "stats": {
+        "luck": 2,
+        "might": 6,
+        "crit": 10
+      },
+      "effect": "last_coin",
+      "flavor": "Heads, you live. Tails, you flip again."
+    },
+    {
+      "id": "crown_of_the_ashen_king",
+      "name": "Crown of the Ashen King",
+      "slot": "helm",
+      "rarity": "legendary",
+      "ilvl": 22,
+      "minChapter": 3,
+      "stats": {
+        "hp": 7,
+        "magicArmor": 12,
+        "armor": 2
+      },
+      "effect": "ashen_crown",
+      "flavor": "Cold as the curse that wore it."
+    },
+    {
+      "id": "pilgrims_road_boots",
+      "name": "Pilgrim's Road Boots",
+      "slot": "boots",
+      "rarity": "legendary",
+      "ilvl": 10,
+      "minChapter": 1,
+      "stats": {
+        "evasion": 1,
+        "armor": 2,
+        "hp": 1
+      },
+      "effect": "pilgrims_stride",
+      "flavor": "They have walked every road in Valdoria, and know the short ones."
+    },
+    {
+      "id": "heart_of_the_forge",
+      "name": "Heart of the Forge",
+      "slot": "trinket",
+      "rarity": "legendary",
+      "ilvl": 22,
+      "minChapter": 3,
+      "stats": {
+        "mpRegen": 2,
+        "hp": 4,
+        "magicArmor": 2
+      },
+      "effect": "forge_heart",
+      "usableBy": [
+        "druid",
+        "paladin",
+        "gambler",
+        "hexer"
+      ],
+      "flavor": "A coal from the dwarven forge, still warm, still giving."
     }
   ],
   "_effects": "Epic özel etkileri (Ömer onayı 2026-10-10, madde 292; item-effects.md). hook = motor kancası (UnitSetup.itemEffects alanı, src/engine/types.ts > ItemEffects), value = sayılar (metindeki {pct}/{value}/{below}... bunlardan doldurulur), ip = etkinin Item Points değeri. effectRules (sabahleyin tek tıkla çevrilebilir, varsayılanlar en güvenli olan): ipFromBudget = etki IP'si Epic bütçesinin İÇİNDEN (statlar o kadar küçük; güç sabit); stack = aynı etki iki item'den toplanmaz (en yükseği; false); endless = etkiler Endless'ta da aynı.",
@@ -1039,6 +1211,101 @@
         "below": 0.3,
         "ratio": 0.15
       }
+    },
+    "ember_burn": {
+      "name": "Emberbrand",
+      "text": "Your hits set the target Burning for {turns} turns (fire damage each turn).",
+      "ip": 3,
+      "hook": "onHitDot",
+      "value": {
+        "status": "burning",
+        "turns": 2,
+        "power": 0.15
+      },
+      "legendary": true
+    },
+    "oath_intercept": {
+      "name": "Oathkeeper's Vow",
+      "text": "Once per battle, you take a lethal hit meant for an ally right beside you.",
+      "ip": 3,
+      "hook": "interceptLethal",
+      "value": true,
+      "legendary": true
+    },
+    "windrunner_echo": {
+      "name": "Windrunner",
+      "text": "Your first attack each battle also hits a random second enemy for {pct} power.",
+      "ip": 2.5,
+      "hook": "firstAttackEcho",
+      "value": 0.5,
+      "legendary": true
+    },
+    "morvane_whisper": {
+      "name": "Whisper of Morvane",
+      "text": "On a kill, {pct} chance to act again at once (once per turn).",
+      "ip": 3,
+      "hook": "killExtraTurn",
+      "value": 0.5,
+      "legendary": true
+    },
+    "last_ember": {
+      "name": "The Last Ember",
+      "text": "Every {every}rd spell costs no MP and is {power} stronger.",
+      "ip": 3,
+      "hook": "nthSpellFree",
+      "value": {
+        "every": 3,
+        "power": 1.25
+      },
+      "legendary": true
+    },
+    "last_coin": {
+      "name": "The Last Coin",
+      "text": "Once per battle, a missed attack is rolled again.",
+      "ip": 2,
+      "hook": "rerollMiss",
+      "value": true,
+      "legendary": true
+    },
+    "ashen_crown": {
+      "name": "Ashen Crown",
+      "text": "Ignore the first debuff applied to you each battle.",
+      "ip": 2,
+      "hook": "ignoreFirstDebuff",
+      "value": true,
+      "legendary": true
+    },
+    "valdren_mantle": {
+      "name": "Mantle of Valdren",
+      "text": "Begin each battle with a shield of {start} of your max HP; it refreshes once when you drop below {below} HP.",
+      "ip": 4,
+      "hook": "shieldRefresh",
+      "value": {
+        "start": 0.15,
+        "below": 0.3,
+        "ratio": 0.15
+      },
+      "legendary": true
+    },
+    "pilgrims_stride": {
+      "name": "Pilgrim's Stride",
+      "text": "Move costs half a turn and grants Fleet (+10% evasion) until the end of your next turn.",
+      "ip": 3,
+      "hook": "moveStride",
+      "value": {
+        "turnCost": 0.5,
+        "status": "fleet",
+        "turns": 2
+      },
+      "legendary": true
+    },
+    "forge_heart": {
+      "name": "Heart of the Forge",
+      "text": "On a critical hit, heal the most wounded ally for {pct} of the damage dealt.",
+      "ip": 2.5,
+      "hook": "critHealAlly",
+      "value": 0.1,
+      "legendary": true
     }
   },
   "effectRules": {
@@ -1079,14 +1346,14 @@
         40,
         20,
         4.5,
-        0.5
+        0
       ],
       "3": [
         15,
         40,
         32,
         11,
-        2
+        0
       ]
     },
     "pity": {
@@ -1121,12 +1388,40 @@
       "elite": 8,
       "boss": 16,
       "treasure": 25
-    }
+    },
+    "legendaryChance": 0
   },
   "_later": "Aşama 2-3 için ayrılmış alanlar (items.md 1.6-1.8, 5.3): bases (affix üretecinin tabanları), affixes, uniques (Legendary), sets, traits. Şimdilik boş.",
   "bases": [],
   "affixes": [],
   "uniques": [],
   "sets": [],
-  "traits": {}
+  "traits": {},
+  "_legendary": "Legendary (Ömer onayı 2026-10-10, madde 296): el yapımı benzersiz item, 3 stat + 1 benzersiz etki (effects[].legendary), bütçe Common x2,85 (etki IP'si bütçeden düşer). Kahraman başına EN FAZLA 1 Legendary (Gear: 'Only one Legendary per hero'). usableBy = yalnızca bu sınıflar takabilir (silah ailesine ek). minChapter = hangi bölümde ortaya çıkabilir (Valdoria = 1: Emberbrand, Mantle of Valdren ve Pilgrim's Road Boots; Ömer 2026-10-10). Normal loot zarı Legendary vermez (loot.legendaryChance = 0); Legendary YALNIZCA ortak nadir düşüş zarından (rareDrop, madde 297) ve Endless tüccarının nadir malından gelir. Önizleme: ?legendary=1 ya da debug > Give all Legendaries.",
+  "_rareDrop": "Ortak nadir düşüş (Ömer onayı 2026-10-10, madde 297): her kazanılan savaşta BİR zar (sefer ve Endless; karşılaşmaya bağlı değil). chance = savaş türüne göre taban (normal %1, elit %3, boss %6) + pityPerMiss x düşüşsüz zafer sayısı (+%0,5; düşüşte sıfırlanır; sayaç kayıtta) + Endless'ta perWave x dalga. İsabette split: set parçası %75 (set item'leri YOK: setsEnabled false iken bu dal hiçbir şey vermez, sayaç sıfırlanmaz) / Legendary %25 (chapterLegendaryMult ile; Valdoria x0,5). Havuz: minChapter <= bölüm (Valdoria: Emberbrand, Mantle of Valdren, Pilgrim's Road Boots); Endless'ta legendaryFromWave'den (11) itibaren hepsi. Akıllı loot YOK: tekdüze seçim, sınıf ağırlığı yok, sahip olunan tekrar düşebilir. Endless tüccarı: merchant.fromWave'den itibaren her ziyarette merchant.chance ihtimalle bir nadir mal, fiyat değer x priceMult. Torba dolu: özel koruma yok (normal akış).",
+  "rareDrop": {
+    "chance": {
+      "battle": 0.01,
+      "elite": 0.03,
+      "boss": 0.06
+    },
+    "pityPerMiss": 0.005,
+    "split": {
+      "set": 0.75,
+      "legendary": 0.25
+    },
+    "setsEnabled": false,
+    "chapterLegendaryMult": {
+      "1": 0.5
+    },
+    "endless": {
+      "perWave": 0.001,
+      "legendaryFromWave": 11,
+      "merchant": {
+        "fromWave": 11,
+        "chance": 0.1,
+        "priceMult": 3
+      }
+    }
+  }
 }

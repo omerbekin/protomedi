@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { ensureIcon } from './icons';
+import { hasMiscImage, miscIconName } from '../ui/misc-icons';
 import type { Pt } from './shape-geometry';
 
 /** Ceset işaretinin renkleri (tasarım kiti): kemik beyazı kuru kafa, kit altını ankh; zeminde ince altın halka. */
@@ -37,12 +38,14 @@ export function createCorpseMarker(scene: Phaser.Scene, pos: Pt, opts: CorpseMar
     ring.lineStyle(hot ? 1.8 : 1, hot ? 0xffb35a : 0xd9b26a, hot ? 0.95 : 0.45).strokeEllipse(0, -2, 84, 19);
   };
   drawRing(false);
-  const ankh = scene.add.image(18, -36, ensureIcon(scene, 'ankh', ANKH, false)).setDisplaySize(52, 52).setAlpha(0.92);
-  const skull = scene.add.image(-9, -17, ensureIcon(scene, 'skull', BONE, false)).setDisplaySize(46, 40).setAngle(-9);
+  // boyalı mezar işareti (haç + miğfer + taşlar, assets/misc-icons/fx/corpse.png) varsa tek resim; yoksa piksel ankh + kuru kafa
+  const art: Phaser.GameObjects.Image[] = hasMiscImage('fx', 'corpse')
+    ? [scene.add.image(0, -4, ensureIcon(scene, miscIconName('fx', 'corpse'), BONE, false)).setOrigin(0.5, 1).setDisplaySize(70, 70)]
+    : [scene.add.image(18, -36, ensureIcon(scene, 'ankh', ANKH, false)).setDisplaySize(52, 52).setAlpha(0.92), scene.add.image(-9, -17, ensureIcon(scene, 'skull', BONE, false)).setDisplaySize(46, 40).setAngle(-9)];
   const hit = scene.add.zone(0, -26, 84, 66).setInteractive();
   if (opts.onOver) hit.on('pointerover', opts.onOver);
   if (opts.onOut) hit.on('pointerout', opts.onOut);
-  const container = scene.add.container(pos.x, pos.y, [shadow, ring, ankh, skull, hit]).setDepth(pos.y - 1); // birimin (aynı y) altında kalır
+  const container = scene.add.container(pos.x, pos.y, [shadow, ring, ...art, hit]).setDepth(pos.y - 1); // birimin (aynı y) altında kalır
   let gone = false;
   if (opts.fadeIn) {
     container.setAlpha(0).setY(pos.y - 6);

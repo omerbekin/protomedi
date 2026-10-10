@@ -2,7 +2,7 @@
 // Saf. Kural: koşu başında oyuncu 4 kahramanı 4 sıra x 3 şerit ızgaraya dizer (öneri = otomatik dizilim); her kazanılan dalganın sonunda her
 // kahramanın SAVAŞ SONUNDAKİ hücresi saklanır (Move ile değişen dahil), sonraki dalga oradan başlar. Düşen kahraman (20% canla kalkar) son
 // hücresine döner; orası doluysa kendi tahtasındaki en yakın boş hücreye (belirleyici sıra). Çağrılar taşınmaz. Eski kayıt (hücre yok) =
-// otomatik dizilim. Dalgalar arası dizilim düzenleme YOK.
+// otomatik dizilim. Dalgalar arası dizilim düzenleme YOK. Koşu başı dizilim takım seçimi ekranında, sürükle-bırak (Ömer 2026-10-10).
 import { CELL_COUNT, classes, defaultSlots } from '../engine/content';
 import type { EndlessHero } from './data';
 
@@ -89,3 +89,48 @@ export function moveInDraft(d: FormationDraft, index: number, cell: number): For
 
 /** Taslağı otomatik dizilime döndür ("Auto arrange"). */
 export const autoDraft = (d: FormationDraft): FormationDraft => ({ ...d, slots: autoSlots(d.classes) });
+
+// ------------------------------------------------------------ takım seçimi ekranında dizilim (Ömer 2026-10-10: seçim ve dizilim TEK ekranda, sürükle-bırak)
+
+/** Boş taslak (takım seçimi açılırken). */
+export const emptyDraft = (): FormationDraft => ({ classes: [], slots: [] });
+
+/** Takıma yeni katılan class'ın önerdiği hücre: otomatik dizilimde alacağı hücre; doluysa ona en yakın boş hücre. */
+function suggestedCell(d: FormationDraft, classId: string): number {
+  const want = autoSlots([...d.classes, classId])[d.classes.length] ?? 0;
+  const taken = new Set(d.slots);
+  return taken.has(want) ? nearestFree(want, taken) : want;
+}
+
+/**
+ * Taslağa yerleştir (sürükle-bırak ve dokunma). Class takımdaysa: `cell` verilirse oraya taşınır (doluysa yer değiştirir), verilmezse değişmez.
+ * Takımda değilse: `cell` verilmezse önerilen hücreye eklenir; verilirse o hücreye konur, hücre doluysa oradaki kahraman takım doluysa
+ * KADRODAN ÇIKAR (yerini yeni gelen alır), değilse en yakın boş hücreye kayar. Takım dolu ve hedef boş / verilmemiş: değişmez (sınır).
+ */
+export function placeInDraft(d: FormationDraft, classId: string, size: number, cell?: number): FormationDraft {
+  if (!classes[classId] || (cell !== undefined && !validCell(cell))) return d;
+  const at = d.classes.indexOf(classId);
+  if (at >= 0) return cell === undefined ? d : moveInDraft(d, at, cell);
+  const occupant = cell === undefined ? -1 : d.slots.indexOf(cell);
+  const full = d.classes.length >= size;
+  if (full && occupant < 0) return d;
+  if (cell === undefined) return { classes: [...d.classes, classId], slots: [...d.slots, suggestedCell(d, classId)] };
+  if (occupant >= 0 && full) {
+    const cls = [...d.classes];
+    cls[occupant] = classId;
+    return { classes: cls, slots: [...d.slots] };
+  }
+  const slots = [...d.slots];
+  if (occupant >= 0) slots[occupant] = nearestFree(cell, new Set([...slots, cell]));
+  return { classes: [...d.classes, classId], slots: [...slots, cell] };
+}
+
+/** Taslaktan çıkar (kadroya geri sürükleme / kadrodaki karta dokunma). */
+export function removeFromDraft(d: FormationDraft, classId: string): FormationDraft {
+  const at = d.classes.indexOf(classId);
+  if (at < 0) return d;
+  return { classes: d.classes.filter((_, i) => i !== at), slots: d.slots.filter((_, i) => i !== at) };
+}
+
+/** Hücredeki class ('' boş). */
+export const draftClassAt = (d: FormationDraft, cell: number): string => d.classes[d.slots.indexOf(cell)] ?? '';

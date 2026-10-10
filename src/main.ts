@@ -43,6 +43,8 @@ const openMerchantShortcut = !skipSelect && !openCampaign && params.has('merchan
 const openEndless = !skipSelect && !openCampaign && (params.has('endless') || openMerchantShortcut);
 // (Endless sahnesi ayrı kod parçasında: tüccar hazırlığı bitmeden sahne başlamaz)
 if (openMerchantShortcut) gateScene('EndlessScene', import('./game/endless-session').then((m) => m.prepareMerchant()));
+// ?legendary=1: 10 Legendary önizlemesi (madde 296) Endless torbasına; sefer torbasına Gear açılırken (CampaignMapScene.openGear)
+if (params.has('legendary')) void import('./game/endless-session').then((m) => m.applyLegendaryPreview());
 // Multiplayer: davet linki (?lobby=KOD) lobiye katılır; yenilenen sekme yarım kalan lobisine döner (docs/design/multiplayer.md)
 const lobbyCode = skipSelect || openCampaign || openEndless ? null : lobbyFromSearch(window.location.search);
 const rejoin = !skipSelect && !openCampaign && !openEndless && !lobbyCode && !!mp.pendingRejoin();

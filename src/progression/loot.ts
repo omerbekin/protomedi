@@ -106,7 +106,9 @@ export function rollLoot(o: LootInput): LootResult {
     let floor = 0;
     if (i === 0 && minR) floor = rIdx(minR);
     if (first && pity >= L.pity.rareAfter) floor = Math.max(floor, rIdx('rare'));
-    r = Math.min(Math.max(r, floor), cap, RARITY_IDS.length - 1);
+    // Legendary düşüş tablosuna bağlı değil (madde 296): legendaryChance 0 iken en çok Epic
+    const top = (L.legendaryChance ?? 0) > 0 ? RARITY_IDS.length - 1 : RARITY_IDS.indexOf('epic');
+    r = Math.min(Math.max(r, floor), cap, top);
     floor = Math.min(floor, r);
     const slot = rng.next() < L.smartSlotChance ? weakestSlot(rng, o.party) : SLOT_IDS[rng.int(0, SLOT_IDS.length - 1)]!;
     let family: string | undefined;

@@ -1538,6 +1538,22 @@
   transform: scale(1.08);
 }
 
+/* Combat log dokunma alanı: HUD ölçeklendiği için (telefonda ~0,36) yazı birkaç piksel kalır; görünmez alan en az 44 x 44 GERÇEK px
+   (--bh-inv = 1 / ölçek, BattleHud.layout). Yerleşim değişmez: alan yazının ortasına oturur. */
+.bh-plink {
+  position: relative;
+}
+
+.bh-plink::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(calc(100% + 16px), calc(44px * var(--bh-inv, 1)));
+  height: max(calc(100% + 16px), calc(44px * var(--bh-inv, 1)));
+  transform: translate(-50%, -50%);
+}
+
 /* yukarı açılan Combat log paneli: sağ alt alanın sağ kenarına hizalı */
 .bh-logp {
   right: 0;

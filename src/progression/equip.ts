@@ -1,7 +1,7 @@
 // "Equip best" (saf): bir kahraman için torbadan en iyi item'leri seçer. Kuşanma ekranındaki düğme ve sefer sim'inin `best` politikası
 // aynı fonksiyonu kullanır (items.md 4.4, 5.4). Puan = item IP'si, ana statlar sınıfa göre ağırlıklı; primary bonusunu kapatacak item seçilmez.
 import { classes } from '../engine/content';
-import { canEquip, instanceStats, ITEMS, itemDef, SLOT_IDS, STAT_IDS, type Equipment, type ItemDef, type ItemInstance, type ItemStats, type SlotId } from './items';
+import { canEquip, instanceStats, legendaryConflict, ITEMS, itemDef, SLOT_IDS, STAT_IDS, type Equipment, type ItemDef, type ItemInstance, type ItemStats, type SlotId } from './items';
 import { primaryCheck } from './primary';
 
 /** Sınıfın bu item'e verdiği değer: ana stat (STR/DEX/INT/LUCK) sınıfın primary'si ise tam, değilse çeyrek; diğer statlar tam IP. */
@@ -41,7 +41,7 @@ export function bestMoves(hero: { class: string; equipment: Equipment }, bag: It
     for (const inst of bag) {
       if (taken.has(inst.uid)) continue;
       const d = itemDef(inst.id);
-      if (!d || d.slot !== slot || !canEquip(hero.class, d)) continue;
+      if (!d || d.slot !== slot || !canEquip(hero.class, d) || legendaryConflict(equipment, d)) continue;
       const score = instanceScore(hero.class, inst);
       if (best && score <= best.score) continue;
       if (primaryCheck({ class: hero.class, equipment }, { equip: inst }).lost) continue;

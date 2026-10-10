@@ -86,7 +86,7 @@ Bu bölüm 1.3'ün "ek stat satırı (affix)" sütununun ve 1.6'nın MVP kısmı
 | Uncommon | **2** | **x1,4** | |
 | Rare | **3** | **x1,85** | |
 | Epic | **3 + 1 özel etki** | **x2,3** | Etkiler UYGULANDI (Ömer seçimi 2026-10-10, madde 292; `item-effects.md`): 11 etki, her Epic item bir etki taşır; etkinin IP'si Epic bütçesinin içinden (statlar o kadar küçük). |
-| Legendary | — | — | Sonra. |
+| Legendary | **3 + 1 benzersiz etki** | **x2,85** | UYGULANDI (Ömer onayı 2026-10-10, madde 296): 10 el yapımı item, kahraman başına 1, `usableBy` / `minChapter`; Valdoria'da Emberbrand, Mantle of Valdren ve Pilgrim's Road Boots; düşüş yalnızca ortak nadir düşüş zarından (madde 297, `data/items.json > rareDrop`: savaş başına %1 / %3 / %6 + kötü şans koruması, %25 Legendary dalı, Valdoria x0,5; Endless 11. dalgadan) ve Endless tüccarının nadir malından; önizleme `?legendary=1`. |
 
 - **Bütçe:** `IP = yuva ağırlığı x B(ilvl) x nadirlik çarpanı`, `B(ilvl) = 0,7 + 0,14 x ilvl` (eski `1 + 0,2 x ilvl`'nin x0,7'si: Ömer'in çarpanları eski çarpanların Common = 1'e göre yeniden ölçeklenmiş hâli, bu yüzden item gücü eski ölçekte kalır ve güç bütçesi / düşman telafisi (`power-budget.json`) aynen çalışır). Tolerans ±%10 (`validateItems`).
 - **Yuva ana statları** (`items.json > slotStats`; item en az birini taşır, Common yalnızca onu):

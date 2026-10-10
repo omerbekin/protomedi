@@ -7,6 +7,7 @@
  * İkonlar oyunun kendi ikonlarıdır: skill ikonları sahibinin seçili sürümüyle (v2 varsayılan), durum rozetleri art-registry > statusBadge,
  * element ikonları yüzen hasar yazısındakiyle aynı, statlar alt bar / tooltip ikonları (stat-icons.ts), item yuvaları Gear ekranı siluetleri.
  */
+import { classLogoName, paintedOr } from '../ui/misc-icons';
 import { uiSound } from '../ui/ui-sound';
 import layout from '../../data/battle-layout.json';
 import castleHall from '../../assets/backgrounds/castle-hall.webp?url';
@@ -78,7 +79,7 @@ const elementPic = (id: string, cls: string): HTMLImageElement => pic(elementIco
 /** Portre: avatar, yoksa tam boy sprite (üstten kırpılır), o da yoksa (ya da resim yüklenemezse) class logosu. Boş kutu yok. */
 function portrait(t: Extract<CodexThumb, { kind: 'portrait' }>, cls: string): HTMLElement {
   const box = h('span', { class: `cx-portrait ${cls} from-${t.from}`, style: { '--g': t.color } });
-  const logo = (): HTMLImageElement => pic(t.logo, t.color, 'cx-portrait-logo', ownerOfUnit(t.unitId));
+  const logo = (): HTMLImageElement => pic(classLogoName({ id: t.unitId, logo: t.logo }), t.color, 'cx-portrait-logo', ownerOfUnit(t.unitId));
   if (t.url) {
     const img = h('img', { attrs: { src: t.url, alt: '', loading: 'lazy', draggable: 'false' } });
     img.addEventListener('error', () => {
@@ -428,7 +429,7 @@ export class WikiPanel {
     const key = text.toLowerCase();
     const skill = this.cat.skills.find((s) => s.name === text);
     const unit = [...this.units.values()].find((u) => u.name === text);
-    const icon = ELEMENT_COLOR[key] ? elementPic(key, 'cx-ico tiny') : skill ? skillPic(skill, skill.accent, 'cx-ico tiny') : unit ? pic(unit.logo, unit.color, 'cx-ico tiny', ownerOfUnit(unit.id)) : null;
+    const icon = ELEMENT_COLOR[key] ? elementPic(key, 'cx-ico tiny') : skill ? skillPic(skill, skill.accent, 'cx-ico tiny') : unit ? pic(classLogoName(unit), unit.color, 'cx-ico tiny', ownerOfUnit(unit.id)) : null;
     return h(tag, {}, icon ? h('span', { class: 'cx-cell' }, icon, h('span', { text })) : text);
   }
 
@@ -451,7 +452,7 @@ export class WikiPanel {
   private groundRef(id: string): HTMLElement | null {
     const g = this.grounds.get(groundEntryId(id));
     if (!g) return null;
-    return h('button', { class: 'cx-ref', attrs: { type: 'button' }, style: { '--c': g.color }, title: g.text, on: { click: () => this.go('statuses', groundEntryId(id)) } }, pic(g.icon, g.color, 'cx-ico small', SHARED_KEY), h('span', { text: g.name }));
+    return h('button', { class: 'cx-ref', attrs: { type: 'button' }, style: { '--c': g.color }, title: g.text, on: { click: () => this.go('statuses', groundEntryId(id)) } }, pic(paintedOr('ground', g.id, g.icon), g.color, 'cx-ico small', SHARED_KEY), h('span', { text: g.name }));
   }
 
   private unitRef(id: string): HTMLElement | null {
@@ -503,7 +504,7 @@ export class WikiPanel {
     const head = h('div', { class: 'cx-unithead' },
       articleHead(portrait(portraitOf(u), 'cx-bigportrait'), u.name,
         u.role || (u.kind === 'summon' ? 'Summon' : ''), pri ? ' · ' : null, pri,
-        h('span', { class: 'cx-headtags' }, pic(u.logo, u.color, 'cx-ico small', ownerOfUnit(u.id), true), chip(u.kind === 'class' ? (u.melee ? 'Melee' : 'Ranged') : 'Summon'), u.testOnly ? h('span', { class: 'cx-tag test', text: 'Test', title: 'Test class: left out of random teams; add it by hand in team selection' }) : null)),
+        h('span', { class: 'cx-headtags' }, pic(classLogoName(u), u.color, 'cx-ico small', ownerOfUnit(u.id), true), chip(u.kind === 'class' ? (u.melee ? 'Melee' : 'Ranged') : 'Summon'), u.testOnly ? h('span', { class: 'cx-tag test', text: 'Test', title: 'Test class: left out of random teams; add it by hand in team selection' }) : null)),
       sprite);
     const attrs = h('div', { class: 'cx-attrs' }, ...u.attributes.map((a) =>
       h('div', { class: `cx-attr${a.primary ? ' primary' : ''}`, title: a.primary ? `${a.label} ${a.value} (primary)` : `${a.label} ${a.value}` }, pic(a.icon, a.color, 'cx-ico small'), h('small', { text: a.label }), h('b', { text: String(a.value) }))));
@@ -540,7 +541,7 @@ export class WikiPanel {
 
   private groundArticle(g: WikiGround): HTMLElement {
     return h('div', {},
-      articleHead(pic(g.icon, g.color, 'cx-ico head', SHARED_KEY, true), g.name, 'Ground · ', elementTag(g.element)),
+      articleHead(pic(paintedOr('ground', g.id, g.icon), g.color, 'cx-ico head', SHARED_KEY, true), g.name, 'Ground · ', elementTag(g.element)),
       h('p', { text: g.text }),
       heading('Element'), h('div', { class: 'cx-refs' }, this.elementRef(g.element)),
       heading('Left by'),

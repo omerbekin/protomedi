@@ -37,10 +37,10 @@ describe('nadirlik = stat sayısı + güç', () => {
     for (const d of ITEMS.items) {
       const rar = ITEMS.rarities.find((x) => x.id === d.rarity)!;
       expect(Object.keys(d.stats), d.id).toHaveLength(rar.statCount);
-      if (d.rarity !== 'epic') expect(d.effect, d.id).toBeUndefined(); // etki yalnızca Epic'te (madde 291)
+      if (d.rarity !== 'epic' && d.rarity !== 'legendary') expect(d.effect, d.id).toBeUndefined(); // etki yalnızca Epic ve Legendary'de (madde 292, 296)
     }
-    expect(ITEMS.items).toHaveLength(52); // id'ler korunur (ikonlar id'ye boyalı)
-    expect(Object.keys(ITEMS.effects)).toHaveLength(11); // Ömer onayı 2026-10-10 (madde 291)
+    expect(ITEMS.items.filter((d) => d.rarity !== 'legendary')).toHaveLength(52); // id'ler korunur (ikonlar id'ye boyalı)
+    expect(Object.keys(ITEMS.effects).filter((k) => !ITEMS.effects[k]!.legendary)).toHaveLength(11); // Epic etkileri; Legendary'ler madde 296
   });
 
   it('silahın ana statı Might ya da ailesinin statı (balta/topuz STR, yay/hançer DEX, asa INT, tılsım LUCK)', () => {
@@ -65,7 +65,7 @@ describe('nadirlik = stat sayısı + güç', () => {
     expect(errs).toMatch(/item a: Common items have exactly 1 stat/);
     expect(errs).toMatch(/item b: needs a main armor stat/);
     expect(errs).toMatch(/item c: stat crit is not allowed on boots/);
-    expect(errs).toMatch(/item d: only Epic items carry an effect/);
+    expect(errs).toMatch(/item d: only Epic and Legendary items carry an effect/);
     expect(errs).toMatch(/item d: unknown effect x/);
     expect(errs).toMatch(/item e: stat str is not allowed on weapon/);
   });

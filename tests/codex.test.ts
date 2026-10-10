@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { content } from '../src/engine';
 import { buildWiki, elementIcon, skillStatusIds, type WikiFiles } from '../src/wiki/catalog';
+import { MISC_IMAGE_FILES } from '../src/game/icon-image-files';
 import { CODEX_SECTIONS, codexEntries, filterEntries, groundEntryId, keepSelection, portraitOf, stepSelection, WEAKNESS_TABLE_ID } from '../src/wiki/codex';
 import { SLOT_GLYPH } from '../src/wiki/slot-glyphs';
 import { ICON_KINDS } from '../src/ui/icon-kinds';
@@ -63,7 +64,7 @@ describe('Codex düzeni (sol menü + liste + madde)', () => {
       }
     for (const e of wiki.elements) {
       expect(e.icon).toBe(elementIcon(e.id));
-      expect(icons.has(e.icon), `${e.id} element icon ${e.icon}`).toBe(true);
+      expect(icons.has(e.icon) || !!MISC_IMAGE_FILES[e.icon], `${e.id} element icon ${e.icon}`).toBe(true); // piksel ikon ya da boyalı element ikonu (assets/misc-icons)
     }
   });
 

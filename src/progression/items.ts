@@ -35,7 +35,11 @@ export interface RarityDef {
 }
 
 /** Motor kancası adları (src/engine/types.ts > ItemEffects alanları). */
-export const EFFECT_HOOKS = ['startShieldRatio', 'critMp', 'secondWind', 'startCharge', 'steadfast', 'debuffShorten', 'tierDamageMult', 'adjacentGuard', 'turnMp', 'firstSkillFree', 'executeLifesteal'] as const;
+export const EFFECT_HOOKS = [
+  'startShieldRatio', 'critMp', 'secondWind', 'startCharge', 'steadfast', 'debuffShorten', 'tierDamageMult', 'adjacentGuard', 'turnMp', 'firstSkillFree', 'executeLifesteal',
+  // Legendary etkileri (madde 296)
+  'onHitDot', 'interceptLethal', 'firstAttackEcho', 'killExtraTurn', 'nthSpellFree', 'rerollMiss', 'ignoreFirstDebuff', 'shieldRefresh', 'moveStride', 'critHealAlly',
+] as const;
 export type EffectHook = (typeof EFFECT_HOOKS)[number];
 
 /** Epic özel etki tanımı (items.json > effects). `text` içindeki {pct}/{value}/{alan} yer tutucuları `value`'dan doldurulur. */
@@ -44,8 +48,13 @@ export interface EffectDef {
   text: string;
   ip: number;
   hook: EffectHook;
-  value: number | boolean | Record<string, number>;
+  value: number | boolean | Record<string, number | string>;
+  /** Legendary'ye özgü benzersiz etki (madde 296): yalnızca Legendary item taşır, Legendary item yalnızca bunu taşır. */
+  legendary?: boolean;
 }
+
+/** Kahraman başına Legendary sınırı mesajı (Gear ekranı; sefer ve Endless). */
+export const LEGENDARY_LIMIT_MSG = 'Only one Legendary per hero';
 
 /** Yuvanın stat kuralı (Ömer 2026-10-10): `main` = ana stat adayları (item en az birini taşır), `extras` = ek stat adayları. '@family' = silah ailesinin ana statı. */
 export interface SlotStatRule {
@@ -92,6 +101,12 @@ export interface ItemDef {
    * `items.json > effects` kayıtlı bir id olmalı; şu an kayıt BOŞ, hiçbir item taşımaz ve motorda davranışı yoktur.
    */
   effect?: string;
+  /** Yalnızca bu sınıflar takabilir (Legendary "Usable by"; silah ailesine ek kısıt). */
+  usableBy?: string[];
+  /** Bu bölümden önce ortaya çıkmaz (Legendary; Valdoria = 1). */
+  minChapter?: number;
+  /** Legendary hikâye satırı (İngilizce, italik). */
+  flavor?: string;
 }
 
 export interface ItemsData {
@@ -134,6 +149,8 @@ export interface LootConfig {
   smartSlotChance: number;
   usableWeaponChance: number;
   repeat: Array<{ items: number; gold: number; maxRarity: RarityId }>;
+  /** Legendary düşüş şansı: YER TUTUCU, 0 (madde 296: düşüş modeli set item'leriyle birlikte kararlaştırılacak). 0 iken loot asla Legendary vermez. */
+  legendaryChance?: number;
   gold: Record<LootKind, number>;
 }
 
@@ -270,8 +287,23 @@ export const classWeaponFamilies = (classId: string): string[] => ITEMS.weaponFa
 
 /** Bu sınıf bu item'i takabilir mi? Silah değilse herkes; silahsa ailesi sınıfa izinli olmalı. */
 export function canEquip(classId: string, d: ItemDef): boolean {
+  if (d.usableBy && !d.usableBy.includes(classId)) return false;
   if (d.slot !== 'weapon') return true;
   return !!d.family && classWeaponFamilies(classId).includes(d.family);
+}
+
+/**
+ * Kahraman başına en fazla 1 Legendary (madde 296): `d` `slot`a takılırsa BAŞKA bir yuvada Legendary kalıyor mu? (Aynı yuvadaki Legendary'nin
+ * yerine geçmek serbest.) Hata mesajı ya da null.
+ */
+export function legendaryConflict(equipment: Partial<Record<SlotId, ItemInstance | null | undefined>>, d: ItemDef): string | null {
+  if (d.rarity !== 'legendary') return null;
+  for (const k of SLOT_IDS) {
+    if (k === d.slot) continue;
+    const inst = equipment[k];
+    if (inst && itemDef(inst.id)?.rarity === 'legendary') return LEGENDARY_LIMIT_MSG;
+  }
+  return null;
 }
 
 /** items.json doğrulaması (boş liste = geçerli). Test: tests/items-data.test.ts. */
@@ -311,6 +343,8 @@ export function validateItems(data: ItemsData = ITEMS): string[] {
   // Item'ler
   const ids = data.items.map((d) => d.id);
   if (new Set(ids).size !== ids.length) errors.push('items: duplicate ids');
+  const legFx = data.items.filter((d) => d.rarity === 'legendary').map((d) => d.effect);
+  if (new Set(legFx).size !== legFx.length) errors.push('items: a Legendary effect is unique to one item');
   for (const d of data.items) {
     const at = `item ${d.id}`;
     if (!d.name) errors.push(`${at}: no name`);
@@ -346,11 +380,15 @@ export function validateItems(data: ItemsData = ITEMS): string[] {
       for (const [k] of entries) if (!allowed.has(k)) errors.push(`${at}: stat ${k} is not allowed on ${d.slot}`);
     }
     if (d.effect !== undefined) {
-      if (!rar?.effect) errors.push(`${at}: only Epic items carry an effect`);
+      if (!rar?.effect) errors.push(`${at}: only Epic and Legendary items carry an effect`);
       if (!data.effects?.[d.effect]) errors.push(`${at}: unknown effect ${d.effect}`);
+      else if (!!data.effects[d.effect]!.legendary !== (d.rarity === 'legendary')) errors.push(`${at}: Legendary items carry a Legendary effect, other items never do`);
     }
-    // IP bütçesi (Legendary/Set Aşama 3'te trait/set payıyla ayrıca)
-    if (d.rarity !== 'legendary' && slotIds.includes(d.slot) && (RARITY_IDS as readonly string[]).includes(d.rarity)) {
+    if (d.rarity === 'legendary' && !d.effect) errors.push(`${at}: a Legendary needs its unique effect`);
+    if (d.usableBy) for (const c of d.usableBy) if (!classes[c]) errors.push(`${at}: usableBy has unknown class ${c}`);
+    if (d.minChapter !== undefined && (!Number.isInteger(d.minChapter) || d.minChapter < 1)) errors.push(`${at}: bad minChapter`);
+    // IP bütçesi (Legendary dahil: x2,85, etki IP'si düşülmüş; madde 296)
+    if (slotIds.includes(d.slot) && (RARITY_IDS as readonly string[]).includes(d.rarity)) {
       const target = targetIP(d); // etki IP'si (ipFromBudget) düşülmüş
       const ip = statsIP(d.stats);
       if (Math.abs(ip - target) > target * data.budget.tolerance + 1e-9) errors.push(`${at}: IP ${ip} outside budget ${target.toFixed(2)} ±${data.budget.tolerance * 100}%`);
@@ -394,3 +432,9 @@ export function migrateRollsX2(root: unknown): number {
   walk(root);
   return n;
 }
+
+/** Tüm Legendary id'leri (katalog sırasıyla). */
+export const legendaryIds = (): string[] => ITEMS.items.filter((d) => d.rarity === 'legendary').map((d) => d.id);
+
+/** ?legendary=1 önizlemesi açık mı (Gear / Endless torbasına 10 Legendary; madde 296). Tarayıcı dışında false. */
+export const legendaryPreviewWanted = (search: string = typeof location !== 'undefined' ? location.search : ''): boolean => new URLSearchParams(search).has('legendary');

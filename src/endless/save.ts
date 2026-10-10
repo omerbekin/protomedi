@@ -54,6 +54,9 @@ export function parseRun(raw: string | null): EndlessRun | null {
       if (!Array.isArray(r.bag)) return null;
       r.bag = r.bag.filter((i) => i && typeof i.uid === 'string' && typeof i.id === 'string');
     }
+    // Nadir düşüş (madde 297): sayaç sayı değilse 0; bozuk duyuru atılır
+    if (r.rarePity !== undefined && (!isNum(r.rarePity) || r.rarePity < 0)) r.rarePity = 0;
+    if (r.rareDrop !== undefined && (typeof r.rareDrop?.itemId !== 'string' || !isNum(r.rareDrop?.wave))) delete r.rareDrop;
     if (r.relics !== undefined && (!Array.isArray(r.relics) || r.relics.some((x) => typeof x !== 'string'))) return null;
     if (r.phase === 'relic' && !Array.isArray(r.relicOffer)) return null;
     if (r.blessing !== undefined && (!isNum(r.blessing.hpMult) || !isNum(r.blessing.waves))) return null;

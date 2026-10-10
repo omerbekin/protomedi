@@ -177,5 +177,24 @@
     "dispellable": false,
     "untilResolved": true,
     "text": "Each standing Iron Mooring gives +5 armor and +5 magic armor"
+  },
+  "burning": {
+    "name": "Burning",
+    "type": "debuff",
+    "icon": "flame",
+    "color": "#e0702a",
+    "dot": {
+      "damageType": "magic",
+      "element": "fire"
+    },
+    "text": "Takes fire damage at the start of each of its turns"
+  },
+  "fleet": {
+    "name": "Fleet",
+    "type": "buff",
+    "icon": "boot",
+    "color": "#c9d6a0",
+    "evasionDelta": 0.1,
+    "text": "Evasion +10% (on the move)"
   }
 }

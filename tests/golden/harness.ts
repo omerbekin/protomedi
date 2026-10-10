@@ -191,7 +191,8 @@ export function groupEndless(): GoldenGroup {
 
 /** Epic item etkileri (UnitSetup.itemEffects) + zarlı item statları: her Epic item bir kahramanda; Giantslayer için elit/boss düşman. */
 export function groupItems(): GoldenGroup {
-  const epics = ITEMS.items.filter((d) => d.effect);
+  // Yalnızca Epic'ler (Legendary'ler kayıttan sonra geldi, madde 296; mevcut kayıtlar birebir kalsın)
+  const epics = ITEMS.items.filter((d) => d.effect && d.rarity === 'epic');
   const classes = ['warrior', 'defender', 'archer', 'mage', 'paladin', 'gambler', 'hexer', 'druid', 'undead', 'antimage', 'cutthroat'];
   const extra: string[] = [];
   const battles = withRecorder('items', () => {
@@ -207,7 +208,7 @@ export function groupItems(): GoldenGroup {
   });
   // Savaş dışı: her item'in her uygun class'a etkisi (türev değerler; item statları dönüşümde ×2 olunca aynı kalmalı)
   const b = new Battle(content.battleSetup('random-battle', 1, 'turns'));
-  for (const d of ITEMS.items) {
+  for (const d of ITEMS.items.filter((x) => x.rarity !== 'legendary')) {
     for (const cls of classes) {
       if (!canEquip(cls, d)) continue;
       const eq: Equipment = { ...emptyEquipment(), [d.slot]: { uid: 'x', id: d.id } };

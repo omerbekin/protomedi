@@ -68,3 +68,27 @@ export const UI_IMAGE_FILES: Readonly<Record<string, { url: string; small: strin
 
 /** Arayüz ikonunun görseli (dosya yoksa null). */
 export const uiImage = (kind: string): { url: string; small: string } | null => UI_IMAGE_FILES[kind] ?? null;
+
+// ---------------------------------------------------------------- OYUN ikonları (boyalı PNG, 60 ikon, Ömer 2026-10-10; skill ikonları hariç)
+
+/**
+ * assets/misc-icons/<grup>/<ad>.png (128, DOM) + assets/misc-icons/<grup>/small/<ad>.png (64, Phaser). Grup: status, fx, element, ground,
+ * relic, emblem, class, node. Asıl sayfalar assets/source/misc-icons/*.png; kesim ve dama deseni silme `node tools/make-misc-icons.mjs`. Kimlik
+ * '<grup>:<ad>' (src/ui/misc-icons.ts > miscIconName); art-registry bu adı görsele çözer, dosya yoksa çağıran eski kodla çizilen ikonu kullanır.
+ */
+const miscFiles = import.meta.glob('../../assets/misc-icons/*/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const miscSmall = import.meta.glob('../../assets/misc-icons/*/small/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const miscId = (path: string): string => {
+  const parts = path.split('/').filter((p) => p !== 'small');
+  const file = (parts.pop() ?? '').replace(/\.png$/, '');
+  return `${parts.pop() ?? ''}:${file}`;
+};
+
+/** '<grup>:<ad>' -> { url (128, DOM), small (64, Phaser; yoksa url) }. */
+export const MISC_IMAGE_FILES: Readonly<Record<string, { url: string; small: string }>> = (() => {
+  const small = Object.fromEntries(Object.entries(miscSmall).map(([p, url]) => [miscId(p), url]));
+  return Object.fromEntries(Object.entries(miscFiles).map(([p, url]) => [miscId(p), { url, small: small[miscId(p)] ?? url }]));
+})();
+
+/** Oyun ikonunun görseli (dosya yoksa null). */
+export const miscImage = (id: string): { url: string; small: string } | null => MISC_IMAGE_FILES[id] ?? null;

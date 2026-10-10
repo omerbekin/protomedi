@@ -144,6 +144,10 @@ export interface EndlessRun {
   bag?: ItemInstance[];
   /** Item örneği uid sayacı. */
   nextItem: number;
+  /** Ortak nadir düşüş (madde 297): düşüşsüz zafer sayacı (eski kayıtta yok = 0). */
+  rarePity?: number;
+  /** Son nadir düşüş (ödül ekranında altın-turuncu duyuru; `wave` = kazanılan dalga). */
+  rareDrop?: { itemId: string; wave: number };
   startedAt: string;
   /** Koşu bitince: nasıl bitti. */
   end?: 'defeat' | 'abandoned';

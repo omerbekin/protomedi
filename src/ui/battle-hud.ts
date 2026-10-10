@@ -302,6 +302,7 @@ export class BattleHud {
     r.top = `${top}px`;
     r.width = `${viewW}px`;
     r.transform = `scale(${scale})`;
+    r.setProperty('--bh-inv', String(1 / Math.max(0.05, scale))); // 1 gerçek px = --bh-inv oyun birimi (dokunma alanları en az 44 gerçek px)
     if (viewW !== this.viewW) {
       this.viewW = viewW;
       this.place();

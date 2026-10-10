@@ -338,6 +338,29 @@ export interface ItemEffects {
   firstSkillFree?: boolean;
   /** Bloodletter: canı `below` oranının altındaki düşmana vuruşta verilen can kaybının `ratio` katı şifa. */
   executeLifesteal?: { below: number; ratio: number };
+  /*
+   * Legendary etkileri (Ömer onayı 2026-10-10, madde 296; data/items.json > effects[].legendary). Hepsi genel ve verilmezse etkisiz.
+   */
+  /** Emberbrand: isabet eden her skill vuruşu hedefe `status` (DoT) uygular; tik miktarı = vuruşun stat gücü x `power`, `turns` tur. */
+  onHitDot?: { status: string; turns: number; power: number };
+  /** Oathkeeper's Bulwark: savaşta bir kez, ekranda yan komşu dosta gelen ÖLÜMCÜL skill vuruşunu taşıyan üstlenir. */
+  interceptLethal?: boolean;
+  /** Windrunner Longbow: savaştaki ilk hasar skill'i, hedefler dışından rastgele bir düşmana da bu güç oranıyla vurur. */
+  firstAttackEcho?: number;
+  /** Whisper of Morvane: skill vuruşuyla düşman öldürünce bu ihtimalle aynı turda bir eylem daha (tur başına en çok bir kez). */
+  killExtraTurn?: number;
+  /** Staff of the Last Ember: her `every`. büyü (MP bedelli skill) bedelsiz ve hasarı x`power`. */
+  nthSpellFree?: { every: number; power: number };
+  /** The Gambler's Last Coin: savaşta bir kez, iska / kaçınılan saldırı yeniden zarlanır. */
+  rerollMiss?: boolean;
+  /** Crown of the Ashen King: savaşta uygulanan İLK debuff yok sayılır. */
+  ignoreFirstDebuff?: boolean;
+  /** Mantle of Valdren: savaş başı kalkan maks canın `start` oranı; can `below` altına inince bir kez maks canın `ratio` oranı kalkan. */
+  shieldRefresh?: { start: number; below: number; ratio: number };
+  /** Pilgrim's Road Boots: Move `turnCost` tur harcar ve `turns` tur `status` (kaçınma buff'ı) verir. */
+  moveStride?: { turnCost: number; status: string; turns: number };
+  /** Heart of the Forge: kritik vuruşta en yaralı dost (canı en düşük oran) verilen can kaybının bu oranı kadar iyileşir. */
+  critHealAlly?: number;
 }
 
 /** Birimin sefer rütbesi (arayüz çerçeve/rozet için; kural değiştirmez). */
@@ -907,7 +930,7 @@ export type Side = 'party' | 'enemy';
  * Durum türleri. 'thorns' (eski Thorn Shield) motorda ve veride KALDIRILDI (madde 222); ad yalnızca src/game/scenes/BattleScene.ts eski bir
  * `e.status === 'thorns'` karşılaştırması yaptığı için tür listesinde duruyor (ui-dev silince buradan da silinecek). Hiçbir skill/durum tanımı onu üretmez.
  */
-export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns' | 'blinded' | 'shrouded' | 'dark_bond' | 'omen' | 'wither' | 'jinxed' | 'silence' | 'abyssal_fury' | 'overextended' | 'staggered' | 'ash_brand' | 'anchored';
+export type StatusKind = 'taunt' | 'guard' | 'regen' | 'slow' | 'haste' | 'wound' | 'stun' | 'fortify' | 'blessed' | 'thorns' | 'blinded' | 'shrouded' | 'dark_bond' | 'omen' | 'wither' | 'jinxed' | 'silence' | 'abyssal_fury' | 'overextended' | 'staggered' | 'ash_brand' | 'anchored' | 'burning' | 'fleet';
 
 /** Yığılan durumun patlaması (Hexer Doom): hasar = scale statı x powerPerStack x yığın x çarpan; büyü zırhı/kalkan uygulanır, isabet zarı YOK, kritik zarı VAR. */
 export interface DoomDef {
@@ -1116,6 +1139,16 @@ export interface Combatant {
   freeSkillUsed?: boolean;
   /** Mana Spring: son MP verilen eylem (turnsTaken); eylem başına bir kez. */
   springAt?: number;
+  /** Legendary çalışma bayrakları (madde 296): Oathkeeper kullanıldı, Windrunner yankısı kullanıldı, bu turda ek eylem verildi, büyü sayacı,
+   * şu anki büyünün güç çarpanı, Last Coin kullanıldı, Ashen Crown kullanıldı, Mantle yenilendi. */
+  interceptUsed?: boolean;
+  echoUsed?: boolean;
+  extraTurnGranted?: boolean;
+  spellCount?: number;
+  empowerMult?: number;
+  rerollUsed?: boolean;
+  debuffIgnored?: boolean;
+  shieldRefreshed?: boolean;
   /** Başlangıç cooldown'u eki (UnitSetup.initialCooldownBonus; cooldown'lu skill'lere). */
   initialCooldownBonus?: number;
   /** Boss kuralları (tanımdan; bkz. BossDef). */

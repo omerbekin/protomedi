@@ -10,6 +10,7 @@ import { sortByPrimary } from '../game/class-order';
 import campaignConfig from '../../data/campaign/campaign.json';
 import campaignMap from '../../data/campaign/valdoria.json';
 import itemsJson from '../../data/items.json';
+import { effectLine } from '../progression/item-text';
 import layout from '../../data/battle-layout.json';
 import { applySummonVariant, content, describeGlobalSkill, describePassive, describeRage, describeSkill, describeStat, TARGET_TEXT } from '../engine';
 import { TARGET_BADGE } from '../engine/skill-info';
@@ -725,6 +726,7 @@ export function buildMechanics(): WikiArticle[] {
         ),
       ]),
       itemsArticle(),
+      legendaryArticle(),
     );
   }
   out.push(...bossArticles());
@@ -737,13 +739,27 @@ function itemsArticle(): WikiArticle {
   return { ...itemsArticleBody(), gear };
 }
 
+/** Legendary item'ler (madde 296; veriden): her biri adı, yuvası, kimin taşıyabileceği ve benzersiz etkisi. */
+function legendaryArticle(): WikiArticle {
+  const leg = (itemsJson.items as Array<{ id: string; name: string; slot: string; rarity: string; effect?: string; usableBy?: string[]; family?: string; minChapter?: number }>).filter((d) => d.rarity === 'legendary');
+  const who = (d: (typeof leg)[number]): string => {
+    const cls = d.usableBy ?? (d.family ? itemsJson.weaponFamilies.find((f) => f.id === d.family)?.classes : undefined);
+    return cls ? cls.map((c) => content.classes[c]?.name ?? c).join(', ') : 'everyone';
+  };
+  const slotName = (id: string) => itemsJson.slots.find((x) => x.id === id)?.name ?? id;
+  return article('legendary-items', 'Campaign', 'Legendary items', 'burst', [
+    p('Legendaries are unique, hand-made items: three stats and one effect no other item has. A hero can wear only one Legendary at a time. They do not drop yet.'),
+    list(...leg.map((d) => `${d.name} (${slotName(d.slot)}; usable by ${who(d)}${d.minChapter && d.minChapter > 1 ? `; from chapter ${d.minChapter}` : ''}): ${effectLine(d as never)?.replace(/^[^:]*: /, '') ?? ''}`)),
+  ]);
+}
+
 function itemsArticleBody(): WikiArticle {
   const L = itemsJson.loot;
   const fams = itemsJson.weaponFamilies.map((x) => `${x.name} (${x.classes.map((c) => content.classes[c]?.name ?? c).join(', ')})`).join('; ');
   return article('items', 'Campaign', 'Items and gear', 'helm', [
     p(`Heroes in the campaign wear gear in ${itemsJson.slots.length} slots: ${itemsJson.slots.map((x) => x.name).join(', ')}. Items only raise stats (STR, DEX, INT, LUCK, HP, armor, Might = skill power, crit, accuracy, evasion, speed, MP and regeneration); they never add flat damage. Quick Battle and multiplayer do not use items.`),
     list(
-      `Rarity sets how many stats an item has and how strong it is: ${itemsJson.rarities.filter((x) => x.id !== 'legendary').map((x) => `${x.name} ${x.statCount} stat${x.statCount > 1 ? 's' : ''}`).join(', ')}. Every item carries its slot's main stat. Higher item levels carry more power; an item's gold value follows its power (${itemsJson.budget.goldPerIP} gold per power point).`,
+      `Rarity sets how many stats an item has and how strong it is: ${itemsJson.rarities.map((x) => `${x.name} ${x.statCount} stat${x.statCount > 1 ? 's' : ''}`).join(', ')}. Every item carries its slot's main stat. Higher item levels carry more power; an item's gold value follows its power (${itemsJson.budget.goldPerIP} gold per power point).`,
       `Each stat is rolled within a small range when the item drops (shown as e.g. "+4 Max HP (3–5)"); the roll is kept for good.`,
       `Weapons come in families and each class uses only its own: ${fams}. Every other slot fits everyone.`,
       `Loot: a victory drops about ${L.perPartyMember.battle} items per hero in the fight (elites ${L.perPartyMember.elite}, bosses ${L.perPartyMember.boss} with at least one Rare), chests at least one Rare. Drops are the same on every difficulty. Winning the same battle again gives less (${L.repeat.map((x) => `${Math.round(x.items * 100)}%`).join(' / ')}).`,

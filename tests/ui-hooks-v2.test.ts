@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { MISC_IMAGE_FILES } from '../src/game/icon-image-files';
 import { Battle, content } from '../src/engine';
 import type { BattleEvent, Combatant } from '../src/engine';
 import { ICONS_V2 } from '../src/game/art-v2/icons-index';
@@ -110,24 +111,23 @@ describe('durum rozeti sürüm kararı', () => {
     expect(statusOwner('stun')).toBeNull();
   });
 
-  it('v1: Shared + statuses.json ikonu; Hexer v2: badge_<id> çizimi; Shared v2 ortak durumu kendi dosyasından çözer', () => {
-    const omenIcon = content.statuses.omen!.icon;
-    setAllVersions('v1'); // varsayılan v2; v1 davranışını açıkça seç
-    expect(statusBadge('omen', omenIcon)).toEqual({ name: omenIcon, owner: SHARED_KEY });
+  it('boyalı durum rozeti (assets/misc-icons/status) varsa her sürümün önünde gelir; yoksa eski kural: v1 Shared + statuses.json ikonu, Hexer v2 badge_<id>', () => {
+    // boyalı rozet: seçili sürümden bağımsız
+    for (const ver of ['v1', 'v2'] as const) {
+      setAllVersions(ver);
+      for (const id of Object.keys(content.statuses)) if (MISC_IMAGE_FILES[`status:${id}`]) expect(statusBadge(id, content.statuses[id]!.icon), `${ver} ${id}`).toEqual({ name: `status:${id}`, owner: SHARED_KEY });
+    }
+    // görseli olmayan durumda eski sürüm kuralı (badge_<id> çizimi ya da Shared ikon)
+    const noArt = Object.keys(content.statuses).filter((id) => !MISC_IMAGE_FILES[`status:${id}`]);
+    setAllVersions('v1');
+    for (const id of noArt) expect(statusBadge(id, content.statuses[id]!.icon)).toEqual({ name: content.statuses[id]!.icon, owner: SHARED_KEY });
+    expect(statusBadge('taunt', 'finger')).toEqual({ name: 'finger', owner: SHARED_KEY });
     setVersion('hexer', 'v2');
-    for (const id of ['omen', 'wither', 'jinxed']) {
+    for (const id of noArt.filter((x) => statusOwner(x) === 'hexer')) {
       const has = !!(ICONS_V2.hexer!.SPRITES[badgeSpriteName(id)] || ICONS_V2.hexer!.ICONS[badgeSpriteName(id)]);
       const icon = content.statuses[id]!.icon;
       expect(statusBadge(id, icon)).toEqual(has ? { name: v2SpriteName('hexer', badgeSpriteName(id)), owner: 'hexer' } : { name: icon, owner: SHARED_KEY });
     }
-    expect(statusBadge('stun', 'bash')).toEqual({ name: 'bash', owner: SHARED_KEY });
-    // ayrı rozeti olmayan sınıf durumu: ikon adı o class'ın v2 ikonuysa onu kullanır (Dark Bond -> Undead), yoksa Shared
-    const bondIcon = content.statuses.dark_bond!.icon;
-    const undeadHas = !!ICONS_V2.undead!.ICONS[bondIcon] && !ICONS_V2.undead!.SPRITES[badgeSpriteName('dark_bond')] && !ICONS_V2.undead!.ICONS[badgeSpriteName('dark_bond')];
-    setVersion('undead', 'v2');
-    if (undeadHas) expect(statusBadge('dark_bond', bondIcon)).toEqual({ name: bondIcon, owner: 'undead' });
-    setVersion('undead', 'v1');
-    expect(statusBadge('dark_bond', bondIcon)).toEqual({ name: bondIcon, owner: SHARED_KEY });
   });
 });
 

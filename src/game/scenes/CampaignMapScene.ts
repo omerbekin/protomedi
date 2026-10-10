@@ -5,6 +5,7 @@ import {
   EVENTS,
   TREASURES,
   acknowledgeHandover,
+  grantAllLegendaries,
   acknowledgeLoot,
   activeHeroes,
   autoFormation,
@@ -53,10 +54,11 @@ import { debugState } from '../debug-state';
 import { isSettingsOpen, setSettingsOpen } from '../../ui/settings';
 import { mountMenuToggle } from '../../ui/game-menu';
 import { openGearScreen, showHandover, showSpoils } from '../../ui/gear-screen';
+import { legendaryPreviewWanted } from '../../progression/items';
 import { openWiki } from '../../wiki/open';
 import { EL, diamondPts, elBadge, elBody, elButton, elDiamond, elGo, elIconButton, elLink, elPanel, elScreenIn, elText, elToast, fadeLine, fitW, hGradient, vGradient } from '../elegant-ui';
 import { MAP_ZOOM, canPan, clampMid, clampZoom, wheelAction, type Bounds } from '../map-view';
-import { drawNodeGlyph, openFormation, openHeroPanel } from '../campaign-panels';
+import { drawNodeGlyph, nodeGlyphImage, openFormation, openHeroPanel } from '../campaign-panels';
 import { openSlotBrowser, type SlotBrowser } from '../campaign-slots-ui';
 import { ensureIcon } from '../icons';
 import { hasUiImage, uiIconName, type UiIconKind } from '../../ui/ui-icons';
@@ -501,11 +503,20 @@ export class CampaignMapScene extends Phaser.Scene {
       for (const a of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) g.fillStyle(EL.ON_N, 1).fillPoints(diamondPts(Math.cos(a) * (r + 10), Math.sin(a) * (r + 10), 3.5), true);
     }
     const glyphCol = here ? 0x1a0f06 : done ? 0x1e150c : goal ? 0x7d705a : closed ? 0x7d705a : option ? EL.ON_N : 0xd9c8a2;
-    drawNodeGlyph(g, n.type, glyphCol, big ? 1.25 : 1);
+    // boyalı düğüm ikonu (assets/misc-icons/node), yoksa ince çizgili glif; hedef (sisli siluet) koyu ve soluk
+    const art = nodeGlyphImage(this, n.type, 0, 0, r * 1.84);
+    if (art) {
+      if (goal) art.setTint(0x6a5e4c).setAlpha(0.6);
+      c.add(art);
+    } else drawNodeGlyph(g, n.type, glyphCol, big ? 1.25 : 1);
     if (n.type === 'treasure' && n.encounter) {
       // Korumalı hazine: sağ altta küçük çapraz kılıç madalyonu
-      g.fillStyle(0x140e09, 1).fillCircle(r * 0.8, r * 0.8, 10).lineStyle(1, EL.GOLD, 0.8).strokeCircle(r * 0.8, r * 0.8, 10);
-      drawNodeGlyph(g, 'battle', 0xd9c8a2, 0.45, r * 0.8, r * 0.8);
+      const gb = this.add.graphics();
+      gb.fillStyle(0x140e09, 1).fillCircle(r * 0.8, r * 0.8, 11).lineStyle(1, EL.GOLD, 0.8).strokeCircle(r * 0.8, r * 0.8, 11);
+      c.add(gb);
+      const guard = nodeGlyphImage(this, 'battle', r * 0.8, r * 0.8, 20);
+      if (guard) c.add(guard);
+      else drawNodeGlyph(gb, 'battle', 0xd9c8a2, 0.45, r * 0.8, r * 0.8);
     }
     // Ad + alt yazı
     const above = n.label === 'above';
@@ -934,8 +945,10 @@ export class CampaignMapScene extends Phaser.Scene {
     const tile = this.add.graphics();
     tile.fillStyle(0x120c08, 1).fillRect(x, cy, 92, 92).lineStyle(1, EL.GOLD, EL.LINE.a3).strokeRect(x + 0.5, cy + 0.5, 91, 91);
     tile.fillStyle(0x140e09, 0.95).fillCircle(x + 46, cy + 46, 30).lineStyle(1, EL.GOLD, 0.7).strokeCircle(x + 46, cy + 46, 30);
-    drawNodeGlyph(tile, n.type, EL.ON_N, 1.25, x + 46, cy + 46);
     L.add(tile);
+    const tileArt = nodeGlyphImage(this, n.type, x + 46, cy + 46, 56);
+    if (tileArt) L.add(tileArt);
+    else drawNodeGlyph(tile, n.type, EL.ON_N, 1.25, x + 46, cy + 46);
     L.add(fitW(elText(this, x + 112, cy + 18, n.name, 19, EL.ON, { em: 0.05 }).setOrigin(0, 0.5), w - 120));
     const state = id === s.at ? 'You are here' : vis === 'cleared' ? 'Cleared' : option ? 'Reachable' : vis === 'closed' ? 'Road closed' : vis === 'goal' ? 'Your goal' : 'Ahead';
     L.add(fitW(elBody(this, x + 112, cy + 44, n.subtitle || TYPE_LABEL[n.type], 16, EL.MUTED).setOrigin(0, 0.5), w - 120));
@@ -1071,8 +1084,10 @@ export class CampaignMapScene extends Phaser.Scene {
       const cy = y + 64 + Math.floor(i / 2) * 32;
       const g = this.add.graphics();
       g.fillStyle(0x140e09, 1).fillCircle(cx, cy, 12).lineStyle(1, EL.GOLD, 0.7).strokeCircle(cx, cy, 12);
-      drawNodeGlyph(g, t, 0xd9c8a2, 0.5, cx, cy);
       L.add(g);
+      const legendArt = nodeGlyphImage(this, t, cx, cy, 26);
+      if (legendArt) L.add(legendArt);
+      else drawNodeGlyph(g, t, 0xd9c8a2, 0.5, cx, cy);
       L.add(elBody(this, cx + 20, cy, TYPE_LABEL[t], 17, EL.TXT, false).setOrigin(0, 0.5));
     });
   }
@@ -1102,6 +1117,7 @@ export class CampaignMapScene extends Phaser.Scene {
   openGear(hero?: string, tutorial = false, after?: () => void): void {
     const root = document.getElementById('ui-root');
     if (!root) return;
+    if (legendaryPreviewWanted()) setState(grantAllLegendaries(this.s)); // ?legendary=1 önizlemesi (madde 296)
     openGearScreen(root, {
       get: () => this.s,
       set: (s) => setState(s),

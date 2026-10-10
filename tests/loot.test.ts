@@ -63,15 +63,15 @@ describe('motor: toplamsal ekler (UnitModifiers)', () => {
 });
 
 describe('item içeriği (Valdoria)', () => {
-  it("her yuvada ve her silah ailesinde Common..Rare bölüm 1 item'i var; Epic'ler var; Legendary bölüm 1'de yok", () => {
+  it("her yuvada ve her silah ailesinde Common..Rare bölüm 1 item'i var; Epic'ler var; bölüm 1'de yalnızca 2 Legendary (düşmez)", () => {
     expect(validateItems()).toEqual([]);
     const ch1 = ITEMS.items.filter((d) => d.ilvl <= 10);
     for (const slot of ['weapon', 'helm', 'armor', 'gloves', 'boots', 'trinket'] as const)
       for (const r of ['common', 'uncommon', 'rare', 'epic'] as const)
         if (slot !== 'weapon' || r !== 'epic') expect(ch1.some((d) => d.slot === slot && d.rarity === r), `${slot} ${r}`).toBe(true);
     for (const fam of ITEMS.weaponFamilies) for (const r of ['common', 'uncommon', 'rare'] as const) expect(ch1.some((d) => d.family === fam.id && d.rarity === r), `${fam.id} ${r}`).toBe(true);
-    expect(ch1.some((d) => d.rarity === 'legendary')).toBe(false);
-    expect(ch1.length).toBeGreaterThanOrEqual(40);
+    expect(ch1.filter((d) => d.rarity === 'legendary').map((d) => d.id)).toEqual(['emberbrand', 'mantle_of_valdren', 'pilgrims_road_boots']); // madde 296 (normal loot zarından düşmez)
+    expect(ch1.filter((d) => d.rarity !== 'legendary').length).toBeGreaterThanOrEqual(40);
   });
 });
 

@@ -151,6 +151,25 @@ export function mountIcons(cat: Catalog): SectionApi {
     );
   }
 
+  // Boyalı oyun ikonları (assets/misc-icons/<grup>/<ad>.png): durum rozetleri, element, zemin, kalıntı, amblem, sınıf logoları, harita düğümleri
+  const misc = h('div', { class: 'cards icons' });
+  for (const a of cat.miscArt) {
+    const url = a.url ? iconUrl(a.id) : '';
+    misc.append(
+      searchable(
+        h(
+          'article',
+          { class: 'card icon-card' },
+          url ? h('img', { class: 'bigicon', attrs: { src: url, alt: a.id, loading: 'lazy' }, title: 'Click to enlarge', on: { click: () => openLightbox(url, a.id, false) } }) : h('div', { class: 'bigicon' }),
+          h('div', { class: 'card-title mono', text: a.name }),
+          h('div', { class: 'tags' }, h('span', { class: a.unlinked ? 'badge' : a.url ? 'badge ok' : 'badge', text: a.unlinked ? 'Unlinked' : a.url ? (a.unused ? 'Not used yet' : 'Game art') : 'Missing' })),
+          h('div', { class: 'small muted', text: a.group }),
+        ),
+        `game art image ${a.group} ${a.name}`,
+      ),
+    );
+  }
+
   // Nadirlik: aynı nesne, yalnızca taş / kenar ayrıntısı nadirlik renginde
   const tints = h('div', { class: 'cards icons' });
   for (const name of ['amulet', 'sword', 'mail']) {
@@ -167,6 +186,7 @@ export function mountIcons(cat: Catalog): SectionApi {
     applyFilter(art, query);
     applyFilter(stats, query);
     applyFilter(uis, query);
+    applyFilter(misc, query);
     applyFilter(tints, query);
     countEl.textContent = `${n} / ${cat.icons.length}`;
     return n;
@@ -186,6 +206,9 @@ export function mountIcons(cat: Catalog): SectionApi {
     h('h3', { class: 'sub', text: `UI icons (${cat.uiArt.filter((a) => a.url).length} / ${cat.uiArt.filter((a) => !a.unlinked).length})` }),
     h('p', { class: 'note', text: 'Painted UI icons (assets/ui-icons, cut by tools/make-ui-icons.mjs from assets/source/ui-icons). Battle HUD actions, cooldown and Rage chips, the Lucky Escape pip, the Combat log toggle, gold and bag counters, and the Gear / Formation buttons use these; without an image they fall back to the pixel icon or show no icon.' }),
     uis,
+    h('h3', { class: 'sub', text: `Game icons (${cat.miscArt.filter((a) => a.url && !a.unlinked).length})` }),
+    h('p', { class: 'note', text: 'Painted game icons (assets/misc-icons, cut by tools/make-misc-icons.mjs from assets/source/misc-icons; the checkerboard ChatGPT baked into two sheets is removed there). Status badges, element and ground icons, Endless relics and reward emblems, class logos, campaign map nodes, the corpse marker and the crit burst use these; without an image they fall back to the pixel icon.' }),
+    misc,
     h('h3', { class: 'sub', text: `Item art (${cat.itemArt.art.length})` }),
     h('p', { class: 'note', text: `Painted item icons (assets/items, cut by tools/make-item-icons.mjs from assets/source/item-icons). An item with art shows it everywhere; the rest fall back to the pixel icons above${cat.itemArt.missing.length ? ` (still pixel: ${cat.itemArt.missing.join(', ')})` : ''}.` }),
     art,

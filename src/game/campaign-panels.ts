@@ -6,6 +6,8 @@ import { characterTexture } from './assets';
 import { classAvatar } from './menu-ui';
 import { EL, diamondPts, elBody, elButton, elText, fitW } from './elegant-ui';
 import { crown, hpBar, openModal, type Modal } from './campaign-ui';
+import { ensureIcon } from './icons';
+import { hasMiscImage, miscIconName } from '../ui/misc-icons';
 
 /**
  * Sefer haritası "War table" parçaları (Ömer 2026-10-09, taslak 2): düğüm glifleri, kahraman paneli (seviye / XP, 6 yuva, statlar),
@@ -16,7 +18,16 @@ const W = 1920;
 
 // ------------------------------------------------------------ düğüm glifleri
 
-/** Düğüm türünün ince çizgili glifi (merkez ox, oy; s = ölçek, ~24 px kutu). */
+/**
+ * Düğüm türünün boyalı ikonu (assets/misc-icons/node/<tür>.png; harita madalyonu, düğüm kartı, lejant). Görsel yoksa null: çağıran ince
+ * çizgili glifi (drawNodeGlyph) çizer. `size` ekrandaki kenar.
+ */
+export function nodeGlyphImage(scene: Phaser.Scene, type: NodeType, x: number, y: number, size: number): Phaser.GameObjects.Image | null {
+  if (!hasMiscImage('node', type)) return null;
+  return scene.add.image(x, y, ensureIcon(scene, miscIconName('node', type), '#e8c47e', false)).setDisplaySize(size, size);
+}
+
+/** Düğüm türünün ince çizgili glifi (merkez ox, oy; s = ölçek, ~24 px kutu). Boyalı ikon yoksa yedek (nodeGlyphImage). */
 export function drawNodeGlyph(g: Phaser.GameObjects.Graphics, type: NodeType, col: number, s: number, ox = 0, oy = 0, alpha = 1): void {
   const P = (x: number, y: number) => ({ x: ox + x * s, y: oy + y * s });
   const L = (x1: number, y1: number, x2: number, y2: number) => g.lineBetween(ox + x1 * s, oy + y1 * s, ox + x2 * s, oy + y2 * s);
@@ -213,7 +224,7 @@ function slotRow(scene: Phaser.Scene, hero: Hero, slot: SlotId, x: number, y: nu
 // ------------------------------------------------------------ dizilim (formation)
 
 /**
- * Pencerenin okuduğu dizilim (genel bağdaştırıcı; Ömer 2026-10-09: Endless koşu başı dizilimi de bu pencereyi kullanır). CampaignState buna
+ * Pencerenin okuduğu dizilim (genel bağdaştırıcı; Endless koşu başı dizilimi 2026-10-10'dan beri takım seçimi ekranında, bu pencerede değil). CampaignState buna
  * doğrudan uyar: `active` = hücre -> kahraman id ('' boş), `roster` = kahramanlar (yalnızca `active`tekiler çizilir).
  */
 export interface FormationState {
