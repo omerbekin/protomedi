@@ -42,7 +42,7 @@ import {
 import { wikiFiles } from '../wiki/files';
 import { lockInput, unlockInput } from './input-lock';
 import { itemDefIcon } from './item-icon-dom';
-import { statIconUrl, statTip } from './stat-tips';
+import { statIconUrl, statTip, statTipSegments } from './stat-tips';
 import { dropAction, isDoubleTap, type DragSource, type DropTarget } from './gear-drop';
 import { dismissOnBackdrop } from './backdrop';
 import { iconUrl } from './dom-icons';
@@ -208,7 +208,13 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
     if (!info) return;
     const head = el('b', '', info.title);
     if (t.dataset['delta']) head.append(el('span', `gr-tip-d ${t.dataset['dir'] ?? ''}`, ` (${t.dataset['delta']})`));
-    tip.replaceChildren(head, ...info.lines.map((l) => el('div', 'gr-tip-l', l)));
+    // türetilen değer satırları: fark parantezi başlık farkıyla aynı renkte (artış yeşil, azalış kırmızı)
+    const line = (l: string): HTMLElement => {
+      const d = el('div', 'gr-tip-l');
+      d.append(...statTipSegments(l).map((g) => (g.dir ? el('span', `gr-tip-d ${g.dir}`, g.text) : document.createTextNode(g.text))));
+      return d;
+    };
+    tip.replaceChildren(head, ...info.lines.map(line));
     tip.classList.add('on');
     const o = offsetIn(t, overlay);
     const W = overlay.clientWidth;

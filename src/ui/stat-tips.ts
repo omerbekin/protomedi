@@ -34,8 +34,33 @@ const KIND: Record<string, StatKind | 'might'> = {
 
 const NUM = /[-−+]?\d+(?:\.\d+)?%?/g;
 
-/** İki açıklama satırını birleştirir: yalnızca sayıları farklıysa "28.6% → 33.3%"; yapı farklıysa sonraki satır. */
-export function mergeLine(before: string, after: string): string {
+/** Sayı yazısı -> değer ('−' eksi işareti de); okunmazsa null. */
+const numOf = (t: string): number | null => {
+  const v = Number(t.replace('−', '-').replace('%', ''));
+  return Number.isFinite(v) ? v : null;
+};
+const decimals = (t: string): number => (t.replace('%', '').split('.')[1] ?? '').length;
+
+/**
+ * Fark yazısı (Ömer 2026-10-10): değerle aynı birim ve hassasiyet ("+6.4%" yüzde puanı, "+6" düz sayı); fark 0 ya da okunmazsa ''. Artış '+',
+ * azalış '-' (başlıktaki Gear farkıyla aynı biçim).
+ */
+export function diffText(before: string, after: string): string {
+  const a = numOf(before);
+  const b = numOf(after);
+  if (a === null || b === null) return '';
+  const pct = before.endsWith('%') && after.endsWith('%');
+  const dp = Math.max(decimals(before), decimals(after));
+  const d = Math.round((b - a) * 10 ** dp) / 10 ** dp;
+  if (d === 0) return '';
+  return `${d > 0 ? '+' : '-'}${Math.abs(d).toFixed(dp)}${pct ? '%' : ''}`;
+}
+
+/**
+ * İki açıklama satırını birleştirir: yalnızca sayıları farklıysa "28.6% → 33.3%"; yapı farklıysa sonraki satır. `withDiff`: değişen her
+ * sayının ardına farkı ekler ("28.6% → 33.3% (+4.7%)"; renk: statTipSegments).
+ */
+export function mergeLine(before: string, after: string, withDiff = false): string {
   if (before === after) return before;
   const nb = before.match(NUM) ?? [];
   const na = after.match(NUM) ?? [];
@@ -44,10 +69,28 @@ export function mergeLine(before: string, after: string): string {
   if (nb.length !== na.length || tb.join('|') !== ta.join('|')) return after;
   let out = tb[0] ?? '';
   nb.forEach((n, i) => {
-    out += n === na[i] ? n : `${n} → ${na[i]}`;
+    const m = na[i]!;
+    if (n === m) out += n;
+    else {
+      const d = withDiff ? diffText(n, m) : '';
+      out += `${n} → ${m}${d ? ` (${d})` : ''}`;
+    }
     out += tb[i + 1] ?? '';
   });
   return out;
+}
+
+/** Satırın parçaları: fark parantezleri ("(+6.4%)" / "(-2)") ayrı parça, yönüyle (artış yeşil, azalış kırmızı: Gear başlık farkıyla aynı renkler). */
+export interface TipSeg {
+  text: string;
+  dir?: 'up' | 'down';
+}
+const DIFF = /(\([+-]\d+(?:\.\d+)?%?\))/;
+export function statTipSegments(line: string): TipSeg[] {
+  return line
+    .split(DIFF)
+    .filter((p) => p !== '')
+    .map((p) => (DIFF.test(p) ? { text: p, dir: p.startsWith('(+') ? 'up' : 'down' } : { text: p }));
 }
 
 /**
@@ -59,7 +102,7 @@ export function statTip(id: string, stats: Stats, after?: Stats | null): StatTip
   if (!now || !after) return now;
   const next = statTipBase(id, after);
   if (!next) return now;
-  const lines = now.lines.map((l, i) => mergeLine(l, next.lines[i] ?? l));
+  const lines = now.lines.map((l, i) => mergeLine(l, next.lines[i] ?? l, true)); // türetilen değerlerde fark da (başlık farkı ayrı: Gear satırı)
   for (let i = now.lines.length; i < next.lines.length; i++) lines.push(next.lines[i]!);
   return { title: mergeLine(now.title, next.title), lines };
 }

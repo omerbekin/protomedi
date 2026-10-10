@@ -473,7 +473,8 @@ export interface ElTipSpec {
   /** Başlık altı ince çizginin altındaki küçük Cinzel satır (Cost · Cooldown). */
   meta?: string;
   shape?: MiniShape | null;
-  lines: Array<[string, string?]>;
+  /** Satır: [yazı, renk] ya da renkli parçalar ({ segs }: ör. stat farkı "(+6.4%)" yeşil; kelime kelime sarılır). */
+  lines: Array<[string, string?] | { segs: Array<{ text: string; hex?: string }> }>;
   width?: number;
 }
 
@@ -545,7 +546,30 @@ export function elTip(scene: Phaser.Scene, spec: ElTipSpec): { container: Phaser
     items.push(m);
     y += m.height + 8;
   }
-  for (const [text, hex] of spec.lines) {
+  for (const ln of spec.lines) {
+    if (!Array.isArray(ln)) {
+      // renkli parçalı satır: kelimeler tek tek dizilir, sığmayan alt satıra iner
+      let x = px;
+      let lineH = 0;
+      for (const seg of ln.segs) {
+        for (const word of seg.text.split(/(?<= )/)) {
+          if (!word) continue;
+          const t = scene.add.text(0, y, word, { fontFamily: BODY_FONT, fontSize: '19px', color: seg.hex ?? EL.TXT }).setResolution(2);
+          if (x > px && x + t.width > w - px) {
+            x = px;
+            y += lineH + 1;
+            t.y = y;
+          }
+          t.x = x;
+          x += t.width;
+          lineH = Math.max(lineH, t.height);
+          items.push(t);
+        }
+      }
+      y += lineH + 3;
+      continue;
+    }
+    const [text, hex] = ln;
     const t = scene.add.text(px, y, text, { fontFamily: BODY_FONT, fontSize: '19px', color: hex ?? EL.TXT, wordWrap: { width: w - px * 2, useAdvancedWrap: true }, lineSpacing: 1 }).setResolution(2);
     items.push(t);
     y += t.height + 3;

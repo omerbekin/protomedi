@@ -52,7 +52,7 @@ import { rewardBlockedReason, takeRareDrop,
 } from '../../endless';
 import { ITEMS, SLOT_IDS, canEquip, effectLine, heroStats, itemDef, itemSubtitle, sellValue, slotDef, statLine, type ItemDef, type ItemStatId } from '../../progression';
 import type { Stats } from '../../engine/types';
-import { statIcon, statTip } from '../../ui/stat-tips';
+import { statIcon, statTip, statTipSegments } from '../../ui/stat-tips';
 import { backgroundKey, hasBackground, preloadAssets } from '../assets';
 import { classAvatar, fitText } from '../menu-ui';
 import { EL, diamondPts, elBody, elButton, elConfirm, elConfirmOpen, elGo, elHeading, elIconButton, elLink, elPanel, elScreenIn, elText, elTip, elToast, fadeLine, placeElTip, type ElButton } from '../elegant-ui';
@@ -70,6 +70,10 @@ import { FULL_W, FULL_X0 } from '../../ui/viewport';
 import { menuFontsReady, whenMenuFontsReady } from '../../ui/menu-fonts';
 import { groupColor, sortByPrimary } from '../class-order';
 import { ENDLESS_SCENE, abandon, commit, continueRun, endless, savedRun, scores, startRun, startWave } from '../endless-session';
+
+/** Stat ipucundaki fark renkleri (DOM Gear ile aynı: gear.css > .gr-tip-d.up / .down). */
+const TIP_UP = '#8fe39a';
+const TIP_DOWN = '#ff8a7a';
 
 export interface EndlessSceneData {
   /** 'title': başlık ekranıyla aç (ana menü / debug); 'pick': doğrudan takım seçimi. Yoksa bellekteki koşunun aşaması. */
@@ -1005,7 +1009,7 @@ export class EndlessScene extends Phaser.Scene {
       const info = st ? statTip(sk, st.now, st.after) : null;
       if (!info) return;
       this.hideTip();
-      const tip = elTip(this, { icon: ic ? ensureIcon(this, ic.kind, ic.color, false) : undefined, iconSize: 40, title: info.title, lines: info.lines.map((l) => [l] as [string]), width: 440 });
+      const tip = elTip(this, { icon: ic ? ensureIcon(this, ic.kind, ic.color, false) : undefined, iconSize: 40, title: info.title, lines: info.lines.map((l) => ({ segs: statTipSegments(l).map((g) => ({ text: g.text, ...(g.dir ? { hex: g.dir === 'up' ? TIP_UP : TIP_DOWN } : {}) })) })), width: 440 });
       const m = z.getWorldTransformMatrix();
       placeElTip(this, tip, { x: m.tx - z.width / 2, y: m.ty - z.height / 2, w: z.width, h: z.height }, 'above');
       this.tip = tip.container;

@@ -35,3 +35,21 @@ describe('Gear stat açıklaması: önce → sonra', () => {
     expect(mergeLine('Same 5', 'Same 5')).toBe('Same 5');
   });
 });
+
+describe('stat ipucu farkı (Ömer 2026-10-10)', async () => {
+  const { mergeLine, diffText, statTipSegments, statTip } = await import('../src/ui/stat-tips');
+  it('türetilen değerde fark aynı birim ve hassasiyetle; azalış eksi; sıfırsa yok', () => {
+    expect(mergeLine('Reduces physical damage taken by 16.7%', 'Reduces physical damage taken by 23.1%', true)).toBe('Reduces physical damage taken by 16.7% → 23.1% (+6.4%)');
+    expect(mergeLine('Max HP 120', 'Max HP 110', true)).toBe('Max HP 120 → 110 (-10)');
+    expect(diffText('5', '5.0')).toBe('');
+    expect(diffText('1.5', '1.75')).toBe('+0.25');
+    expect(statTipSegments('x 16.7% → 23.1% (+6.4%) y')).toEqual([{ text: 'x 16.7% → 23.1% ' }, { text: '(+6.4%)', dir: 'up' }, { text: ' y' }]);
+    expect(statTipSegments('a (-2)')[1]).toEqual({ text: '(-2)', dir: 'down' });
+  });
+  it('statTip: zırh artınca açıklama satırında fark, başlıkta yok (başlık farkı Gear satırından)', () => {
+    const base = { armor: 12 } as Record<string, number>;
+    const tip = statTip('armor', base as never, { armor: 18 } as never);
+    expect(tip?.title).not.toMatch(/\(\+/);
+    expect(tip?.lines.some((l) => /→ .*\(\+[\d.]+%\)/.test(l))).toBe(true);
+  });
+});
