@@ -522,8 +522,9 @@ export class MusicEngine {
     if (this.idx < 0) this.idx = this.events.length;
     const g = this.fade.gain;
     g.cancelScheduledValues(at);
-    g.setValueAtTime(fadeSec > 0 ? 0.0001 : 1, at);
-    if (fadeSec > 0) g.exponentialRampToValueAtTime(1, at + fadeSec);
+    // doğrusal yükseliş: üstel rampa (0.0001'den) ilk yarısında neredeyse sessiz kalıyordu ("geç başlıyor", Ömer 2026-10-10)
+    g.setValueAtTime(fadeSec > 0 ? 0 : 1, at);
+    if (fadeSec > 0) g.linearRampToValueAtTime(1, at + fadeSec);
     this.startDrone(at);
   }
 
@@ -694,7 +695,7 @@ export interface MusicCheck {
 
 /**
  * Müziğin bir parçasını çevrimdışı çizer ve ölçer (dinlenemediği için sayısal denetim: sessiz değil, tepe < 1, NaN yok).
- * Seviye en yüksek (Music 10 x Sound volume 10). Tarayıcı konsolu: `(await import('/src/game/music.ts')).renderMusicCheck(20)`.
+ * Seviye en yüksek (Music %100 x Master Volume %100). Tarayıcı konsolu: `(await import('/src/game/music.ts')).renderMusicCheck(20)`.
  */
 export async function renderMusicCheck(seconds = 20, fromSong = 0, sampleRate = 44100): Promise<MusicCheck> {
   const ctx = new OfflineAudioContext(2, Math.round(sampleRate * seconds), sampleRate);

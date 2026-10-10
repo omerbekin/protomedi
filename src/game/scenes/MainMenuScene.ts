@@ -19,6 +19,7 @@ import { GOLD } from '../ui-frame';
 import { mp, MP_SCENE } from '../mp-client';
 import { addLogo, hasLogo, preloadLogo } from '../branding';
 import { loadVolume, setSettingsVolume } from '../../ui/settings';
+import { VOLUME_STEPS, volumeLabel } from '../../ui/volume-steps';
 import { SPEED_STEPS, battleSpeed, battleSpeedLabel, onBattleSpeedChange, setBattleSpeed, speedAt, speedIndex } from '../../ui/battle-speed';
 import { openDebugMenu } from '../../ui/debug-entry';
 import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from '../../ui/fullscreen';
@@ -58,6 +59,9 @@ const PANEL_W = 760; // Settings / Multiplayer satırlarının genişliği (sağ
 const SHADE_W = 980; // soldan sağa açılan gölge
 /** Settings açıkken sahnenin genel koyuluğu (settings-backdrop v2; DOM .st-overlay ile aynı). */
 const SETTINGS_DARK = 0.52;
+/** Settings sütunu yerleşimi (Ömer 2026-10-10: Sounds / Gameplay bölümleri): başlık ortası y, ilk öğenin üst kenarı, bölüm başlığı yüksekliği.
+ *  DOM Settings aynı ölçülerle (style.css > html.menu-elegant .st-col / .st-section). */
+const SETTINGS_LAYOUT = { titleY: 250, top: 325, heading: 56 };
 /**
  * Görünüm stili (src/ui/menu-style.ts): 'classic' bugünkü menü; 'elegant' ilk taslağın zarif stili (?menu=new önizleme). Onaylanınca
  * yalnızca DEFAULT_MENU_STYLE değişir; aşağıdaki ölçüler aynı kalır (önizleme = onaylanan görünüm).
@@ -162,6 +166,8 @@ export class MainMenuScene extends Phaser.Scene {
   private panel: Phaser.GameObjects.Container | null = null;
   private panelRows: Row[] = [];
   private panelSel = 0;
+  /** Sütunda bir sonraki öğenin üst kenarı (satır ROW_H, bölüm başlığı SETTINGS_LAYOUT.heading yer kaplar). */
+  private panelTop = 0;
   private back!: Phaser.GameObjects.Container;
   /** Sağ alttaki küçük sürüm yazısı (__APP_VERSION__). */
   private version: Phaser.GameObjects.Text | null = null;
@@ -802,7 +808,9 @@ export class MainMenuScene extends Phaser.Scene {
     // %52 kararır + sütunun arkasında soldan sağa açılan gölge (oyun içi DOM Settings'le aynı: style.css > .st-overlay)
     if (kind === 'settings') p.add(this.add.rectangle(FULL_X0 - this.colX - 200, 0, FULL_W + 400, H, 0x000000, SETTINGS_DARK).setOrigin(0, 0));
     p.add([this.shadeExtension(), this.columnShade()]);
-    p.add(this.titleText(COL_X, LOOK.titleY, kind === 'settings' ? 'Settings' : 'Multiplayer', LOOK.titleSize, 3).setOrigin(0, 0.5));
+    const settings = kind === 'settings';
+    this.panelTop = settings ? SETTINGS_LAYOUT.top : LOOK.panelY0 - ROW_H / 2;
+    p.add(this.titleText(COL_X, settings ? SETTINGS_LAYOUT.titleY : LOOK.titleY, settings ? 'Settings' : 'Multiplayer', LOOK.titleSize, 3).setOrigin(0, 0.5));
     if (kind === 'settings') this.buildSettings(p);
     else this.buildMultiplayer(p);
     this.panelSel = 0;
@@ -819,17 +827,29 @@ export class MainMenuScene extends Phaser.Scene {
 
   private addPanelRow(p: Phaser.GameObjects.Container, label: string, run: () => void, o: { right?: Phaser.GameObjects.GameObject[]; enabled?: boolean; adjust?: (d: number) => void } = {}): Row {
     const i = this.panelRows.length;
-    const row = this.makeRow(LOOK.panelY0 + i * ROW_H, label, LOOK.panelSize, run, { ...o, width: PANEL_W, onHover: () => this.selectPanel(i) });
+    const row = this.makeRow(this.panelTop + ROW_H / 2, label, LOOK.panelSize, run, { ...o, width: PANEL_W, onHover: () => this.selectPanel(i) });
+    this.panelTop += ROW_H;
     row.adjust = o.adjust;
     p.add(row.root);
     this.panelRows.push(row);
     return row;
   }
 
-  /** 0-10 seviye satırı (− [kaydırıcı] + değer): Sound volume ile aynı görünüm ve dokunma alanları. */
+  /** Bölüm başlığı (Sounds / Gameplay): küçük soluk Cinzel büyük harf + sağa sönen ince altın çizgi (DOM .st-section ile aynı). */
+  private panelHeading(p: Phaser.GameObjects.Container, label: string): void {
+    const base = this.panelTop + SETTINGS_LAYOUT.heading - 10;
+    const t = elText(this, COL_X + 34, base, label, 20, EL.MUTED, { em: 0.16 }).setOrigin(0, 1);
+    const x0 = t.x + t.width + 16;
+    const line = this.add.graphics();
+    line.fillGradientStyle(0xd9b26a, 0xd9b26a, 0xd9b26a, 0xd9b26a, 0.3, 0, 0.3, 0).fillRect(x0, base - 9, Math.max(0, PANEL_W - x0), 1);
+    p.add([line, t]);
+    this.panelTop += SETTINGS_LAYOUT.heading;
+  }
+
+  /** Seviye satırı (− [kaydırıcı] + değer; 0..max adım): tüm Settings kaydırıcıları aynı görünüm ve dokunma alanları. */
   private levelRow(p: Phaser.GameObjects.Container, label: string, initial: number, apply: (n: number, preview: boolean) => void, fmt: (n: number) => string, onChange?: (fn: (n: number) => void) => () => void, max = 10): void {
     let level = initial;
-    const trackX = 440;
+    const trackX = 410; // değer yazısı "100%" / "0.25x" + düğmesine binmesin
     const trackW = 200;
     const g = this.add.graphics();
     const value = this.valueText(PANEL_W - 6, 0, fmt(level), TXT_ON).setOrigin(1, 0.5);
@@ -885,66 +905,23 @@ export class MainMenuScene extends Phaser.Scene {
     this.addPanelRow(p, label, () => undefined, { right: [g, ...step('−', trackX - 46, -1), track, ...step('+', trackX + trackW + 42, 1), value], adjust: (d) => set(level + d, true) });
   }
 
-  /** Ayarlar: mevcut ayar ekranındakilerin aynısı (ses seviyesi 0-10, tam ekran); değer aynı yerde saklanır. */
+  /** Ayarlar (oyun içi DOM Settings ile aynı içerik ve sıra; src/ui/settings.ts): "Sounds" (Master Volume, Music, UI sounds) ve
+   *  "Gameplay" (Reduced motion, Battle speed, Fullscreen) bölümleri; tüm kaydırıcılar 20 adım. Değerler aynı yerde saklanır. */
   private buildSettings(p: Phaser.GameObjects.Container): void {
-    // --- Sound volume: − [kaydırıcı] + değer ---
-    let level = loadVolume();
-    const trackX = 440;
-    const trackW = 200;
-    const g = this.add.graphics();
-    const value = this.valueText(PANEL_W - 6, 0, String(level), TXT_ON).setOrigin(1, 0.5);
-    const draw = () => {
-      g.clear();
-      g.fillStyle(0x120c07, 0.9).fillRect(trackX, -5, trackW, 10);
-      g.fillStyle(0xd9b26a, 1).fillRect(trackX, -5, (trackW * level) / 10, 10);
-      g.lineStyle(1, GOLD.edge, 1).strokeRect(trackX - 0.5, -5.5, trackW + 1, 11);
-      g.fillStyle(0xf3d999, 1).fillCircle(trackX + (trackW * level) / 10, 0, 13);
-      g.lineStyle(2, 0x5a3a10, 1).strokeCircle(trackX + (trackW * level) / 10, 0, 13);
-      value.setText(String(level));
-    };
-    const set = (v: number, preview: boolean) => {
-      const n = Math.min(10, Math.max(0, Math.round(v)));
-      if (n === level && !preview) return;
-      level = n;
-      setSettingsVolume(n, preview);
-      draw();
-    };
-    const step = (label: string, x: number, d: number) => {
-      const t = this.valueText(x, 0, label, TXT_ON, LOOK.stepSize).setOrigin(0.5);
-      const z = this.add.zone(x, 0, 64, ROW_H - 8).setInteractive({ useHandCursor: true });
-      z.on('pointerup', () => set(level + d, true));
-      return [t, z];
-    };
-    const track = this.add.zone(trackX + trackW / 2, 0, trackW + 40, ROW_H - 8).setInteractive({ useHandCursor: true });
-    const fromPointer = (ptr: Phaser.Input.Pointer) => {
-      const root = track.parentContainer;
-      const lx = worldXY(this, ptr).x - (root?.x ?? 0) - (root?.parentContainer?.x ?? 0) - trackX;
-      set((lx / trackW) * 10, false);
-    };
-    let dragging = false;
-    track.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
-      dragging = true;
-      fromPointer(ptr);
-    });
-    track.on('pointermove', (ptr: Phaser.Input.Pointer) => dragging && ptr.isDown && fromPointer(ptr));
-    const stopDrag = () => {
-      if (dragging) setSettingsVolume(level, true); // bırakınca deneme sesi
-      dragging = false;
-    };
-    track.on('pointerup', stopDrag);
-    track.on('pointerout', stopDrag);
-    draw();
-    this.addPanelRow(p, 'Sound volume', () => undefined, { right: [g, ...step('−', trackX - 46, -1), track, ...step('+', trackX + trackW + 42, 1), value], adjust: (d) => set(level + d, true) });
+    this.panelHeading(p, 'Sounds');
+    // --- Master Volume: skill sesleri, arayüz sesleri ve müzik bununla çarpılır (setSettingsVolume -> DOM Settings applyVolume) ---
+    this.levelRow(p, 'Master Volume', loadVolume(), (n, preview) => setSettingsVolume(n, preview), volumeLabel, undefined, VOLUME_STEPS);
 
-    // --- Music: ana menü müziği 0-10 (0 = tamamen kapalı; DOM Settings satırının aynısı: src/ui/music.ts). Burada canlı duyulur ---
-    this.levelRow(p, 'Music', loadMusicLevel(), (n) => setMusicLevel(n), (n) => (n === 0 ? 'Off' : String(n)), onMusicLevelChange);
+    // --- Music: ana menü müziği (0 = tamamen kapalı; src/ui/music.ts). Burada canlı duyulur ---
+    this.levelRow(p, 'Music', loadMusicLevel(), (n) => setMusicLevel(n), volumeLabel, onMusicLevelChange, VOLUME_STEPS);
 
-    // --- UI sounds: menü sesleri 0-10 (0 = kapalı; DOM Settings satırının aynısı: src/ui/ui-sound.ts) ---
+    // --- UI sounds: menü sesleri (0 = kapalı; src/ui/ui-sound.ts) ---
     this.levelRow(p, 'UI sounds', loadUiSoundLevel(), (n, preview) => {
       setUiSoundLevel(n);
       if (preview) previewUiSound('select');
-    }, (n) => (n === 0 ? 'Off' : String(n)), onUiSoundLevelChange);
+    }, volumeLabel, onUiSoundLevelChange, VOLUME_STEPS);
 
+    this.panelHeading(p, 'Gameplay');
     // --- Reduced motion: ana menü sahnesinde paralaks ve parçacık yok (src/ui/motion-pref.ts; kayıt yoksa işletim sistemi tercihi) ---
     const motion = this.valueText(PANEL_W - 6, 0, reducedMotion() ? 'On' : 'Off', TXT_ON).setOrigin(1, 0.5);
     this.addPanelRow(p, 'Reduced motion', () => {
@@ -952,14 +929,14 @@ export class MainMenuScene extends Phaser.Scene {
       motion.setText(reducedMotion() ? 'On' : 'Off');
     }, { right: [motion] });
 
-    // --- Battle speed: kaydırıcı, ayrık adımlar 0.25x-4x (UI sounds ile aynı satır; src/ui/battle-speed.ts) ---
+    // --- Battle speed: 20 adım 0.25x-4x (1x çevresinde ince; src/ui/battle-speed.ts) ---
     this.levelRow(p, 'Battle speed', speedIndex(battleSpeed()), (i) => setBattleSpeed(speedAt(i)), (i) => battleSpeedLabel(speedAt(i)), (fn) => onBattleSpeedChange((v) => fn(speedIndex(v))), SPEED_STEPS);
 
     // --- Fullscreen (API yoksa satır yok; iPhone'da ipucu) ---
     const support = currentSupport();
     if (support !== 'none' && !isStandalone()) {
       const state = this.valueText(PANEL_W - 6, 0, 'Enter', TXT_ON).setOrigin(1, 0.5);
-      const note = this.noteText(COL_X, LOOK.panelY0 + (this.panelRows.length + 1) * ROW_H - 10, '', 22, '#cdb88d').setOrigin(0, 0.5);
+      const note = this.noteText(COL_X, this.panelTop + ROW_H + 12, '', 22, '#cdb88d').setOrigin(0, 0.5);
       p.add(note);
       this.cleanups.push(onFullscreenChange((on) => state.active && state.setText(on ? 'Exit' : 'Enter')));
       this.addPanelRow(p, 'Fullscreen', () => {
@@ -969,7 +946,7 @@ export class MainMenuScene extends Phaser.Scene {
     }
 
     // Gizli debug girişinin yedeği (src/ui/debug-gesture.ts): en altta küçük, soluk "Developer tools"
-    const dev = elBody(this, COL_X, LOOK.panelY0 + this.panelRows.length * ROW_H + 10, 'Developer tools', 21, 'rgba(168,151,122,0.55)').setOrigin(0, 0.5);
+    const dev = elBody(this, COL_X, this.panelTop + 48, 'Developer tools', 21, 'rgba(168,151,122,0.55)').setOrigin(0, 0.5);
     dev.setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Rectangle(-10, -14, dev.width + 20, dev.height + 28), hitAreaCallback: Phaser.Geom.Rectangle.Contains });
     dev.on('pointerover', () => dev.setColor(EL.NOTE));
     dev.on('pointerout', () => dev.setColor('rgba(168,151,122,0.55)'));

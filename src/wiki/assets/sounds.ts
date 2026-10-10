@@ -37,7 +37,7 @@ async function measurePeak(entry: SoundEntry): Promise<number> {
   const rate = 44100;
   const off = new OfflineAudioContext(1, Math.ceil((entry.duration + 0.4) * rate), rate);
   const master = off.createGain();
-  master.gain.value = isUi(entry) ? UI_AUDIO.master * (UI_AUDIO.defaultLevel / 10) : MASTER_GAIN;
+  master.gain.value = isUi(entry) ? UI_AUDIO.master * (UI_AUDIO.defaultLevel / 20) : MASTER_GAIN;
   master.connect(off.destination);
   synthSfx(off, master, entry.def, 0);
   const buf = await off.startRendering();

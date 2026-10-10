@@ -1,7 +1,7 @@
 {
   "_not": "ARAYÜZ (menü) SESLERİ - Ömer 2026-10-10 onayı. data/audio.json ile aynı katman dili (tone/noise/pluck/voice; src/game/audio.ts synthSfx). Hepsi kısa (40-250 ms), kısık ve tekrarda yormaz: deri/parşömen hışırtısı, yumuşak ahşap/demir tık, boğuk gümleme, kumaş fırçası, kese sallama (çınlayan sikke YOK), deri toka şakırtısı, boğuk ahşap vuruş. Çan/sinüs çınlaması YOK; sinüs yalnızca alçak darbe gövdesi. master = arayüz seslerinin genel kısıklığı (oyunun ana ses ayarı ve Settings > UI sounds ile çarpılır). throttleMs = aynı tür sesin en kısa tekrar aralığı (hover fare hızlı gezinince yağmasın); hoverQuietMs = tık/açılış sonrası hover susar. vary = her çalışta frekans/kazanç küçük sapması (aynı ses makineli tüfek gibi tekrarlanmasın). Sayılar kulakla ayarlanır: Codex > Assets > Sounds > UI.",
   "master": 0.75,
-  "defaultLevel": 5,
+  "defaultLevel": 10,
   "throttleMs": { "default": 45, "hover": 90, "toast": 250 },
   "hoverQuietMs": 140,
   "vary": { "freq": 0.06, "gain": 0.12 },

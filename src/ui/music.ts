@@ -1,9 +1,11 @@
 // Ana menü müziği denetimi (hafif; menü parçasında). Beste ve ses motoru ayrı parçada: src/game/music.ts (ilk gerektiğinde dynamic import).
 // Kurallar (Ömer 2026-10-10): ana menüde çalar; ilk kullanıcı hareketinden (tık/dokunma/tuş) önce ses YOK (tarayıcı autoplay kuralı), sonra
 // yavaşça yükselir; menüden savaşa / sefere / Endless'a çıkarken söner, menüye dönünce kaldığı yerden (bir sonraki ölçü başından) yükselir;
-// sekme gizlenince durur (bağlam askıya alınır). Seviye = Settings > Music (0-10, 0 = tamamen kapalı: motor ve düğümler bırakılır)
-// x Settings > Sound volume (ana ses) x data/audio-music.json > master. Hata oyunu durdurmaz.
+// sekme gizlenince durur (bağlam askıya alınır). Seviye = Settings > Music (0-20 adım = %0-100, 0 = tamamen kapalı: motor ve düğümler
+// bırakılır) x Settings > Master Volume x data/audio-music.json > master. Hızlı başlangıç (Ömer 2026-10-10): main.ts ana menüyle açılışta
+// menuMusic(true) der ve motor modülü hemen indirilir; böylece yükleme ekranındaki ilk tık bile müziği başlatır. Hata oyunu durdurmaz.
 import musicData from '../../data/audio-music.json';
+import { clampStep, readStepLevel, stepFraction, stepRecord } from './volume-steps';
 
 type MusicModule = typeof import('../game/music');
 type Engine = InstanceType<MusicModule['MusicEngine']>;
@@ -16,22 +18,18 @@ const FADE_OUT = musicData.fadeOutMs / 1000;
 const PUMP_MS = 200;
 const LOOKAHEAD = 0.9;
 
-const clampLevel = (v: number): number => Math.min(10, Math.max(0, Math.round(v)));
-
-/** Kayıtlı müzik seviyesi 0..10 (kayıt yoksa varsayılan ~%60). */
+/** Kayıtlı müzik seviyesi 0..20 adım (kayıt yoksa varsayılan %60; eski 0-10 kayıtlar x2 göçer). */
 export function loadMusicLevel(): number {
   try {
-    const raw = globalThis.localStorage?.getItem(KEY);
-    const v = raw ? Number((JSON.parse(raw) as { level?: number }).level) : NaN;
-    return Number.isFinite(v) ? clampLevel(v) : DEFAULT_MUSIC_LEVEL;
+    return readStepLevel(globalThis.localStorage?.getItem(KEY), 'level', DEFAULT_MUSIC_LEVEL);
   } catch {
     return DEFAULT_MUSIC_LEVEL;
   }
 }
 
 let level = loadMusicLevel();
-/** Ana ses seviyesi 0..10 (Settings > Sound volume; src/ui/settings.ts bildirir). */
-let master = 7;
+/** Ana ses seviyesi 0..20 adım (Settings > Master Volume; src/ui/settings.ts bildirir). */
+let master = 14;
 let wanted = false;
 let unlocked = false;
 let ctx: AudioContext | null = null;
@@ -43,9 +41,9 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let suspendTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<(level: number) => void>();
 
-/** Müzik motorunun gerçek kazancı (0..1). Saf: seviye 0-10 x ana ses 0-10. */
+/** Müzik motorunun gerçek kazancı (0..1). Saf: seviye 0-20 x ana ses 0-20. */
 export function musicGain(lvl: number, masterLevel: number): number {
-  return (clampLevel(lvl) / 10) * (clampLevel(masterLevel) / 10);
+  return stepFraction(lvl) * stepFraction(masterLevel);
 }
 
 export function musicLevel(): number {
@@ -53,9 +51,9 @@ export function musicLevel(): number {
 }
 
 export function setMusicLevel(v: number): void {
-  level = clampLevel(v);
+  level = clampStep(v);
   try {
-    globalThis.localStorage?.setItem(KEY, JSON.stringify({ level }));
+    globalThis.localStorage?.setItem(KEY, stepRecord('level', level));
   } catch {
     /* saklama kapalı: yalnızca bu oturum */
   }
@@ -69,15 +67,16 @@ export function onMusicLevelChange(fn: (level: number) => void): () => void {
   return () => listeners.delete(fn);
 }
 
-/** Settings > Sound volume değişti (0..10): müzik de onunla çarpılır. */
+/** Settings > Master Volume değişti (0..20 adım): müzik de onunla çarpılır. */
 export function setMusicMaster(v: number): void {
-  master = clampLevel(v);
+  master = clampStep(v);
   update();
 }
 
 /** Ana menü açıldı (true) / kapanıyor (false). */
 export function menuMusic(on: boolean): void {
   wanted = on;
+  if (on && level > 0) void loadModule(); // motor ilk harekete hazır olsun (bekleme olmasın)
   update();
 }
 

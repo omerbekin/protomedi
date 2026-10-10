@@ -94,10 +94,10 @@ describe('endless: dalga kuralları', () => {
     expect([1, 2, 3, 4, 9, 30, 31, 40].map((w) => enemyCount(w))).toEqual([2, 2, 2, 2, 2, 2, 3, 3]);
   });
 
-  it('dalga güçlenmesi: 1. dalga yok, sonra dalga başına can/stat +%1,7, güç +%1,6 (balance-tester 2026-10-09)', () => {
+  it('dalga güçlenmesi: 1. dalga yok, sonra dalga başına can/stat +%1,25, güç +%1,15 (balance-tester 2026-10-10)', () => {
     expect(waveMods(1)).toBeUndefined();
-    expect(waveMods(2)).toEqual({ hpMult: 1.017, statMult: 1.017, powerMult: 1.016 });
-    expect(waveMods(11)).toEqual({ hpMult: 1.17, statMult: 1.17, powerMult: 1.16 });
+    expect(waveMods(2)).toEqual({ hpMult: 1.013, statMult: 1.013, powerMult: 1.012 }); // r3(1,0125) / r3(1,0115)
+    expect(waveMods(11)).toEqual({ hpMult: 1.125, statMult: 1.125, powerMult: 1.115 });
     expect(combineMods({ hpMult: 2, spriteScale: 1.4 }, { hpMult: 1.5, powerMult: 1.1 })).toEqual({ hpMult: 3, spriteScale: 1.4, powerMult: 1.1 });
   });
 

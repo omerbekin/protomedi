@@ -166,120 +166,163 @@ Alternatif (daha basit): devam eden eski seferler eski 17 duraklık haritada bit
 5. Sefer süresi neredeyse iki katına çıkıyor (~13-14 savaş): uygun mu? (Ömer'in "daha sık Valdoria" isteğiyle uyumlu.)
 6. Eski kayıtlar: göç (öneri) mi, yoksa devam eden seferler eski haritada mı bitsin?
 
-## 10. Yayılmış varyantlar (Ömer geri bildirimi 2026-10-10: "düğümler çok sıkışık")
+## 10. Yayılmış varyantlar (Ömer geri bildirimi 2026-10-10: "düğümler çok sıkışık"; 2. tur: HUD'sız alan, eğitim sabit, adlar araziye uygun)
 
-**Taslak sayfa:** `public/mockups/valdoria-map.html` (yayında `/protomedi/mockups/valdoria-map.html`; adresin sonuna `#v1` ... `#v5` doğrudan o varyantı açar). Oyun verisi DEĞİŞMEDİ. Sayfa canlı sefer haritasını taklit eder: dünya birimi = eski 16:9 harita bölgesi (1920 x 1080), sahne yüksekliği 1080 birim, yakınlaştırma 1,0-1,4 (−/+ ve Ctrl + tekerlek), sürükleyerek / ◂ ▸ ile kaydırma, düğüm yarıçapı 24 (boss 30), boyalı düğüm ikonları (`assets/misc-icons/node`, başlangıç `node:start`, yeni türler `node:rest` / `node:merchant`), ad 15 birim Cinzel, dokunma alanı 96 birim çap, HUD (sol Party sütunu, sağ düğüm kartı, üst bant, alt kontroller, lejant) `CampaignMapScene.renderHud` ölçüleriyle. Üstte varyant seçici; altında taslak araçları (oyunda yok): Overview (tüm harita), HUD overlay, Phone labels 24, Tap areas, Mark collisions. Sol altta varyantın durak sayısı / sefer başına durak / rota / seçim sayısı / tür karışımı ve ÖLÇÜMLER: yazı çakışması (tarayıcıda gerçek yazı genişliğiyle), en yakın iki düğüm arası, dokunma hedefi (bu ekranda ve 390 px yüksek telefonda).
+**Taslak sayfa:** `public/mockups/valdoria-map.html` (yayında `/protomedi/mockups/valdoria-map.html`; `#v1` ... `#v5` doğrudan o varyantı açar). Oyun verisi DEĞİŞMEDİ. Sayfa canlı sefer haritasını taklit eder: dünya birimi = eski 16:9 harita bölgesi (1920 x 1080), sahne yüksekliği 1080 birim, yakınlaştırma 1,0-1,4, kaydırma; düğüm yarıçapı 24 (boss 30), boyalı düğüm ikonları, ad 15 birim Cinzel, dokunma alanı 96 birim çap; HUD taklidi `CampaignMapScene.renderHud` ölçüleriyle. Araçlar (oyunda yok): Home view 1.0x, Overview, HUD overlay, Phone labels 24, Tap areas, Mark collisions. Sol panelde (Party sütununun yerinde, haritayı örtmez): durak / sefer başına durak / rota / seçim, karışım ve ölçümler. **HUD overlap**, ev görünümünde ve 1,0x'te, 16:9 ve 21:9 için ayrı ölçülür; düğüm diski, ad kutusu ve yol eğrisi gerçek yazı genişliğiyle denetlenir ve HUD'a giren adlar mavi kesik çerçeveyle işaretlenir. Diğer ölçümler: yazı çakışması (kırmızı), en yakın iki düğüm, dokunma hedefi. Düğümün üstüne gelince arazi notu da görünür.
 
-| # | Varyant | Haritada | Sefer başına | Rota / seçim | Yazı çakışması: masaüstü (15) / telefon yazısı (24) | En yakın iki düğüm |
+### 10.1 Sert kurallar (Ömer, 2. tur) ve nasıl ölçüldü
+1. **HUD'a binme yok:** 1,0x'te 16:9 ve 21:9 masaüstünde hiçbir düğüm, ad ya da yol şunların altında değil: Party sütunu, düğüm kartı, üst bant, alt kontroller, lejant, Menu.
+   - Ölçüm "ev görünümü"nde yapılır: kamera ortası 960, 540 (haritanın bugünkü varsayılanı). Görünen dünya 16:9'da 0-1920, 21:9'da -300-2220.
+   - 16:9'daki HUD'sız alan T biçiminde: orta sütun (x 488-1412, y 120-720) ve alt şerit (tüm genişlik, y 720-990; alt kontroller ve lejant hariç).
+   - 21:9 alanı 16:9'unkini kapsar; 16:9'da temiz olan 21:9'da da temiz.
+2. **Eğitim aynen:** Mill Road -> Ravenwood -> Ruined Watchtower -> Ashford Village (valdoria.json 1-4): aynı sıra, aynı sayı, **bugünkü konumlarında** (dördü de zaten HUD'sız alanda). Önceki turda eğitime eklenen Fisher's Cove ve Woodcutter's Clearing çıkarıldı.
+3. **Ad = arazi:** her düğümün altındaki görsel kontrol edildi (tablolardaki "Arazi" sütunu).
+   - Misty Marsh bataklık havuzlarında.
+   - King's Bridge tam nehrin üstünde, yolun nehri geçtiği yerde. Görselde çizili köprü ya da sığ geçit YOK; düğümün kendisi geçiş noktası.
+   - Iron Pass iki karlı tepenin arasındaki geçitte; Dwarven Mine ve Old Quarry dağ yamacında; St. Brann's Abbey yüksek dağda.
+   - Mercenary Camp orman açıklığında; Thornwood Hollow ve Hermit's Cache güneydoğu ormanında.
+   - Yollar dağları yalnızca Iron Pass'ten (ve dağdaki maden / ocak / manastıra çıkan yamaçtan) geçer.
+   - Nehri yalnızca King's Bridge'deki yollar geçer (otomatik denetim: nehri geçen başka yol 0).
+
+### 10.2 Takas (Ömer'e açıklama)
+- **HUD'sız alan küçük:** 16:9'da yalnızca yaklaşık 920 x 600 + 1900 x 270 birim, yani eski 16:9 haritanın içi.
+  - Geniş görselin doğusu (boyanmış ek bölge) ev görünümünde HUD'un altında ya da ekran dışında kalıyor.
+  - Bu yüzden kuralı tam sağlayan haritalar küçük: A 22 durak, B 19 durak. Önceki turdaki 25'lik planlar bu alana sığmadı; yazı çakışması ve iç içe yollar çıktı.
+- **Kural yalnızca kamera sabitse anlamlı:** bugün kamera bulunulan düğüme kayıyor. O zaman HUD'sız alana konmuş bir harita da kenara kayınca HUD altına girer.
+  - Önerim: 1,0x = sabit ev görünümü (kaydırma gerekmez); 1,2-1,4x'te kaydırma serbest.
+  - Bu bir arayüz değişikliği; karar Ömer'in.
+- **Spread 32 (pan) bilerek kuralı çiğneyen karşılaştırma:**
+  - Son önerinin içeriği (eğitim bugünkü gibi, 32 durak) bütün geniş haritaya yayıldı.
+  - Ev görünümünde HUD'a binen öğe sayısı 34 (16:9) / 21 (21:9); her düğüm kaydırınca HUD'sız alana gelir.
+  - Bugünkü harita (Current) bile ev görünümünde 15 (16:9) / 6 (21:9) öğeyle HUD'a biniyor.
+- **Telefon:** HUD orada "compact" (alt kontroller 92 birim, düğüm kartı daha aşağıdan başlar).
+  - A ve B'de doğudaki 3-4 düğüm (Ashen Plain, Siege Line, Forward Camp, Gate of Cinders) telefonda düğüm kartının altına düşüyor. Kartın katlanması ya da o bölgede kaydırma gerekir.
+  - 24 birimlik telefon adlarıyla A'da 13, B'de 7 yazı çakışması var (alan dar). Telefonda yalnızca bulunulan / seçilebilir / seçili düğümün adı gösterilmeli.
+  - Dokunma hedefi 1,0x'te yaklaşık 35 px, 1,4x'te yaklaşık 49 px.
+
+### 10.3 Ölçümler (tarayıcıda, ev görünümü, 1,0x)
+
+| # | Varyant | Haritada / sefer başına | Rota / seçim | HUD overlap 16:9 / 21:9 | Yazı çakışması masaüstü / telefon 24 | En yakın iki düğüm |
 |---|---|---|---|---|---|---|
-| 1 | Current (bugünkü, valdoria.json aynen) | 17 | 12 | 12 / 3 | 0 / 6 | 129 birim |
-| 2 | Last proposal (ilk 34'lük şablon, konumlar aynen) | 34 | 23 | 12 / 3 | **15** / 32 | 72 birim (dokunma alanları üst üste) |
-| 3 | Spread 34 (aynı 34 durak, bütün geniş haritaya yayıldı) | 34 | 23 | 12 / 3 | 0 / 6 | 129 birim |
-| 4 | Spread ~25 A (3 büyük seçim) | 25 | 17 | 12 / 3 | 0 / 0 | 153 birim |
-| 5 | Spread ~25 B (ana yol + 7 küçük çatal) | 25 | 18 | 128 / 7 | 0 / 0-1 | 133 birim |
+| 1 | Current | 17 / 12 | 12 / 3 | 15 / 6 | 0 / 5 | 129 |
+| 2 | Last proposal | 34 / 23 | 12 / 3 | 35 / 12 | 15 / 32 | 72 |
+| 3 | Spread 32 (pan) | 32 / 21 | 12 / 3 | 34 / 21 (kaydırmalı, bilerek) | 0 / 26 | 109 |
+| 4 | **Spread A** | **22 / 16** | 8 / 3 | **0 / 0** | 0 / 13 | 112 |
+| 5 | **Spread B** | **19 / 15** | 16 / 4 | **0 / 0** | 0 / 7 | 131 |
 
-- **Yerleşim kuralları (hepsi için):** düğüm merkezi dünyada x 235-2395 (kıyıdan doğudaki yeni boyanmış bölgeye kadar), y 150-925 (üstte başlık bandı 0-120, altta kontroller / lejant ~990-1080); iki düğüm arası en az 96 birim (dokunma alanları çakışmaz); ad kutuları birbirine ve başka düğümün dokunma alanına değmez (6 birim pay); yollar ad kutularını kesmez (A ve B'de 0, Spread 34'te 1 sınırda). Yazı yönü (alt / üst) düğüm başına `label: above` ile (bugünkü veri alanı).
-- **16:9 ve 21:9 masaüstü, 1,0x:** çakışmalar dünya biriminde ölçüldüğü için ekran oranından ve yakınlaştırmadan bağımsız: 3, 4, 5 her iki oranda da 0. Görünen alan 16:9'da 1920, 21:9'da ~2520 birim genişlik; yayılmış haritalar ~2160 birim genişliğinde, yani 16:9'da yatay kaydırma gerekir (bugün de öyle). Sol Party sütunu ve sağ düğüm kartı ekranın iki yanından ~500'er birimi örter: düğüm kaydırılarak ortaya alınır (canlı haritada kamera seçili / bulunulan düğüme gider).
-- **Telefon (390 px yüksek, yatay):** dokunma alanı 96 birim = 1,0x'te ~35 px (44 altında), 1,4x'te ~49 px (yeterli). 15 birimlik ad 1,4x'te ~7-8 px: okunmaz. **Öneri (karar Ömer'in):** telefonda (`html.compact/short`) ad 24 birim (1,4x'te ~12 px) ve yakınlaştırma telefonda 1,4x ile açılsın. 24 birimlik adla A ve B çakışmasız tasarlandı; Spread 34'te 6 çakışma kalır (34 durak bu harita boyunda telefon yazısı için fazla), bugünkü haritada da 6.
-- **Varyant A (önerim):** bugünkü 3 seçim noktası korunur, kollar 2 durak: I. bölge tek yol (Mill Road, Fisher's Cove, Ravenwood, Ruined Watchtower, Ashford Village); seçim 1: güney Misty Marsh -> Witch's Hut / kuzey Iron Pass -> Dwarven Mine; Valdren Keep; seçim 2: kuzey Pilgrim Road -> St. Brann's Abbey / orta Mercenary Camp -> Crossroads Market / güney Black Cathedral -> Grave Field; Riverside Camp (dinlenme, boss öncesi) -> King's Bridge (boss); Ashen Plain; seçim 3: kuzey Dragon's Spine -> Ice Cave / doğu Siege Line -> Forward Camp (tüccar); Gate of Cinders -> Castle Morvane (final boss). Karışım: 10 savaş, 3 elit, 2 boss, 2 kasaba, 2 olay, 3 hazine, 1 dinlenme, 2 tüccar. K2 (en çok 2 savaşsız durak art arda) her rotada korunur.
-- **Varyant B:** tek ana yol, her biri tek duraklık iki seçenekli 7 küçük çatal (hemen birleşir): Mill Road -> [Fisher's Cove | Ravenwood] -> Ruined Watchtower -> Ashford Village -> [Iron Pass | Misty Marsh] -> Bog Hollow -> [Dwarven Mine | Witch's Hut] -> Valdren Keep -> [Mercenary Camp | Black Cathedral] -> Grave Field -> [St. Brann's Abbey | Crossroads Market] -> Riverside Camp -> King's Bridge -> [Burned Hamlet | Ashen Plain] -> Siege Line -> [Dragon's Spine | Forward Camp] -> Gate of Cinders -> Castle Morvane. Karışım: 10 savaş, 3 elit, 2 boss, 2 kasaba, 3 olay, 2 hazine, 1 dinlenme, 2 tüccar. Daha sık ama daha küçük kararlar; dalların kişiliği (risk / ödül) A'dan zayıf.
-- **Açık sorular (Ömer):** hangi varyant; telefon adı 24 birim + telefonda 1,4x açılış; Spread 34 seçilirse telefonda yalnızca bulunulan / seçilebilir / seçili düğümün adını göstermek (diğerleri yalnızca ikon) gerekir.
+- **Spread A:**
+  - Eğitim.
+  - Seçim 1: kuzey Iron Pass (geçit) -> Dwarven Mine (dağ) / güney Misty Marsh (bataklık) -> Witch's Hut.
+  - Valdren Keep (nehir kıyısı tarlaları).
+  - Seçim 2: kuzey Pilgrim Road -> St. Brann's Abbey (dağ) / güney Black Cathedral -> Grave Field.
+  - Riverside Camp (dinlenme) -> **King's Bridge (nehrin üstü, boss)** -> Ashen Plain.
+  - Seçim 3: Thornwood Hollow (elit, orman) -> Hermit's Cache / Siege Line -> Forward Camp (tüccar).
+  - Gate of Cinders -> Castle Morvane (doğu kırı).
+  - Karışım: 9 savaş, 3 elit, 2 boss, 2 kasaba, 1 olay, 3 hazine, 1 dinlenme, 1 tüccar. K2 korunur.
+  - Önceki turdan çıkanlar: Fisher's Cove (eğitimdeydi), Mercenary Camp ve Crossroads Market (seçim 2'nin 3. kolu sığmadı).
+- **Spread B:**
+  - Eğitim -> [Iron Pass | Misty Marsh] -> Valdren Keep -> [Old Quarry (elit, dağ) | Crossroads Market] -> Mercenary Camp (orman açıklığı).
+  - Riverside Camp -> King's Bridge -> [Burned Hamlet (nehrin güneyi) | Ashen Plain] -> Siege Line -> [Forward Camp | Thornwood Hollow] -> Gate of Cinders -> Castle Morvane.
+  - Karışım: 8 savaş, 3 elit, 2 boss, 2 kasaba, 1 olay, 0 hazine, 1 dinlenme, 2 tüccar. K2 korunur.
+- **Yeniden adlandırmalar (araziye uymayan eski adlar):**
 
-#### Spread ~25 A: düğüm listesi (pos = valdoria.json biriminde; 1'den büyük / 0'dan küçük değer geniş haritanın kenar bölgesi)
+  | Eski ad | Yeni ad | Varyant | Neden |
+  |---|---|---|---|
+  | Dragon's Spine | **Thornwood Hollow** | A, B | Nehrin doğusunda dağ yok, orman var |
+  | Ice Cave | **Hermit's Cache** | A | Aynı neden |
+  | Ashford Ford | **Ashford Road** | Spread 32 | Orada nehir ya da geçit yok |
+  | Bog Hollow | **Fallow Fields** | Spread 32 | Düğüm tarlada |
 
-| id | Ad | Tür | Durak | pos | Yazı | Bağlantı |
-|---|---|---|---|---|---|---|
-| mill | Mill Road | battle | 1 | [0.179, 0.850] | altta | cove |
-| cove | Fisher's Cove | event | 2 | [0.122, 0.637] | altta | raven |
-| raven | Ravenwood | battle | 3 | [0.220, 0.446] | altta | watch |
-| watch | Ruined Watchtower | elite | 4 | [0.290, 0.212] | altta | ash |
-| ash | Ashford Village | town | 5 | [0.424, 0.310] | altta | marsh, iron |
-| iron | Iron Pass | battle | 6 | [0.528, 0.425] | altta | mine |
-| marsh | Misty Marsh | battle | 6 | [0.443, 0.614] | altta | witch |
-| mine | Dwarven Mine | treasure | 7 | [0.659, 0.371] | altta | valdren |
-| witch | Witch's Hut | event | 7 | [0.564, 0.796] | altta | valdren |
-| valdren | Valdren Keep | town | 8 | [0.696, 0.681] | üstte | pilgrim, merc, cath |
-| pilgrim | Pilgrim Road | battle | 9 | [0.793, 0.427] | altta | abbey |
-| merc | Mercenary Camp | battle | 9 | [0.821, 0.646] | altta | market |
-| cath | Black Cathedral | elite | 9 | [0.779, 0.794] | üstte | grave |
-| abbey | St. Brann's Abbey | treasure | 10 | [0.912, 0.390] | üstte | river |
-| market | Crossroads Market | merchant | 10 | [0.918, 0.600] | üstte | river |
-| grave | Grave Field | battle | 10 | [0.891, 0.830] | altta | river |
-| river | Riverside Camp | rest | 11 | [0.993, 0.648] | altta | bridge |
-| bridge | King's Bridge | boss | 12 | [1.016, 0.497] | üstte | ashen |
-| ashen | Ashen Plain | battle | 13 | [1.115, 0.584] | altta | dragon, siege |
-| dragon | Dragon's Spine | elite | 14 | [1.031, 0.357] | altta | ice |
-| siege | Siege Line | battle | 14 | [1.226, 0.478] | altta | camp |
-| ice | Ice Cave | treasure | 15 | [0.947, 0.180] | altta | gate |
-| camp | Forward Camp | merchant | 15 | [1.212, 0.297] | altta | gate |
-| gate | Gate of Cinders | battle | 16 | [1.086, 0.251] | altta | castle |
-| castle | Castle Morvane | boss | 17 | [1.170, 0.139] | altta | — |
+  Castle Morvane A ve B'de doğu kırında (dağ, ev görünümünde HUD'un altında kalıyor); Spread 32'de kuzeydoğu yüksek dağlarında.
+- **Açık sorular (Ömer):**
+  - A mı, B mi, yoksa kaydırmalı büyük harita (Spread 32 + 1,0x'te kaydırmayı kabul etmek) mı?
+  - 1,0x'te kamera ev görünümüne sabitlensin mi?
+  - Telefonda düğüm kartı katlansın ve yalnızca ilgili düğümlerin adı mı gösterilsin?
 
-#### Spread ~25 B: düğüm listesi (pos = valdoria.json biriminde; 1'den büyük / 0'dan küçük değer geniş haritanın kenar bölgesi)
+#### Spread A (22 durak): düğüm listesi (pos = valdoria.json birimi)
 
-| id | Ad | Tür | Durak | pos | Yazı | Bağlantı |
-|---|---|---|---|---|---|---|
-| mill | Mill Road | battle | 1 | [0.179, 0.850] | altta | cove, raven |
-| cove | Fisher's Cove | event | 2 | [0.122, 0.637] | altta | watch |
-| raven | Ravenwood | battle | 2 | [0.276, 0.680] | altta | watch |
-| watch | Ruined Watchtower | elite | 3 | [0.206, 0.435] | altta | ash |
-| ash | Ashford Village | town | 4 | [0.332, 0.286] | altta | iron, marsh |
-| iron | Iron Pass | battle | 5 | [0.472, 0.319] | altta | bog |
-| marsh | Misty Marsh | battle | 5 | [0.416, 0.553] | altta | bog |
-| bog | Bog Hollow | battle | 6 | [0.542, 0.584] | altta | mine, witch |
-| mine | Dwarven Mine | treasure | 7 | [0.626, 0.404] | altta | valdren |
-| witch | Witch's Hut | event | 7 | [0.585, 0.806] | altta | valdren |
-| valdren | Valdren Keep | town | 8 | [0.721, 0.619] | altta | merc, cath |
-| merc | Mercenary Camp | battle | 9 | [0.779, 0.428] | üstte | grave |
-| cath | Black Cathedral | elite | 9 | [0.793, 0.794] | üstte | grave |
-| grave | Grave Field | battle | 10 | [0.863, 0.637] | altta | abbey, market |
-| abbey | St. Brann's Abbey | treasure | 11 | [0.904, 0.464] | altta | river |
-| market | Crossroads Market | merchant | 11 | [0.933, 0.831] | altta | river |
-| river | Riverside Camp | rest | 12 | [1.003, 0.658] | altta | bridge |
-| bridge | King's Bridge | boss | 13 | [1.059, 0.510] | altta | hamlet, ashen |
-| hamlet | Burned Hamlet | event | 14 | [1.004, 0.369] | altta | siege |
-| ashen | Ashen Plain | battle | 14 | [1.184, 0.594] | altta | siege |
-| siege | Siege Line | battle | 15 | [1.170, 0.405] | altta | dragon, camp |
-| camp | Forward Camp | merchant | 16 | [1.240, 0.255] | altta | gate |
-| dragon | Dragon's Spine | elite | 16 | [1.031, 0.256] | altta | gate |
-| gate | Gate of Cinders | battle | 17 | [1.143, 0.292] | altta | castle |
-| castle | Castle Morvane | boss | 18 | [1.086, 0.139] | altta | — |
+| id | Ad | Tür | Durak | pos | Yazı | Arazi | Bağlantı |
+|---|---|---|---|---|---|---|---|
+| mill | Mill Road | battle | 1 | [0.146, 0.846] | altta | eğitim, bugünkü konum | raven |
+| raven | Ravenwood | battle | 2 | [0.276, 0.727] | altta | eğitim, bugünkü konum | watch |
+| watch | Ruined Watchtower | elite | 3 | [0.339, 0.591] | üstte | eğitim, bugünkü konum | ash |
+| ash | Ashford Village | town | 4 | [0.414, 0.643] | altta | eğitim, bugünkü konum | iron, marsh |
+| iron | Iron Pass | battle | 5 | [0.453, 0.435] | altta | pass between the two snow peaks | mine |
+| marsh | Misty Marsh | battle | 5 | [0.453, 0.782] | altta | marsh pools | witch |
+| mine | Dwarven Mine | treasure | 6 | [0.542, 0.382] | üstte | east slope of the snow peak | valdren |
+| witch | Witch's Hut | event | 6 | [0.508, 0.682] | altta | marsh edge | valdren |
+| valdren | Valdren Keep | town | 7 | [0.547, 0.540] | üstte | fields by the river | pilgrim, cath |
+| pilgrim | Pilgrim Road | battle | 8 | [0.599, 0.403] | altta | road under the forest | abbey |
+| cath | Black Cathedral | elite | 8 | [0.570, 0.641] | üstte | fields | grave |
+| abbey | St. Brann's Abbey | treasure | 9 | [0.657, 0.235] | altta | mountain abbey | river |
+| grave | Grave Field | battle | 9 | [0.625, 0.529] | altta | fields | river |
+| river | Riverside Camp | rest | 10 | [0.687, 0.509] | üstte | river bank | bridge |
+| bridge | King's Bridge | boss | 11 | [0.677, 0.628] | altta | ON the river (the crossing) | ashen |
+| ashen | Ashen Plain | battle | 12 | [0.760, 0.731] | altta | open grass east of the river | thorn, siege |
+| siege | Siege Line | battle | 13 | [0.844, 0.722] | altta | grass | camp |
+| thorn | Thornwood Hollow | elite | 13 | [0.688, 0.815] | altta | south-east forest | cache |
+| camp | Forward Camp | merchant | 14 | [0.932, 0.731] | altta | grass | gate |
+| cache | Hermit's Cache | treasure | 14 | [0.771, 0.864] | altta | forest | gate |
+| gate | Gate of Cinders | battle | 15 | [0.859, 0.838] | altta | forest edge | castle |
+| castle | Castle Morvane | boss | 16 | [0.938, 0.858] | altta | eastern moor | — |
 
-#### Spread 34: düğüm listesi (pos = valdoria.json biriminde; 1'den büyük / 0'dan küçük değer geniş haritanın kenar bölgesi)
+#### Spread B (19 durak): düğüm listesi (pos = valdoria.json birimi)
 
-| id | Ad | Tür | Durak | pos | Yazı | Bağlantı |
-|---|---|---|---|---|---|---|
-| 1 | Mill Road | battle | 1 | [0.179, 0.850] | altta | 1a |
-| 1a | Fisher's Cove | event | 2 | [0.122, 0.658] | altta | 2 |
-| 2 | Ravenwood | battle | 3 | [0.220, 0.489] | altta | 2a |
-| 2a | Woodcutter's Clearing | battle | 4 | [0.179, 0.319] | altta | 3 |
-| 3 | Ruined Watchtower | elite | 5 | [0.276, 0.169] | altta | 4 |
-| 4 | Ashford Village | town | 6 | [0.402, 0.233] | altta | 4a |
-| 4a | Ashford Ford | battle | 7 | [0.374, 0.478] | altta | 5A, 5B |
-| 5B | Iron Pass | battle | 8 | [0.500, 0.393] | altta | 5B2 |
-| 5A | Misty Marsh | battle | 8 | [0.430, 0.701] | altta | 5A2 |
-| 5B2 | Shepherd's Watch | event | 9 | [0.584, 0.255] | altta | 6B |
-| 5A2 | Reed Ferry | rest | 9 | [0.514, 0.840] | altta | 6A |
-| 6B | Dwarven Mine | treasure | 10 | [0.681, 0.319] | altta | 6B2 |
-| 6A | Witch's Hut | event | 10 | [0.626, 0.850] | altta | 6A2 |
-| 6B2 | Old Quarry | elite | 11 | [0.708, 0.468] | altta | 7 |
-| 6A2 | Bog Hollow | battle | 11 | [0.667, 0.712] | altta | 7 |
-| 7 | Valdren Keep | town | 12 | [0.738, 0.606] | altta | 8A, 8B, 8C |
-| 8A | St. Brann's Abbey | treasure | 13 | [0.794, 0.382] | altta | 8A2 |
-| 8B | Mercenary Camp | battle | 13 | [0.839, 0.547] | altta | 8B2 |
-| 8C | Black Cathedral | elite | 13 | [0.765, 0.786] | altta | 8C2 |
-| 8A2 | Pilgrim Road | battle | 14 | [0.926, 0.456] | altta | 8M |
-| 8B2 | Crossroads Market | merchant | 14 | [0.915, 0.608] | altta | 8M |
-| 8C2 | Grave Field | battle | 14 | [0.863, 0.829] | altta | 8M |
-| 8M | Riverside Camp | rest | 15 | [0.982, 0.709] | altta | 9 |
-| 9 | King's Bridge | boss | 16 | [1.003, 0.531] | altta | 9a |
-| 9a | Burned Hamlet | event | 17 | [1.080, 0.658] | altta | 10 |
-| 10 | Ashen Plain | battle | 18 | [1.115, 0.499] | altta | 11A, 11B |
-| 11A | Dragon's Spine | elite | 19 | [1.017, 0.371] | altta | 11A2 |
-| 11B | Siege Line | battle | 19 | [1.212, 0.574] | altta | 11B2 |
-| 11A2 | Frozen Pass | battle | 20 | [0.933, 0.286] | altta | 11A3 |
-| 11B2 | Forward Camp | merchant | 20 | [1.226, 0.404] | altta | 11B3 |
-| 11A3 | Ice Cave | treasure | 21 | [0.947, 0.169] | altta | 12a |
-| 11B3 | Morvane's Outworks | elite | 21 | [1.170, 0.265] | altta | 12a |
-| 12a | Gate of Cinders | battle | 22 | [1.045, 0.246] | altta | 12 |
-| 12 | Castle Morvane | boss | 23 | [1.115, 0.139] | altta | — |
+| id | Ad | Tür | Durak | pos | Yazı | Arazi | Bağlantı |
+|---|---|---|---|---|---|---|---|
+| mill | Mill Road | battle | 1 | [0.146, 0.846] | altta | eğitim, bugünkü konum | raven |
+| raven | Ravenwood | battle | 2 | [0.276, 0.727] | altta | eğitim, bugünkü konum | watch |
+| watch | Ruined Watchtower | elite | 3 | [0.339, 0.591] | üstte | eğitim, bugünkü konum | ash |
+| ash | Ashford Village | town | 4 | [0.414, 0.643] | altta | eğitim, bugünkü konum | iron, marsh |
+| iron | Iron Pass | battle | 5 | [0.453, 0.435] | altta | pass between the two snow peaks | valdren |
+| marsh | Misty Marsh | battle | 5 | [0.453, 0.782] | altta | marsh pools | valdren |
+| valdren | Valdren Keep | town | 6 | [0.528, 0.593] | altta | fields | quarry, market |
+| quarry | Old Quarry | elite | 7 | [0.557, 0.417] | altta | east snow peak | merc |
+| market | Crossroads Market | merchant | 7 | [0.613, 0.527] | altta | fields at the crossroads | merc |
+| merc | Mercenary Camp | battle | 8 | [0.661, 0.380] | altta | forest clearing | river |
+| river | Riverside Camp | rest | 9 | [0.688, 0.506] | üstte | river bank | bridge |
+| bridge | King's Bridge | boss | 10 | [0.677, 0.628] | altta | ON the river (the crossing) | hamlet, ashen |
+| ashen | Ashen Plain | battle | 11 | [0.760, 0.713] | altta | open grass | siege |
+| hamlet | Burned Hamlet | event | 11 | [0.651, 0.750] | altta | fields south of the river | siege |
+| siege | Siege Line | battle | 12 | [0.803, 0.815] | altta | forest edge | camp, thorn |
+| camp | Forward Camp | merchant | 13 | [0.871, 0.709] | altta | grass | gate |
+| thorn | Thornwood Hollow | elite | 13 | [0.866, 0.861] | altta | south-east forest | gate |
+| gate | Gate of Cinders | battle | 14 | [0.941, 0.735] | altta | grass | castle |
+| castle | Castle Morvane | boss | 15 | [0.948, 0.861] | üstte | eastern moor | — |
+
+#### Spread 32 (pan; 32 durak): düğüm listesi (pos = valdoria.json birimi)
+
+| id | Ad | Tür | Durak | pos | Yazı | Arazi | Bağlantı |
+|---|---|---|---|---|---|---|---|
+| 1 | Mill Road | battle | 1 | [0.146, 0.846] | altta | eğitim, bugünkü konum | 2 |
+| 2 | Ravenwood | battle | 2 | [0.276, 0.727] | altta | eğitim, bugünkü konum | 3 |
+| 3 | Ruined Watchtower | elite | 3 | [0.339, 0.591] | üstte | eğitim, bugünkü konum | 4 |
+| 4 | Ashford Village | town | 4 | [0.414, 0.643] | altta | eğitim, bugünkü konum | 4a |
+| 4a | Ashford Road | battle | 5 | [0.500, 0.593] | altta | fields | 5A, 5B |
+| 5B | Iron Pass | battle | 6 | [0.453, 0.431] | altta | pass between the snow peaks | 5B2 |
+| 5A | Misty Marsh | battle | 6 | [0.443, 0.810] | altta | marsh pools | 5A2 |
+| 5B2 | Shepherd's Watch | event | 7 | [0.499, 0.296] | altta | hills | 6B |
+| 5A2 | Reed Ferry | rest | 7 | [0.542, 0.763] | altta | river bank | 6A |
+| 6B | Dwarven Mine | treasure | 8 | [0.569, 0.241] | altta | mountain foot | 6B2 |
+| 6A | Witch's Hut | event | 8 | [0.578, 0.662] | altta | river bank fields | 6A2 |
+| 6B2 | Old Quarry | elite | 9 | [0.589, 0.397] | altta | rocky slope | 7 |
+| 6A2 | Fallow Fields | battle | 9 | [0.582, 0.561] | altta | fields | 7 |
+| 7 | Valdren Keep | town | 10 | [0.652, 0.499] | altta | fields | 8A, 8B, 8C |
+| 8A | St. Brann's Abbey | treasure | 11 | [0.704, 0.225] | altta | mountains | 8A2 |
+| 8B | Mercenary Camp | battle | 11 | [0.688, 0.326] | altta | forest clearing | 8B2 |
+| 8C | Black Cathedral | elite | 11 | [0.677, 0.601] | altta | fields by the river | 8C2 |
+| 8A2 | Pilgrim Road | battle | 12 | [0.766, 0.349] | üstte | grass under the range | 8M |
+| 8B2 | Crossroads Market | merchant | 12 | [0.738, 0.473] | altta | grass crossroads | 8M |
+| 8C2 | Grave Field | battle | 12 | [0.745, 0.575] | altta | fields | 8M |
+| 8M | Riverside Camp | rest | 13 | [0.814, 0.448] | altta | river bank | 9 |
+| 9 | King's Bridge | boss | 14 | [0.833, 0.546] | altta | ON the river (the crossing) | 9a |
+| 9a | Burned Hamlet | event | 15 | [0.896, 0.654] | altta | grass | 10 |
+| 10 | Ashen Plain | battle | 16 | [0.969, 0.537] | altta | open grass | 11A, 11B |
+| 11A | Dragon's Spine | elite | 17 | [0.990, 0.278] | altta | mountains | 11A2 |
+| 11B | Siege Line | battle | 17 | [1.057, 0.435] | altta | grass | 11B2 |
+| 11A2 | Frozen Pass | battle | 18 | [1.057, 0.167] | altta | snow mountains | 11A3 |
+| 11B2 | Forward Camp | merchant | 18 | [1.146, 0.431] | altta | grass | 11B3 |
+| 11A3 | Ice Cave | treasure | 19 | [1.123, 0.330] | altta | mountains | 12a |
+| 11B3 | Morvane's Outworks | elite | 19 | [1.215, 0.331] | altta | foothills | 12a |
+| 12a | Gate of Cinders | battle | 20 | [1.188, 0.231] | altta | mountains | 12 |
+| 12 | Castle Morvane | boss | 21 | [1.229, 0.130] | altta | high mountains | — |

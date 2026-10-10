@@ -6,8 +6,8 @@
     { "fromWave": 1, "count": 2 },
     { "fromWave": 31, "count": 3 }
   ],
-  "_scaling": "Dalga başına düşman güçlenmesi (doğrusal; 1. dalga x1): can ve dört stat +%1,7, skill gücü +%1,6. Elit/boss karşılaşmasının kendi çarpanlarıyla çarpılır. Çok hassas: +%0,5 fark ilk boss kazanmasını ~6 puan oynatır (eski +%5 / +%3 ile 4. dalga geçilmiyordu).",
-  "scaling": { "hpPerWave": 0.017, "statPerWave": 0.017, "powerPerWave": 0.016 },
+  "_scaling": "Dalga başına düşman güçlenmesi (doğrusal; 1. dalga x1): can ve dört stat +%1,25, skill gücü +%1,15 (balance-tester 2026-10-10: sürekli akış + MP oranı + cooldown taşıma + ceset kuralları sonrası +%1,7 / +%1,6 ile ilk boss ~%43-49, ortalama dalga ~10,5 idi; tek ayarla bantlara döndü, 4 seed grubunda boss %57-59, ortalama 12,4-13,1). Elit/boss karşılaşmasının kendi çarpanlarıyla çarpılır. Çok hassas: +%0,5 fark ilk boss kazanmasını ~6 puan oynatır (eski +%5 / +%3 ile 4. dalga geçilmiyordu).",
+  "scaling": { "hpPerWave": 0.0125, "statPerWave": 0.0125, "powerPerWave": 0.0115 },
   "eliteEvery": 5,
   "bossEvery": 10,
   "_encounters": "Özel dalgalar data/campaign/encounters.json karşılaşmalarını kullanır (birimler, yuvalar, özel adlar, rütbe, çarpanlar). Sefer tutorial'ına özgü lockSkills / initialCooldownBonus endless'ta UYGULANMAZ. Elit listesi (balance-tester 2026-10-09): elit rütbeli birimi olan karşılaşmalardan (tests/endless.test.ts kuralı) dragons_spine (5. dalgada ~%78, 15.'de ~%30) ve watchtower_chief (her dalgada ~%100); black_cathedral 5. dalgada ~%40 kazanıldığı için (koşu katili) çıkarıldı. Endless'a özel orta zorlukta elit karşılaşma yok (açık soru). Boss'lar sırayla döner (10, 20, 30 ...): Lord Morvane iki kez, sonra Bridge Warden (2 eylemli dev; 10. dalgada ~%20 kazanılıyordu, artık 30. dalganın duvarı).",

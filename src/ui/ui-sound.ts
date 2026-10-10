@@ -3,9 +3,10 @@
 // Sesler `data/audio-ui.json` içinde, oyunun skill sesleriyle aynı katman dilinde (src/game/audio.ts > synthSfx) WebAudio ile sentezlenir:
 // deri/parşömen hışırtısı, ahşap/demir tık, boğuk gümleme, kumaş fırçası, kese sallama, deri toka, ahşap vuruş (CLAUDE.md ses felsefesi).
 // Kurallar: ilk kullanıcı hareketinden (tık/dokunma/tuş) önce ses YOK (tarayıcı autoplay kuralı); aynı tür ses `throttleMs`'ten sık çalmaz,
-// hover tık/açılıştan hemen sonra susar; seviye = Settings > UI sounds (0-10, 0 = kapalı) x oyunun ana ses seviyesi. Hata oyunu durdurmaz.
+// hover tık/açılıştan hemen sonra susar; seviye = Settings > UI sounds (0-20 adım = %0-100, 0 = kapalı) x Master Volume. Hata oyunu durdurmaz.
 import uiData from '../../data/audio-ui.json';
 import type { SfxDef } from '../game/audio';
+import { clampStep, readStepLevel, stepFraction, stepRecord } from './volume-steps';
 
 export type UiSoundKind = 'open' | 'close' | 'confirm' | 'back' | 'hover' | 'select' | 'error' | 'toast' | 'tab' | 'equip' | 'buy' | 'sell';
 export const UI_SOUND_KINDS: readonly UiSoundKind[] = ['open', 'close', 'confirm', 'back', 'hover', 'select', 'error', 'toast', 'tab', 'equip', 'buy', 'sell'];
@@ -32,14 +33,10 @@ export const UI_AUDIO = {
 
 const KEY = 'proto.uiSound.v1';
 const levelListeners = new Set<(level: number) => void>();
-const clampLevel = (v: number): number => Math.min(10, Math.max(0, Math.round(v)));
-
-/** Kayıtlı arayüz ses seviyesi 0..10 (kayıt yoksa varsayılan: açık, orta). */
+/** Kayıtlı arayüz ses seviyesi 0..20 adım (kayıt yoksa varsayılan: açık, orta; eski 0-10 kayıtlar x2 göçer: src/ui/volume-steps.ts). */
 export function loadUiSoundLevel(): number {
   try {
-    const raw = globalThis.localStorage?.getItem(KEY);
-    const v = raw ? Number((JSON.parse(raw) as { level?: number }).level) : NaN;
-    return Number.isFinite(v) ? clampLevel(v) : UI_AUDIO.defaultLevel;
+    return readStepLevel(globalThis.localStorage?.getItem(KEY), 'level', UI_AUDIO.defaultLevel);
   } catch {
     return UI_AUDIO.defaultLevel;
   }
@@ -52,9 +49,9 @@ export function uiSoundLevel(): number {
 }
 
 export function setUiSoundLevel(v: number): void {
-  level = clampLevel(v);
+  level = clampStep(v);
   try {
-    globalThis.localStorage?.setItem(KEY, JSON.stringify({ level }));
+    globalThis.localStorage?.setItem(KEY, stepRecord('level', level));
   } catch {
     /* saklama kapalı: yalnızca bu oturum */
   }
@@ -130,7 +127,7 @@ function playOn(c: AudioContext, m: AudioModule, kind: UiSoundKind, vary: boolea
   if (!def || lvl <= 0 || !m.audioSettings.enabled || m.audioSettings.volume <= 0) return;
   if (c.state !== 'running') void c.resume();
   const out = c.createGain();
-  out.gain.value = UI_AUDIO.master * (lvl / 10) * m.audioSettings.volume;
+  out.gain.value = UI_AUDIO.master * stepFraction(lvl) * m.audioSettings.volume;
   out.connect(c.destination);
   m.synthSfx(c, out, vary ? varySfx(def, Math.random) : def);
 }

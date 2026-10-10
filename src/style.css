@@ -751,6 +751,29 @@ body {
   text-shadow: 0 0 3px #0c0805, 0 2px 0 #0c0805, 0 0 calc(18 * var(--u)) rgba(240, 140, 40, 0.45);
 }
 
+/* Bölüm başlığı (Ömer 2026-10-10: "Sounds" / "Gameplay"): küçük soluk Cinzel büyük harf + sağa uzanan ince altın çizgi (kit .3) */
+.st-section {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(16 * var(--u));
+  height: calc(56 * var(--u));
+  padding: 0 0 calc(10 * var(--u)) calc(34 * var(--u));
+  box-sizing: border-box;
+  font: bold calc(20 * var(--u)) var(--st-serif);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #a8977a;
+  text-shadow: 0 2px 3px #0c0805;
+}
+
+.st-section::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  margin-bottom: 0.45em;
+  background: linear-gradient(90deg, rgba(217, 178, 106, 0.3), rgba(217, 178, 106, 0));
+}
+
 .st-control {
   display: flex;
   align-items: center;
@@ -871,9 +894,10 @@ html.menu-elegant .st-overlay {
   --st-body: 'EB Garamond', Georgia, 'Palatino Linotype', serif;
 }
 
-/* Konumlar ana menü sütunuyla birebir: başlık ortası y 350, ilk satır ortası y 470, satır 92, yazı COL_X + 34, değer sağ kenarı COL_X + 754 */
+/* Konumlar ana menü sütunuyla birebir (MainMenuScene > SETTINGS_LAYOUT): başlık ortası y 250, bölüm başlığı 56, satır 92, yazı COL_X + 34,
+   değer sağ kenarı COL_X + 754 */
 html.menu-elegant .st-col {
-  top: calc(var(--et) + 321.4 * var(--u));
+  top: calc(var(--et) + 221.4 * var(--u));
   width: max(calc(754 * var(--u)), 500px);
 }
 
@@ -922,6 +946,32 @@ html.menu-elegant .st-value {
 
 html.menu-elegant .st-note {
   font: calc(24 * var(--u)) var(--st-body);
+}
+
+html.menu-elegant .st-section {
+  font: 600 calc(20 * var(--u)) var(--st-serif);
+}
+
+/* Kısa sahne (yatay telefon): satırlar 44 px dokunma alanında kalır; sütun Back'in hemen altından başlar, sığmazsa kendi içinde kayar */
+html.short .st-col {
+  top: calc(var(--et) + 50px);
+  max-height: calc(100% - var(--et) - var(--eb) - 58px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none; /* kaydırma çubuğu görünmez (değer sütununu kesmesin); dokunarak / tekerlekle kayar */
+}
+
+html.short .st-col::-webkit-scrollbar {
+  display: none;
+}
+
+html.short .st-title {
+  margin-bottom: 4px;
+}
+
+html.short .st-section {
+  height: 22px;
+  padding-bottom: 3px;
 }
 
 

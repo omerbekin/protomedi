@@ -44,7 +44,7 @@ describe('Arayüz sesleri: data/audio-ui.json şekli', () => {
 
   it('varsayılan: açık, orta seviye; kayıt yoksa o döner', () => {
     expect(UI_AUDIO.defaultLevel).toBeGreaterThan(0);
-    expect(UI_AUDIO.defaultLevel).toBeLessThan(10);
+    expect(UI_AUDIO.defaultLevel).toBeLessThan(20); // 20 adım ölçeği (src/ui/volume-steps.ts)
     expect(loadUiSoundLevel()).toBe(UI_AUDIO.defaultLevel);
   });
 

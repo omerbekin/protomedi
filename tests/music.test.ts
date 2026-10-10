@@ -59,11 +59,12 @@ describe('Ana menü müziği: veri ve beste (data/audio-music.json, src/game/mus
   it('döngü 60-90 sn sürer; seviye varsayılanı ~%60', () => {
     expect(cycleSec()).toBeGreaterThanOrEqual(60);
     expect(cycleSec()).toBeLessThanOrEqual(90);
-    expect(DEFAULT_MUSIC_LEVEL).toBe(6);
-    expect(loadMusicLevel()).toBe(6); // node: localStorage yok -> varsayılan
+    expect(DEFAULT_MUSIC_LEVEL).toBe(12); // 20 adımda %60
+    expect(loadMusicLevel()).toBe(12); // node: localStorage yok -> varsayılan
     expect(musicGain(0, 7)).toBe(0); // 0 = tamamen kapalı
-    expect(musicGain(6, 0)).toBe(0); // ana ses kapalıysa müzik de
-    expect(musicGain(10, 10)).toBe(1);
+    expect(musicGain(12, 0)).toBe(0); // ana ses kapalıysa müzik de
+    expect(musicGain(20, 20)).toBe(1);
+    expect(musicGain(12, 14)).toBeCloseTo(0.6 * 0.7);
   });
 
   it('beste belirleyici, sıralı, sonlu; flüt notaları akor ölçeğinde ve aralıkta; çalgıların hepsi var', () => {

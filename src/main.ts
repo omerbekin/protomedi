@@ -8,6 +8,8 @@ import { lobbyFromSearch } from './net/lobby-code';
 import { installDebugEntry } from './ui/debug-entry';
 import { flowContext, startMainMenu, startNewGame, startTeamSelect } from './game/session-flow';
 import { SettingsScreen } from './ui/settings';
+import { menuMusic } from './ui/music';
+import { stepFraction } from './ui/volume-steps';
 import { GameMenu, isGameMenuOpen } from './ui/game-menu';
 import { lockInput, onInputLockChange, unlockInput } from './ui/input-lock';
 import { createFullscreenButton } from './ui/fullscreen';
@@ -63,10 +65,12 @@ let audioReady = false;
 const withAudio = () =>
   import('./game/audio').then((a) => {
     audioReady = true;
-    if (volumeLevel !== null) a.audioSettings.volume = volumeLevel / 10;
+    if (volumeLevel !== null) a.audioSettings.volume = stepFraction(volumeLevel); // Master Volume 0-20 adım
     return a;
   });
 if (firstScene !== 'menu') gateScene(firstScene, withAudio());
+// Ana menü müziği (src/ui/music.ts): menüyle açılışta yükleme ekranındaki ilk tık/tuş bile müziği başlatsın (motor modülü şimdi iner)
+if (firstScene === 'menu') menuMusic(true);
 whenBootReady(() => void withAudio().catch(() => undefined));
 
 const game = new Phaser.Game({
