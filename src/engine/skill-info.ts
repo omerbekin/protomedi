@@ -4,7 +4,7 @@ import { isRatioCost, skillCostLabel } from './cost';
 import { betMultipliers, betStake } from './gamble';
 import { bonusScaleRaw } from './spec';
 import { applySummonVariant, attributePower } from './stats';
-import type { AreaDef, Attribute, CombatantDef, Element, Formulas, GlobalSkillDef, GroundDef, PassiveDef, SkillDef, SkillTarget, Stats, StatusDef } from './types';
+import type { AreaDef, Attribute, CombatantDef, Element, Formulas, GlobalSkillDef, GroundDef, PassiveDef, SkillDef, SkillEffect, SkillTarget, Stats, StatusDef } from './types';
 
 /** Skill'in oyuncuya gösterilen genel bilgileri (tooltip). Metinler İngilizce (oyun içi arayüz). */
 export interface SkillInfo {
@@ -102,6 +102,22 @@ export const ATTRIBUTE_NAME: Record<Attribute, string> = { str: 'STR', int: 'INT
 const BONUS_STAT_NAME: Record<Attribute | 'armor' | 'magicArmor', string> = { ...ATTRIBUTE_NAME, armor: 'Armor', magicArmor: 'Magic armor' };
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
+/** Ölçekli sayı (statın gücü x oran, yuvarlanmış): tooltip satırlarındaki "(24)" ve `skillNumbers` AYNI hesaptan. */
+const scaled = (stats: Stats, scale: Attribute, power: number, formulas: Formulas): number => Math.round(attributePower(stats, scale, formulas) * power);
+type DamageEffect = Extract<SkillEffect, { type: 'damage' }>;
+/** Hasar etkisinin sayısı; hibrit ölçekte (bonusScale) ana + ek (kartın gösterdiği statlarla; savaşta aura zırhı da eklenir). */
+const damageAmount = (e: DamageEffect, stats: Stats, formulas: Formulas): number =>
+  e.bonusScale?.length ? Math.round(attributePower(stats, e.scale, formulas) * e.power + bonusScaleRaw(e.bonusScale, stats) * (stats.spellPowerMult ?? 1)) : scaled(stats, e.scale, e.power, formulas);
+/** Aynı hasar etkisi art arda tekrar ediyorsa (Double Strike: iki vuruş) tek kayıt + tekrar sayısı. */
+function groupEffects(skill: SkillDef): Array<{ e: SkillEffect; times: number }> {
+  const out: Array<{ e: SkillEffect; times: number }> = [];
+  for (const e of skill.effects) {
+    const last = out[out.length - 1];
+    if (last && JSON.stringify(last.e) === JSON.stringify(e) && e.type === 'damage') last.times++;
+    else out.push({ e, times: 1 });
+  }
+  return out;
+}
 /** Boss bağışıklık satırındaki tür adı (madde 271/272): CC ya da isabet/kritik cezası. */
 const immuneKind = (d: StatusDef): string => (d.cc ? 'crowd control' : 'accuracy/crit penalty');
 
@@ -114,7 +130,7 @@ export interface EffectDefs {
 /** Pasifin oyuncuya gösterilen açıklaması; değerler sahibinin stat'larından hesaplanır. */
 export function describePassive(passive: PassiveDef, stats: Stats, formulas: Formulas): string {
   const e = passive.effect;
-  const val = (scale: Attribute, power: number) => Math.round(attributePower(stats, scale, formulas) * power);
+  const val = (scale: Attribute, power: number) => scaled(stats, scale, power, formulas);
   switch (e.type) {
     case 'rage':
       return `The lower your HP, the harder you hit: up to +${pct(e.maxBonus)} damage at the brink of death.`;
@@ -212,21 +228,15 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
     kinds.push(kind);
   };
   // Aynı etki art arda tekrar ediyorsa (Double Strike: iki vuruş) tek satır + 'x2'
-  const effects: Array<{ e: SkillDef['effects'][number]; times: number }> = [];
-  for (const e of skill.effects) {
-    const last = effects[effects.length - 1];
-    if (last && JSON.stringify(last.e) === JSON.stringify(e) && e.type === 'damage') last.times++;
-    else effects.push({ e, times: 1 });
-  }
-  for (const { e, times } of effects) {
+  for (const { e, times } of groupEffects(skill)) {
     const who = skill.target === 'area_any' ? (e.side === 'allies' ? ' (on your side: allies)' : e.side === 'enemies' ? ' (on the enemy side: enemies)' : '') : skill.target === 'everyone' ? ((e.side ?? (e.type === 'heal' || e.type === 'hot' || e.type === 'shield' || e.type === 'guard' ? 'allies' : 'enemies')) === 'allies' ? ' (allies)' : ' (enemies)') : '';
-    const raw = (scale: Attribute, power: number) => Math.round(attributePower(stats, scale, formulas) * power);
+    const raw = (scale: Attribute, power: number) => scaled(stats, scale, power, formulas);
     if (e.type === 'damage') {
       const element = e.element ?? 'physical';
       if (e.bonusScale?.length) {
         // Hibrit ölçek: "Damage 36% STR + 25% Armor (12)"; sayı = ana + ek (kartın gösterdiği statlarla; savaşta aura zırhı da eklenir)
         const parts = e.bonusScale.map((b) => `${pct(b.pct)} ${BONUS_STAT_NAME[b.stat]}`).join(' + ');
-        const total = Math.round(attributePower(stats, e.scale, formulas) * e.power + bonusScaleRaw(e.bonusScale, stats) * (stats.spellPowerMult ?? 1));
+        const total = damageAmount(e, stats, formulas);
         add(`Damage ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} + ${parts} (${total})${times > 1 ? ` x${times}` : ''}${who}`, element);
         if (e.bonusScale.some((b) => b.stat === 'armor')) add('Uses your current armor, aura bonus included');
       } else add(`Damage ${pct(e.power)} ${ATTRIBUTE_NAME[e.scale]} (${raw(e.scale, e.power)})${times > 1 ? ` x${times}` : ''}${who}`, element);
@@ -398,4 +408,95 @@ export function describeSkill(skill: SkillDef, stats: Stats, formulas: Formulas,
     lines,
     kinds,
   };
+}
+
+/**
+ * Skill'in hesaplanan anahtar sayısı (Gear ekranı skill listesi ve item karşılaştırması). `scaled` sayılar statlarla değişir ve tooltip
+ * satırındaki parantezli sayıyla AYNI hesaptır (`describeSkill` aynı yardımcıları kullanır; tests/gear-skills.test.ts denetler); diğerleri
+ * (durum şansı / süresi) sabittir.
+ */
+export interface SkillNumber {
+  label: string;
+  /** Gösterilen değer ('24', '30%', '2 turns'). */
+  text: string;
+  /** Sayısal değer (scaled sayılarda). */
+  value?: number;
+  /** Statlarla ölçeklenir mi (karşılaştırmada fark yalnızca bunlarda). */
+  scaled: boolean;
+  /** Aynı vuruş art arda (Double Strike x2). */
+  times?: number;
+  /** Renk ipucu: element, kalkan ya da şifa. */
+  kind?: Element | 'shield' | 'magicShield' | 'heal';
+}
+
+/** Skill'in anahtar sayıları (describeSkill ile aynı etki sırası ve hesap). */
+export function skillNumbers(skill: SkillDef, stats: Stats, formulas: Formulas, defs: EffectDefs = {}, units: Record<string, CombatantDef> = {}): SkillNumber[] {
+  const out: SkillNumber[] = [];
+  const num = (label: string, value: number, kind?: SkillNumber['kind'], times = 1): void => {
+    out.push({ label, text: String(value), value, scaled: true, ...(times > 1 ? { times } : {}), ...(kind ? { kind } : {}) });
+  };
+  const turnsText = (n: number) => `${n} turn${n > 1 ? 's' : ''}`;
+  const fixed = (label: string, text: string): void => {
+    out.push({ label, text, scaled: false });
+  };
+  const raw = (scale: Attribute, power: number) => scaled(stats, scale, power, formulas);
+  for (const { e, times } of groupEffects(skill)) {
+    if (e.type === 'damage') num('Damage', damageAmount(e, stats, formulas), e.element ?? 'physical', times);
+    else if (e.type === 'heal') num('Heal', raw(e.scale, e.power), 'heal');
+    else if (e.type === 'hot') num('Heal / turn', raw(e.scale, e.power), 'heal');
+    else if (e.type === 'shield') num(e.shieldType === 'magic' ? 'Magic shield' : 'Shield', raw(e.scale, e.power), e.shieldType === 'magic' ? 'magicShield' : 'shield');
+    else if (e.type === 'manaBurn' && e.onEmpty) num('Damage at 0 MP', raw(e.onEmpty.damage.scale, e.onEmpty.damage.power), e.onEmpty.damage.element ?? 'physical');
+    else if (e.type === 'ground') num(`${defs.grounds?.[e.ground]?.name ?? 'Ground'} / turn`, raw(e.scale, e.power), defs.grounds?.[e.ground]?.element);
+    else if (e.type === 'dot') {
+      const def = defs.statuses?.[e.status];
+      num(`${def?.name ?? e.status} / turn`, raw(e.scale, e.power), def?.dot?.element);
+    } else if (e.type === 'omen') {
+      const def = defs.statuses?.[e.status ?? 'omen'];
+      const detonates = skill.effects.some((x) => x.type === 'detonate' && x.status === (e.status ?? 'omen'));
+      if (def?.doom && def.maxStacks && !detonates) num('Doom / Omen', raw(def.doom.scale, def.doom.powerPerStack), def.doom.element);
+    } else if (e.type === 'detonate') {
+      const doom = defs.statuses?.[e.status]?.doom;
+      if (doom) num('Doom / Omen', raw(doom.scale, doom.powerPerStack * e.mult), doom.element);
+    } else if (e.type === 'status') {
+      const def = defs.statuses?.[e.status];
+      const name = def?.name ?? e.status;
+      if (def?.attackCharges) fixed(name, `${def.attackCharges} attacks`);
+      else fixed(name, e.chance !== undefined && e.chance < 1 ? `${pct(e.chance)}, ${turnsText(e.turns)}` : turnsText(e.turns));
+    } else if (e.type === 'taunt') fixed('Taunt', turnsText(e.turns));
+    else if (e.type === 'guard') fixed('Guard', turnsText(e.turns));
+    else if (e.type === 'bond') fixed(defs.statuses?.dark_bond?.name ?? 'Dark Bond', turnsText(e.turns));
+    else if (e.type === 'revive') fixed('Revives with', `${pct(e.hpRatio)} HP`);
+    else if (e.type === 'summon' && units[e.unit]) fixed(`${units[e.unit]!.name} HP`, String(units[e.unit]!.stats.hp));
+  }
+  return out;
+}
+
+/** Pasifin anahtar sayıları (describePassive ile aynı hesap). */
+export function passiveNumbers(passive: PassiveDef, stats: Stats, formulas: Formulas): SkillNumber[] {
+  const e = passive.effect;
+  const num = (label: string, value: number, kind?: SkillNumber['kind']): SkillNumber[] => [{ label, text: String(value), value, scaled: true, ...(kind ? { kind } : {}) }];
+  const fixed = (label: string, text: string): SkillNumber[] => [{ label, text, scaled: false }];
+  switch (e.type) {
+    case 'divineLight':
+    case 'verdantBlessing':
+      return num('Heal', scaled(stats, e.scale, e.power, formulas), 'heal');
+    case 'armorAura':
+      return num('Armor aura', Math.round(stats.armor * e.pct), 'shield');
+    case 'rage':
+      return fixed('Max bonus', `+${pct(e.maxBonus)}`);
+    case 'spellEcho':
+      return fixed('Chance', pct(e.chance));
+    case 'longshot':
+      return fixed('Per row', `+${pct(e.perRow)}`);
+    case 'soulDrain':
+      return fixed('Life steal', pct(e.ratio));
+    case 'bonusVsStatus':
+      return fixed('Bonus', `+${pct(e.bonus)}`);
+    case 'manaOverflow':
+      return fixed(`Team MP per ${e.threshold} blocked`, `+${e.mana}`);
+    case 'omenTransfer':
+      return fixed('Omens passed', `up to ${e.maxOnArrival}`);
+    default:
+      return [];
+  }
 }

@@ -121,7 +121,8 @@ Kaynak `data/ui-motion.json`; okuyan modül `src/ui/motion.ts`. "Reduced motion"
 
 ## 4. Ömer'in kararları (2026-10-10) ve durum
 
-- **Öneri 1 (harita Menu'sü + oyun içi Menu birleşmesi):** hâlâ konuşuluyor; değişiklik yok.
+- **Öneri 1 (harita Menu'sü + oyun içi Menu birleşmesi): UYGULANDI (Ömer 2026-10-10, "menüler her ekranda farklı duruyor").** Sefer haritasının Menu'sü artık savaştakiyle AYNI ortak bileşen (`src/ui/game-menu.ts`, DOM): aynı çerçeve (el-panel köşeli, ortada Cinzel "Menu" başlığı), kutusuz satırlar (Resume kor elmaslı ilk satır), aynı açılış/kapanış hareketi, kararma, Esc ve zemine dokunma; Settings menünün üstünde aynı ekran, Codex aynı. İçerik bağlama göre (`session-flow.ts > menuItems`): harita = Resume / Save n/m (elle kayıt) / Load (Normal) / Codex / Settings / Main Menu (onay yok: ilerleme kayıtta); savaş listeleri değişmedi. Harita yalnızca anlık durumu verir (`CampaignMapScene.menuState`: düğme görünür mü, Save yazısı, Load) ve Save / Load eylemlerini (`menuSave` / `menuLoad`). Eski Phaser `openModal` menüsü ve haritanın ayrı Menu düğmesi kaldırıldı.
+- **Denetim (2026-10-10) sonucu, aynı kalanlar:** Codex tam ekran kitap düzeni (Back kuralı, pencere değil) ○; Endless dalga arası paneller (kamp / ödül / tüccar) Menu değil "◂ Back" taşır (madde 300 kararı; campaign-dev bu ekranlarda çalışıyor) ○; ana menü Settings sütunu (Phaser) ile oyun içi Settings (DOM) aynı satırlar ve ölçüler (Battle speed kaydırıcısı ikisinde de) ✓.
 - **Öneri 2 (Settings zemini): UYGULANDI (Ömer 2026-10-10, v2 "Darkening everywhere").** Settings her yerde (ana menü, savaş, harita, Endless) yalnızca koyulaştırma: sahne %52 kararır + sütunun arkasında soldan sağa açılan gölge, bulanıklık yok (`src/style.css > .st-overlay`, `MainMenuScene > SETTINGS_DARK`). Taslak sayfası silindi.
 - **Öneri 3 (sonuç ekranı):** yapıldı.
   - Kademeli giriş süreleri `data/ui-motion.json > result` ön ayarından geliyor; Reduced motion açıkken anında.

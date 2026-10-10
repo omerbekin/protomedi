@@ -118,7 +118,11 @@ export function applyOutcome(run: EndlessRun, plan: Pick<WavePlan, 'wave'>, out:
   }
   const boss = waveKind(run.wave, cfg) === 'boss';
   // Sürekli akış (madde 300): canlı çağrılar hücreleriyle taşınır; kahramanlar onların hücrelerine düşmez
-  const summons = out.carry?.summons ?? [];
+  const summons = (out.carry?.summons ?? []).map((x) => {
+    if ((cfg.carry.cooldowns ?? 'carry') === 'carry') return x;
+    const { cooldowns: _c, ...rest } = x;
+    return rest;
+  });
   if (summons.length) s.summons = clone(summons);
   else delete s.summons;
   // Dizilim taşınır: savaş sonundaki hücreler (düşen son hücresine, doluysa en yakın boşa)
@@ -128,14 +132,26 @@ export function applyOutcome(run: EndlessRun, plan: Pick<WavePlan, 'wave'>, out:
     if (c !== undefined) h.slot = c;
   }
   const heal = victoryHealOf(run.relics, cfg);
+  const corpses = (cfg.carry.fallen ?? 'corpse') === 'corpse';
   for (const u of out.units) {
     const h = heroOf(s, u.heroId);
     if (!h) continue;
+    // Düşen kahraman (Ömer 2026-10-10 takip): ceset olarak kalır (can 0; boss şifası da kaldırmaz), ödül ekranındaki Revive kartı kaldırır.
+    // carry.fallen 'rise' = eski kural (zaferde reviveRatio canla kendiliğinden kalkar).
+    if (!u.alive && corpses) {
+      h.hpRatio = 0;
+      const c = out.carry?.heroes[u.heroId];
+      if (c?.corpse) h.carry = { corpse: c.corpse };
+      else delete h.carry;
+      continue;
+    }
     if (boss) h.hpRatio = clamp01(cfg.carry.bossVictoryHeal);
     else h.hpRatio = u.alive ? clamp01(u.hpRatio + heal) : clamp01(cfg.carry.reviveRatio);
-    // MP canla aynı oranla (Ömer 2026-10-10; 'full' = eski kural); buff / Rage / kalkan yalnızca sağ kalana (düşen temiz kalkar)
+    // MP canla aynı oranla (Ömer 2026-10-10; 'full' = eski kural); buff / Rage / kalkan / cooldown yalnızca sağ kalana
     const carry: UnitCarry = u.alive ? { ...(out.carry?.heroes[u.heroId] ?? {}) } : {};
     delete carry.mpRatio;
+    delete carry.corpse;
+    if ((cfg.carry.cooldowns ?? 'carry') !== 'carry') delete carry.cooldowns;
     if (cfg.carry.mp !== 'full') {
       const mp = boss ? cfg.carry.bossVictoryHeal : u.alive ? (u.mpRatio ?? 1) + heal : cfg.carry.reviveRatio;
       if (clamp01(mp) < 1) carry.mpRatio = Math.round(clamp01(mp) * 1000) / 1000;
@@ -302,6 +318,9 @@ export function rewardOffer(run: EndlessRun, cfg: EndlessConfig = ENDLESS, catal
   cards.push({ kind: 'gold', amount: gold });
   if (kind === 'boss') cards.push({ kind: 'feast', hpMult: cfg.special.boss.feastHpMult, waves: cfg.special.boss.feastWaves });
   else cards.push({ kind: 'heal', ratio: kind === 'elite' ? cfg.special.elite.healRatio : cfg.rewards.healRatio });
+  // Ceset varken ek kart: "Revive <kahraman>" (Ömer 2026-10-10 takip; ekranda en çok bir tane: kahraman sırasında ilk düşen)
+  const fallen = (cfg.carry.fallen ?? 'corpse') === 'corpse' ? run.heroes.find((h) => h.hpRatio <= 0) : undefined;
+  if (fallen) cards.push({ kind: 'revive', heroId: fallen.id, ratio: cfg.rewards.reviveRatio ?? 0.5 });
   return cards;
 }
 
@@ -489,10 +508,17 @@ export function chooseReward(run: EndlessRun, index: number, cfg: EndlessConfig 
   if (!card) return run;
   const s = clone(run);
   if (card.kind === 'gold') s.gold += card.amount;
-  else if (card.kind === 'heal') for (const h of s.heroes) h.hpRatio = clamp01(h.hpRatio + card.ratio);
+  // Şifa / Feast cesetleri kaldırmaz (yalnızca Revive kartı)
+  else if (card.kind === 'heal') for (const h of s.heroes) h.hpRatio = h.hpRatio > 0 ? clamp01(h.hpRatio + card.ratio) : 0;
   else if (card.kind === 'feast') {
-    for (const h of s.heroes) h.hpRatio = 1;
+    for (const h of s.heroes) if (h.hpRatio > 0) h.hpRatio = 1;
     s.blessing = { hpMult: card.hpMult, waves: card.waves };
+  } else if (card.kind === 'revive') {
+    const h = heroOf(s, card.heroId);
+    if (!h || h.hpRatio > 0) return run;
+    h.hpRatio = clamp01(card.ratio);
+    if (h.hpRatio < 1 && cfg.carry.mp !== 'full') h.carry = { mpRatio: Math.round(clamp01(card.ratio) * 1000) / 1000 };
+    else delete h.carry;
   }
   else if (!addToBag(s, card.itemId, catalog, cfg, card.rolls).ok) return run; // item torbaya (Gear ekranında takılır); torba doluysa seçilemez
   return afterReward(s, cfg, catalog);

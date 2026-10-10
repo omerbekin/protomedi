@@ -32,12 +32,14 @@ export function cardTitle(c: RewardCard): string {
   if (c.kind === 'gold') return `${c.amount} Gold`;
   if (c.kind === 'heal') return c.ratio >= 0.6 ? 'Field Surgeon' : 'Tend the Wounded';
   if (c.kind === 'feast') return "Hero's Feast";
+  if (c.kind === 'revive') return 'Revive';
   return 'Spoils';
 }
 
 export function cardText(c: RewardCard): string {
   if (c.kind === 'gold') return `Coin for the merchant who comes after every ${ENDLESS.shop.every}th wave.`;
   if (c.kind === 'heal') return `Every hero recovers ${Math.round(c.ratio * 100)}% of their health.`;
+  if (c.kind === 'revive') return `The fallen hero rises with ${Math.round(c.ratio * 100)}% of their health and mana.`;
   if (c.kind === 'feast') return `Every hero is fully healed and has +${Math.round((c.hpMult - 1) * 100)}% max health for the next ${c.waves} waves.`;
   return '';
 }

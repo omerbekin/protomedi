@@ -3677,16 +3677,17 @@ export class BattleScene extends Phaser.Scene {
       const c = this.battle.get(u.uid);
       const view = this.views.get(u.uid);
       if (!c || !view) continue;
+      if (u.hpRatio <= 0) continue; // düşen kahraman ceset olarak kalır (Revive kartı kaldırır; endless.json > carry.fallen)
       const fallen = c.hp <= 0;
       const before = c.hp;
       c.hp = Math.max(1, Math.round(c.maxHp * u.hpRatio));
       if (!fallen && c.hp > before) view.floatText(`+${c.hp - before}`, colors.heal, 40, false, { kind: 'heal' });
       c.mp = Math.round(c.maxMp * u.mpRatio);
-      c.cooldowns = {};
       c.statuses = fallen ? [] : c.statuses.filter((st) => content.statuses[st.kind]?.type !== 'debuff');
       if (fallen) {
         if (this.rageShown.has(c.uid)) this.setRageShown(c.uid, 0);
         c.rage = c.maxRage !== undefined ? 0 : c.rage;
+        this.uiCorpses.delete(c.uid);
         view.revive(c.hp, c.mp);
       } else {
         view.setHp(c.hp, m.recoverMs > 0);
@@ -3694,7 +3695,6 @@ export class BattleScene extends Phaser.Scene {
         view.ring(colors.heal, 1.1);
       }
     }
-    this.uiCorpses.clear();
     this.refreshCorpseMarks();
     this.refreshBadges();
     return this.wait(m.recoverMs);
@@ -3705,9 +3705,19 @@ export class BattleScene extends Phaser.Scene {
     for (const u of units) {
       const c = this.battle.get(u.uid);
       const view = this.views.get(u.uid);
-      if (!c || !view || c.hp <= 0) continue;
+      if (!c || !view || u.hpRatio <= 0) continue;
       const hp = Math.max(1, Math.round(c.maxHp * u.hpRatio));
       const mp = Math.round(c.maxMp * u.mpRatio);
+      // Revive kartı: ceset kalkar (ceset işareti kendi akışıyla söner)
+      if (c.hp <= 0) {
+        c.hp = hp;
+        c.mp = mp;
+        this.uiCorpses.delete(c.uid);
+        this.refreshCorpseMarks();
+        view.revive(hp, mp);
+        view.setOverlayHidden(false);
+        continue;
+      }
       if (hp === c.hp && mp === c.mp) continue;
       if (hp > c.hp) view.floatText(`+${hp - c.hp}`, colors.heal, 40, false, { kind: 'heal' });
       c.hp = hp;

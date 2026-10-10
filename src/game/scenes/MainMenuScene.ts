@@ -18,7 +18,7 @@ import { GOLD } from '../ui-frame';
 import { mp, MP_SCENE } from '../mp-client';
 import { addLogo, hasLogo, preloadLogo } from '../branding';
 import { loadVolume, setSettingsVolume } from '../../ui/settings';
-import { battleSpeed, battleSpeedLabel, nextBattleSpeed, setBattleSpeed } from '../../ui/battle-speed';
+import { SPEED_STEPS, battleSpeed, battleSpeedLabel, onBattleSpeedChange, setBattleSpeed, speedAt, speedIndex } from '../../ui/battle-speed';
 import { openDebugMenu } from '../../ui/debug-entry';
 import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from '../../ui/fullscreen';
 import { isInputLocked, lockInput, unlockInput } from '../../ui/input-lock';
@@ -810,7 +810,7 @@ export class MainMenuScene extends Phaser.Scene {
   }
 
   /** 0-10 seviye satırı (− [kaydırıcı] + değer): Sound volume ile aynı görünüm ve dokunma alanları. */
-  private levelRow(p: Phaser.GameObjects.Container, label: string, initial: number, apply: (n: number, preview: boolean) => void, fmt: (n: number) => string, onChange?: (fn: (n: number) => void) => () => void): void {
+  private levelRow(p: Phaser.GameObjects.Container, label: string, initial: number, apply: (n: number, preview: boolean) => void, fmt: (n: number) => string, onChange?: (fn: (n: number) => void) => () => void, max = 10): void {
     let level = initial;
     const trackX = 440;
     const trackW = 200;
@@ -819,14 +819,14 @@ export class MainMenuScene extends Phaser.Scene {
     const draw = () => {
       g.clear();
       g.fillStyle(0x120c07, 0.9).fillRect(trackX, -5, trackW, 10);
-      g.fillStyle(0xd9b26a, 1).fillRect(trackX, -5, (trackW * level) / 10, 10);
+      g.fillStyle(0xd9b26a, 1).fillRect(trackX, -5, (trackW * level) / max, 10);
       g.lineStyle(1, GOLD.edge, 1).strokeRect(trackX - 0.5, -5.5, trackW + 1, 11);
-      g.fillStyle(0xf3d999, 1).fillCircle(trackX + (trackW * level) / 10, 0, 13);
-      g.lineStyle(2, 0x5a3a10, 1).strokeCircle(trackX + (trackW * level) / 10, 0, 13);
+      g.fillStyle(0xf3d999, 1).fillCircle(trackX + (trackW * level) / max, 0, 13);
+      g.lineStyle(2, 0x5a3a10, 1).strokeCircle(trackX + (trackW * level) / max, 0, 13);
       value.setText(fmt(level));
     };
     const set = (v: number, preview: boolean) => {
-      const n = Math.min(10, Math.max(0, Math.round(v)));
+      const n = Math.min(max, Math.max(0, Math.round(v)));
       if (n === level && !preview) return;
       level = n;
       apply(n, preview);
@@ -842,7 +842,7 @@ export class MainMenuScene extends Phaser.Scene {
     const fromPointer = (ptr: Phaser.Input.Pointer) => {
       const root = track.parentContainer;
       const lx = worldXY(this, ptr).x - (root?.x ?? 0) - (root?.parentContainer?.x ?? 0) - trackX;
-      set((lx / trackW) * 10, false);
+      set((lx / trackW) * max, false);
     };
     let dragging = false;
     track.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
@@ -932,15 +932,8 @@ export class MainMenuScene extends Phaser.Scene {
       motion.setText(reducedMotion() ? 'On' : 'Off');
     }, { right: [motion] });
 
-    // --- Battle speed: savaşta turlar arası görsel bekleme (1x / 2x / 4x; src/ui/battle-speed.ts) ---
-    const bspeed = this.valueText(PANEL_W - 6, 0, battleSpeedLabel(battleSpeed()), TXT_ON).setOrigin(1, 0.5);
-    this.addPanelRow(p, 'Battle speed', () => {
-      setBattleSpeed(nextBattleSpeed(battleSpeed()));
-      bspeed.setText(battleSpeedLabel(battleSpeed()));
-    }, { right: [bspeed], adjust: (d) => {
-      setBattleSpeed(nextBattleSpeed(battleSpeed(), d > 0 ? 1 : -1));
-      bspeed.setText(battleSpeedLabel(battleSpeed()));
-    } });
+    // --- Battle speed: kaydırıcı, ayrık adımlar 0.25x-4x (UI sounds ile aynı satır; src/ui/battle-speed.ts) ---
+    this.levelRow(p, 'Battle speed', speedIndex(battleSpeed()), (i) => setBattleSpeed(speedAt(i)), (i) => battleSpeedLabel(speedAt(i)), (fn) => onBattleSpeedChange((v) => fn(speedIndex(v))), SPEED_STEPS);
 
     // --- Fullscreen (API yoksa satır yok; iPhone'da ipucu) ---
     const support = currentSupport();

@@ -926,3 +926,159 @@ html.short .gr-slot-sub {
 }
 .gr-mini-row.gr-rare-drop { animation: gr-rare-flash 1.6s ease-out 2 forwards; }
 .gr-rare-tag { margin-left: auto; font: 600 max(11px, calc(16 * var(--u))) var(--g-disp); letter-spacing: 0.12em; text-transform: uppercase; color: #f0a830; text-shadow: 0 0 8px rgba(240, 140, 40, 0.8); }
+
+/* --- Skills (Ömer 2026-10-10): seçili kahramanın 4 skill'i + pasifi, o anki statlarla; karşılaştırmada "24 → 30 (+6)" ---
+   Her sayı kendi satırında, satır kaymaz (nowrap; dar sütunda etiket "…" ile kısalır): fark görünse de kart yüksekliği aynı kalır. */
+.gr-skills {
+  margin-top: calc(14 * var(--u));
+}
+
+.gr-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(max(176px, calc(188 * var(--u))), 1fr));
+  gap: calc(8 * var(--u)) calc(10 * var(--u));
+}
+
+.gr-skill {
+  min-width: 0;
+  min-height: 44px;
+  padding: calc(6 * var(--u)) calc(10 * var(--u)) calc(7 * var(--u));
+  background: rgba(8, 6, 4, 0.45);
+  border: 1px solid var(--g-line2);
+  cursor: help;
+  transition: border-color 0.18s;
+}
+
+.gr-skill:hover {
+  border-color: var(--g-gold);
+}
+
+.gr-skill.passive {
+  border-style: dashed;
+}
+
+.gr-skill-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: calc(8 * var(--u));
+}
+
+.gr-skill-title {
+  min-width: 0;
+  line-height: 1.1;
+}
+
+.gr-skill-ico,
+.gr-stip-ico {
+  flex: none;
+  width: max(22px, calc(34 * var(--u)));
+  height: max(22px, calc(34 * var(--u)));
+  image-rendering: pixelated;
+  filter: drop-shadow(0 1px 1px #000);
+}
+
+.gr-skill-name {
+  font: 600 max(11px, calc(16 * var(--u))) var(--g-disp);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gr-skill:hover .gr-skill-name {
+  color: var(--g-gold);
+}
+
+.gr-skill-meta {
+  font: italic max(11px, calc(15 * var(--u))) var(--g-body);
+  color: var(--g-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gr-skill-nums {
+  margin-top: calc(4 * var(--u));
+}
+
+.gr-skill-num {
+  display: flex;
+  align-items: baseline;
+  gap: calc(6 * var(--u));
+  font-size: max(12px, calc(18 * var(--u)));
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.gr-skill-num.none {
+  font-style: italic;
+  color: var(--g-dim);
+}
+
+.gr-skill-k {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-style: italic;
+  color: var(--g-dim);
+}
+
+.gr-skill-v {
+  flex: none;
+  font: 600 0.92em var(--g-disp);
+}
+
+.gr-skill-a {
+  flex: none;
+  font: 600 0.92em var(--g-disp);
+}
+
+.gr-skill-d {
+  flex: none;
+}
+
+.gr-skill-a.up,
+.gr-skill-d.up {
+  color: #8fd36a;
+}
+
+.gr-skill-a.down,
+.gr-skill-d.down {
+  color: #e0785e;
+}
+
+/* skill tooltip'i (savaş kit tooltip'iyle aynı düzen) */
+.gr-stip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gr-stip-badge {
+  margin-left: auto;
+  font: 600 0.72em var(--g-disp);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--g-dim);
+}
+
+.gr-stip-meta,
+.gr-stip-tags {
+  font-size: 0.88em;
+  color: var(--g-dim);
+  margin: 2px 0;
+}
+
+.gr-stip-tags {
+  font: 600 0.72em var(--g-disp);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gr-skill-x {
+  flex: none;
+  color: var(--g-dim);
+}

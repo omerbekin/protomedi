@@ -52,3 +52,17 @@ describe('oyun içi Menu (sağ üst Menu düğmesi / Esc): içerik bağlama gör
     expect(menuItems('none')).toBeNull();
   });
 });
+
+describe('sefer haritası Menu: savaştakiyle aynı ortak bileşen (Ömer 2026-10-10)', () => {
+  it('Resume / Save / Load / Codex / Settings / Main Menu; Save yazısı sahneden; Load yalnızca Normal; gizliyken menü yok; onay yok', () => {
+    expect(menuItems('campaign')).toBeNull();
+    expect(menuItems('campaign', { available: false, save: 'Save  1/5', load: true })).toBeNull();
+    const m = menuItems('campaign', { available: true, save: 'Save  1/5', load: true })!;
+    expect(m.items).toEqual(['resume', 'save', 'load', 'codex', 'settings', 'mainMenu']);
+    expect(m.labels?.save).toBe('Save  1/5');
+    expect(m.confirm).toEqual({});
+    expect(menuItems('campaign', { available: true, save: null, load: false })!.items).toEqual(['resume', 'codex', 'settings', 'mainMenu']);
+    expect(MENU_LABELS.load).toBe('Load');
+  });
+});
+

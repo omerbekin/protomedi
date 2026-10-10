@@ -99,7 +99,7 @@ export const HEAL_BELOW = 0.7;
 
 /**
  * Oyuncu vekilinin ödül seçimi (kart dizini). Can düşükse iyileştirme; değilse item (item'siz koşuda item kartı yok sayılır), yoksa altın.
- * Boss sonrası: item varsa item, yoksa Hero's Feast. Item'li ve item'siz koşu aynı iyileştirme eşiğini kullanır (fark yalnızca item).
+ * Boss sonrası: item varsa item, yoksa Hero's Feast. Ceset varsa (Revive kartı) her zaman önce o. Item'li ve item'siz koşu aynı iyileştirme eşiğini kullanır (fark yalnızca item).
  */
 export function pickReward(run: EndlessRun, gear: 'best' | 'none'): number {
   const cards = run.offer ?? [];
@@ -107,6 +107,8 @@ export function pickReward(run: EndlessRun, gear: 'best' | 'none'): number {
   const low = Math.min(...run.heroes.map((h) => h.hpRatio));
   const idx = (k: string) => cards.findIndex((c) => c.kind === k);
   const heal = idx('heal');
+  // Ceset varsa önce Revive (takımın dörtte biri; şifa / item onu geri getirmez)
+  if (idx('revive') >= 0) return idx('revive');
   if (heal >= 0 && (hp < HEAL_BELOW || (low <= 0.25 && hp < HEAL_BELOW + 0.15))) return heal;
   if (gear === 'best' && idx('item') >= 0) return idx('item');
   if (gear === 'none' && idx('feast') >= 0) return idx('feast');

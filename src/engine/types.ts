@@ -426,8 +426,12 @@ export interface UnitSetup {
   owner?: string;
   lifespan?: number;
   empowered?: boolean;
-  /** true: skill'lerin başlangıç cooldown'u (initialCooldown) uygulanmaz (dalga arası cooldown'lar sıfırlandı). */
+  /** true: skill'lerin başlangıç cooldown'u (initialCooldown) uygulanmaz (dalga arası cooldown'lar sıfırlandı ya da taşındı). */
   skipInitialCooldown?: boolean;
+  /** Taşınan kalan cooldown'lar (skill -> kendi tur sayısı). */
+  startCooldowns?: Record<string, number>;
+  /** Birim savaşa CESET olarak girer (önceki dalgada düştü): can 0, ceset 'revivable' ya da 'consumed'; sırası yok, Resurrection / Raise Dead kuralları geçerli. */
+  startDead?: 'revivable' | 'consumed';
 }
 
 /** Savaş sonu özetinde tek birim (src/engine/battle-summary.ts > battleSummary). */

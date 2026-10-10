@@ -2,7 +2,7 @@
  * Turlar arası GÖRSEL bekleme (Ömer 2026-10-10; yalnızca sunum, motor ve sıra aynı). Motor her birimin sıra sayacını hızı kadar doldurur
  * (eşik formulas.turn.threshold); bir eylemden sonra sıradaki aktör eşiğe ulaşana kadar geçen "oyun zamanı" gerçek zamana çevrilir:
  * hızı `refSpd` (20) olan birim boştan doluya `fullMs` (2000 ms) içinde dolar, yani tik başına fullMs * refSpd / threshold. Tek bekleme en
- * çok `maxMs`; Battle speed (1x/2x/4x) böler; Reduced motion kısaltır. Saf ve test edilebilir (Phaser'sız).
+ * çok `maxMs` (1x'te); Battle speed (0.25x-4x) böler, tavan da onunla bölünür; Reduced motion kısaltır. Saf ve test edilebilir (Phaser'sız).
  */
 export interface TurnWaitCfg {
   fullMs: number;
@@ -44,7 +44,8 @@ function votesOf(prev: CounterSnap, next: CounterSnap, use: (uid: string) => boo
 /** Tik sayısı -> bekleme (ms): tavan, Battle speed ve Reduced motion uygulanmış. */
 export function waitMs(ticks: number, threshold: number, cfg: TurnWaitCfg, speed: number, reducedMotion: boolean): number {
   const perTick = (cfg.fullMs * cfg.refSpd) / threshold;
-  const ms = Math.min(cfg.maxMs, Math.max(0, ticks) * perTick) / Math.max(1, speed);
+  // tavan 1x'te tanımlı: hız bölünce tavan da bölünür (2,5 sn / hız); 1x altında bekleme uzar
+  const ms = Math.min(cfg.maxMs, Math.max(0, ticks) * perTick) / Math.max(0.25, speed);
   return Math.round(reducedMotion ? ms * cfg.reducedMotionMult : ms);
 }
 

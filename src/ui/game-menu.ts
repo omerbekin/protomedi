@@ -1,4 +1,4 @@
-import { MENU_LABELS, menuItems, type FlowContext, type MenuItemId } from '../game/session-flow';
+import { MENU_LABELS, menuItems, type FlowContext, type MapMenuState, type MenuItemId } from '../game/session-flow';
 import './motion';
 import { uiSound } from './ui-sound';
 import { dismissOnBackdrop } from './backdrop';
@@ -44,6 +44,10 @@ export interface GameMenuHooks {
   codex?: () => void;
   /** Sefer savaşından haritaya geri çekil (savaş sayılmaz). */
   retreat: () => void;
+  /** Sefer haritası Menu'sü (aynı bileşen): sahnenin anlık durumu ve Save / Load eylemleri (src/game/session-flow.ts > MapMenuState). */
+  mapMenu?: () => MapMenuState | null;
+  save?: () => void;
+  load?: () => void;
   /** Geri çekilme düğmesinin yazısı (endless: 'Retreat to Camp'); yoksa MENU_LABELS.retreat. */
   retreatLabel?: () => string | undefined;
   /** Menü (ya da üstündeki ayarlar ekranı) açıldı / kapandı: savaşı durdur / sürdür. */
@@ -131,7 +135,7 @@ export class GameMenu {
   /** Etkin sahneye göre Menu düğmesini göster / gizle. */
   sync(): void {
     const ctx = this.hooks.context();
-    const has = !!menuItems(ctx);
+    const has = !!menuItems(ctx, this.hooks.mapMenu?.());
     this.toggle.hidden = !has;
     if (has) placeMenuToggle(this.root, this.toggle);
     const sceneChanged = this.lastCtx !== null && sceneOf(this.lastCtx) !== sceneOf(ctx);
@@ -145,14 +149,14 @@ export class GameMenu {
 
   /** Esc'in sahnelerden çağrılan yolu: menü yoksa açar, varsa kapatır. Menü bu bağlamda yoksa false. */
   toggleOpen(): boolean {
-    if (!menuItems(this.hooks.context())) return false;
+    if (!menuItems(this.hooks.context(), this.hooks.mapMenu?.())) return false;
     this.setOpen(!this.open);
     return true;
   }
 
   setOpen(open: boolean): void {
     if (open === this.open) return;
-    const spec = open ? menuItems(this.hooks.context()) : null;
+    const spec = open ? menuItems(this.hooks.context(), this.hooks.mapMenu?.()) : null;
     if (open && !spec) return;
     this.open = open;
     uiSound(open ? 'open' : 'close');
@@ -196,6 +200,10 @@ export class GameMenu {
         return this.ask(this.hooks.teamSelect, confirm);
       case 'retreat':
         return this.ask(this.hooks.retreat, confirm);
+      case 'save':
+        return this.hooks.save ? this.run(this.hooks.save) : undefined;
+      case 'load':
+        return this.hooks.load ? this.run(this.hooks.load) : undefined;
       case 'mainMenu':
         return this.ask(this.hooks.mainMenu, confirm);
     }

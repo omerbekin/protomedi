@@ -119,7 +119,11 @@ export function wavePlan(run: EndlessRun, cfg: EndlessConfig = ENDLESS): WavePla
   live.forEach((h, i) => slots[i]! >= 0 && refUid.set(heroRef(h.id), uidAt.get(slots[i]!)!));
   for (const [cell, k] of summonCells) refUid.set(summonRef(k), uidAt.get(cell)!);
   const uidOf = (ref: string) => refUid.get(ref);
-  const clearCooldowns = wave > 1 && cfg.carry.cooldowns !== 'initial';
+  // Dalga arası cooldown: 'carry' (varsayılan) kaldığı yerden, 'clear' sıfır, 'initial' her dalga savaş başı gibi; ilk dalga hep savaş başı
+  const cdMode = cfg.carry.cooldowns ?? 'carry';
+  const skipInitial = wave > 1 && cdMode !== 'initial';
+  const keepCd = { cooldowns: cdMode === 'carry' };
+  const corpses = (cfg.carry.fallen ?? 'corpse') === 'corpse';
   live.forEach((h, i) => {
     const slot = slots[i]!;
     if (slot < 0) return;
@@ -132,9 +136,14 @@ export function wavePlan(run: EndlessRun, cfg: EndlessConfig = ENDLESS): WavePla
     if (run.blessing && run.blessing.waves > 0 && run.blessing.hpMult !== 1)
       setup.modifiers = { ...(setup.modifiers ?? {}), hpMult: r3((setup.modifiers?.hpMult ?? 1) * run.blessing.hpMult) };
     if (h.hpRatio < 1) setup.startHpRatio = Math.max(0, h.hpRatio);
-    // Taşınan durum (MP oranı, buff'lar, Rage, kalkan) + dalga arası cooldown sıfırlama
-    Object.assign(setup, carrySetup(h.carry, uidAt.get(slot)!, uidOf));
-    if (clearCooldowns) setup.skipInitialCooldown = true;
+    // Taşınan durum (MP oranı, buff'lar, Rage, kalkan, cooldown'lar) + dalga arası cooldown kuralı
+    Object.assign(setup, carrySetup(h.carry, uidAt.get(slot)!, uidOf, keepCd));
+    if (skipInitial) setup.skipInitialCooldown = true;
+    // Önceki dalgada düşen kahraman bu savaşa CESET olarak girer (hücresinde; Resurrection / Revive kartı kaldırır)
+    if (corpses && h.hpRatio <= 0) {
+      setup.startDead = h.carry?.corpse ?? 'revivable';
+      delete setup.startHpRatio;
+    }
     if (Object.keys(setup).length) partyUnits[slot] = setup;
   });
   for (const [cell, k] of summonCells) {
@@ -142,7 +151,7 @@ export function wavePlan(run: EndlessRun, cfg: EndlessConfig = ENDLESS): WavePla
     party[cell] = x.unit;
     const owner = x.owner ? uidOf(heroRef(x.owner)) : undefined;
     partyUnits[cell] = {
-      ...carrySetup(x, uidAt.get(cell)!, uidOf),
+      ...carrySetup(x, uidAt.get(cell)!, uidOf, keepCd),
       startHp: x.hp,
       ...(owner ? { owner } : {}),
       ...(x.lifespan !== undefined ? { lifespan: x.lifespan } : {}),

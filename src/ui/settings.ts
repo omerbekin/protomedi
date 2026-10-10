@@ -1,5 +1,5 @@
 import { lockInput, unlockInput } from './input-lock';
-import { battleSpeed, battleSpeedLabel, nextBattleSpeed, onBattleSpeedChange, setBattleSpeed } from './battle-speed';
+import { SPEED_STEPS, battleSpeed, battleSpeedLabel, onBattleSpeedChange, setBattleSpeed, speedAt, speedIndex, type BattleSpeed } from './battle-speed';
 import './motion';
 import { onReducedMotionChange, reducedMotion, setReducedMotion } from './motion-pref';
 import { openDebugMenu } from './debug-entry';
@@ -141,10 +141,33 @@ export class SettingsScreen {
     onReducedMotionChange((on) => (motion.textContent = on ? 'On' : 'Off'));
     this.addRow(col, 'Reduced motion', () => setReducedMotion(!reducedMotion()), [motion]);
 
-    // --- Battle speed: turlar arası görsel beklemeyi ölçekler (1x / 2x / 4x; src/ui/battle-speed.ts, src/game/turn-wait.ts) ---
-    const bspeed = el('span', 'st-value', battleSpeedLabel(battleSpeed()));
-    onBattleSpeedChange((v) => (bspeed.textContent = battleSpeedLabel(v)));
-    this.addRow(col, 'Battle speed', () => setBattleSpeed(nextBattleSpeed(battleSpeed())), [bspeed], (d) => setBattleSpeed(nextBattleSpeed(battleSpeed(), d > 0 ? 1 : -1)));
+    // --- Battle speed: kaydırıcı, ayrık adımlar 0.25x-4x (Sound volume / UI sounds ile aynı bileşen; src/ui/battle-speed.ts, src/game/turn-wait.ts) ---
+    const bsMinus = el('button', 'st-step', '−');
+    bsMinus.type = 'button';
+    bsMinus.setAttribute('aria-label', 'Slower battle');
+    const bsSlider = el('input', 'st-slider');
+    bsSlider.type = 'range';
+    bsSlider.min = '0';
+    bsSlider.max = String(SPEED_STEPS);
+    bsSlider.step = '1';
+    bsSlider.setAttribute('aria-label', 'Battle speed');
+    const bsPlus = el('button', 'st-step', '+');
+    bsPlus.type = 'button';
+    bsPlus.setAttribute('aria-label', 'Faster battle');
+    const bsValue = el('span', 'st-value');
+    const paintBs = (v: BattleSpeed): void => {
+      const i = speedIndex(v);
+      bsSlider.value = String(i);
+      bsValue.textContent = battleSpeedLabel(v);
+      bsSlider.style.setProperty('--fill', `${(i / SPEED_STEPS) * 100}%`);
+    };
+    paintBs(battleSpeed());
+    onBattleSpeedChange(paintBs);
+    const applyBs = (i: number): void => setBattleSpeed(speedAt(i));
+    bsSlider.addEventListener('input', () => applyBs(Number(bsSlider.value)));
+    bsMinus.addEventListener('click', () => applyBs(speedIndex(battleSpeed()) - 1));
+    bsPlus.addEventListener('click', () => applyBs(speedIndex(battleSpeed()) + 1));
+    this.addRow(col, 'Battle speed', () => undefined, [bsMinus, bsSlider, bsPlus, bsValue], (d) => applyBs(speedIndex(battleSpeed()) + d));
 
     // --- Fullscreen (Fullscreen API yoksa satır yok; iPhone'da ipucu) ---
     const support = currentSupport();

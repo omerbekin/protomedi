@@ -1097,14 +1097,14 @@ export class EndlessScene extends Phaser.Scene {
   }
 
   /** Kart türlerinin hafif zemin renkleri (kit paleti içinde; çok düşük alfa). */
-  private static readonly TINT = { item: 0x6f8aa8, gold: 0xd9b24a, heal: 0x9a3a32, feast: 0xc0782a, relic: 0x8a6ab0 } as const;
+  private static readonly TINT = { item: 0x6f8aa8, gold: 0xd9b24a, heal: 0x9a3a32, feast: 0xc0782a, relic: 0x8a6ab0, revive: 0x7aa86a } as const;
 
   private rewardCard(run: EndlessRun, card: RewardCard, index: number, cx: number, w: number, special: 'elite' | 'boss' | null): void {
     const rich = !!special;
     const R = LOOK.card.medal;
-    const kicker = card.kind === 'item' ? T.kickerItem(special) : card.kind === 'gold' ? T.kickerGold(special) : card.kind === 'feast' ? T.kickerFeast : T.kickerHeal(special);
+    const kicker = card.kind === 'item' ? T.kickerItem(special) : card.kind === 'gold' ? T.kickerGold(special) : card.kind === 'feast' ? T.kickerFeast : card.kind === 'revive' ? T.kickerRevive : T.kickerHeal(special);
     const d = card.kind === 'item' ? itemDef(card.itemId) : undefined;
-    const accent = d ? hexNum(rarityColor(d)) : card.kind === 'gold' ? 0xecc878 : card.kind === 'feast' ? 0xf0b860 : 0xd96a5a;
+    const accent = d ? hexNum(rarityColor(d)) : card.kind === 'gold' ? 0xecc878 : card.kind === 'feast' ? 0xf0b860 : card.kind === 'revive' ? 0x9ad08a : 0xd96a5a;
     const tint = EndlessScene.TINT[card.kind];
     this.choiceCard({ index, cx, w, rich, accent, tint, kicker, take: () => this.actTakeReward(run, index), rarity: !!d, blocked: rewardBlockedReason(run, card) }, (k) => {
       const emblem = d ? itemEmblem(this, d, rarityColor(d)) : card.kind === 'gold' ? purseEmblem(this) : card.kind === 'feast' ? feastEmblem(this) : healEmblem(this);
@@ -1124,6 +1124,18 @@ export class EndlessScene extends Phaser.Scene {
         const text = this.note(k.cx, y + 48, cardText(card), 20, C.text).setOrigin(0.5, 0).setWordWrapWidth(k.w - 56).setAlign('center');
         k.add(text);
         this.healRows(run, card.kind === 'heal' ? card.ratio : 1, k, y + 48 + text.height + 16);
+      } else if (card.kind === 'revive') {
+        // Düşmüş kahraman: portre + ad, "0% → 50%" (Ömer 2026-10-10 takip)
+        const hero = run.heroes.find((h) => h.id === card.heroId);
+        const def = hero ? content.classes[hero.class] : undefined;
+        const name = hero ? className(hero.class) : '';
+        k.add(fitText(elText(this, k.cx, y + 12, T.revive(name), 30, EL.ON, { em: 0.04, weight: '700' }).setOrigin(0.5), k.w - 40));
+        if (def) {
+          k.add(this.add.rectangle(k.cx, y + 96, 88, 88, EL.INK, 0.9).setStrokeStyle(1, EL.GOLD, EL.LINE.a2));
+          k.add(classAvatar(this, def, k.cx, y + 96, 84));
+        }
+        k.add(this.note(k.cx, y + 156, cardText(card), 20, C.text).setOrigin(0.5, 0).setWordWrapWidth(k.w - 56).setAlign('center'));
+        k.add(this.note(k.cx, k.bottom - 30, T.healPreview(0, card.ratio), 20, C.accent).setOrigin(0.5, 0));
       }
       // Item kartı: sağ üst köşede satış değeri + küçük piksel sikke
       if (d) this.sellTag(sellValue(d), k.x1 - 18, k.top + 6, k.add);
@@ -1195,7 +1207,9 @@ export class EndlessScene extends Phaser.Scene {
     run.heroes.forEach((hh, i) => {
       const cy = y0 + rowH * i + rowH / 2;
       const def = content.classes[hh.class];
-      const to = Math.min(1, hh.hpRatio + ratio);
+      // Ceset şifayla kalkmaz (yalnızca Revive kartı): "Fallen"
+      const dead = hh.hpRatio <= 0;
+      const to = dead ? 0 : Math.min(1, hh.hpRatio + ratio);
       if (def) {
         k.add(this.add.rectangle(left + av / 2, cy, av + 4, av + 4, EL.INK, 0.9).setStrokeStyle(1, EL.GOLD, EL.LINE.a2));
         k.add(classAvatar(this, def, left + av / 2, cy, av));
@@ -1209,7 +1223,7 @@ export class EndlessScene extends Phaser.Scene {
       g.fillStyle(0x7fb85a, 0.35).fillRect(nameX, cy + 3, bw * to, 5);
       g.fillStyle(0x7fb85a, 0.95).fillRect(nameX, cy + 3, bw * Math.max(0, hh.hpRatio), 5);
       k.add(g);
-      k.add(this.note(right, cy, T.healPreview(hh.hpRatio, to), Math.min(19, rowH * 0.5), to > hh.hpRatio ? C.text : C.dim).setOrigin(1, 0.5));
+      k.add(this.note(right, cy, dead ? T.fallen : T.healPreview(hh.hpRatio, to), Math.min(19, rowH * 0.5), to > hh.hpRatio ? C.text : C.dim).setOrigin(1, 0.5));
     });
   }
 

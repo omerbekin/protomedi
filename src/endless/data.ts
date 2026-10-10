@@ -17,8 +17,9 @@ export interface EndlessConfig {
   elites: string[];
   bosses: string[];
   /** Dalga arası taşıma (sürekli akış, madde 300): mp 'ratio' = canla aynı oran ('full' = her dalga tam), cooldowns 'clear' | 'initial'. */
-  carry: { victoryHeal: number; reviveRatio: number; bossVictoryHeal: number; mp?: 'ratio' | 'full'; cooldowns?: 'clear' | 'initial' };
-  rewards: { healRatio: number; goldBase: number; goldPerWave: number };
+  carry: { victoryHeal: number; reviveRatio: number; bossVictoryHeal: number; mp?: 'ratio' | 'full'; cooldowns?: 'carry' | 'clear' | 'initial'; fallen?: 'corpse' | 'rise' };
+  /** reviveRatio: ödül ekranındaki 'Revive <kahraman>' kartının can (ve MP) oranı (carry.fallen 'corpse'). */
+  rewards: { healRatio: number; goldBase: number; goldPerWave: number; reviveRatio?: number };
   special: {
     elite: SpecialRewards & { healRatio: number };
     boss: SpecialRewards & { feastHpMult: number; feastWaves: number };
@@ -95,6 +96,10 @@ export interface UnitCarry {
   shield?: number;
   magicShield?: number;
   shieldHooks?: ShieldHook[];
+  /** Kalan cooldown'lar (skill -> kendi tur sayısı; carry.cooldowns 'carry'). */
+  cooldowns?: Record<string, number>;
+  /** Düşmüş kahramanın cesedi Raise Dead ile tüketildiyse (savaşta Resurrection kaldıramaz; Revive kartı yine kaldırır). */
+  corpse?: 'consumed';
 }
 
 /** Dalgadan dalgaya taşınan (oyuncu tarafı, canlı) çağrı: birim id'si, hücresi, sahibi (kahraman id), canı, kalan ömrü, beslenme hâli. */
@@ -114,7 +119,9 @@ export type RewardCard =
   | { kind: 'gold'; amount: number }
   | { kind: 'heal'; ratio: number }
   /** Boss sonrası: tam can + sonraki `waves` dalga boyunca maks can x hpMult. */
-  | { kind: 'feast'; hpMult: number; waves: number };
+  | { kind: 'feast'; hpMult: number; waves: number }
+  /** Düşmüş (ceset) kahramanı `ratio` canla (ve MP ile) kaldırır (carry.fallen 'corpse'; ekranda en çok bir tane: ilk düşen). */
+  | { kind: 'revive'; heroId: string; ratio: number };
 
 /** Koşu boyu geçici güçlendirme (Hero's Feast): kalan dalga sayısı kadar oyuncu birimlerinin maks canı x hpMult. */
 export interface Blessing {

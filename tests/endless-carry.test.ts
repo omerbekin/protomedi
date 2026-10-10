@@ -4,6 +4,7 @@ import type { Battle } from '../src/engine';
 import {
   ENDLESS,
   applyOutcome,
+  chooseReward,
   battleFor,
   fightWave,
   newRun,
@@ -63,32 +64,53 @@ describe('Endless sürekli akış: dalga arası taşıma', () => {
     expect(m2.mp).toBe(Math.round(m2.maxMp * hm.carry!.mpRatio!));
   });
 
-  it('düşen kahraman %20 can ve %20 MP ile, temiz kalkar; boss zaferi tam can + tam MP', () => {
+  it('düşen kahraman CESET olarak kalır; Revive kartı %50 can + MP ile kaldırır; boss şifası kaldırmaz; ceset sonraki savaşta geçerli', () => {
     const { run, battle, plan } = wonWave1();
     const a = unitOf(battle, 'archer');
     a.hp = 0;
     a.statuses = [{ kind: 'haste', turns: 2, source: a.uid }];
     const next = applyOutcome(run, plan, outcomeFromBattle(plan, battle));
     const ha = next.heroes.find((h) => h.class === 'archer')!;
-    expect(ha.hpRatio).toBe(ENDLESS.carry.reviveRatio);
-    expect(ha.carry).toEqual({ mpRatio: ENDLESS.carry.reviveRatio });
-    // Boss dalgası
-    const bossRun = { ...run, wave: ENDLESS.bossEvery };
-    const bp = { ...plan, wave: ENDLESS.bossEvery };
-    const after = applyOutcome(bossRun, bp, outcomeFromBattle(plan, battle));
-    for (const h of after.heroes) {
-      expect(h.hpRatio).toBe(1);
-      expect(h.carry?.mpRatio).toBeUndefined(); // tam
-    }
+    expect(ha.hpRatio).toBe(0);
+    expect(ha.carry).toBeUndefined();
+    const idx = next.offer!.findIndex((c) => c.kind === 'revive');
+    expect(next.offer![idx]).toEqual({ kind: 'revive', heroId: ha.id, ratio: ENDLESS.rewards.reviveRatio });
+    // Revive alınmazsa: sonraki savaşta ceset (can 0, diriltilebilir), sırası yok
+    const ready = { ...next, phase: 'ready' as const, offer: undefined };
+    const b2 = battleFor(wavePlan(ready));
+    const a2 = unitOf(b2, 'archer');
+    expect(a2.hp).toBe(0);
+    expect(b2.corpseOf(a2.uid)?.state).toBe('revivable');
+    expect(b2.currentUid).not.toBe(a2.uid);
+    // Revive alınırsa: %50 can ve MP
+    const rev = chooseReward(next, idx);
+    const hr = rev.heroes.find((h) => h.class === 'archer')!;
+    expect(hr.hpRatio).toBe(ENDLESS.rewards.reviveRatio);
+    expect(hr.carry?.mpRatio).toBe(ENDLESS.rewards.reviveRatio);
+    // Şifa kartı ceseti kaldırmaz
+    const healIdx = next.offer!.findIndex((c) => c.kind === 'heal');
+    expect(chooseReward(next, healIdx).heroes.find((h) => h.class === 'archer')!.hpRatio).toBe(0);
+    // Boss zaferi: yaşayanlar tam, ceset ceset
+    const after = applyOutcome({ ...run, wave: ENDLESS.bossEvery }, { ...plan, wave: ENDLESS.bossEvery }, outcomeFromBattle(plan, battle));
+    for (const h of after.heroes) expect(h.hpRatio).toBe(h.class === 'archer' ? 0 : 1);
+    // 'rise' = eski kural
+    const old = applyOutcome(run, plan, outcomeFromBattle(plan, battle), { ...ENDLESS, carry: { ...ENDLESS.carry, fallen: 'rise' } });
+    expect(old.heroes.find((h) => h.class === 'archer')!.hpRatio).toBe(ENDLESS.carry.reviveRatio);
+    expect(old.offer!.some((c) => c.kind === 'revive')).toBe(false);
   });
 
-  it("cooldown'lar sıfırlanır: 2. dalgadan itibaren başlangıç cooldown'u yok (carry.cooldowns 'clear'); 'initial' eski kural", () => {
-    const run = newRun(3, PARTY, '2026-10-10T00:00:00.000Z');
-    const ult = (b: Battle) => Object.keys(unitOf(b, 'warrior').cooldowns).length + Object.keys(unitOf(b, 'mage').cooldowns).length;
-    expect(ult(battleFor(wavePlan(run)))).toBeGreaterThan(0); // 1. dalga: savaş başı gibi
-    const w2 = { ...run, wave: 2 };
-    expect(ult(battleFor(wavePlan(w2)))).toBe(0);
-    expect(ult(battleFor(wavePlan(w2, { ...ENDLESS, carry: { ...ENDLESS.carry, cooldowns: 'initial' } })))).toBeGreaterThan(0);
+  it("cooldown'lar: 'carry' (varsayılan) kaldığı yerden; 'clear' sıfır; 'initial' savaş başı gibi", () => {
+    const { run, battle, plan } = wonWave1();
+    const w = unitOf(battle, 'warrior');
+    const sk = w.skills[1]!;
+    w.cooldowns = { [sk]: 2 };
+    const next = { ...applyOutcome(run, plan, outcomeFromBattle(plan, battle)), phase: 'ready' as const, offer: undefined };
+    expect(next.heroes.find((h) => h.class === 'warrior')!.carry?.cooldowns).toEqual({ [sk]: 2 });
+    const cds = (cfg = ENDLESS) => unitOf(battleFor(wavePlan(next, cfg)), 'warrior').cooldowns;
+    expect(cds()).toEqual({ [sk]: 2 }); // başlangıç cooldown'u yeniden yok, taşınan aynen
+    expect(cds({ ...ENDLESS, carry: { ...ENDLESS.carry, cooldowns: 'clear' } })).toEqual({});
+    const first = unitOf(battleFor(wavePlan(run)), 'warrior').cooldowns; // 1. dalga = savaş başı
+    expect(cds({ ...ENDLESS, carry: { ...ENDLESS.carry, cooldowns: 'initial' } })).toEqual(first);
   });
 
   it('çağrılar taşınır: hücre, sahip, can, ömür, beslenme; kahraman uid sırası çağrıyla bozulmaz', () => {
@@ -122,6 +144,10 @@ describe('Endless sürekli akış: dalga arası taşıma', () => {
     const back = parseRun(JSON.stringify({ version: 3, run: next }))!;
     expect(back.heroes).toEqual(next.heroes);
     expect(back.phase).toBe(next.phase);
+    // Ceset kayıtta kalır (can 0 + tüketildi bilgisi)
+    const dead = { ...next, heroes: next.heroes.map((h, i) => (i === 0 ? { ...h, hpRatio: 0, carry: { corpse: 'consumed' as const } } : h)) };
+    const back2 = parseRun(JSON.stringify({ version: 3, run: dead }))!;
+    expect(back2.heroes[0]).toMatchObject({ hpRatio: 0, carry: { corpse: 'consumed' } });
     const old = parseRun(JSON.stringify({ version: 2, run: { ...next, suspended: { wave: 2, seed: 1, actions: [], turn: 0, hash: 'x' } } }))!;
     expect(old.heroes.every((h) => h.carry === undefined)).toBe(true);
     expect(old.suspended).toBeUndefined();

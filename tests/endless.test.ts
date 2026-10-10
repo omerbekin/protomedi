@@ -165,7 +165,7 @@ describe('endless: dalga planı -> savaş', () => {
 });
 
 describe('endless: savaş sonucu ve can taşıma', () => {
-  it('zafer: canlılar +%20, düşen %20 ile kalkar, dalga +1, ödül kartları açılır', () => {
+  it('zafer: canlılar +%20, düşen ceset olarak kalır (Revive kartı), dalga +1, ödül kartları açılır', () => {
     const run = fresh();
     const plan = wavePlan(run);
     const next = applyOutcome(run, plan, win(run, 0.5, ['h2']));
@@ -173,17 +173,18 @@ describe('endless: savaş sonucu ve can taşıma', () => {
     expect(next.phase).toBe('reward');
     expect(next.stats).toEqual({ cleared: 1, turns: 20, kills: 3 });
     expect(heroOf(next, 'h1')!.hpRatio).toBeCloseTo(0.7);
-    expect(heroOf(next, 'h2')!.hpRatio).toBeCloseTo(0.2);
-    expect(next.offer).toHaveLength(3);
+    expect(heroOf(next, 'h2')!.hpRatio).toBe(0);
+    expect(next.offer).toHaveLength(4);
+    expect(next.offer![3]).toEqual({ kind: 'revive', heroId: 'h2', ratio: ENDLESS.rewards.reviveRatio });
     // aynı sonuç ikinci kez yazılmaz (sonuç ekranı tekrar kurulsa da)
     expect(applyOutcome(next, plan, win(run))).toBe(next);
     expect(run.wave).toBe(1); // girdi değişmez
   });
 
-  it('boss zaferi takımı tam iyileştirir', () => {
+  it('boss zaferi yaşayanları tam iyileştirir; ceseti kaldırmaz', () => {
     const run = { ...fresh(), wave: 10 };
     const next = applyOutcome(run, { wave: 10 }, win(run, 0.1, ['h3']));
-    for (const h of next.heroes) expect(h.hpRatio).toBe(1);
+    for (const h of next.heroes) expect(h.hpRatio).toBe(h.id === 'h3' ? 0 : 1);
   });
 
   it('yenilgi: koşu biter, skor yazılabilir', () => {

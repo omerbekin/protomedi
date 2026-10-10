@@ -50,6 +50,8 @@ function carryOf(c: Combatant, ref: (uid: string | undefined) => string | undefi
   if (c.magicShield > 0) out.magicShield = c.magicShield;
   if (c.shieldHooks?.length) out.shieldHooks = c.shieldHooks.map((h): ShieldHook => ({ ...h, caster: ref(h.caster) ?? self, onAbsorb: { ...h.onAbsorb } }));
   if (c.maxMp > 0) out.mpRatio = r3(Math.max(0, Math.min(1, c.mp / c.maxMp)));
+  const cds = Object.entries(c.cooldowns).filter(([, v]) => v > 0);
+  if (cds.length) out.cooldowns = Object.fromEntries(cds);
   return out;
 }
 
@@ -72,8 +74,10 @@ export function snapshotCarry(battle: Battle, heroOrder: readonly string[]): Wav
   const heroes: Record<string, UnitCarry> = {};
   for (const c of party) {
     const r = refs.get(c.uid);
-    if (c.summoned || !r || c.hp <= 0) continue;
-    heroes[r.slice(2)] = carryOf(c, ref);
+    if (c.summoned || !r) continue;
+    // Ölü kahraman: yalnızca cesedin durumu (tüketildiyse); ceset olarak sonraki dalgaya geçer (carry.fallen 'corpse')
+    if (c.hp <= 0) heroes[r.slice(2)] = battle.corpseOf(c.uid)?.state === 'consumed' ? { corpse: 'consumed' } : {};
+    else heroes[r.slice(2)] = carryOf(c, ref);
   }
   const summons = live.map((c): CarriedSummon => {
     const owner = ref(c.owner);
@@ -91,7 +95,7 @@ export function snapshotCarry(battle: Battle, heroOrder: readonly string[]): Wav
 }
 
 /** Taşınan durum -> sonraki savaşın birim kurulumu (referanslar `uidOf` ile bu savaşın uid'lerine; bilinmeyen kaynak = birimin kendisi). */
-export function carrySetup(carry: UnitCarry | undefined, selfUid: string, uidOf: (ref: string) => string | undefined): UnitSetup {
+export function carrySetup(carry: UnitCarry | undefined, selfUid: string, uidOf: (ref: string) => string | undefined, o: { cooldowns?: boolean } = {}): UnitSetup {
   if (!carry) return {};
   const out: UnitSetup = {};
   const statuses: Status[] = [];
@@ -111,6 +115,7 @@ export function carrySetup(carry: UnitCarry | undefined, selfUid: string, uidOf:
   if (carry.magicShield) out.startMagicShield = carry.magicShield;
   if (carry.shieldHooks?.length) out.startShieldHooks = carry.shieldHooks.map((h) => ({ ...h, caster: uidOf(h.caster) ?? selfUid, onAbsorb: { ...h.onAbsorb } }));
   if (carry.mpRatio !== undefined && carry.mpRatio < 1) out.startMpRatio = carry.mpRatio;
+  if (o.cooldowns && carry.cooldowns && Object.keys(carry.cooldowns).length) out.startCooldowns = { ...carry.cooldowns };
   return out;
 }
 
@@ -124,6 +129,11 @@ export function cleanCarry(v: unknown): UnitCarry | undefined {
   if (num(c.rage)) out.rage = c.rage;
   if (num(c.shield)) out.shield = c.shield;
   if (num(c.magicShield)) out.magicShield = c.magicShield;
+  if (c.corpse === 'consumed') out.corpse = 'consumed';
+  if (c.cooldowns && typeof c.cooldowns === 'object') {
+    const cd = Object.entries(c.cooldowns).filter(([k, v]) => typeof k === 'string' && num(v) && v > 0);
+    if (cd.length) out.cooldowns = Object.fromEntries(cd);
+  }
   if (Array.isArray(c.statuses)) {
     const st = c.statuses.filter((s) => s && typeof s.kind === 'string' && num(s.turns) && typeof s.source === 'string');
     if (st.length) out.statuses = st;

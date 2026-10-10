@@ -52,11 +52,11 @@ import { classAvatar, classLogoBadge, ensureGlow } from '../menu-ui';
 import { sortByPrimary } from '../class-order';
 import { debugState } from '../debug-state';
 import { isSettingsOpen, setSettingsOpen } from '../../ui/settings';
-import { mountMenuToggle } from '../../ui/game-menu';
+import { isGameMenuOpen, setGameMenuOpen } from '../../ui/game-menu';
+import type { MapMenuState } from '../session-flow';
 import { openGearScreen, showHandover, showSpoils } from '../../ui/gear-screen';
 import { legendaryPreviewWanted } from '../../progression/items';
-import { openWiki } from '../../wiki/open';
-import { EL, diamondPts, elBadge, elBody, elButton, elDiamond, elGo, elIconButton, elLink, elPanel, elScreenIn, elText, elToast, fadeLine, fitW, hGradient, vGradient } from '../elegant-ui';
+import { EL, diamondPts, elBadge, elBody, elDiamond, elGo, elIconButton, elLink, elPanel, elScreenIn, elText, elToast, fadeLine, fitW, hGradient, vGradient } from '../elegant-ui';
 import { MAP_ZOOM, canPan, clampMid, clampZoom, wheelAction, type Bounds } from '../map-view';
 import { drawNodeGlyph, nodeGlyphImage, openFormation, openHeroPanel } from '../campaign-panels';
 import { openSlotBrowser, type SlotBrowser } from '../campaign-slots-ui';
@@ -111,13 +111,11 @@ export class CampaignMapScene extends Phaser.Scene {
   private caravan: Phaser.GameObjects.Image[] = [];
   private walking: { finish: () => void } | null = null;
   private modal: Modal | null = null;
-  private pauseMenu: Modal | null = null;
   /** Menu > Load: bu yuvanın kayıt listesi (src/game/campaign-slots-ui.ts "Column"). */
   private slotBrowser: SlotBrowser | null = null;
   /** Kahraman paneli ya da Formation penceresi açık (Menu düğmesi gizlenir; pencerenin kendi Close / Done'ı yeter). */
   private sideOpen = false;
   /** Sağ üstteki DOM "Menu" düğmesi. */
-  private menuBtn: HTMLButtonElement | null = null;
   private tip: Phaser.GameObjects.Container | null = null;
   private dashT = 0;
   private drag = { down: false, moved: false, x: 0, y: 0 };
@@ -142,10 +140,8 @@ export class CampaignMapScene extends Phaser.Scene {
     this.caravan = [];
     this.walking = null;
     this.modal = null;
-    this.pauseMenu = null;
     this.slotBrowser = null;
     this.sideOpen = false;
-    this.menuBtn = null;
     this.tip = null;
     this.mapZoom = 1;
     this.frame = { left: 0, right: W, top: 0, bottom: H };
@@ -197,87 +193,63 @@ export class CampaignMapScene extends Phaser.Scene {
       this.updatePanButtons();
       this.syncOverlays();
     });
-    this.mountMenuButton();
+    this.events.once('shutdown', () => setSettingsOpen(false));
     this.input.keyboard?.on('keydown-ESC', () => this.onEscape());
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onKey(e));
     this.advance();
   }
 
   // ------------------------------------------------------------ oyun menüsü (sağ üst Menu düğmesi / Esc)
+  //
+  // Ömer 2026-10-10: harita Menu'sü savaştakiyle AYNI ortak bileşen (src/ui/game-menu.ts; içerik src/game/session-flow.ts > menuItems
+  // 'campaign'): Resume / Save (elle kayıt) / Load (Normal) / Codex / Settings / Main Menu. Sağ üstteki Menu düğmesini de o bileşen yönetir;
+  // sahne yalnızca anlık durumu (menuState) ve Save / Load eylemlerini verir.
 
-  /** Sağ üstteki DOM simge sırasına (Menu / tam ekran / wiki) hizalı "Menu" düğmesi (savaştaki ile aynı: mountMenuToggle); sahne kapanınca kaldırılır. */
-  private mountMenuButton(): void {
-    const root = document.getElementById('ui-root');
-    if (!root) return;
-    root.querySelector('.campaign-menu-toggle')?.remove();
-    const b = mountMenuToggle(root, () => this.toggleMenu(), 'campaign-menu-toggle');
-    this.menuBtn = b;
-    this.events.once('shutdown', () => {
-      b.remove();
-      this.menuBtn = null;
-      setSettingsOpen(false);
-    });
+  /** Ortak Menu'nün okuduğu durum: düğme görünür mü, Save yazısı, Load var mı. */
+  menuState(): MapMenuState {
+    const gear = !!document.querySelector('#ui-root .gr-overlay');
+    const cover = !!this.slotBrowser || this.sideOpen || gear || !!this.walking;
+    const s = this.s;
+    return {
+      available: !cover,
+      save: canSaveManually(s) && !this.modal ? `Save  ${saveCount(storage(), s.slot)}/${CONFIG.rules.maxSaves.normal}` : null,
+      load: s.mode === 'normal',
+    };
   }
 
-  /**
-   * Katman düzeni (her karede): açık bir pencere / menü / yuva ekranı / Gear varken alttaki ipucu kartı gizlenir (pencerelerin üstüne
-   * çizilmesin); yuva ekranı, kahraman paneli, Formation ve Gear açıkken sağ üstteki Menu düğmesi de gizlenir (Geri / Menu kuralı:
-   * o ekranların kendi Back / Close / Done'ı yeter).
-   */
+  /** Menu > Save. */
+  menuSave(): void {
+    save('manual');
+    this.renderHud(); // "Game saved" bildirimi
+  }
+
+  /** Menu > Load. */
+  menuLoad(): void {
+    this.openLoad();
+  }
+
+  /** Ortak Menu açık mı (harita girdisi o sırada kilitli). */
+  private get menuOpen(): boolean {
+    return isGameMenuOpen();
+  }
+
+  /** Katman düzeni (her karede): açık bir pencere / menü / yuva ekranı / Gear varken alttaki ipucu kartı gizlenir (pencerelerin üstüne çizilmesin). */
   private syncOverlays(): void {
     const gear = !!document.querySelector('#ui-root .gr-overlay');
     const cover = !!this.slotBrowser || this.sideOpen || gear;
-    if (this.menuBtn && this.menuBtn.hidden !== cover) this.menuBtn.hidden = cover;
     if (this.tip) {
-      const show = !cover && !this.pauseMenu && !this.modal;
+      const show = !cover && !this.menuOpen && !this.modal;
       if (this.tip.visible !== show) this.tip.setVisible(show);
     }
   }
 
-  private toggleMenu(): void {
-    if (this.slotBrowser || this.sideOpen) return;
-    if (this.pauseMenu) this.closeMenu();
-    else this.openMenu();
-  }
-
   private closeMenu(): void {
-    this.pauseMenu?.close();
-    this.pauseMenu = null;
+    setGameMenuOpen(false);
   }
 
-  /** Resume / Save / Load (Normal) / Codex / Settings / Main Menu (Ömer 2026-10-09; tasarım kiti: openModal + kit düğmeleri). */
   private openMenu(): void {
-    if (this.pauseMenu || this.walking || this.slotBrowser) return;
-    const s = this.s;
-    const items: Array<{ label: string; run: () => void; primary?: boolean }> = [{ label: 'Resume', primary: true, run: () => this.closeMenu() }];
-    if (canSaveManually(s) && !this.modal)
-      items.push({
-        label: `Save  ${saveCount(storage(), s.slot)}/${CONFIG.rules.maxSaves.normal}`,
-        run: () => {
-          save('manual');
-          this.closeMenu();
-          this.renderHud(); // "Game saved" bildirimi
-        },
-      });
-    if (s.mode === 'normal') items.push({ label: 'Load', run: () => (this.closeMenu(), this.openLoad()) });
-    // Codex (sağ üst kitap düğmesi kaldırıldı): menüden açılır; her bağlamda Settings'in hemen üstünde
-    items.push({ label: 'Codex', run: () => (this.closeMenu(), openWiki()) });
-    // Ayarlar sütunu açıkken menü penceresi gizlenir (ana menü sütun görünümü); Back / Esc ile geri gelir
-    items.push({
-      label: 'Settings',
-      run: () => {
-        m.root.setVisible(false);
-        setSettingsOpen(true, () => m.root.active && m.root.setVisible(true));
-      },
-    });
-    items.push({ label: 'Main Menu', run: () => elGo(this, MENU_SCENE) });
-    const m = openModal(this, this.ui, { title: 'Menu', width: 620, height: 170 + items.length * 88, onDismiss: () => this.closeMenu() });
-    items.forEach((it, i) => {
-      const b = elButton(this, it.label, it.run, { kind: it.primary ? 'primary' : 'secondary', w: 440, h: it.primary ? 70 : 60, size: it.primary ? 24 : 19, ready: true });
-      b.root.setPosition(W / 2, m.area.y + 40 + i * 88);
-      m.root.add(b.root);
-    });
-    this.pauseMenu = m;
+    if (this.walking || this.slotBrowser) return;
+    setGameMenuOpen(true);
   }
 
   /** Menu > Load: bu yuvanın kayıtları; Back menüye döner, bir kayıt yüklenince harita o kayıtla yeniden kurulur. */
@@ -288,7 +260,7 @@ export class CampaignMapScene extends Phaser.Scene {
       onlySlot: true,
       onClose: () => {
         this.slotBrowser = null;
-        this.openMenu();
+        this.openMenu(); // ortak Menu'ye geri döner
       },
       onLoad: (e) => {
         loadEntry(e);
@@ -302,7 +274,7 @@ export class CampaignMapScene extends Phaser.Scene {
     if (debugState.uiPaused) return; // wiki açık: Esc wiki'nindir
     if (isSettingsOpen()) return setSettingsOpen(false);
     if (this.slotBrowser) return this.slotBrowser.back();
-    if (this.pauseMenu) return this.closeMenu();
+    if (this.menuOpen) return this.closeMenu();
     if (this.walking) return this.walking.finish();
     const step = nextStep(this.s).kind;
     // zorunlu seçim pencereleri (kahraman, aday, veda, yeni takım) Esc ile kapanmaz: menü üstlerine açılır
@@ -317,7 +289,7 @@ export class CampaignMapScene extends Phaser.Scene {
 
   /** Ok tuşları = kaydırma, + / - = yakınlaştırma (pencere / menü açıkken değil). */
   private onKey(e: KeyboardEvent): void {
-    if (this.modal || this.pauseMenu || debugState.uiPaused || isSettingsOpen()) return;
+    if (this.modal || this.menuOpen || debugState.uiPaused || isSettingsOpen()) return;
     if (e.key === 'ArrowLeft') this.panBy(-PAN_STEP, 0);
     else if (e.key === 'ArrowRight') this.panBy(PAN_STEP, 0);
     else if (e.key === 'ArrowUp') this.panBy(0, -PAN_STEP * 0.6);
@@ -541,7 +513,7 @@ export class CampaignMapScene extends Phaser.Scene {
     if (here && this.actionHere()) this.tweens.add({ targets: g, scale: { from: 1, to: 1.08 }, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     const zone = this.add.zone(0, 0, 96, 96).setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Circle(48, 48, 48), hitAreaCallback: Phaser.Geom.Circle.Contains });
     zone.on('pointerup', () => {
-      if (this.drag.moved || this.walking || this.modal || this.pauseMenu) return;
+      if (this.drag.moved || this.walking || this.modal || this.menuOpen) return;
       this.onNodeTap(n.id, v);
     });
     c.add(zone);
@@ -680,7 +652,7 @@ export class CampaignMapScene extends Phaser.Scene {
 
   private bindCamera(): void {
     this.input.on('wheel', (p: Phaser.Input.Pointer, _o: unknown, dx: number, dy: number) => {
-      if (this.modal || this.pauseMenu) return;
+      if (this.modal || this.menuOpen) return;
       const ev = p.event as WheelEvent | undefined;
       // birkaç piksellik dikey pay tekerleği yutmasın: dikey kaydırma yalnızca belirgin yer varsa
       const a = wheelAction({ dx, dy, ctrl: !!ev?.ctrlKey }, { vertical: this.frame.bottom - this.frame.top - this.viewSize().h > 150 });
@@ -695,7 +667,7 @@ export class CampaignMapScene extends Phaser.Scene {
     canvas.addEventListener('wheel', stopZoom, { passive: false });
     this.events.once('shutdown', () => canvas.removeEventListener('wheel', stopZoom));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      this.drag = { down: !this.modal && !this.pauseMenu, moved: false, x: p.x, y: p.y };
+      this.drag = { down: !this.modal && !this.menuOpen, moved: false, x: p.x, y: p.y };
     });
     // İki parmakla sıkıştırma = yakınlaştırma
     this.input.addPointer(1);
@@ -994,7 +966,7 @@ export class CampaignMapScene extends Phaser.Scene {
       cy += Math.max(30, t.height) + 22;
     }
     // Eylemler: kutusuz yazı düğmeleri (sol sütundaki Formation · Gear dili); birincil eylem büyük, kor elmaslı
-    const busy = () => !!this.modal || !!this.pauseMenu || !!this.walking || this.drag.moved;
+    const busy = () => !!this.modal || !!this.menuOpen || !!this.walking || this.drag.moved;
     let primary: { label: string; run: () => void } | null = null;
     if (option) primary = { label: 'March', run: () => this.chooseRoad(id) };
     else if (id === s.at && step.kind === 'battle') primary = { label: 'Fight', run: () => startCampaignBattle(this) };
@@ -1042,7 +1014,7 @@ export class CampaignMapScene extends Phaser.Scene {
     const step = size + 12;
     const y = H - 18 - size / 2;
     const mk = (label: string, x: number, run: () => void) => {
-      const b = elIconButton(this, { label }, () => !this.modal && !this.pauseMenu && run(), { size });
+      const b = elIconButton(this, { label }, () => !this.modal && !this.menuOpen && run(), { size });
       b.root.setPosition(x, y);
       this.hud.add(b.root);
       return b.root;
@@ -1366,7 +1338,7 @@ export class CampaignMapScene extends Phaser.Scene {
 
   /** Yan panel açılabilir mi: yürürken, menü açıkken ya da zorunlu bir seçim penceresi varken açılmaz. */
   private canOpenSide(): boolean {
-    if (this.walking || this.pauseMenu) return false;
+    if (this.walking || this.menuOpen) return false;
     if (this.modal && FORCED.includes(nextStep(this.s).kind)) return false;
     return true;
   }

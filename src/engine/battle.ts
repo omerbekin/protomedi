@@ -204,6 +204,19 @@ export class Battle {
       ...setup.party.map((d, i) => createSetupCombatant(d, 'party', setup.partySlots?.[i] ?? i, `party-${i}`, setup.partyUnits?.[i], setup.formulas)),
       ...setup.enemies.map((d, i) => createSetupCombatant(d, 'enemy', setup.enemySlots?.[i] ?? i, `enemy-${i}`, setup.enemyUnits?.[i], setup.formulas)),
     ];
+    // Endless: önceki dalgada düşen birim savaşa ceset olarak girer (UnitSetup.startDead); verilmezse savaş aynı
+    const units = [...setup.party.map((_, i) => setup.partyUnits?.[i]), ...setup.enemies.map((_, i) => setup.enemyUnits?.[i])];
+    this.combatants.forEach((c, i) => {
+      const dead = units[i]?.startDead;
+      if (!dead || c.summoned) return;
+      c.hp = 0;
+      c.statuses = [];
+      c.shield = 0;
+      c.magicShield = 0;
+      this.announcedDead.add(c.uid);
+      this.leaveCorpse(c);
+      if (dead === 'consumed') this.corpseState.set(c.uid, 'consumed');
+    });
     // Başlangıç cooldown'u (initialCooldown): yalnızca turns modunda ve class birimlerinde; test modunda cooldown zaten yok
     if (this.mode === 'turns') for (const c of this.combatants) this.applyInitialCooldowns(c);
     // Boss: faz 1 ve bağlı yardımcı sayısı rozeti (Anchored); boss yoksa hiçbir şey değişmez
@@ -3435,6 +3448,7 @@ function createSetupCombatant(baseDef: CombatantDef, side: Side, slot: number, u
   if (finite(unit.lifespan)) c.lifespan = Math.max(1, Math.floor(unit.lifespan));
   if (unit.empowered !== undefined && c.summoned) c.empowered = unit.empowered;
   if (unit.skipInitialCooldown) c.skipInitialCooldown = true;
+  if (unit.startCooldowns) for (const [k, v] of Object.entries(unit.startCooldowns)) if (finite(v) && v > 0 && c.skills.includes(k)) c.cooldowns[k] = Math.floor(v);
   return c;
 }
 

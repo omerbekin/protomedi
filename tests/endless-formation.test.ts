@@ -109,7 +109,7 @@ describe('endless dizilim: dalgadan dalgaya', () => {
     expect(d!.slot).toBe(9);
     expect(w!.slot).toBe(nearestFree(0, new Set([0, 6, 9]))); // 0'a en yakın boş: 1
     expect(w!.slot).toBe(1);
-    expect(w!.hpRatio).toBeCloseTo(0.2); // Endless kuralı: %20 canla kalkar
+    expect(w!.hpRatio).toBe(0); // Endless kuralı (2026-10-10 takip): düşen kahraman ceset olarak kalır (Revive kartı kaldırır)
     // boşsa kendi hücresine döner
     const { next: n2 } = won(run, [
       { i: 0, slot: 0, hp: 0 },

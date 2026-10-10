@@ -45,9 +45,13 @@ import { itemDefIcon } from './item-icon-dom';
 import { statIconUrl, statTip, statTipSegments } from './stat-tips';
 import { dropAction, isDoubleTap, type DragSource, type DropTarget } from './gear-drop';
 import { dismissOnBackdrop } from './backdrop';
-import { iconUrl } from './dom-icons';
+import { bindIcon, iconUrl } from './dom-icons';
 import { hasUiImage, uiIconName, type UiIconKind } from './ui-icons';
 import type { Stats } from '../engine';
+import { gearSkillRows, passiveTip, skillTip, type GearSkillRow, type GearSkillTip } from './gear-skills';
+import { ELEMENT_COLOR, skillTags } from './skill-tags';
+import { ownerOfSkill, ownerOfUnit } from '../game/asset-versions';
+import layout from '../../data/battle-layout.json';
 
 /** Düğümün `anc` içindeki konumu (offset zinciri; döndürülmüş sahnede de doğru, kaydırmalar düşülür). */
 function offsetIn(node: HTMLElement, anc: HTMLElement): { x: number; y: number } {
@@ -167,6 +171,73 @@ function withUiIcon(e: HTMLElement, k: UiIconKind): void {
   e.prepend(img);
 }
 
+/** Skill sayısı / tooltip satırı rengi: savaş tooltip'iyle aynı (element, kalkan, büyü kalkanı; şifa yeşil). */
+const KIND_COLOR: Record<string, string> = { ...ELEMENT_COLOR, shield: layout.colors.shield, magicShield: layout.colors.magicShield, heal: layout.colors.heal };
+const kindColor = (k: string | undefined): string | undefined => (k && k !== 'physical' ? KIND_COLOR[k] : undefined);
+
+/** Skill / pasif ikonu (savaş HUD'ı ve Codex'le aynı kaynak; sürüme canlı bağlı: dom-icons > bindIcon). */
+function skillIcon(r: { skill?: { id: string; icon: string; fx: string }; passive?: boolean }, classId: string, cls: string): HTMLImageElement {
+  const img = el('img', cls);
+  img.alt = '';
+  img.draggable = false;
+  const p = content.classes[classId]?.passive;
+  if (r.skill) bindIcon(img, r.skill.icon, r.skill.fx, ownerOfSkill(r.skill.id));
+  else bindIcon(img, p?.icon || uiIconName('passive'), content.classes[classId]?.color ?? '#e8c47e', ownerOfUnit(classId));
+  return img;
+}
+
+/**
+ * Gear ekranındaki skill kartı: ikon + ad + bedel / bekleme, altında anahtar sayılar ("Damage 24"; karşılaştırmada "24 → 30 (+6)",
+ * artış yeşil, azalış kırmızı, fark 0 ise gizli). Her sayı kendi satırında: fark görünse de kartın yüksekliği değişmez.
+ */
+function skillCard(r: GearSkillRow, classId: string): HTMLElement {
+  const card = el('div', `gr-skill${r.passive ? ' passive' : ''}`);
+  card.dataset['skill'] = r.id;
+  const head = el('div', 'gr-skill-head');
+  const name = el('div', 'gr-skill-name', r.name);
+  const meta = el('div', 'gr-skill-meta', r.passive ? 'Passive' : [r.cost, r.cooldown ? `CD ${r.cooldown.replace(' turns', '')}` : ''].filter(Boolean).join(' · '));
+  const title = el('div', 'gr-skill-title');
+  title.append(name, meta);
+  head.append(skillIcon(r, classId, 'gr-skill-ico'), title);
+  card.append(head);
+  const nums = el('div', 'gr-skill-nums');
+  for (const n of r.numbers) {
+    const line = el('div', 'gr-skill-num');
+    const v = el('span', 'gr-skill-v', n.text);
+    const c = kindColor(n.kind);
+    if (c) v.style.color = c;
+    line.append(el('span', 'gr-skill-k', n.label), v);
+    if (n.after && n.diff) line.append(el('span', `gr-skill-a ${n.dir ?? ''}`, `→ ${n.after}`), el('span', `gr-skill-d ${n.dir ?? ''}`, `(${n.diff})`));
+    if (n.times) line.append(el('span', 'gr-skill-x', `x${n.times}`)); // art arda vuruş (Double Strike): tooltip'teki gibi sayının ardından
+    nums.append(line);
+  }
+  if (!r.numbers.length) nums.append(el('div', 'gr-skill-num none', 'No stat scaling'));
+  card.append(nums);
+  return card;
+}
+
+/** Skill tooltip'inin içeriği (savaştaki kit tooltip'iyle aynı düzen: ikon + ad (+ rozet), bedel / bekleme, etiketler, etki satırları). */
+function skillTipNodes(t: GearSkillTip, skill: { id: string; icon: string; fx: string } | undefined, classId: string, line: (l: string, color?: string) => HTMLElement): HTMLElement[] {
+  const head = el('div', 'gr-stip-head');
+  head.append(skillIcon({ ...(skill ? { skill } : { passive: true }) }, classId, 'gr-stip-ico'), el('b', '', t.title));
+  if (!skill) head.append(el('span', 'gr-stip-badge', t.badge));
+  const out: HTMLElement[] = [head];
+  if (t.meta.length) out.push(el('div', 'gr-stip-meta', t.meta.join(' · ')));
+  const def = skill ? content.skills[skill.id] : undefined;
+  if (def) {
+    const tags = el('div', 'gr-stip-tags');
+    skillTags(def).forEach((g, i) => {
+      if (i) tags.append(document.createTextNode(' · '));
+      const s = el('span', '', g.text);
+      if (g.color) s.style.color = g.color;
+      tags.append(s);
+    });
+    out.push(tags);
+  }
+  out.push(...t.rows.map((r) => line(r.text, kindColor(r.kind))));
+  return out;
+}
+
 type Selection = { kind: 'bag'; uid: string } | { kind: 'slot'; slot: SlotId } | null;
 
 /** Sefer Gear ekranı (eski giriş; kaynak CampaignState). */
@@ -204,17 +275,30 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
     tipPinned = false;
   };
   const showTip = (t: HTMLElement): void => {
-    const info = curStats ? statTip(t.dataset['stat'] ?? '', curStats, t.dataset['delta'] ? afterStats : null) : null;
-    if (!info) return;
-    const head = el('b', '', info.title);
-    if (t.dataset['delta']) head.append(el('span', `gr-tip-d ${t.dataset['dir'] ?? ''}`, ` (${t.dataset['delta']})`));
     // türetilen değer satırları: fark parantezi başlık farkıyla aynı renkte (artış yeşil, azalış kırmızı)
-    const line = (l: string): HTMLElement => {
+    const line = (l: string, color?: string): HTMLElement => {
       const d = el('div', 'gr-tip-l');
+      if (color) d.style.color = color;
       d.append(...statTipSegments(l).map((g) => (g.dir ? el('span', `gr-tip-d ${g.dir}`, g.text) : document.createTextNode(g.text))));
       return d;
     };
-    tip.replaceChildren(head, ...info.lines.map(line));
+    const skillId = t.dataset['skill'];
+    if (skillId !== undefined) {
+      // Skill / pasif açıklaması: savaştaki skill tooltip'iyle aynı satırlar (skill-info), item seçiliyse değişen sayılar "24 → 30 (+6)"
+      const hero = src.heroes().find((h) => h.id === heroId);
+      if (!hero || !curStats) return;
+      const def = content.classes[hero.class];
+      const skill = content.skills[skillId];
+      const info = skillId === 'passive' && def?.passive ? passiveTip(def.passive, curStats, afterStats) : skill ? skillTip(skill, curStats, afterStats) : null;
+      if (!info) return;
+      tip.replaceChildren(...skillTipNodes(info, skill && skillId !== 'passive' ? skill : undefined, hero.class, line));
+    } else {
+      const info = curStats ? statTip(t.dataset['stat'] ?? '', curStats, t.dataset['delta'] ? afterStats : null) : null;
+      if (!info) return;
+      const head = el('b', '', info.title);
+      if (t.dataset['delta']) head.append(el('span', `gr-tip-d ${t.dataset['dir'] ?? ''}`, ` (${t.dataset['delta']})`));
+      tip.replaceChildren(head, ...info.lines.map((l) => line(l)));
+    }
     tip.classList.add('on');
     const o = offsetIn(t, overlay);
     const W = overlay.clientWidth;
@@ -230,18 +314,19 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
     tip.style.top = `${y}px`;
     tipFor = t;
   };
+  const TIP_SEL = '[data-stat],[data-skill]';
   overlay.addEventListener('pointerover', (e) => {
-    if (e.pointerType === 'touch' || tipPinned) return;
-    const t = (e.target as HTMLElement).closest<HTMLElement>('[data-stat]');
+    if (e.pointerType === 'touch' || tipPinned || drag) return;
+    const t = (e.target as HTMLElement).closest<HTMLElement>(TIP_SEL);
     if (t && t !== tipFor) showTip(t);
   });
   overlay.addEventListener('pointerout', (e) => {
     if (e.pointerType === 'touch' || tipPinned) return;
-    const t = (e.target as HTMLElement).closest<HTMLElement>('[data-stat]');
+    const t = (e.target as HTMLElement).closest<HTMLElement>(TIP_SEL);
     if (t && !(e.relatedTarget instanceof Node && t.contains(e.relatedTarget))) hideTip();
   });
   overlay.addEventListener('click', (e) => {
-    const t = (e.target as HTMLElement).closest<HTMLElement>('[data-stat]');
+    const t = (e.target as HTMLElement).closest<HTMLElement>(TIP_SEL);
     if (!t) {
       if (tipPinned) hideTip();
       return;
@@ -332,6 +417,8 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
   let drag: { src: DragSource; ghost: HTMLElement; rc: string } | null = null;
   let press: { src: DragSource; x: number; y: number; touch: boolean; timer: number; icon: HTMLElement; rc: string } | null = null;
   let dragJustEnded = false;
+  /** Sürükleme önizlemesi: seçili kahramana kuşanılabilecek bir hedefin üstünde tutulan torba item'i (uid; yoksa ''). */
+  let dragPreview = '';
   const targetOf = (node: Element | null): DropTarget | null => {
     const t = node?.closest<HTMLElement>('[data-drop]');
     const v = t?.dataset['drop'] ?? '';
@@ -380,10 +467,13 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
     markTargets(false);
     dragJustEnded = true;
     window.setTimeout(() => (dragJustEnded = false), 0);
-    if (!drop) return;
-    const tg = targetOf(document.elementFromPoint(x, y));
-    if (!tg) return;
-    const act = dropAction(d.src, tg, classOf);
+    // sürükleme önizlemesi biter: bırakma bir işlem yapmazsa seçili item'in farkına dönülür
+    const hadPreview = !!dragPreview;
+    dragPreview = '';
+    const tg = drop ? targetOf(document.elementFromPoint(x, y)) : null;
+    const act = tg ? dropAction(d.src, tg, classOf) : null;
+    if (hadPreview && (!act || act.kind === 'none')) render();
+    if (!tg || !act) return;
     if (act.kind === 'equip') tryEquip(act.heroId, act.uid);
     else if (act.kind === 'unequip') {
       sel = null;
@@ -406,9 +496,24 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
     press = { src: srcD, x: e.clientX, y: e.clientY, touch, icon, rc: t.style.getPropertyValue('--rc') || '#f3d999', timer: 0 };
     if (touch) press.timer = window.setTimeout(() => press && startDrag(press.x, press.y), 380);
   });
+  /**
+   * Sürüklenen torba item'i seçili kahramanın uygun yuvasının / kartının üstündeyse karşılaştırma onunla yapılır (stat farkları ve skill
+   * sayıları "önce → sonra"); hedeften çıkınca seçili item'in farkına döner. Yalnızca hedef değişince yeniden çizilir.
+   */
+  const updateDragPreview = (x: number, y: number): void => {
+    if (!drag || drag.src.kind !== 'bag') return;
+    const tg = targetOf(document.elementFromPoint(x, y));
+    const act = tg && tg.kind !== 'bag' && tg.heroId === heroId ? dropAction(drag.src, tg, classOf) : null;
+    const uid = act?.kind === 'equip' ? act.uid : '';
+    if (uid === dragPreview) return;
+    dragPreview = uid;
+    render();
+    markTargets(true);
+  };
   const onMove = (e: PointerEvent): void => {
     if (drag) {
       moveGhost(e.clientX, e.clientY);
+      updateDragPreview(e.clientX, e.clientY);
       return;
     }
     if (!press) return;
@@ -521,9 +626,11 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
     const bagUid = sel?.kind === 'bag' ? sel.uid : '';
     const candidate = bagUid ? bag.find((i) => i.uid === bagUid) : undefined;
     const usableCandidate = candidate && itemDef(candidate.id) && canEquip(hero.class, itemDef(candidate.id)!) ? candidate : undefined;
-    const diff = new Map((usableCandidate ? equipDiff(hero, usableCandidate) : []).map((x) => [x.id, x.delta]));
-    const cd = usableCandidate ? itemDef(usableCandidate.id) : undefined;
-    afterStats = cd ? heroStats({ ...hero, equipment: { ...hero.equipment, [cd.slot]: usableCandidate } }) : null;
+    // Karşılaştırılan item: sürüklenip uygun hedefin üstünde tutulan, yoksa seçili torba item'i
+    const compared = (dragPreview ? bag.find((i) => i.uid === dragPreview) : undefined) ?? usableCandidate;
+    const diff = new Map((compared ? equipDiff(hero, compared) : []).map((x) => [x.id, x.delta]));
+    const cd = compared ? itemDef(compared.id) : undefined;
+    afterStats = cd ? heroStats({ ...hero, equipment: { ...hero.equipment, [cd.slot]: compared } }) : null;
     const stats = el('div', 'gr-stats');
     for (const p of heroPanel(hero)) {
       const row = el('div', 'gr-stat');
@@ -544,6 +651,15 @@ export function openGear(root: HTMLElement, src: GearSource, o: { hero?: string;
       stats.append(row);
     }
     mid.append(stats);
+    // Skills: 4 skill + pasif, o anki statlarla (savaş tooltip'iyle aynı sayılar); karşılaştırmada değişen sayılar "24 → 30 (+6)"
+    if (curStats) {
+      const skills = el('div', 'gr-skills');
+      skills.append(el('div', 'gr-sec', 'Skills'));
+      const grid = el('div', 'gr-skill-grid');
+      for (const r of gearSkillRows(hero.class, curStats, afterStats)) grid.append(skillCard(r, hero.class));
+      skills.append(grid);
+      mid.append(skills);
+    }
     body.append(mid);
 
     // --- Sağ: torba

@@ -143,6 +143,14 @@ installWiki(document.getElementById('ui-root')!, {
 
 // --- In-game Menu (top right "Menu" button + Esc) of battle / team select / multiplayer: Resume / Settings / New Game / Team Select /
 // Retreat to Map (campaign) / Back to Main Menu; the battle is paused while it is open (src/ui/game-menu.ts) ---
+/** Etkin sefer haritası (yoksa null): ortak Menu'nün harita bağlamı. Sahne sınıfı statik içe aktarılmaz (kod bölme). */
+interface MapMenuScene {
+  menuState(): import('./game/session-flow').MapMenuState;
+  menuSave(): void;
+  menuLoad(): void;
+}
+const mapNow = (): MapMenuScene | null => (game.scene.isActive('CampaignMapScene') ? (game.scene.getScene('CampaignMapScene') as unknown as MapMenuScene) : null);
+
 new GameMenu(document.getElementById('ui-root')!, {
   context: () => flowContext(game),
   newGame: () => startNewGame(game),
@@ -151,6 +159,10 @@ new GameMenu(document.getElementById('ui-root')!, {
   codex: () => openWiki(),
   retreat: () => battleNow()?.campaign?.retreat?.(),
   retreatLabel: () => battleNow()?.campaign?.retreatLabel,
+  // Sefer haritası Menu'sü (aynı bileşen; Ömer 2026-10-10): sahnenin durumu ve Save / Load
+  mapMenu: () => mapNow()?.menuState() ?? null,
+  save: () => mapNow()?.menuSave(),
+  load: () => mapNow()?.menuLoad(),
   onOpen: () => {
     debugState.uiPaused = true;
     battleNow()?.applyDebugTiming();

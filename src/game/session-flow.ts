@@ -37,7 +37,18 @@ export function flowButtons(ctx: FlowContext): { newGame: boolean; teamSelect: b
 /** Pure decision: the "Back to Main Menu" entry is shown everywhere except on the main menu itself. */
 export const mainMenuButton = (ctx: FlowContext): boolean => ctx !== 'none' && ctx !== 'main-menu';
 
-export type MenuItemId = 'resume' | 'settings' | 'codex' | 'newGame' | 'teamSelect' | 'retreat' | 'mainMenu';
+export type MenuItemId = 'resume' | 'settings' | 'codex' | 'newGame' | 'teamSelect' | 'retreat' | 'save' | 'load' | 'mainMenu';
+
+/**
+ * Sefer haritasının Menu'sü için sahneden gelen durum (Ömer 2026-10-10: harita Menu'sü artık savaştakiyle AYNI ortak bileşen, src/ui/game-menu.ts).
+ * `available` false = Menu düğmesi gizli (yuva ekranı, kahraman paneli, Formation, Gear açık; yürüyüş sürüyor). `save` = Save satırının yazısı
+ * ("Save  2/5"; elle kayıt yoksa null), `load` = Load satırı (yalnızca Normal mod).
+ */
+export interface MapMenuState {
+  available: boolean;
+  save: string | null;
+  load: boolean;
+}
 
 export interface MenuSpec {
   items: MenuItemId[];
@@ -56,10 +67,10 @@ export const RETREAT_CONFIRM = 'Retreat? This battle will not count.';
  * Quick battle: Resume / Codex / Settings / Leave (= takım seçimine dön) / Main Menu;
  * campaign + endless battle (undecided): Resume / Codex / Settings / Retreat (to Map | to Camp) / Main Menu (retreat: the battle does not
  * count; `retreatToMap` in campaign-session); multiplayer: Resume / Codex / Settings / Leave (= maçı terk, ana menü).
- * Leaving an undecided battle asks first. No menu (null) on the main menu and the campaign map (it has its own Menu:
- * Resume / Save / Load / Codex / Settings / Main Menu, `CampaignMapScene.openMenu`).
+ * Leaving an undecided battle asks first. No menu (null) on the main menu. Campaign map (`map` state from the scene): Resume / Save / Load
+ * (Normal) / Codex / Settings / Main Menu, the SAME shared component as battle (Ömer 2026-10-10).
  */
-export function menuItems(ctx: FlowContext): MenuSpec | null {
+export function menuItems(ctx: FlowContext, map?: MapMenuState | null): MenuSpec | null {
   const f = flowButtons(ctx);
   const leave = ctx === 'campaign-battle-live' ? 'Leave the battle and return to the main menu? Progress since your last save will be lost.' : ctx === 'mp-live' ? 'Leave the match? Leaving counts as a loss.' : 'Leave the current battle?';
   switch (ctx) {
@@ -80,6 +91,15 @@ export function menuItems(ctx: FlowContext): MenuSpec | null {
       if (ctx === 'mp-live' || ctx === 'mp') spec.labels = { mainMenu: 'Leave' };
       return spec;
     }
+    case 'campaign': {
+      // Sefer haritası: Resume / Save (elle kayıt varsa) / Load (Normal) / Codex / Settings / Main Menu (ilerleme kayıtta: onay yok)
+      if (!map?.available) return null;
+      const items: MenuItemId[] = ['resume'];
+      if (map.save) items.push('save');
+      if (map.load) items.push('load');
+      items.push('codex', 'settings', 'mainMenu');
+      return { items, confirm: {}, ...(map.save ? { labels: { save: map.save } } : {}) };
+    }
     default:
       return null;
   }
@@ -92,6 +112,8 @@ export const MENU_LABELS: Record<MenuItemId, string> = {
   newGame: 'New Game',
   teamSelect: 'Leave',
   retreat: 'Retreat to Map',
+  save: 'Save',
+  load: 'Load',
   mainMenu: 'Main Menu',
 };
 
