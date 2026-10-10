@@ -4,6 +4,7 @@ import './motion';
 import { onReducedMotionChange, reducedMotion, setReducedMotion } from './motion-pref';
 import { openDebugMenu } from './debug-entry';
 import { loadUiSoundLevel, onUiSoundLevelChange, previewUiSound, setUiSoundLevel } from './ui-sound';
+import { loadMusicLevel, onMusicLevelChange, setMusicLevel, setMusicMaster } from './music';
 import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFullscreen } from './fullscreen';
 
 /**
@@ -12,7 +13,7 @@ import { currentSupport, IOS_HINT, isStandalone, onFullscreenChange, toggleFulls
  * kutusuz serif satırlar (seçili satırın önünde kor rengi elmas + hafif parıltı), sağda değer/denetim, sol üstte "◂ Back".
  * Ölçüler oyun birimiyle (--gu: 1 mantıksal birimin CSS pikseli) ve sütun konumu ana menüyle aynı (--menu-x; src/ui/viewport.ts).
  * Klavye: yukarı/aşağı satır, sol/sağ ses, Enter seçer, Esc / Back kapatır; altta açık olan menü yeniden görünür. Açıkken sahne girişi kilitli.
- * İçerik: ses seviyesi (0-10, tarayıcıda saklanır), UI sounds (menü sesleri 0-10, 0 = kapalı), Reduced motion + tam ekran. Oyun akışı eylemleri menüdedir (`src/ui/game-menu.ts`).
+ * İçerik: ses seviyesi (0-10, tarayıcıda saklanır), Music (ana menü müziği 0-10, 0 = kapalı), UI sounds (menü sesleri 0-10, 0 = kapalı), Reduced motion + tam ekran. Oyun akışı eylemleri menüdedir (`src/ui/game-menu.ts`).
  */
 export interface SettingsHooks {
   /** Ses seviyesi değişti (0..10). */
@@ -95,6 +96,7 @@ export class SettingsScreen {
       paintSlider();
       saveVolume(v);
       hooks.onVolume(v);
+      setMusicMaster(v); // müzik ana ses seviyesiyle çarpılır (src/ui/music.ts)
       if (preview) hooks.preview();
     });
     paintSlider();
@@ -103,6 +105,32 @@ export class SettingsScreen {
     minus.addEventListener('click', () => apply(Number(slider.value) - 1, true));
     plus.addEventListener('click', () => apply(Number(slider.value) + 1, true));
     this.addRow(col, 'Sound volume', () => undefined, [minus, slider, plus, value], (d) => apply(Number(slider.value) + d, true));
+
+    // --- Music: ana menü müziği 0-10 (0 = tamamen kapalı; src/ui/music.ts, data/audio-music.json). Ana ses seviyesiyle çarpılır; menüde canlı duyulur ---
+    const muMinus = el('button', 'st-step', '−');
+    muMinus.type = 'button';
+    muMinus.setAttribute('aria-label', 'Lower music');
+    const muSlider = el('input', 'st-slider');
+    muSlider.type = 'range';
+    muSlider.min = '0';
+    muSlider.max = '10';
+    muSlider.step = '1';
+    muSlider.setAttribute('aria-label', 'Music volume');
+    const muPlus = el('button', 'st-step', '+');
+    muPlus.type = 'button';
+    muPlus.setAttribute('aria-label', 'Raise music');
+    const muValue = el('span', 'st-value');
+    const paintMu = (v: number): void => {
+      muSlider.value = String(v);
+      muValue.textContent = v === 0 ? 'Off' : String(v);
+      muSlider.style.setProperty('--fill', `${v * 10}%`);
+    };
+    paintMu(loadMusicLevel());
+    onMusicLevelChange(paintMu);
+    muSlider.addEventListener('input', () => setMusicLevel(Number(muSlider.value)));
+    muMinus.addEventListener('click', () => setMusicLevel(Number(muSlider.value) - 1));
+    muPlus.addEventListener('click', () => setMusicLevel(Number(muSlider.value) + 1));
+    this.addRow(col, 'Music', () => undefined, [muMinus, muSlider, muPlus, muValue], (d) => setMusicLevel(Number(muSlider.value) + d));
 
     // --- UI sounds: menü sesleri (deri, parşömen, ahşap tık; src/ui/ui-sound.ts, data/audio-ui.json). 0 = kapalı; ana ses seviyesiyle çarpılır ---
     const uiMinus = el('button', 'st-step', '−');
@@ -228,6 +256,7 @@ export class SettingsScreen {
       true,
     );
     hooks.onVolume(Number(slider.value));
+    setMusicMaster(Number(slider.value));
     registerSettingsScreen(this);
   }
 
@@ -286,7 +315,10 @@ export function setSettingsOpen(open: boolean, onBack?: () => void): void {
 /** Ses seviyesini değiştir (0-10; ana menü Settings sütunu); `preview` true ise deneme sesi çalar. Ekran yoksa yalnızca saklar. */
 export function setSettingsVolume(level: number, preview = false): void {
   if (instance) instance.applyVolume(level, preview);
-  else saveVolume(Math.min(10, Math.max(0, Math.round(level))));
+  else {
+    saveVolume(Math.min(10, Math.max(0, Math.round(level))));
+    setMusicMaster(level);
+  }
 }
 export function isSettingsOpen(): boolean {
   return instance?.isOpen ?? false;

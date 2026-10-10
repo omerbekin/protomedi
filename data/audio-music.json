@@ -1,0 +1,54 @@
+{
+  "_not": "ANA MENÜ MÜZİĞİ (Ömer 2026-10-10). Dosya yok: WebAudio ile kodla bestelenir ve çalınır (src/game/music.ts; denetim src/ui/music.ts). Re Dorian (D E F G A B C) + Aeolian rengi (Bb), 3/4, yavaş akor döngüsü. Çalgılar: lavta/arp (Karplus-Strong telli çalgı, arpej + bas), yumuşak drone (D2 + A2 açık beşli) ve akor pedi, bazı ölçülerde çerçeve davul (bodhrán: 'dum' + kenar 'tek'), blok flüt (recorder) ezgisi. Hafif yankı (ConvolverNode, üretilmiş impuls). Biçim: 4 bölüm x 8 ölçü = 32 ölçü (~69 sn); her döngüde 'cycles' listesinden sıradaki değişiklikler + döngü numarasıyla tohumlanan süslemeler / üretilen ezgi: aynı döngü kısa sürede tekrar etmez. Akor adları: kök (C, C#, Db, ... B) + isteğe bağlı 'm' (minör). Tema notaları 'Nota+oktav:vuruş' (D5:1.5 = D5 bir buçuk vuruş); her ölçünün toplamı beatsPerBar. Arp kalıpları ölçü başına 6 sekizlik (2 ölçülük liste dönüşümlü): 0 kök3, 1 beşli3, 2 kök4, 3 üçlü4, 4 beşli4, 5 kök5, null sus. Davul kalıbı 6 sekizlik güç (>= dumAt 'dum', altı 'tek', 0 sus). Seviye = Settings > Music (0-10, 0 = tamamen kapalı) x Settings > Sound volume x master. Sayılar kulakla ayarlanır.",
+  "bpm": 84,
+  "beatsPerBar": 3,
+  "tonic": "D",
+  "mode": "dorian",
+  "master": 0.85,
+  "defaultLevel": 6,
+  "fadeInMs": 3000,
+  "fadeOutMs": 1200,
+  "humanize": { "timingMs": 9, "velocity": 0.18 },
+  "reverb": { "seconds": 3.2, "decay": 3.4, "damp": 0.55, "wet": 0.34, "dry": 0.8 },
+  "softClip": 1.0,
+  "voices": {
+    "harp": { "gain": 0.5, "decay": 2.4, "bassDecay": 3.6, "bassGain": 0.42, "bright": 0.55, "pick": 0.18, "pan": -0.22 },
+    "flute": { "gain": 0.2, "attack": 0.07, "release": 0.16, "vibratoHz": 5.1, "vibratoCents": 13, "vibratoDelay": 0.28, "h2": 0.16, "h3": 0.07, "breath": 0.05, "chiff": 0.18, "pan": 0.2, "lowGain": 0.75 },
+    "pad": { "gain": 0.024, "attack": 0.9, "release": 1.5, "detuneCents": 7, "cutoff": 820, "octave": 4 },
+    "drone": { "gain": 0.025, "notes": ["D2", "A2"], "cutoff": 380, "lfoHz": 0.06, "lfoDepth": 140, "attack": 2.5 },
+    "drum": { "gain": 0.42, "dumAt": 0.6, "pan": 0.05 }
+  },
+  "harpPatterns": {
+    "flow": [0, 1, 3, 4, 5, 4, 0, 1, 3, 4, 3, 1],
+    "climb": [0, 3, 4, 5, 4, 3, 0, 2, 4, 5, 4, 2],
+    "sparse": [0, null, 3, null, 4, null, 0, null, 4, null, 3, null]
+  },
+  "drumPatterns": {
+    "heart": [0.85, 0, 0, 0, 0.32, 0],
+    "march": [1, 0, 0.4, 0, 0.55, 0.28],
+    "roll": [1, 0.22, 0.38, 0.3, 0.62, 0.5]
+  },
+  "themes": {
+    "banner": ["A4:1 D5:1.5 E5:0.5", "F5:2 D5:1", "C5:1 A4:1 C5:1", "E5:1.5 D5:0.5 C5:1", "A4:1 D5:1.5 E5:0.5", "F5:1 G5:1 F5:1", "G5:1 E5:1 C5:0.5 E5:0.5", "D5:3"],
+    "march": ["C5:1 F5:1 A5:1", "G5:2 E5:1", "B4:1 D5:1 G5:1", "F5:1.5 E5:0.5 D5:1", "Bb4:1 D5:1 F5:1", "A5:2 G5:0.5 F5:0.5", "G5:1 E5:1 C5:1", "E5:2 C#5:1"]
+  },
+  "melodyRange": { "high": ["A4", "A5"], "low": ["D4", "D5"] },
+  "rhythms": {
+    "high": [[1, 1, 1], [2, 1], [1.5, 0.5, 1], [1, 2], [1, 1, 0.5, 0.5]],
+    "low": [[3], [2, 1], [1, 2]],
+    "cadence": [[3], [2, 1]]
+  },
+  "sections": {
+    "hearth": { "chords": ["Dm", "C", "Dm", "Am", "F", "C", "G", "Dm"], "harp": "flow", "bass": true, "pad": 1, "drum": null, "melody": null },
+    "banner": { "chords": ["Dm", "Bb", "F", "C", "Dm", "Bb", "C", "Dm"], "harp": "flow", "bass": true, "pad": 1, "drum": "heart", "melody": "theme:banner" },
+    "march": { "chords": ["F", "C", "G", "Dm", "Bb", "F", "C", "A"], "harp": "climb", "bass": true, "pad": 1.15, "drum": "march", "drumLast": "roll", "melody": "theme:march" },
+    "embers": { "chords": ["Dm", "C", "Bb", "C", "F", "Am", "Bb", "A"], "harp": "sparse", "bass": true, "pad": 0.9, "drum": null, "melody": "gen:high" }
+  },
+  "form": ["hearth", "banner", "march", "embers"],
+  "cycles": [
+    {},
+    { "hearth": { "melody": "gen:low", "harp": "sparse" }, "banner": { "ornament": 0.35 }, "march": { "ornament": 0.2 }, "embers": { "drum": "heart", "harp": "flow" } },
+    { "hearth": { "drum": "heart" }, "banner": { "ornament": 0.5, "harp": "climb" }, "march": { "ornament": 0.4, "harp": "flow" }, "embers": { "melody": "gen:low" } },
+    { "hearth": { "melody": "gen:high", "harp": "flow" }, "banner": { "melody": "gen:high", "drum": null }, "march": { "ornament": 0.3 }, "embers": { "harp": "climb", "drum": "heart" } }
+  ]
+}

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { loadUiSoundLevel, onUiSoundLevelChange, previewUiSound, setUiSoundLevel } from '../../ui/ui-sound';
+import { loadMusicLevel, menuMusic, onMusicLevelChange, setMusicLevel } from '../../ui/music';
 import { getMap, latestSave, migrateSaves, readSaves, slotSummaries, type SaveEntry } from '../../campaign';
 import { backgroundKey, hasBackground, loadRestInBackground, preloadAssets } from '../assets';
 import { campaignArtKey, hasCampaignArt, preloadCampaignArt } from '../campaign-art';
@@ -162,6 +163,8 @@ export class MainMenuScene extends Phaser.Scene {
   private panelRows: Row[] = [];
   private panelSel = 0;
   private back!: Phaser.GameObjects.Container;
+  /** Sağ alttaki küçük sürüm yazısı (__APP_VERSION__). */
+  private version: Phaser.GameObjects.Text | null = null;
   private cards: Array<{ c: Phaser.GameObjects.Container; focus: (on: boolean) => void; run: () => void }> = [];
   private cardSel = 0;
   private cleanups: Array<() => void> = [];
@@ -194,6 +197,7 @@ export class MainMenuScene extends Phaser.Scene {
     this.lookTween = null;
     this.cleanups = [];
     this.promptOpen = false;
+    this.version = null;
   }
 
   preload(): void {
@@ -222,6 +226,7 @@ export class MainMenuScene extends Phaser.Scene {
     this.buildMenuColumn();
     this.buildCards();
     this.buildBack();
+    this.buildVersion();
     this.buildBackground(); // geniş ekran yerleşimi sütunu ve Back'i de konumlar (onStageResize)
     this.modalLayer = this.add.container(0, 0).setDepth(1000);
 
@@ -231,7 +236,11 @@ export class MainMenuScene extends Phaser.Scene {
       if (this.scene.isActive() && (mp.state !== 'idle' || mp.active)) this.scene.start(MP_SCENE);
     });
     this.cleanups.push(offMp);
+    // Ana menü müziği (src/ui/music.ts): ilk kullanıcı hareketinden sonra yükselir; ekran kararmaya başlayınca (savaş / sefer / Endless) söner
+    menuMusic(true);
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_START, () => menuMusic(false));
     this.events.once('shutdown', () => {
+      menuMusic(false);
       for (const fn of this.cleanups) fn();
       this.cleanups = [];
       if (this.promptOpen) unlockInput('main-menu-prompt');
@@ -300,6 +309,7 @@ export class MainMenuScene extends Phaser.Scene {
     if (!this.tweens.isTweening(this.menuCol)) this.menuCol.setX(this.view === 'menu' ? this.colX : this.hiddenColX());
     if (this.panel && !this.tweens.isTweening(this.panel)) this.panel.setX(this.colX);
     this.back.setX(left + 48);
+    this.version?.setPosition(right - 34, H - 22);
     this.applyLook();
   }
 
@@ -526,6 +536,13 @@ export class MainMenuScene extends Phaser.Scene {
   private buildBack(): void {
     const l = elLink(this, '◂ Back', () => this.ready() && this.goBack(), { small: 'Esc' });
     this.back = l.root.setPosition(stageView.left + 48, 56).setDepth(40).setAlpha(0).setVisible(false);
+  }
+
+  /** Sağ alt köşede küçük sürüm yazısı (tasarım kiti: soluk EB Garamond italik; konum layoutStage'de, görünen alanın sağ kenarına göre). */
+  private buildVersion(): void {
+    const v = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '';
+    if (!v) return;
+    this.version = elBody(this, stageView.right - 34, H - 22, `v${v}`, 22, EL.MUTED).setOrigin(1, 1).setAlpha(0.75).setDepth(45);
   }
 
   /** Quick Battle kartının altındaki "Endless mode" anahtarı (açıkken kart Endless'ı açar); seçim tarayıcıda saklanır. */
@@ -918,6 +935,9 @@ export class MainMenuScene extends Phaser.Scene {
     track.on('pointerout', stopDrag);
     draw();
     this.addPanelRow(p, 'Sound volume', () => undefined, { right: [g, ...step('−', trackX - 46, -1), track, ...step('+', trackX + trackW + 42, 1), value], adjust: (d) => set(level + d, true) });
+
+    // --- Music: ana menü müziği 0-10 (0 = tamamen kapalı; DOM Settings satırının aynısı: src/ui/music.ts). Burada canlı duyulur ---
+    this.levelRow(p, 'Music', loadMusicLevel(), (n) => setMusicLevel(n), (n) => (n === 0 ? 'Off' : String(n)), onMusicLevelChange);
 
     // --- UI sounds: menü sesleri 0-10 (0 = kapalı; DOM Settings satırının aynısı: src/ui/ui-sound.ts) ---
     this.levelRow(p, 'UI sounds', loadUiSoundLevel(), (n, preview) => {

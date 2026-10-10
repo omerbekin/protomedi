@@ -11,6 +11,7 @@ Web tabanlı (TypeScript + Phaser 3 + Vite), mobil tarayıcıda da oynanır.
 - Ömer'in "çerçevesi" `docs/design/` altındadır. Orada yazmayan bir tasarım kararını kendi kafana göre verme: varsayım yaptıysan görev sonunda açıkça söyle ve `docs/design/open-questions.md` dosyasına ekle.
 - Küçük adımlar: her adım sonunda oynanabilir bir şey çıkmalı.
 - Ana oturum koordine eder; gerektiğinde `.claude/agents/` altındaki agentları çağırır ve sonuçları Ömer'e tek özet olarak sunar.
+- **Sürüm numarası (Ömer 2026-10-10):** ara sürümleri (0.6.0, 0.7.0 gibi) Ömer söyler. Onun dışında GitHub'a her paylaşımda Claude mevcut sürümü küçük adımla ilerletir (0.6.0 -> 0.6.1 -> 0.6.2; `npm version <x> --no-git-tag-version`). Sürüm ana menüde sağ altta küçük yazar (`__APP_VERSION__`).
 - **Yayın kelimeleri (Ömer 2026-10-10):** "GitHub'a at" = commit + `main`'e push → GitHub Pages canlı test sitesi (https://omerbekin.github.io/protomedi/); biten değişiklikler test için artık buraya gider (localhost:5000 değil). "Canlıya al / canlıya at / live'a al / at" = https://eov.backinn.com.tr'ye yayın (`npm run deploy:cf`), Ömer "her şey tamam" dedikten sonra. Push'tan önce tam `npm test` yeşil olmalı (CI kırmızıysa Pages güncellenmez).
 - **Agent görev adları (Ömer 2026-10-09):** her agent başlatılırken açıklaması (Background tasks'ta görünen ad) agent türüyle başlar: `<tür>: <iş>` (ör. `ui-dev: battle HUD mockups`, `engine-dev: melee reach bug`, `balance-tester: Endless balance`, `content-designer: summon VFX`, `campaign-dev: item MVP`, `endless-dev: gear bag`, `multiplayer-dev: ...`). Tür `.claude/agents/` altındaki rollerden biridir; genel amaçlı agent kullanılsa bile açıklama işin rolüyle başlar.
 
@@ -79,7 +80,7 @@ tests/            vitest testleri
 
 ## Kapsam dışı (şimdilik)
 - Co-op ve sefer çok oyunculusu. (İki oyunculu çevrimiçi **Quick Battle** var: `docs/design/multiplayer.md`, `src/net/`, Worker `cloudflare/`; ağ katmanı yalnızca lockstep hamle gönderir, motor kuralı değişmez.)
-- Gerçek ses/müzik (placeholder bip sesleri yeterli).
+- Kayıtlı (gerçek) ses/müzik dosyaları; SFX ve ana menü müziği WebAudio sentezidir (müzik: `data/audio-music.json`, `src/game/music.ts`, kontrol `src/ui/music.ts`, Settings > Music; Ömer 2026-10-10).
 
 ## Komutlar
 - `npm run dev` — geliştirme sunucusu (`--host` açık: aynı Wi-Fi'deki telefondan da açılır)
