@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Valdoria x2 Map Template</title>
+<!--
+  Valdoria'nın iki kat düğümlü hâli için ŞABLON (campaign-dev, 2026-10-10; Ömer onayı için). Oyun kodu DEĞİL, oyun verisine dokunmaz.
+  Tasarım belgesi: docs/design/campaign/valdoria-2x.md. Harita: geniş Valdoria görseli (assets/campaign/valdoria-bg-wide.webp kopyası).
+  Mevcut düğümler altın halka, önerilen yeni düğümler kor rengi halka + "NEW". Yeni yollar kor rengi. Bir düğümün üstüne gelince / dokununca
+  adı, türü, durak numarası ve notu görünür. Sağ alttaki düğmeler: yalnızca yeniler / tümü, durak numaraları.
+-->
+<style>
+@font-face { font-family: 'Cinzel'; font-weight: 400 900; font-display: swap; src: url('valdoria-2x/fonts/Cinzel-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-weight: 400 800; font-display: swap; src: url('valdoria-2x/fonts/EBGaramond-normal-latin.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400 800; font-display: swap; src: url('valdoria-2x/fonts/EBGaramond-italic-latin.woff2') format('woff2'); }
+:root { --gold: 217,178,106; --on: #f3d999; --txt: #d9c8a2; --muted: #a8977a; --ember: #e0702a; --ember2: #ffb35a;
+  --cin: Cinzel, Georgia, serif; --gar: 'EB Garamond', Georgia, serif; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #050403; color: var(--txt); font-family: var(--gar); overflow: hidden; }
+#wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+svg { width: 100%; height: 100%; display: block; }
+.title { font: 600 34px var(--cin); letter-spacing: .14em; fill: var(--on); paint-order: stroke; stroke: rgba(8,6,4,.9); stroke-width: 6px; }
+.sub { font: italic 20px var(--gar); fill: var(--txt); paint-order: stroke; stroke: rgba(8,6,4,.9); stroke-width: 5px; }
+.edge { fill: none; stroke: rgba(242,220,170,.85); stroke-width: 3.2; stroke-linecap: round; }
+.edge.dash { stroke-dasharray: 9 9; }
+.edge.new { stroke: var(--ember2); }
+.node .disc { fill: rgba(16,11,7,.92); stroke: rgb(var(--gold)); stroke-width: 2.5; }
+.node.new .disc { stroke: var(--ember2); stroke-width: 3.2; }
+.node.new .halo { fill: none; stroke: rgba(255,179,90,.55); stroke-width: 2; stroke-dasharray: 3 4; }
+.node .glyph { fill: none; stroke: var(--on); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.node .glyph .f { fill: var(--on); stroke: none; }
+.node.t-boss .glyph { stroke: #ff7a63; } .node.t-boss .glyph .f { fill: #ff7a63; }
+.node.t-elite .glyph { stroke: #f0c24a; } .node.t-elite .glyph .f { fill: #f0c24a; }
+.node.new .glyph { stroke: #ffd7a0; }
+.node .tag { font: 600 11px var(--cin); letter-spacing: .12em; fill: #1a0f06; }
+.node .tagbg { fill: var(--ember2); }
+.node .lbl { font: 600 13px var(--cin); letter-spacing: .06em; fill: var(--txt); paint-order: stroke; stroke: rgba(8,6,4,.9); stroke-width: 4px; }
+.node .stop { font: 600 12px var(--cin); fill: #1a0f06; }
+.node .stopbg { fill: rgba(242,220,170,.92); }
+.node { cursor: pointer; }
+.node:hover .disc { stroke-width: 4.5; }
+.hide-old .node.old .lbl, .hide-old .edge.old { opacity: .25; }
+.no-stop .stopg { display: none; }
+#tip { position: fixed; pointer-events: none; z-index: 10; min-width: 220px; max-width: 340px; padding: 10px 14px; background: linear-gradient(180deg, rgba(30,22,14,.96), rgba(12,9,6,.97)); border: 1px solid rgba(var(--gold),.5); box-shadow: 0 10px 28px rgba(0,0,0,.6); display: none; }
+#tip b { display: block; font: 600 17px var(--cin); letter-spacing: .06em; color: var(--on); }
+#tip i { display: block; font-size: 15px; color: var(--muted); }
+#tip span { display: block; font-size: 15px; margin-top: 4px; }
+#tip .new { color: var(--ember2); font: 600 11px var(--cin); letter-spacing: .14em; }
+#legend { position: fixed; left: 14px; bottom: 14px; padding: 10px 14px; background: rgba(10,7,5,.88); border: 1px solid rgba(var(--gold),.35); font-size: 14px; display: grid; grid-template-columns: repeat(2, auto); gap: 4px 18px; }
+#legend h4 { grid-column: 1 / -1; margin: 0 0 4px; font: 600 12px var(--cin); letter-spacing: .16em; color: var(--on); text-transform: uppercase; }
+#legend div { display: flex; align-items: center; gap: 8px; }
+#legend svg { width: 26px; height: 26px; flex: none; }
+#tools { position: fixed; right: 14px; bottom: 14px; display: flex; gap: 6px; }
+#tools button { all: unset; cursor: pointer; padding: 8px 12px; font: 600 12px var(--cin); letter-spacing: .1em; color: var(--muted); background: rgba(10,7,5,.88); border: 1px solid rgba(var(--gold),.35); }
+#tools button.on { color: #1a0f06; background: var(--ember); border-color: var(--ember2); }
+#stats { position: fixed; right: 14px; top: 14px; padding: 8px 14px; background: rgba(10,7,5,.88); border: 1px solid rgba(var(--gold),.35); font-size: 15px; line-height: 1.35; }
+#stats b { font: 600 12px var(--cin); letter-spacing: .14em; color: var(--on); }
+@media (max-height: 560px) { #legend { font-size: 11px; gap: 2px 10px; padding: 6px 8px; } #legend svg { width: 18px; height: 18px; } #stats { font-size: 11px; } }
+</style>
+</head>
+<body>
+<div id="wrap"><svg id="map" viewBox="0 0 1916 821" preserveAspectRatio="xMidYMid meet"></svg></div>
+<div id="tip"></div>
+<div id="legend"></div>
+<div id="stats"></div>
+<div id="tools"><button id="bOld">Highlight new</button><button id="bStop" class="on">Stop numbers</button></div>
+<script>
+const DATA = {"nodes": [{"id": "1", "name": "Mill Road", "type": "battle", "region": "I", "pos": [0.146, 0.846], "note": "Start · Battle", "new": false}, {"id": "2", "name": "Ravenwood", "type": "battle", "region": "I", "pos": [0.276, 0.727], "note": "Battle · Outlaw Pack", "new": false}, {"id": "3", "name": "Ruined Watchtower", "type": "elite", "region": "I", "pos": [0.339, 0.591], "note": "Elite · Bandit Chief", "new": false}, {"id": "4", "name": "Ashford Village", "type": "town", "region": "I", "pos": [0.414, 0.643], "note": "Town · Rest, Recruits", "new": false}, {"id": "5A", "name": "Misty Marsh", "type": "battle", "region": "II", "pos": [0.494, 0.805], "note": "Battle · Bog Ambush", "new": false}, {"id": "5B", "name": "Iron Pass", "type": "battle", "region": "II", "pos": [0.452, 0.497], "note": "Battle · Ambush", "new": false}, {"id": "6A", "name": "Witch's Hut", "type": "event", "region": "II", "pos": [0.565, 0.856], "note": "Event · Cursed Merchant", "new": false}, {"id": "6B", "name": "Dwarven Mine", "type": "treasure", "region": "II", "pos": [0.542, 0.497], "note": "Treasure · Guarded", "new": false}, {"id": "7", "name": "Valdren Keep", "type": "town", "region": "II", "pos": [0.625, 0.635], "note": "City · Rest, Recruits", "new": false, "city": true}, {"id": "8A", "name": "St. Brann's Abbey", "type": "treasure", "region": "II", "pos": [0.706, 0.455], "note": "Treasure · Relic Vault", "new": false}, {"id": "8B", "name": "Mercenary Camp", "type": "battle", "region": "II", "pos": [0.725, 0.696], "note": "Battle · Gold", "new": false}, {"id": "8C", "name": "Black Cathedral", "type": "elite", "region": "II", "pos": [0.719, 0.815], "note": "Elite · The Undying", "new": false}, {"id": "9", "name": "King's Bridge", "type": "boss", "region": "II", "pos": [0.81, 0.591], "note": "Boss · The Bridge Warden", "new": false}, {"id": "10", "name": "Ashen Plain", "type": "battle", "region": "III", "pos": [0.886, 0.505], "note": "Battle · Cursed Ground", "new": false}, {"id": "11A", "name": "Dragon's Spine", "type": "elite", "region": "III", "pos": [0.836, 0.318], "note": "Elite · Hidden Entrance", "new": false}, {"id": "11B", "name": "Siege Line", "type": "battle", "region": "III", "pos": [0.95, 0.443], "note": "Battle", "new": false}, {"id": "12", "name": "Castle Morvane", "type": "boss", "region": "III", "pos": [0.924, 0.17], "note": "Final Boss", "new": false}, {"id": "1a", "name": "Fisher's Cove", "type": "event", "region": "I", "pos": [0.125, 0.69], "note": "Olay · kıyı köyü (tutorial: olayları öğretir)", "new": true}, {"id": "2a", "name": "Woodcutter's Clearing", "type": "battle", "region": "I", "pos": [0.215, 0.615], "note": "Savaş · orman haydutları (2 kişilik takım)", "new": true}, {"id": "4a", "name": "Ashford Ford", "type": "battle", "region": "I", "pos": [0.468, 0.665], "note": "Savaş · yeni bölüğün ilk savaşı (zorunlu)", "new": true}, {"id": "5A2", "name": "Reed Ferry", "type": "rest", "region": "II", "pos": [0.515, 0.905], "note": "Dinlenme noktası (çeşme) · YENİ TÜR, soru 1", "new": true}, {"id": "6A2", "name": "Bog Hollow", "type": "battle", "region": "II", "pos": [0.6, 0.745], "note": "Savaş · bataklık yaratıkları", "new": true}, {"id": "5B2", "name": "Shepherd's Watch", "type": "event", "region": "II", "pos": [0.497, 0.57], "note": "Olay · dağ yolu", "new": true}, {"id": "6B2", "name": "Old Quarry", "type": "elite", "region": "II", "pos": [0.585, 0.53], "note": "Elit · taş ocağı ustası", "new": true}, {"id": "8A2", "name": "Pilgrim Road", "type": "battle", "region": "II", "pos": [0.748, 0.49], "note": "Savaş · yol kesiciler", "new": true}, {"id": "8B2", "name": "Crossroads Market", "type": "merchant", "region": "II", "pos": [0.762, 0.705], "note": "Tüccar · YENİ TÜR, soru 2", "new": true}, {"id": "8C2", "name": "Grave Field", "type": "battle", "region": "II", "pos": [0.792, 0.8], "note": "Savaş · mezarlık", "new": true}, {"id": "8M", "name": "Riverside Camp", "type": "rest", "region": "II", "pos": [0.762, 0.6], "note": "Dinlenme noktası (boss öncesi; madde 264'ün çözümü) · soru 1", "new": true}, {"id": "9a", "name": "Burned Hamlet", "type": "event", "region": "III", "pos": [0.845, 0.535], "note": "Olay · köprü sonrası", "new": true}, {"id": "11A2", "name": "Frozen Pass", "type": "battle", "region": "III", "pos": [0.75, 0.26], "note": "Savaş · donmuş geçit", "new": true}, {"id": "11A3", "name": "Ice Cave", "type": "treasure", "region": "III", "pos": [0.8, 0.16], "note": "Hazine (korumasız sandık)", "new": true}, {"id": "11B2", "name": "Forward Camp", "type": "merchant", "region": "III", "pos": [0.978, 0.37], "note": "Tüccar + dinlenme (son kasaba yerine) · soru 2", "new": true}, {"id": "11B3", "name": "Morvane's Outworks", "type": "elite", "region": "III", "pos": [0.99, 0.27], "note": "Elit · kale önü tahkimatı", "new": true}, {"id": "12a", "name": "Gate of Cinders", "type": "battle", "region": "III", "pos": [0.875, 0.235], "note": "Savaş · kale kapısı (zorunlu, finalden önce)", "new": true}], "edges": [{"from": "1", "to": "1a", "style": "solid", "new": true}, {"from": "1a", "to": "2", "style": "solid", "new": true}, {"from": "2", "to": "2a", "style": "solid", "new": true}, {"from": "2a", "to": "3", "style": "solid", "new": true}, {"from": "3", "to": "4", "style": "solid", "new": false}, {"from": "4", "to": "4a", "style": "solid", "new": true}, {"from": "4a", "to": "5A", "style": "dashed", "new": true}, {"from": "5A", "to": "5A2", "style": "dashed", "new": true}, {"from": "5A2", "to": "6A", "style": "dashed", "new": true}, {"from": "6A", "to": "6A2", "style": "dashed", "new": true}, {"from": "6A2", "to": "7", "style": "dashed", "new": true}, {"from": "4a", "to": "5B", "style": "dashed", "new": true}, {"from": "5B", "to": "5B2", "style": "dashed", "new": true}, {"from": "5B2", "to": "6B", "style": "dashed", "new": true}, {"from": "6B", "to": "6B2", "style": "dashed", "new": true}, {"from": "6B2", "to": "7", "style": "dashed", "new": true}, {"from": "7", "to": "8A", "style": "dashed", "new": false}, {"from": "8A", "to": "8A2", "style": "dashed", "new": true}, {"from": "8A2", "to": "8M", "style": "dashed", "new": true}, {"from": "7", "to": "8B", "style": "dashed", "new": false}, {"from": "8B", "to": "8B2", "style": "dashed", "new": true}, {"from": "8B2", "to": "8M", "style": "dashed", "new": true}, {"from": "7", "to": "8C", "style": "dashed", "new": false}, {"from": "8C", "to": "8C2", "style": "dashed", "new": true}, {"from": "8C2", "to": "8M", "style": "dashed", "new": true}, {"from": "8M", "to": "9", "style": "solid", "new": true}, {"from": "9", "to": "9a", "style": "solid", "new": true}, {"from": "9a", "to": "10", "style": "solid", "new": true}, {"from": "10", "to": "11A", "style": "dashed", "new": false}, {"from": "11A", "to": "11A2", "style": "dashed", "new": true}, {"from": "11A2", "to": "11A3", "style": "dashed", "new": true}, {"from": "11A3", "to": "12a", "style": "dashed", "new": true}, {"from": "10", "to": "11B", "style": "dashed", "new": false}, {"from": "11B", "to": "11B2", "style": "dashed", "new": true}, {"from": "11B2", "to": "11B3", "style": "dashed", "new": true}, {"from": "11B3", "to": "12a", "style": "dashed", "new": true}, {"from": "12a", "to": "12", "style": "solid", "new": true}], "region": [0.08229, 0.00077, 0.79804, 0.94083], "dist": {"1": 1, "1a": 2, "2": 3, "2a": 4, "3": 5, "4": 6, "4a": 7, "5A": 8, "5B": 8, "5A2": 9, "5B2": 9, "6A": 10, "6B": 10, "6A2": 11, "6B2": 11, "7": 12, "8A": 13, "8B": 13, "8C": 13, "8A2": 14, "8B2": 14, "8C2": 14, "8M": 15, "9": 16, "9a": 17, "10": 18, "11A": 19, "11B": 19, "11A2": 20, "11B2": 20, "11A3": 21, "11B3": 21, "12a": 22, "12": 23}, "routes": 12, "stops": [23]};
+const NS = 'http://www.w3.org/2000/svg';
+const [rx0, ry0, rx1, ry1] = DATA.region;
+const XY = (p) => [ (rx0 + p[0] * (rx1 - rx0)) * 1916, (ry0 + p[1] * (ry1 - ry0)) * 821 ];
+// Oyun içi düğüm glifleri (src/game/campaign-panels.ts > drawNodeGlyph) SVG karşılığı; rest ve merchant ÖNERİ glifleri
+const GLYPH = {
+  battle: '<path d="M-9 -9 L9 9 M9 -9 L-9 9 M-9 4 L-4 9 M9 4 L4 9"/>',
+  elite: '<circle cx="0" cy="-2" r="8"/><circle class="f" cx="-3" cy="-3" r="1.8"/><circle class="f" cx="3" cy="-3" r="1.8"/><path d="M-4 6 L-4 10 M0 6 L0 10 M4 6 L4 10"/>',
+  boss: '<path d="M-10 7 L-10 -5 L-5 1 L0 -9 L5 1 L10 -5 L10 7 Z"/><circle class="f" cx="0" cy="3" r="1.8"/>',
+  town: '<path d="M-9 9 L-9 -8 L-5 -8 L-5 -4 L-1 -4 L-1 -8 L3 -8 L3 -4 L9 -4 L9 9 Z M-3 9 L-3 3 L3 3 L3 9"/>',
+  treasure: '<rect x="-10" y="-2" width="20" height="10"/><path d="M-10 -2 L-10 -6 L-6 -9 L6 -9 L10 -6 L10 -2 M-2 -2 L-2 2 M2 -2 L2 2"/>',
+  event: '<path d="M-5.8 -5.6 A6 6 0 1 1 2.5 1.5 L0 4"/><circle class="f" cx="0" cy="8.5" r="1.8"/>',
+  rest: '<path d="M-10 4 L10 4 L7 9 L-7 9 Z M0 4 L0 -3 M0 -10 C-4 -5 -4 -2 0 -2 C4 -2 4 -5 0 -10"/>',
+  merchant: '<path d="M-7 -3 L7 -3 L9 9 L-9 9 Z M-3 -3 C-3 -9 3 -9 3 -3"/><circle class="f" cx="0" cy="3" r="2"/>',
+};
+const TYPE_NAME = { battle: 'Battle', elite: 'Elite', boss: 'Boss', town: 'Town / City', treasure: 'Treasure', event: 'Event', rest: 'Rest point (NEW TYPE)', merchant: 'Merchant (NEW TYPE)' };
+const svg = document.getElementById('map');
+const el = (tag, attrs = {}, parent = svg) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); parent.append(e); return e; };
+el('image', { href: 'valdoria-2x/map.webp', x: 0, y: 0, width: 1916, height: 821, preserveAspectRatio: 'none' });
+el('rect', { x: 0, y: 0, width: 1916, height: 821, fill: 'rgba(8,6,4,.18)' });
+const t = el('text', { x: 40, y: 60, class: 'title' }); t.textContent = 'VALDORIA · x2 TEMPLATE';
+const s = el('text', { x: 42, y: 92, class: 'sub' }); s.textContent = `${DATA.nodes.length} stops on the map (17 today), ${DATA.stops[0]} per run (12 today), ${DATA.routes} routes. Gold = today, ember = proposed.`;
+const byId = Object.fromEntries(DATA.nodes.map((n) => [n.id, n]));
+const eg = el('g');
+for (const e of DATA.edges) {
+  const [x1, y1] = XY(byId[e.from].pos); const [x2, y2] = XY(byId[e.to].pos);
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1, k = 0.12;
+  el('path', { d: `M${x1} ${y1} Q${mx - dy * k} ${my + dx * k} ${x2} ${y2}`, class: `edge ${e.style === 'dashed' ? 'dash' : ''} ${e.new ? 'new' : 'old'}` }, eg);
+}
+const tip = document.getElementById('tip');
+for (const n of DATA.nodes) {
+  const [x, y] = XY(n.pos);
+  const g = el('g', { class: `node t-${n.type} ${n.new ? 'new' : 'old'}`, transform: `translate(${x} ${y})` });
+  if (n.new) el('circle', { class: 'halo', r: 27 }, g);
+  el('circle', { class: 'disc', r: n.type === 'boss' ? 24 : 20 }, g);
+  const gl = el('g', { class: 'glyph' }, g); gl.innerHTML = GLYPH[n.type];
+  const lbl = el('text', { class: 'lbl', x: 0, y: 40, 'text-anchor': 'middle' }, g); lbl.textContent = n.name;
+  const sg = el('g', { class: 'stopg' }, g);
+  el('circle', { class: 'stopbg', cx: 17, cy: -17, r: 10 }, sg);
+  const st = el('text', { class: 'stop', x: 17, y: -13, 'text-anchor': 'middle' }, sg); st.textContent = DATA.dist[n.id];
+  if (n.new) { el('rect', { class: 'tagbg', x: -17, y: -36, width: 34, height: 14, rx: 2 }, g); const tg = el('text', { class: 'tag', x: 0, y: -25, 'text-anchor': 'middle' }, g); tg.textContent = 'NEW'; }
+  const show = (ev) => {
+    tip.innerHTML = `${n.new ? '<div class="new">PROPOSED · NEW</div>' : ''}<b>${n.name}</b><i>${TYPE_NAME[n.type]} · Region ${n.region} · stop ${DATA.dist[n.id]} · id ${n.id}</i><span>${n.note}</span>`;
+    tip.style.display = 'block';
+    const r = tip.getBoundingClientRect();
+    tip.style.left = Math.min(window.innerWidth - r.width - 8, ev.clientX + 16) + 'px';
+    tip.style.top = Math.min(window.innerHeight - r.height - 8, ev.clientY + 16) + 'px';
+  };
+  g.addEventListener('pointerenter', show); g.addEventListener('pointermove', show); g.addEventListener('click', show);
+  g.addEventListener('pointerleave', () => (tip.style.display = 'none'));
+}
+const leg = document.getElementById('legend');
+leg.innerHTML = '<h4>Node types</h4>' + Object.keys(GLYPH).map((k) => `<div><svg viewBox="-14 -14 28 28"><g class="node t-${k} ${k === 'rest' || k === 'merchant' ? 'new' : ''}"><circle class="disc" r="12"/><g class="glyph" transform="scale(.75)">${GLYPH[k]}</g></g></svg>${TYPE_NAME[k]}</div>`).join('');
+const cnt = (f) => DATA.nodes.filter(f).length;
+document.getElementById('stats').innerHTML = `<b>MIX</b><br>Battles ${cnt((n) => n.type === 'battle')} · Elites ${cnt((n) => n.type === 'elite')} · Bosses ${cnt((n) => n.type === 'boss')}<br>Events ${cnt((n) => n.type === 'event')} · Treasure ${cnt((n) => n.type === 'treasure')} · Towns ${cnt((n) => n.type === 'town')}<br>Rest ${cnt((n) => n.type === 'rest')} · Merchant ${cnt((n) => n.type === 'merchant')} · New ${cnt((n) => n.new)}`;
+const toggle = (id, cls, target) => { const b = document.getElementById(id); b.onclick = () => { b.classList.toggle('on'); target.classList.toggle(cls); }; };
+document.getElementById('bOld').onclick = (e) => { e.currentTarget.classList.toggle('on'); svg.classList.toggle('hide-old'); };
+document.getElementById('bStop').onclick = (e) => { e.currentTarget.classList.toggle('on'); svg.classList.toggle('no-stop'); };
+</script>
+</body>
+</html>
